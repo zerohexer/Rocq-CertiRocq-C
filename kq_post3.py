@@ -180,7 +180,7 @@ def pointer_analysis():
                         for q, x in zip(ps, a[1:]):
                             if x.startswith('$'): cons.append(('copy', callee, q, fn, x))
                             else: P(callee, q).add(U)
-                elif callee in INT_OPS or callee in KQ_INT or callee.startswith('kq_hw_'): pass   # hw/kq_hw.h: numbers in, a number out
+                elif callee in INT_OPS or callee in KQ_INT or callee.startswith(('kq_hw_', 'kq_c_', 'kq_cr_')): pass   # hw/kq_hw.h, a program's C functions (compile.sh): numbers in, a number out
                 elif callee in ('kq_updb', 'kq_upd32', 'kq_upd_u', 'kq_upd32_u'): cons.append(('copy', fn, lhs, fn, a[3]))
                 else: P(fn, lhs).add(U)                     # a closure, or an operation not listed above
                 continue

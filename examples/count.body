@@ -1,0 +1,12 @@
+(* examples/count.body -- a loop: the numbers 1 .. n, n from the command line (compile.sh examples/count.body 5).
+   A loop is a Fixpoint over a budget f (kq_nat n: n rounds at most), calling itself as its last step. *)
+Fixpoint count (f : nat) (i n : int) (s : mem) : mem :=
+  match f with
+  | O => s
+  | S f => if n <? i then s else count f (i + 1) n (kq_out i s)
+  end.
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  let n := kq_arg 0 in
+  rd 0 0 (count (kq_nat n) 1 n (kq_input 0)).

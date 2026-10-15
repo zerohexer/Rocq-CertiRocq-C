@@ -1,0 +1,12 @@
+(* examples/libs.body -- functions of C libraries, declared here and called by name: srand and rand from the C
+   library, sqrt from the maths library (CLIBS=-lm).  rand's result goes into a cell: the memory, one block of one
+   cell, is examples/libs.mem.  kq_out prints a number. *)
+Axiom c_srand : int -> mem -> mem.           (* srand(seed) *)
+Axiom cr_rand : int -> int -> mem -> mem.    (* cell i of block h := rand() *)
+Axiom c_sqrt : int -> int.                   (* sqrt(x), cut to a whole number; no effects *)
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  let s := cr_rand 0 0 (c_srand 42 (kq_input 0)) in
+  let s := kq_out (c_sqrt 1000000) (kq_out (rd 0 0 s) s) in
+  rd 0 0 s.

@@ -1,0 +1,10 @@
+(* examples/write.body -- a buffer handed to C: the bytes of "Hi!" and a new line, put in narrow block 0 (cells of 4
+   bytes, the first byte lowest), and C's write(1, address, 4).  hw_addr gives the block's address.  The memory, one
+   narrow block of one cell, is examples/write.mem. *)
+Axiom c_write : int -> int -> int -> mem -> mem.   (* write(fd, buffer, n) *)
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  let s := upd32 0 0 (72 lor (105 << 8) lor (33 << 16) lor (10 << 24)) (kq_input 0) in   (* H i ! new line *)
+  let s := c_write 1 (hw_addr 0) 4 s in
+  rd 0 0 s.

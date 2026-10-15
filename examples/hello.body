@@ -1,0 +1,23 @@
+(* examples/hello.body -- a first program.  `main` is what runs.  The memory s is handed from step to step; the
+   outside world is part of it, so writing a character takes the memory and gives the next one.  putchar is C's own:
+   declared here, connected by compile.sh (cffi.py).  Reading the last memory (rd 0 0 s) keeps every step before it. *)
+Axiom c_putchar : int -> mem -> mem.
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  let s := kq_input 0 in
+  let s := c_putchar 72 s in    (* H *)
+  let s := c_putchar 101 s in   (* e *)
+  let s := c_putchar 108 s in   (* l *)
+  let s := c_putchar 108 s in   (* l *)
+  let s := c_putchar 111 s in   (* o *)
+  let s := c_putchar 44 s in    (* , *)
+  let s := c_putchar 32 s in    (* space *)
+  let s := c_putchar 119 s in   (* w *)
+  let s := c_putchar 111 s in   (* o *)
+  let s := c_putchar 114 s in   (* r *)
+  let s := c_putchar 108 s in   (* l *)
+  let s := c_putchar 100 s in   (* d *)
+  let s := c_putchar 33 s in    (* ! *)
+  let s := c_putchar 10 s in    (* new line *)
+  rd 0 0 s.

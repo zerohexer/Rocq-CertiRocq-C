@@ -1,0 +1,7 @@
+(* examples/own.body -- a C function of the program's own: examples/own.c, compiled and linked with it, called the
+   same way as the C library's. *)
+Axiom c_collatz_steps : int -> int.   (* steps of the 3n + 1 walk from n down to 1; no effects *)
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  rd 0 0 (kq_out (c_collatz_steps (kq_arg 0)) (kq_input 0)).

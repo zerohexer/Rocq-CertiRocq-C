@@ -6,6 +6,66 @@ checks equal to the original, a checker accepts the programs whose memory can be
 CertiRocq, a clean-up of its C and a small support library do the rest.  `hw/` extends this to programs with no
 operating system under them: device registers, atomics, interrupts, and processor instructions written in Rocq.
 
+## Getting started
+
+You need git and Docker (Linux, macOS, or Windows with WSL 2), about 8 GB of disk, and 6 GB of memory for Docker
+while the images build.
+
+```
+git clone https://github.com/zerohexer/Rocq-CertiRocq-C.git
+cd Rocq-CertiRocq-C
+bash images.sh          # once: the two Docker images, about 25 minutes
+```
+
+A first program, `examples/hello.body`:
+
+```coq
+Axiom c_putchar : int -> mem -> mem.   (* C's putchar *)
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  let s := kq_input 0 in
+  let s := c_putchar 72 s in    (* H *)
+  let s := c_putchar 101 s in   (* e *)
+  ...
+  let s := c_putchar 10 s in    (* new line *)
+  rd 0 0 s.
+```
+
+Build it and run it:
+
+```
+docker run --rm -v "$PWD":/w kernelq-certirocq:1b45a1aa-kq2 bash /w/compile.sh examples/hello.body
+```
+
+```
+KQ-SHAPE OK: 0 function(s) on the hot path, 1 outside it --
+left in the C: 0 values built, 0 of them inside a loop, 0 closures built, 0 calls through a closure
+built bin/U_hello
+Hello, world!
+main = 0
+```
+
+`compile.sh` runs the whole pipeline -- the translator, the checker, CertiRocq, the clean-up of the C, clang -- and
+then the program; numbers after the file name are its command line.  The generated C is `U_hello_prog.c`, the cleaned
+C `bld/user/U_hello.c`, the program `bin/U_hello`.  `examples/count.body` is a loop over a number from the command
+line (`compile.sh examples/count.body 5` prints 1 to 5).  What a program can use is declared in `KQRun.v`; how to
+write one that stays fast is `WRITING-FAST-ROCQ.md`.
+
+**C functions.**  A program calls any C function by declaring it, with a prefix that says how the call works:
+
+```coq
+Axiom c_putchar : int -> mem -> mem.        (* putchar(c), for its effect *)
+Axiom cr_rand : int -> int -> mem -> mem.   (* rand(): its result into cell i of block h *)
+Axiom c_sqrt : int -> int.                  (* sqrt(x), no effects: its result is the answer *)
+```
+
+Arguments are numbers; an address is a number too (`hw_addr h` is narrow block h's, for a buffer).  `compile.sh`
+writes the C that connects each declaration (`cffi.py`); `-e CINCLUDE="a.h"` adds headers and `-e CLIBS=-lm`
+libraries.  A C file next to the program is compiled and linked with it, and a `.mem` file next to it is its starting
+memory.  `examples/`: `libs` (the C and maths libraries), `write` (a buffer handed to `write`), `own` (a C function of
+the program's own).
+
 ## Results
 
 26 Codeforces problems.  Time of the computation in ms, and in brackets how many times the C++ time; Intel Core Ultra 9
@@ -115,7 +175,8 @@ Programs that are the machine's only program, built by the same pipeline and run
 
 CertiRocq's unverified parts (the erasure options, the C code generator), clang, the support code (`sup/v4/`; `hw/`
 for programs on the bare machine), the convention that a `nat` is one machine integer (`KQNat.v`), the clean-up pass,
-and the checker, which is tested, not proved.  The translator is not trusted: the kernel checks its output every time.
+the checker, which is tested, not proved, and the C functions a program declares, with the code `cffi.py` writes to
+connect them.  The translator is not trusted: the kernel checks its output every time.
 
 ## Limits
 
