@@ -12,6 +12,9 @@ kernels run in QEMU that check themselves.
 
 Started 2026-10-13 as a spike; it supersedes a first harness, whose numbers were taken before the fixes described here.
 
+Licence: MIT (`LICENSE`), the same as CertiRocq's, so that any of this can go into CertiRocq or a fork of it.  `patch/`
+changes CertiRocq itself (MIT, its authors); the images are built from CertiRocq and MetaRocq as published.
+
 ## Result
 
 One fast core of an Intel Core i9-12900H, pinned; best of 5; time of the computation only (`results/table.txt`, the
