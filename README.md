@@ -48,6 +48,12 @@ All three are native programs, timed the same way:
   - **stock CertiRocq**: unmodified, with its own defaults, runtime and integer operations (`nat` as a chain of cells);
   - **this pipeline**: the translator, the patched CertiRocq, the clean-up of the C and the support code below; the
     fastest program for that problem.
+- The two Rocq columns are the same Rocq source, so they compare one to one.  The C++ uses the same algorithm and
+  data structure but is written as a contestant would, not translated line by line: its arrays hold 4-byte `int`s where
+  a Rocq cell is 8 bytes (unless the program uses narrow blocks), and in four problems (CF1100F, CF833B, CF20C, CF453B)
+  the fastest Rocq program uses a formulation the C++ does not.  `results/table_285H.md` also times the C++ with 8-byte
+  cells and the C++ written the way the Rocq is (against the latter: CF453B 1.29×, CF20C 1.32×, CF1100F 0.96×, CF833B
+  1.10×).
 - This pipeline against C++: median 1.23 times the C++ time; 16 of 26 problems at or below 1.25, 21 at or below 1.5.
   On an Intel Core i9-12900H: median 1.09 (`results/table.md`).
 - This pipeline against stock CertiRocq, program by program: 8.8 times faster (geometric mean over 51 programs, from
