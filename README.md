@@ -8,45 +8,50 @@ operating system under them: device registers, atomics, interrupts, and processo
 
 ## Results
 
-26 Codeforces problems, each against an independent C++ solution.  Time of the computation in ms; Intel Core Ultra 9
+26 Codeforces problems.  Time of the computation in ms, and in brackets how many times the C++ time; Intel Core Ultra 9
 285H, one pinned core, best of 7 (stock: best of 3).  Every answer equals the C++ answer.
 
-| Problem | What the work is | C++ | CertiRocq, stock | CertiRocq, optimized | stock / C++ | optimized / C++ |
-|---|---|---|---|---|---|---|
-| CF455A | two loops over 5 million cells | 4.3 | 357 | 5.8 | 82.4 | **1.35** |
-| CF380C | segment tree, 100 000 queries | 54.8 | 204 | 51.6 | 3.7 | **0.94** |
-| CF1100F | table of bases, 500 000 queries | 87.1 | 357 | 98.2 | 4.1 | **1.13** |
-| CF868F | divide and conquer with a moving window | 69.6 | 1459 | 63.5 | 21.0 | **0.91** |
-| CF631E | hull of lines, binary search | 3.6 | 49.7 | 4.9 | 13.9 | **1.37** |
-| CF833B | segment tree, add and maximum on ranges | 305 | 1710 | 320 | 5.6 | **1.05** |
-| CF17E | palindromes of 2 million letters | 31.3 | 664 | 38.4 | 21.2 | **1.23** |
-| CF20C | shortest paths with a heap | 9.2 | 48.9 | 7.5 | 5.3 | **0.82** |
-| CF1039D | greedy on a tree, divide and conquer | 472 | 6015 | 588 | 12.7 | **1.25** |
-| CF813F | offline: sort, segment tree, union-find with undo | 30.3 | 220 | 45.9 | 7.3 | **1.52** |
-| CF235C | suffix automaton | 38.0 | 221 | 47.2 | 5.8 | **1.24** |
-| CF1172F | segment tree of sorted arrays | 217 | 1375 | 195 | 6.3 | **0.90** |
-| CF432D | prefix function of 2 million letters | 6.7 | 405 | 8.1 | 60.7 | **1.22** |
-| CF453B | table over sets of primes | 598 | 3557 | 384 | 5.9 | **0.64** |
-| CF622F | modular arithmetic, 1 million terms | 60.7 | 408 | 86.3 | 6.7 | **1.42** |
-| CF61E | tree of sums (binary indexed), used twice | 46.9 | 275 | 59.9 | 5.9 | **1.28** |
-| CF385C | sieve up to 10 million | 160 | 2760 | 151 | 17.3 | **0.94** |
-| CF1167C | union-find | 5.1 | 181 | 8.9 | 35.4 | **1.74** |
-| CF163A | table of 25 million cells, two rows kept | 8.8 | 321 | 23.3 | 36.5 | **2.65** |
-| CF460C | binary search on the answer | 29.3 | 1422 | 35.8 | 48.6 | **1.22** |
-| CF35C | walk over a 2000 x 2000 grid with a queue | 20.5 | 815 | 22.2 | 39.8 | **1.08** |
-| CF295B | all shortest ways, 500 vertices | 30.9 | 493 | 81.8 | 16.0 | **2.65** |
-| CF339D | tree updated from the bottom, 2 million changes | 73.8 | 715 | 124 | 9.7 | **1.68** |
-| CF547B | nearest smaller with a stack | 27.7 | 508 | 35.8 | 18.3 | **1.29** |
-| CF165E | table over sets of 22 bits | 57.3 | 622 | 62.2 | 10.9 | **1.09** |
-| CF7D | two running hashes over 5 million letters | 18.8 | 876 | 20.5 | 46.7 | **1.09** |
+| Problem | What the work is | C++, written by hand | Rocq, stock CertiRocq | Rocq, this pipeline |
+|---|---|---|---|---|
+| CF455A | two loops over 5 million cells | 4.3 | 357 (82×) | **5.8 (1.35×)** |
+| CF380C | segment tree, 100 000 queries | 54.8 | 204 (3.7×) | **51.6 (0.94×)** |
+| CF1100F | table of bases, 500 000 queries | 87.1 | 357 (4.1×) | **98.2 (1.13×)** |
+| CF868F | divide and conquer with a moving window | 69.6 | 1459 (21×) | **63.5 (0.91×)** |
+| CF631E | hull of lines, binary search | 3.6 | 49.7 (14×) | **4.9 (1.37×)** |
+| CF833B | segment tree, add and maximum on ranges | 305 | 1710 (5.6×) | **320 (1.05×)** |
+| CF17E | palindromes of 2 million letters | 31.3 | 664 (21×) | **38.4 (1.23×)** |
+| CF20C | shortest paths with a heap | 9.2 | 48.9 (5.3×) | **7.5 (0.82×)** |
+| CF1039D | greedy on a tree, divide and conquer | 472 | 6015 (13×) | **588 (1.25×)** |
+| CF813F | offline: sort, segment tree, union-find with undo | 30.3 | 220 (7.3×) | **45.9 (1.52×)** |
+| CF235C | suffix automaton | 38.0 | 221 (5.8×) | **47.2 (1.24×)** |
+| CF1172F | segment tree of sorted arrays | 217 | 1375 (6.3×) | **195 (0.90×)** |
+| CF432D | prefix function of 2 million letters | 6.7 | 405 (61×) | **8.1 (1.22×)** |
+| CF453B | table over sets of primes | 598 | 3557 (5.9×) | **384 (0.64×)** |
+| CF622F | modular arithmetic, 1 million terms | 60.7 | 408 (6.7×) | **86.3 (1.42×)** |
+| CF61E | tree of sums (binary indexed), used twice | 46.9 | 275 (5.9×) | **59.9 (1.28×)** |
+| CF385C | sieve up to 10 million | 160 | 2760 (17×) | **151 (0.94×)** |
+| CF1167C | union-find | 5.1 | 181 (35×) | **8.9 (1.74×)** |
+| CF163A | table of 25 million cells, two rows kept | 8.8 | 321 (36×) | **23.3 (2.65×)** |
+| CF460C | binary search on the answer | 29.3 | 1422 (49×) | **35.8 (1.22×)** |
+| CF35C | walk over a 2000 x 2000 grid with a queue | 20.5 | 815 (40×) | **22.2 (1.08×)** |
+| CF295B | all shortest ways, 500 vertices | 30.9 | 493 (16×) | **81.8 (2.65×)** |
+| CF339D | tree updated from the bottom, 2 million changes | 73.8 | 715 (9.7×) | **124 (1.68×)** |
+| CF547B | nearest smaller with a stack | 27.7 | 508 (18×) | **35.8 (1.29×)** |
+| CF165E | table over sets of 22 bits | 57.3 | 622 (11×) | **62.2 (1.09×)** |
+| CF7D | two running hashes over 5 million letters | 18.8 | 876 (47×) | **20.5 (1.09×)** |
 
-- **CertiRocq, stock**: the same Rocq text through unmodified CertiRocq: its defaults, its runtime, its integer
-  operations, `nat` as a chain of cells.
-- **CertiRocq, optimized**: this repository's pipeline; the fastest program for that problem.
-- Optimized / C++: median 1.23; 16 of 26 at or below 1.25, 21 at or below 1.5.  On an Intel Core i9-12900H: median
-  1.09 (`results/table.md`).
-- Optimized against stock, program by program: 8.8 times faster (geometric mean over 51 programs, from 2.7 to 61
-  times; `results/stock_vs_ours.txt`).
+All three are native programs, timed the same way:
+
+- **C++, written by hand**: an independent solution in C++, compiled by `clang++ -O2`.
+- **Rocq**: the solution written in Rocq.  CertiRocq compiles it to C, `clang -O2 -flto` compiles the C, and the
+  machine code runs.
+  - **stock CertiRocq**: unmodified, with its own defaults, runtime and integer operations (`nat` as a chain of cells);
+  - **this pipeline**: the translator, the patched CertiRocq, the clean-up of the C and the support code below; the
+    fastest program for that problem.
+- This pipeline against C++: median 1.23 times the C++ time; 16 of 26 problems at or below 1.25, 21 at or below 1.5.
+  On an Intel Core i9-12900H: median 1.09 (`results/table.md`).
+- This pipeline against stock CertiRocq, program by program: 8.8 times faster (geometric mean over 51 programs, from
+  2.7 to 61 times; `results/stock_vs_ours.txt`).
 
 ## How it works
 
