@@ -130,32 +130,6 @@ Hardware: `hw/build.sh NAME` in the image, `hw/run.sh NAME` on the host (QEMU), 
 
 `pstat.sh` and `tests/same.sh` read the processor's counters and run on the host.
 
-## Files
-
-| File | What it is |
-|---|---|
-| `KQRun.v`, `KQNat.v` | what a program imports: the memory, arithmetic, the conditional move, input and output, the generic hardware operations; `nat` as a machine integer |
-| `KQFast.v` | the translator (steps 1 to 3) and the tactic `kq_fast_qed` |
-| `KQBound.v` | the reads and writes without the test, block lengths, and the lemmas step 3's proofs use |
-| `KQShape.v` | the checker |
-| `KQSpec.v`, `KQModel.v`, `KQSpecDemo.v` | the laws, their model, proofs about kernel code |
-| `kq_post3.py` | the clean-up of the generated C |
-| `sup/v4/` | the C support code |
-| `patch/`, `images.sh`, `docker/build.sh` | the CertiRocq patch; the two Docker images |
-| `hw/` | the hardware layer, its kernels and checks |
-| `hand/`, `hand.tsv` | the 36 programs written by the guideline, with their measured choices |
-| `sv/`, `sv2fast.py` | the corpus programs and their conversion |
-| `problems.tsv`, `big/`, `cpp64/`, `cppw/` | the timed problems and their C++ solutions |
-| `demo/` | two tasks and a scheduler with input and output, and a model under which Rocq runs the same text |
-| `prof.sh`, `kqsel.py` | the measured choices |
-| `bounds.sh` | a program's bounds setting |
-| `mknarrowbody.py`, `mknarrow.py`, `narrow.tsv` | programs and memories with narrow blocks |
-| `mkbig.py`, `mkcase.py`, `mkrefs.sh` | the large inputs; a random input per corpus program and the original's answer |
-| `setup.sh`, `regen.sh`, `mk.sh`, `check.sh`, `shape.sh`, `bench.sh`, `table.sh`, `all.sh`, `one.sh` | inputs; Rocq to C; build; compare with the originals; checker verdicts; timing; the table; everything; one program |
-| `floor.sh`, `pstat.sh`, `mktable.py` | the cost of the bounds test; the processor's counters; the table as Markdown |
-| `tests/` | the same loop written many ways; the bounds settings compared; stock CertiRocq; the integer operations; Rocq's division; the checker's verdicts |
-| `results/` | every measurement: tables for both machines, stock against optimized, each step on and off, two C compilers |
-
 ## Licence
 
 MIT (`LICENSE`), the same as CertiRocq.  `patch/` modifies CertiRocq (MIT, its authors).
