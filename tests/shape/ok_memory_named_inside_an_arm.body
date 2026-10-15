@@ -1,0 +1,15 @@
+(* EXPECT: OK *)
+(* a memory is named inside one arm of an `if`, and the `if` itself is named: the name inside the arm is gone when the
+   arm ends, and the memory the `if` gives is a new one (found 2026-10-14: the checker took the two for one, because
+   they stand at the same depth, and refused every later use -- the standard form of CF35C has exactly this) *)
+Fixpoint walk (fuel : nat) (i : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let c := rd 0 i s =? 0 in
+      let s1 := if c then (let t := upd 1 i 5 s in upd 2 i 6 t) else s in
+      let x := rd 1 i s1 in
+      let s2 := if x =? 5 then (let t := upd 3 i x s1 in upd 4 i x t) else s1 in
+      walk f (i + 1) s2
+  end.
+Definition solve (n : nat) (s : mem) : mem := walk n 0 s.

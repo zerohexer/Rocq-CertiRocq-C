@@ -1,0 +1,72 @@
+(* CF380Cn WITH NARROW BLOCKS (4 bytes a cell; KQRun.v: rd32, upd32): rS, rN, rQL, rQR; written by mknarrowbody.py from CF380C.body *)
+(* CF380C, written for speed.  The same segment tree as the corpus program; what changed is HOW it is written:
+     - a node's three numbers sit next to each other in ONE block (cells 3o, 3o+1, 3o+2), not in three blocks;
+     - a query leaves its three numbers in three cells (block rQ) instead of returning a triple: nothing is built;
+     - the middle of an interval is a shift, not a division. *)
+Local Notation rS := 0.   (* narrow *)      (* the brackets: cell i (1..n) holds 1 for '(' *)
+Local Notation rN := 1.   (* narrow *)      (* the tree *)
+Local Notation rQ := 2.      (* cells 0, 1, 2: what the last query found *)
+Local Notation rQL := 2.   (* narrow *)
+Local Notation rQR := 3.   (* narrow *)
+Local Notation rANS := 6.
+
+Fixpoint build (h : nat) (o l r : int) (s : mem) : mem :=
+  match h with
+  | O => s
+  | S h' =>
+      if l =? r then
+        if rd32 rS l s =? 1 then upd32 rN (3 * o + 2) 0 (upd32 rN (3 * o + 1) 1 (upd32 rN (3 * o) 0 s))
+        else upd32 rN (3 * o + 2) 1 (upd32 rN (3 * o + 1) 0 (upd32 rN (3 * o) 0 s))
+      else
+        let m := (l + r) >> 1 in
+        let s2 := build h' (2 * o + 1) (m + 1) r (build h' (2 * o) l m s) in
+        let a := 6 * o in
+        let o1 := rd32 rN (a + 1) s2 in
+        let c2 := rd32 rN (a + 5) s2 in
+        let mm := if o1 <=? c2 then o1 else c2 in
+        let t := rd32 rN a s2 + rd32 rN (a + 3) s2 + 2 * mm in
+        let oo := o1 + rd32 rN (a + 4) s2 - mm in
+        let cc := rd32 rN (a + 2) s2 + c2 - mm in
+        upd32 rN (3 * o + 2) cc (upd32 rN (3 * o + 1) oo (upd32 rN (3 * o) t s2))
+  end.
+
+Fixpoint query (h : nat) (o l r ql qr : int) (s : mem) : mem :=
+  match h with
+  | O => upd rQ 2 0 (upd rQ 1 0 (upd rQ 0 0 s))
+  | S h' =>
+      if qr <? l then upd rQ 2 0 (upd rQ 1 0 (upd rQ 0 0 s))
+      else if r <? ql then upd rQ 2 0 (upd rQ 1 0 (upd rQ 0 0 s))
+      else if (ql <=? l) && (r <=? qr) then
+        let a := 3 * o in
+        let x0 := rd32 rN a s in
+        let x1 := rd32 rN (a + 1) s in
+        let x2 := rd32 rN (a + 2) s in
+        upd rQ 2 x2 (upd rQ 1 x1 (upd rQ 0 x0 s))
+      else
+        let m := (l + r) >> 1 in
+        let s1 := query h' (2 * o) l m ql qr s in
+        let t1 := rd rQ 0 s1 in
+        let o1 := rd rQ 1 s1 in
+        let c1 := rd rQ 2 s1 in
+        let s2 := query h' (2 * o + 1) (m + 1) r ql qr s1 in
+        let c2 := rd rQ 2 s2 in
+        let mm := if o1 <=? c2 then o1 else c2 in
+        let t := t1 + rd rQ 0 s2 + 2 * mm in
+        let oo := o1 + rd rQ 1 s2 - mm in
+        upd rQ 2 (c1 + c2 - mm) (upd rQ 1 oo (upd rQ 0 t s2))
+  end.
+
+Fixpoint answer_all (fuel h : nat) (i nz : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let s1 := query h 1 1 nz (rd32 rQL i s) (rd32 rQR i s) s in
+      answer_all f h (i + 1) nz (upd rANS i (rd rQ 0 s1) s1)
+  end.
+
+Definition solve (q h : nat) (nz : int) (s : mem) : mem :=
+  answer_all q h 0 nz (build h 1 1 nz s).
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  kq_sum (solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_arg 2) (kq_input 0)).

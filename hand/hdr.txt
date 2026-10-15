@@ -1,0 +1,6 @@
+From CertiRocq.Plugin Require Import CertiRocq.
+From MetaRocq.Template Require Import All.
+Require Import KQ.KQRun KQ.KQShape KQ.KQNat KQ.KQBound KQ.KQFast.
+Open Scope sint63_scope.
+Open Scope bool_scope.
+CertiRocq Extract Inline [ zdiv, zmod, kq_jump ].

@@ -1,0 +1,8 @@
+(* EXPECT: OK *)
+(* a memory that is written in one arm of an `if` and left alone in the other *)
+Fixpoint some (fuel : nat) (i : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => let s1 := if rd 0 i s =? 0 then upd 0 i 1 s else s in some f (i + 1) s1
+  end.
+Definition solve (n : nat) (s : mem) : int := rd 0 0 (some n 0 s).

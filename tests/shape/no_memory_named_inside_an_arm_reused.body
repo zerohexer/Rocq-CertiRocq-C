@@ -1,0 +1,12 @@
+(* EXPECT: REFUSE *)
+(* the counterpart: the memory the `if` was given is used again after the `if` (one of whose arms wrote it) *)
+Fixpoint walk (fuel : nat) (i : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let c := rd 0 i s =? 0 in
+      let s1 := if c then (let t := upd 1 i 5 s in upd 2 i 6 t) else s in
+      let x := rd 1 i s in
+      walk f (i + 1) (upd 3 i x s1)
+  end.
+Definition solve (n : nat) (s : mem) : mem := walk n 0 s.

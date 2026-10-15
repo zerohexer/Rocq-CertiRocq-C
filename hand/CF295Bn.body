@@ -1,0 +1,52 @@
+(* CF295Bn WITH NARROW BLOCKS (4 bytes a cell; KQRun.v: rd32, upd32): rD, rX, rIN; written by mknarrowbody.py from CF295Bv2.body *)
+(* CF295B "Greg and Graph", second version: THE BUDGET IS THE COUNT (rule 8).
+   As the first version, but a loop that makes exactly n rounds is given the budget n and asks nothing else: one test
+   a round, not two.  And the loop over a row carries the two cells it is at, not a start and a column to add. *)
+Local Notation rD := 0.   (* narrow *)      (* cell i * n + j: the shortest way from i to j found so far *)
+Local Notation rX := 1.   (* narrow *)
+Local Notation rIN := 2.   (* narrow *)
+Local Notation rANS := 3.
+
+(* row i against row v, from the cells pi and pv on: d[i][j] = min(d[i][j], dik + d[v][j]) *)
+Fixpoint relax (fuel : nat) (pi pv dik : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let a := rd32 rD pi s in
+      let b := dik + rd32 rD pv s in
+      relax f (pi + 1) (pv + 1) dik (upd32 rD pi (if b <? a then b else a) s)
+  end.
+
+Fixpoint relax_all (fuel n0 : nat) (i n v : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => let dik := rd32 rD (i * n + v) s in relax_all f n0 (i + 1) n v (relax n0 (i * n) (v * n) dik s)
+  end.
+
+Fixpoint rowsum (fuel : nat) (j pi acc : int) (s : mem) : int :=
+  match fuel with
+  | O => acc
+  | S f => rowsum f (j + 1) (pi + 1) (acc + (if rd32 rIN j s =? 1 then rd32 rD pi s else 0)) s
+  end.
+
+Fixpoint total (fuel n0 : nat) (i n acc : int) (s : mem) : int :=
+  match fuel with
+  | O => acc
+  | S f => total f n0 (i + 1) n (if rd32 rIN i s =? 1 then rowsum n0 0 (i * n) acc s else acc) s
+  end.
+
+Fixpoint steps (fuel n0 : nat) (k n : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let v := rd32 rX k s in
+      let s1 := relax_all n0 n0 0 n v (upd32 rIN v 1 s) in
+      let t := total n0 n0 0 n 0 s1 in
+      steps f n0 (k - 1) n (upd rANS k t s1)
+  end.
+
+Definition solve (n : nat) (nz : int) (s : mem) : mem := steps n n (nz - 1) nz s.
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  kq_sum (solve (kq_nat (kq_arg 0)) (kq_arg 0) (kq_input 0)).

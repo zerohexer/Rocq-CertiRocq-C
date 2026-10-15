@@ -1,0 +1,74 @@
+(* CF1167C "News Distribution" (new problem, written by the guideline from the start):
+   the users of a group pass the news on to each other; for every user, how many users end up knowing it.
+   A union-find with sizes.
+     - rule 5: `root` only looks, and gives back one number;
+     - rule 2: pointing the cells of a walk at the root is a second loop, with its own single question;
+     - rule 4: which root goes under which is a choice between numbers. *)
+Local Notation rG := 0.      (* the members of all groups, one group after the other *)
+Local Notation rGS := 1.     (* cell g: where group g starts in rG; cell g + 1: where it ends *)
+Local Notation rP := 2.
+Local Notation rSZ := 3.
+Local Notation rANS := 4.
+
+Fixpoint root (fuel : nat) (v : int) (s : mem) : int :=
+  match fuel with
+  | O => v
+  | S f => let p := rd rP v s in if p =? v then v else root f p s
+  end.
+
+(* every cell on the way from v up to the root r now points at r *)
+Fixpoint point (fuel : nat) (v r : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => let p := rd rP v s in if p =? r then s else point f p r (upd rP v r s)
+  end.
+
+Definition union (a b : int) (s : mem) : mem :=
+  let ra := root 40 a s in
+  let rb := root 40 b s in
+  let s2 := point 40 b rb (point 40 a ra s) in
+  if ra =? rb then s2
+  else
+    let sa := rd rSZ ra s2 in
+    let sb := rd rSZ rb s2 in
+    let big := if sa <? sb then rb else ra in
+    let small := if sa <? sb then ra else rb in
+    upd rSZ big (sa + sb) (upd rP small big s2).
+
+Fixpoint members (fuel : nat) (i e u0 : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => if e <=? i then s else let u := rd rG i s in members f (i + 1) e u0 (union u0 u s)
+  end.
+
+Fixpoint groups (fuel tot : nat) (g : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let b := rd rGS g s in
+      let e := rd rGS (g + 1) s in
+      let s1 := if b <? e then (let u0 := rd rG b s in members tot (b + 1) e u0 s) else s in
+      groups f tot (g + 1) s1
+  end.
+
+Fixpoint init (fuel : nat) (v : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => init f (v + 1) (upd rSZ v 1 (upd rP v v s))
+  end.
+
+Fixpoint answers (fuel : nat) (v : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let r := root 40 v s in
+      let c := rd rSZ r s in
+      answers f (v + 1) (upd rANS v c s)
+  end.
+
+Definition solve (n m tot : nat) (s : mem) : mem :=
+  answers n 1 (groups m tot 0 (init n 1 s)).
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  kq_sum (solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_nat (kq_arg 2)) (kq_input 0)).

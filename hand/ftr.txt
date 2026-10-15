@@ -1,0 +1,5 @@
+
+MetaRocq Run (kq_gate main).
+CertiRocq Compile --allow-unsafe-erasure --anf-variant 9 --c-args 1000 --output "%s_prog" main
+Extract Constants [ rd => "kq_rdb", upd => "kq_updb", kq_arg => "kq_arg", kq_input => "kq_input", kq_sum => "kq_sum", kq_nat => "kq_nat_int", kq_select => "kq_select", kq_sel_lts => "kq_sel_lts", kq_sel_les => "kq_sel_les", kq_sel_eq => "kq_sel_eq", kq_sel_ltu => "kq_sel_ltu", kq_sel_leu => "kq_sel_leu", kq_selectn => "kq_selectn", kq_sel_ges => "kq_sel_ges", kq_sel_gts => "kq_sel_gts", kq_sel_ne => "kq_sel_ne", kq_sel_geu => "kq_sel_geu", kq_sel_gtu => "kq_sel_gtu", kq_prof => "kq_prof", kq_in => "kq_in", kq_out => "kq_out", rd32 => "kq_rd32", upd32 => "kq_upd32" ]
+Include [ "kq_io.h" ].

@@ -1,0 +1,49 @@
+(* CF460C "Present" (new problem, written by the guideline from the start; the input is 20 times the judge's largest):
+   n flowers, m days, a watering makes w flowers in a row one higher; make the smallest flower as high as possible.
+   A binary search on the answer; one try walks the flowers once, watering where it must.
+     - rule 1: the try's running numbers (waterings that still reach this flower, waterings used) are parameters;
+     - rule 5: a try gives back the memory, and leaves its yes / no in a cell, once;
+     - rule 4: the two ends of the search are chosen as numbers inside the one recursive call. *)
+Local Notation rA := 0.
+Local Notation rD := 1.      (* cell i: how many waterings start at flower i, in the try being made *)
+Local Notation rST := 2.     (* cell 0: 1 when the last try succeeded *)
+
+Fixpoint amin (fuel : nat) (i best : int) (s : mem) : int :=
+  match fuel with
+  | O => best
+  | S f => amin f (i + 1) (zmin best (rd rA i s)) s
+  end.
+
+(* can every flower reach the height x with at most m waterings? *)
+Fixpoint check (fuel : nat) (i n w x m add used : int) (s : mem) : mem :=
+  match fuel with
+  | O => upd rST 0 1 s
+  | S f =>
+      if n <? i then upd rST 0 1 s
+      else
+        let add1 := add - (if w <? i then rd rD (i - w) s else 0) in
+        let need := x - rd rA i s - add1 in
+        let t := if 0 <? need then need else 0 in
+        if m <? used + t then upd rST 0 0 s
+        else check f (i + 1) n w x m (add1 + t) (used + t) (upd rD i t s)
+  end.
+
+Fixpoint search (fuel n1 : nat) (lo hi n w m : int) (s : mem) : int :=
+  match fuel with
+  | O => lo
+  | S f =>
+      if hi <=? lo then lo
+      else
+        let mid := (lo + hi + 1) >> 1 in
+        let s1 := check n1 1 n w mid m 0 0 s in
+        let ok := rd rST 0 s1 =? 1 in
+        search f n1 (if ok then mid else lo) (if ok then hi else mid - 1) n w m s1
+  end.
+
+Definition solve (n n1 : nat) (nz wz mz : int) (s : mem) : int :=
+  let lo := amin n 1 2000000000 s in
+  search 64 n1 lo (lo + mz) nz wz mz s.
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_arg 2) (kq_arg 3) (kq_arg 4) (kq_input 0).

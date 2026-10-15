@@ -1,0 +1,41 @@
+(* CF165E "Compatible Numbers", second version: THE BUDGET IS THE COUNT (rule 8), and a cell is written only when it
+   changes.  The pass over the table makes exactly 2^22 rounds: it is given that budget and asks nothing else. *)
+Local Notation rA := 0.
+Local Notation rF := 1.      (* cell m: one of the numbers whose bits all lie inside m, or 0 *)
+Local Notation rANS := 2.
+
+Fixpoint place (fuel : nat) (i : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => let x := rd rA i s in place f (i + 1) (upd rF x x s)
+  end.
+
+Fixpoint pass (fuel : nat) (m bit : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if (m land bit) =? 0 then pass f (m + 1) bit s
+      else if rd rF m s =? 0 then pass f (m + 1) bit (upd rF m (rd rF (m lxor bit) s) s)
+      else pass f (m + 1) bit s
+  end.
+
+Fixpoint bits (fuel fl : nat) (bit full : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => if full <=? bit then s else bits f fl (bit << 1) full (pass fl 0 bit s)
+  end.
+
+Fixpoint answers (fuel : nat) (i full : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let x := rd rF ((full - 1) lxor rd rA i s) s in
+      answers f (i + 1) full (upd rANS i (if x =? 0 then -1 else x) s)
+  end.
+
+Definition solve (n fl : nat) (full : int) (s : mem) : mem :=
+  answers n 0 full (bits 24 fl 1 full (place n 0 s)).
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  kq_sum (solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_arg 1) (kq_input 0)).

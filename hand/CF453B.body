@@ -1,0 +1,74 @@
+(* CF453B, written for speed.  The same table over (how many numbers are placed, which primes are used) as the corpus
+   program.  What changed, all in the innermost loop (58 rounds for every state that can be reached):
+     - rule 4: "does b fit" and "is this cheaper" are two tosses of a coin; here they choose the NUMBER that is
+       written, and the cell is always written (with what it held when nothing changes) -- no jump on either;
+     - rule 1: what does not change during the 58 rounds (the number a[i], where the next layer starts) is worked out
+       once, before them, and passed in. *)
+Local Notation rA := 0.
+Local Notation rMASK := 1.   (* cell b: the primes that divide b, as a set of bits *)
+Local Notation rPR := 2.
+Local Notation rDP := 3.     (* cell i * 2^17 + m: the least cost of placing the first i numbers using the primes m *)
+Local Notation INFTY := 1000000000.
+Local Notation LAYER := 131072.
+
+Definition set_primes (s : mem) : mem :=
+  upd rPR 16 59 (upd rPR 15 53 (upd rPR 14 47 (upd rPR 13 43 (upd rPR 12 41 (upd rPR 11 37 (upd rPR 10 31 (upd rPR 9 29
+  (upd rPR 8 23 (upd rPR 7 19 (upd rPR 6 17 (upd rPR 5 13 (upd rPR 4 11 (upd rPR 3 7 (upd rPR 2 5 (upd rPR 1 3
+  (upd rPR 0 2 s)))))))))))))))).
+
+Fixpoint pmask (fuel : nat) (b j bj acc : int) (s : mem) : int :=
+  match fuel with
+  | O => acc
+  | S f => pmask f b (j + 1) (bj * 2) (if (b mod rd rPR j s) =? 0 then acc lor bj else acc) s
+  end.
+
+Fixpoint fill_masks (fuel : nat) (b : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => let m := pmask 17 b 0 1 0 s in fill_masks f (b + 1) (upd rMASK b m s)
+  end.
+
+Fixpoint init_dp (fuel : nat) (i : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => init_dp f (i + 1) (upd rDP i INFTY s)
+  end.
+
+(* the state (i, m) costs cur: every b from 1 to 58 that shares no prime with m gives a state of the next layer *)
+Fixpoint trans_b (fuel : nat) (b m cur ai base : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let mb := rd rMASK b s in
+      let idx := base + (m lor mb) in
+      let old := rd rDP idx s in
+      let cost := cur + zabs (ai - b) in
+      trans_b f (b + 1) m cur ai base (upd rDP idx (if ((m land mb) =? 0) && (cost <? old) then cost else old) s)
+  end.
+
+Fixpoint trans_m (fuel : nat) (m here ai next : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let cur := rd rDP (here + m) s in
+      trans_m f (m + 1) here ai next (if cur <? INFTY then trans_b 58 1 m cur ai next s else s)
+  end.
+
+Fixpoint trans_i (fuel w : nat) (i : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => let ai := rd rA i s in trans_i f w (i + 1) (trans_m w 0 (i * LAYER) ai ((i + 1) * LAYER) s)
+  end.
+
+Fixpoint best (fuel : nat) (p acc : int) (s : mem) : int :=
+  match fuel with
+  | O => acc
+  | S f => best f (p + 1) (zmin acc (rd rDP p s)) s
+  end.
+
+Definition solve (w wn nn : nat) (n : int) (s : mem) : int :=
+  best w (n * LAYER) INFTY (trans_i nn w 0 (upd rDP 0 0 (init_dp wn 0 (fill_masks 58 1 (set_primes s))))).
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_nat (kq_arg 2)) (kq_arg 3) (kq_input 0).

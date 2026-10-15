@@ -1,0 +1,5 @@
+(* EXPECT: REFUSE *)
+(* a loop builds a pair every round *)
+Fixpoint both (fuel : nat) (i : int) (acc : int * int) (s : mem) : int * int :=
+  match fuel with O => acc | S f => both f (i + 1) (fst acc + rd 0 i s, snd acc + 1) s end.
+Definition solve (n : nat) (s : mem) : int := fst (both n 0 (0, 0) s).

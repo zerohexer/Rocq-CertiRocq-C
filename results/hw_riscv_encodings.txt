@@ -1,0 +1,23 @@
+# hw/riscv/check.sh, 2026-10-15: the RISC-V example's instruction words, from Rocq and from LLVM's assembler
+Riscv.v compiles: its pins hold
+  csrr a0, sstatus         rocq 0x10002573  assembler 0x10002573  same
+  csrci sstatus, 2         rocq 0x10017073  assembler 0x10017073  same
+  csrsi sstatus, 2         rocq 0x10016073  assembler 0x10016073  same
+  wfi                      rocq 0x10500073  assembler 0x10500073  same
+  ret                      rocq 0x00008067  assembler 0x00008067  same
+  rdtime a0                rocq 0xc0102573  assembler 0xc0102573  same
+  srli a1, a0, 32          rocq 0x02055593  assembler 0x02055593  same
+  slli a0, a0, 32          rocq 0x02051513  assembler 0x02051513  same
+  srli a0, a0, 32          rocq 0x02055513  assembler 0x02055513  same
+  csrr a0, stval           rocq 0x14302573  assembler 0x14302573  same
+  sfence.vma a0, zero      rocq 0x12050073  assembler 0x12050073  same
+  csrw stvec, a0           rocq 0x10551073  assembler 0x10551073  same
+  slli t0, a1, 60          rocq 0x03c59293  assembler 0x03c59293  same
+  srli a0, a0, 12          rocq 0x00c55513  assembler 0x00c55513  same
+  or a0, a0, t0            rocq 0x00556533  assembler 0x00556533  same
+  csrw satp, a0            rocq 0x18051073  assembler 0x18051073  same
+  sfence.vma zero, zero    rocq 0x12000073  assembler 0x12000073  same
+  mv a6, a3                rocq 0x00068813  assembler 0x00068813  same
+  mv a7, a4                rocq 0x00070893  assembler 0x00070893  same
+  ecall                    rocq 0x00000073  assembler 0x00000073  same
+RISC-V encodings: 20 words from Rocq, 20 from the assembler, 20 the same

@@ -1,0 +1,65 @@
+(* CF1100F, written for speed, third version: ONE WORD PER CELL OF THE TABLE, AND NO JUMP ON A COIN TOSS.
+   The same table of prefix bases as the corpus program.  A cell of row r holds a basis vector (below 2^20) and the
+   position it came from (below 2^20); here both sit in ONE machine word, position * 2^20 + vector, in one block,
+   where the corpus program keeps two blocks.  Half the reads, half the writes, half the memory touched.
+     - row r is made from row r-1 in ONE pass over the 20 bits (copy the cell, or put the new number in);
+     - "is bit b of x set" is a test against a mask that is halved every round, not a read of a table;
+     - the choice a query makes each round is a choice between two NUMBERS (`if .. then y else res` as an argument of
+       the one call that goes round), not between two calls;
+     - third version: so is everything a round of the row-building loop decides (see `row`). *)
+Local Notation rC := 0.
+Local Notation rROW := 2.
+Local Notation rQL := 4.
+Local Notation rQR := 5.
+Local Notation rANS := 6.
+Local Notation M := 1048575.                 (* 2^20 - 1 *)
+Local Notation TOP := 524288.                (* 2^19 *)
+
+(* bits 19 .. 0 of row `src` to row `dst`, x (from position p) worked in on the way; b counts down, pw is 2^b.
+   Whether bit b of x is set is a coin toss the machine cannot predict, so NOTHING here is decided by a jump: the three
+   things a round produces (the cell to write, the next x, the next p) are each a choice between two numbers. *)
+Fixpoint row (fuel : nat) (b pw x p src dst : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let w := rd rROW (src + b) s in
+      let cur := w land M in
+      let q := w >> 20 in
+      let bit := negb ((x land pw) =? 0) in
+      let free := cur =? 0 in
+      let older := q <? p in
+      row f (b - 1) (pw >> 1)
+          (if bit then (if free then 0 else x lxor cur) else x)
+          (if bit && negb free && older then q else p)
+          src dst
+          (upd rROW (dst + b) (if bit && (free || older) then (p << 20) + x else w) s)
+  end.
+
+Fixpoint build (fuel w : nat) (r : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => build f w (r + 1) (row w 19 TOP (rd rC r s) r ((r - 1) * 20) (r * 20) s)
+  end.
+
+Fixpoint qry (fuel : nat) (b l base res : int) (s : mem) : int :=
+  match fuel with
+  | O => res
+  | S f =>
+      let w := rd rROW (base + b) s in
+      let y := res lxor (w land M) in
+      qry f (b - 1) l base (if (l <=? (w >> 20)) && (res <? y) then y else res) s
+  end.
+
+Fixpoint answer_all (fuel w : nat) (i : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => answer_all f w (i + 1) (upd rANS i (qry w 19 (rd rQL i s) (rd rQR i s * 20) 0 s) s)
+  end.
+
+Definition solve (n q : nat) (s : mem) : mem :=
+  let w := 20%nat in
+  answer_all q w 0 (build n w 1 s).
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  kq_sum (solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_input 0)).

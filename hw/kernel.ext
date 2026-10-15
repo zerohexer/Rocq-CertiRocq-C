@@ -1,0 +1,3 @@
+# the kernel's own machine routines: ROCQNAME CNAME (hw/kernel.S)
+asm_bswap32 kq_hw_asm_bswap32
+asm_store32 kq_hw_asm_store32

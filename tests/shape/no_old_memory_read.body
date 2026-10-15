@@ -1,0 +1,3 @@
+(* EXPECT: REFUSE *)
+(* the old memory is read after a write *)
+Definition solve (s : mem) : int := let s1 := upd 0 0 1 s in rd 0 0 s + rd 0 0 s1.

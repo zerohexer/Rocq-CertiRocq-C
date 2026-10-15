@@ -1,0 +1,143 @@
+(* CF235Cn WITH NARROW BLOCKS (4 bytes a cell; KQRun.v: rd32, upd32): rS, rNEXT, rLINK, rLEN, rCNT, rBKT, rORD, rQ, rQOFF, rQLEN, rVIS; written by mknarrowbody.py from CF235C.body *)
+(* CF235C, written for speed.  The same suffix automaton, the same counting of occurrences and the same walk of every
+   pattern twice round as the corpus program.  What changed:
+     - rule 5: nothing gives back a pair.  The corpus program's `new_state`, `walk_set`, `step` and `scan` each
+       return two things; here a new state's number is simply "the count plus one", the walk up the links HANDS OVER
+       to what comes next instead of reporting where it stopped (rule 2), and a pattern's state and matched length are
+       two parameters of the scan;
+     - rule 1: the last state is a parameter of the build loop, not a cell;
+     - rule 7: the position in the pattern wraps round by a test, not by a remainder of a number known only at run
+       time. *)
+Local Notation rS := 0.   (* narrow *)
+Local Notation rNEXT := 1.   (* narrow *)
+Local Notation rLINK := 2.   (* narrow *)
+Local Notation rLEN := 3.   (* narrow *)
+Local Notation rCNT := 4.   (* narrow *)
+Local Notation rST := 5.     (* cell 0: how many states there are *)
+Local Notation rBKT := 5.   (* narrow *)
+Local Notation rORD := 6.   (* narrow *)
+Local Notation rQ := 7.   (* narrow *)
+Local Notation rQOFF := 8.   (* narrow *)
+Local Notation rQLEN := 9.   (* narrow *)
+Local Notation rVIS := 10.   (* narrow *)
+Local Notation rANS := 12.
+Local Notation K := 26.
+
+(* every state on the way up whose c-transition is q now goes to the clone; then the two links *)
+Fixpoint walk_redirect (fuel : nat) (p c q clone cur : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if p =? 0 then upd32 rLINK cur clone (upd32 rLINK q clone s)
+      else if rd32 rNEXT (p * K + c) s =? q
+           then walk_redirect f (rd32 rLINK p s) c q clone cur (upd32 rNEXT (p * K + c) clone s)
+           else upd32 rLINK cur clone (upd32 rLINK q clone s)
+  end.
+
+(* the clone gets q's 26 transitions and q's link; then the redirection *)
+Fixpoint copy_next (fuel n2 : nat) (k q clone p c cur : int) (s : mem) : mem :=
+  match fuel with
+  | O => walk_redirect n2 p c q clone cur (upd32 rLINK clone (rd32 rLINK q s) s)
+  | S f => copy_next f n2 (k + 1) q clone p c cur (upd32 rNEXT (clone * K + k) (rd32 rNEXT (q * K + k) s) s)
+  end.
+
+(* from the last state up the links: a state without a c-transition gets one to cur; where that stops decides the rest *)
+Fixpoint walk_set (fuel n2 : nat) (p c cur : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if p =? 0 then upd rST 0 cur (upd32 rLINK cur 1 s)
+      else
+        let q := rd32 rNEXT (p * K + c) s in
+        if q =? 0 then walk_set f n2 (rd32 rLINK p s) c cur (upd32 rNEXT (p * K + c) cur s)
+        else if rd32 rLEN p s + 1 =? rd32 rLEN q s then upd rST 0 cur (upd32 rLINK cur q s)
+        else copy_next 26 n2 0 q (cur + 1) p c cur (upd rST 0 (cur + 1) (upd32 rLEN (cur + 1) (rd32 rLEN p s + 1) s))
+  end.
+
+Fixpoint build (fuel n2 : nat) (i last : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let c := rd32 rS i s in
+      let cur := rd rST 0 s + 1 in
+      build f n2 (i + 1) cur (walk_set n2 n2 last c cur (upd32 rCNT cur 1 (upd32 rLEN cur (rd32 rLEN last s + 1) s)))
+  end.
+
+Fixpoint bucket (fuel : nat) (v sz : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => if sz <? v then s else let l := rd32 rLEN v s in bucket f (v + 1) sz (upd32 rBKT l (rd32 rBKT l s + 1) s)
+  end.
+
+Fixpoint prefix (fuel : nat) (i : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => prefix f (i + 1) (upd32 rBKT i (rd32 rBKT (i - 1) s + rd32 rBKT i s) s)
+  end.
+
+Fixpoint place (fuel : nat) (v : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if v <? 1 then s
+      else let l := rd32 rLEN v s in let b := rd32 rBKT l s in place f (v - 1) (upd32 rORD (b - 1) v (upd32 rBKT l (b - 1) s))
+  end.
+
+Fixpoint propagate (fuel : nat) (i : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if i <? 0 then s
+      else let v := rd32 rORD i s in let l := rd32 rLINK v s in propagate f (i - 1) (upd32 rCNT l (rd32 rCNT l s + rd32 rCNT v s) s)
+  end.
+
+Fixpoint fall (fuel : nat) (v c : int) (s : mem) : int :=
+  match fuel with
+  | O => v
+  | S f => if v =? 1 then v else if rd32 rNEXT (v * K + c) s =? 0 then fall f (rd32 rLINK v s) c s else v
+  end.
+
+Fixpoint shrink (fuel : nat) (v m : int) (s : mem) : int :=
+  match fuel with
+  | O => v
+  | S f => let lk := rd32 rLINK v s in if m <=? rd32 rLEN lk s then shrink f lk m s else v
+  end.
+
+(* one pattern: i counts the letters read (twice round, less one), j is where the next letter is; v and l are the
+   state and how many letters are matched; the answer goes into its cell when the scan ends *)
+Fixpoint scan (fuel n2 : nat) (i j v l off m qid acc : int) (s : mem) : mem :=
+  match fuel with
+  | O => upd rANS (qid - 1) acc s
+  | S f =>
+      if 2 * m - 1 <=? i then upd rANS (qid - 1) acc s
+      else
+        let c := rd32 rQ (off + j) s in
+        let j' := if j + 1 =? m then 0 else j + 1 in
+        let v1 := fall n2 v c s in
+        let q := rd32 rNEXT (v1 * K + c) s in
+        if q =? 0 then scan f n2 (i + 1) j' 1 0 off m qid acc s
+        else
+          let v2 := shrink n2 q m s in
+          let l1 := rd32 rLEN v1 s in
+          let l2 := rd32 rLEN v2 s in
+          let lm := (if l <=? l1 then l else l1) + 1 in
+          let l' := if lm <=? l2 then lm else l2 in
+          if (m <=? l') && negb (rd32 rVIS v2 s =? qid)
+          then scan f n2 (i + 1) j' v2 l' off m qid (acc + rd32 rCNT v2 s) (upd32 rVIS v2 qid s)
+          else scan f n2 (i + 1) j' v2 l' off m qid acc s
+  end.
+
+Fixpoint answer_all (fuel n2 mx : nat) (i : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => answer_all f n2 mx (i + 1) (scan mx n2 0 0 1 0 (rd32 rQOFF i s) (rd32 rQLEN i s) (i + 1) 0 s)
+  end.
+
+Definition solve (n n2 q mx : nat) (s : mem) : mem :=
+  let s3 := build n n2 0 1 (upd rST 0 1 s) in
+  let sz := rd rST 0 s3 in
+  answer_all q n2 mx 0 (propagate n2 (sz - 1) (place n2 sz (prefix n 1 (bucket n2 1 sz s3)))).
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  kq_sum (solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_nat (kq_arg 2)) (kq_nat (kq_arg 3)) (kq_input 0)).

@@ -1,0 +1,54 @@
+(* CF61En WITH NARROW BLOCKS (4 bytes a cell; KQRun.v: rd32, upd32): rA, rT, rL; written by mknarrowbody.py from CF61E.body *)
+(* CF61E "Enemy is weak" (new problem, written by the guideline from the start):
+   the number of triples i < j < k with a[i] > a[j] > a[k].
+   A binary indexed tree over the values, used twice: from the left it tells, for every j, how many earlier numbers are
+   larger; from the right, how many later numbers are smaller.  The tree's two walks are loops that give back one
+   thing each (a number; the memory); the running total is a parameter. *)
+Local Notation rA := 0.   (* narrow *)
+Local Notation rT := 1.   (* narrow *)      (* the tree: cell i holds how many of the values i - lowbit(i) + 1 .. i are in *)
+Local Notation rL := 2.   (* narrow *)      (* for every j: how many earlier numbers are larger *)
+
+(* how many values up to i are in *)
+Fixpoint query (fuel : nat) (i acc : int) (s : mem) : int :=
+  match fuel with
+  | O => acc
+  | S f => if i <=? 0 then acc else query f (i - (i land (- i))) (acc + rd32 rT i s) s
+  end.
+
+(* the value i goes in *)
+Fixpoint add (fuel : nat) (i n : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => if n <? i then s else add f (i + (i land (- i))) n (upd32 rT i (rd32 rT i s + 1) s)
+  end.
+
+Fixpoint lefts (fuel : nat) (j n : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let x := rd32 rA j s in
+      let l := j - 1 - query 21 x 0 s in
+      lefts f (j + 1) n (add 21 x n (upd32 rL j l s))
+  end.
+
+Fixpoint clear (fuel : nat) (i : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => clear f (i + 1) (upd32 rT i 0 s)
+  end.
+
+Fixpoint rights (fuel : nat) (j n acc : int) (s : mem) : int :=
+  match fuel with
+  | O => acc
+  | S f =>
+      let x := rd32 rA j s in
+      let v := acc + rd32 rL j s * query 21 (x - 1) 0 s in
+      rights f (j - 1) n v (add 21 x n s)
+  end.
+
+Definition solve (n : nat) (nz : int) (s : mem) : int :=
+  rights n nz nz 0 (clear (S n) 0 (lefts n 1 nz s)).
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_arg 0) (kq_input 0).

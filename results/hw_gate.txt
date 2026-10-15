@@ -1,0 +1,97 @@
+# hw/check.sh, 2026-10-15, i9-12900H laptop: QEMU's own processor (tcg) and KVM; every x86 instruction from hw/X86.v
+claims assumed (beyond declarations and Rocq's integers): the model: []; the page-table proof: [KQSpec.real_laws]; the index proof: [KQSpec.real_laws]
+GATE: the laws hold in a model (nothing of ours assumed), and the proofs about kernel code rest on them alone
+kernel: KQ-SHAPE OK: 9 function(s) on the hot path, 13 outside it -- tx_wait_kq, digits_kq, emit_kq, idt_fill_
+irqnow: KQ-SHAPE OK: 5 function(s) on the hot path, 9 outside it -- idt_fill_kq, waitn_kq, tx_wait_kq, digits_
+irqnow_irq: KQ-SHAPE OK: 0 function(s) on the hot path, 2 outside it -- 
+fault: KQ-SHAPE OK: 5 function(s) on the hot path, 6 outside it -- idt_fill_kq, pd_fill_kq, tx_wait_kq, digits
+fault_irq: KQ-SHAPE OK: 0 function(s) on the hot path, 3 outside it -- 
+smp: KQ-SHAPE OK: 7 function(s) on the hot path, 4 outside it -- spin_kq, wait_flag_kq, add_n_kq, inc_n_kq, tx
+smp_ap: KQ-SHAPE OK: 3 function(s) on the hot path, 1 outside it -- add_n_kq, inc_n_kq, wait_go_kq
+own: KQ-SHAPE OK: 8 function(s) on the hot path, 12 outside it -- idt_fill_kq, ticks_kq, tx_wait_kq, digits_kq
+  tcg kernel: mmio 0
+  tcg kernel: page 0
+  tcg kernel: time 10
+  tcg kernel: cpu  AuthenticAMD
+  tcg kernel: ram  0
+  tcg kernel: pci  4663
+  tcg kernel: atom 0
+  tcg kernel: bulk 0
+  tcg kernel: asm  0
+  tcg kernel: KQ-RESULT 0 checksum 508360687 interrupts lost 0
+  tcg kernel: QEMU exit status 1: the program answered 0
+GATE: kernel passes every check (tcg)
+  tcg irqnow: irq  10
+  tcg irqnow: KQ-RESULT 0 checksum 831153368 interrupts lost 0 handled by Rocq at once 10
+  tcg irqnow: QEMU exit status 1: the program answered 0
+GATE: irqnow passes every check (tcg)
+  tcg fault: map  0
+  tcg fault: flt  1
+  tcg fault: KQ-RESULT 0 checksum 773903928 interrupts lost 0 handled by Rocq at once 1
+  tcg fault: QEMU exit status 1: the program answered 0
+GATE: fault passes every check (tcg)
+  tcg smp: cpus 2
+  tcg smp: rdwr 1056956
+  tcg smp: atom 2000000
+  tcg smp: KQ-RESULT 0 checksum 921425739 interrupts lost 0
+  tcg smp: QEMU exit status 1: the program answered 0
+GATE: smp passes every check (tcg)
+  (the plain read-and-write counter below 2000000: the two processors did run at the same time, and only the atomic one kept every update)
+  tcg own: own  10
+  tcg own: sym  0
+  tcg own: run  21789
+  tcg own: load 7761
+  tcg own: KQ-RESULT 0 checksum 698489120 interrupts lost 0
+  tcg own: QEMU exit status 1: the program answered 0
+GATE: own passes every check (tcg)
+  kvm kernel: mmio 0
+  kvm kernel: page 0
+  kvm kernel: time 10
+  kvm kernel: cpu  GenuineIntel
+  kvm kernel: ram  0
+  kvm kernel: pci  4663
+  kvm kernel: atom 0
+  kvm kernel: bulk 0
+  kvm kernel: asm  0
+  kvm kernel: KQ-RESULT 0 checksum 110896242 interrupts lost 0
+  kvm kernel: QEMU exit status 1: the program answered 0
+GATE: kernel passes every check (kvm)
+  kvm irqnow: irq  10
+  kvm irqnow: KQ-RESULT 0 checksum 831153368 interrupts lost 0 handled by Rocq at once 10
+  kvm irqnow: QEMU exit status 1: the program answered 0
+GATE: irqnow passes every check (kvm)
+  kvm fault: map  0
+  kvm fault: flt  1
+  kvm fault: KQ-RESULT 0 checksum 773903928 interrupts lost 0 handled by Rocq at once 1
+  kvm fault: QEMU exit status 1: the program answered 0
+GATE: fault passes every check (kvm)
+  kvm smp: cpus 2
+  kvm smp: rdwr 1121596
+  kvm smp: atom 2000000
+  kvm smp: KQ-RESULT 0 checksum 53648068 interrupts lost 0
+  kvm smp: QEMU exit status 1: the program answered 0
+GATE: smp passes every check (kvm)
+  (the plain read-and-write counter below 2000000: the two processors did run at the same time, and only the atomic one kept every update)
+  kvm own: own  10
+  kvm own: sym  0
+  kvm own: run  2387
+  kvm own: load 955
+  kvm own: KQ-RESULT 0 checksum 512977123 interrupts lost 0
+  kvm own: QEMU exit status 1: the program answered 0
+GATE: own passes every check (kvm)
+  control_wrongmap: page 16
+  control_wrongmap: QEMU exit status 33: the program answered 16
+GATE: the control control_wrongmap fails as it must
+  control_noeoi: irq  1
+  control_noeoi: QEMU exit status 3: the program answered 1
+GATE: the control control_noeoi fails as it must
+  control_wrongpage: map  1
+  control_wrongpage: QEMU exit status 3: the program answered 1
+GATE: the control control_wrongpage fails as it must
+  control_nostart: cpus 1
+  control_nostart: QEMU exit status 3: the program answered 1
+GATE: the control control_nostart fails as it must
+  control_wrongvec: own  0
+  control_wrongvec: QEMU exit status 3: the program answered 1
+GATE: the control control_wrongvec fails as it must
+gate exit 0

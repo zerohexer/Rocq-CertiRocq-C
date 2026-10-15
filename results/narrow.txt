@@ -1,0 +1,11 @@
+# narrow blocks (4 bytes a cell; KQRun.v rd32 / upd32): the eight programs of narrow.tsv against the same programs with
+# wide blocks, the C++ and the C++ with 8-byte cells (ms, best of 5, one fast core; 2026-10-14; every answer equal to the C++'s)
+=== times (ms, best of 5): C++ | C++ 8-byte cells | Rocq wide | Rocq narrow
+CF339D         61.72     89.72    113.02    102.81 
+CF35C          12.37     17.27     19.86     13.59 
+CF295B         35.66     56.92    113.49    122.31 
+CF235C         24.43     33.88     42.72     30.67 
+CF385C        125.07    252.35    166.72    122.95 
+CF380C         40.85     60.04     57.03     54.92 
+CF165E         58.64     67.87     66.25     64.88 
+CF61E          68.62     79.57     79.23     68.59 

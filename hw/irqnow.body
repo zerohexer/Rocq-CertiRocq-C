@@ -1,0 +1,22 @@
+(* hw/irqnow.body -- ROCQ AT THE MOMENT OF AN INTERRUPT.  The timer's interrupts are counted by a Rocq program run at the
+   moment each one comes (hw/irqnow_irq.body: it adds 1 to a counter and acknowledges the interrupt).  This program
+   only sets things up and waits until the counter -- memory it shares with that program, read here only through an
+   atomic load -- reaches `kq_arg 0` (10); it counts nothing itself.  The answer: 0 when the counter got there. *)
+Local Notation IDT := 4.     (* narrow block: the interrupt table *)
+Local Notation SH := 6.      (* narrow block: memory shared with the interrupt program *)
+Fixpoint waitn (f : nat) (a want : int) (s : mem) : mem :=
+  match f with
+  | O => s
+  | S f => let s1 := hw_aload 4 a 1 0 s in
+           if want <=? rd 1 0 s1 then s1 else waitn f a want (hw_pause s1)
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  let want := kq_arg 0 in
+  let s0 := ser_init (x86_setup (kq_input 0)) in
+  let s1 := hw_vectors (hw_addr IDT) 4095 (idt_fill (kq_nat 256) IDT 0 s0) in
+  let s2 := hw_irq_on (pit_init (pic_init s1)) in
+  let s3 := hw_irq_off (waitn (kq_nat 100000000) (hw_addr SH) want s2) in
+  let n := rd 1 0 s3 in
+  let s4 := line 105 114 113 32 n s3 in
+  if (n =? want) && (rd 1 0 s4 =? n) then 0 else 1.

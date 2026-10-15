@@ -1,0 +1,67 @@
+(* CF547B "Mike and Feet" (new problem, written by the guideline from the start; the input is 10 times the judge's
+   largest):
+   bears in a row; for every size x, the largest "smallest bear" over all groups of x bears standing together.
+   For every bear, the nearest smaller bear on each side (a stack); the bear is the smallest of the group between
+   them.
+     - rule 1: the stack's height is a parameter of the loop;
+     - rule 5: taking bears off the stack only looks, and gives back the new height. *)
+Local Notation rA := 0.
+Local Notation rSTK := 1.
+Local Notation rL := 2.      (* the nearest smaller bear on the left (0 when there is none) *)
+Local Notation rR := 3.      (* the nearest smaller bear on the right (n + 1 when there is none) *)
+Local Notation rANS := 4.
+
+(* the stack's height once its bears that are not smaller than x are off *)
+Fixpoint drop (fuel : nat) (sp x : int) (s : mem) : int :=
+  match fuel with
+  | O => sp
+  | S f => if sp <=? 0 then sp else if x <=? rd rA (rd rSTK (sp - 1) s) s then drop f (sp - 1) x s else sp
+  end.
+
+Fixpoint lefts (fuel n1 : nat) (i n sp : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if n <? i then s
+      else
+        let sp1 := drop n1 sp (rd rA i s) s in
+        let l := if sp1 =? 0 then 0 else rd rSTK (sp1 - 1) s in
+        lefts f n1 (i + 1) n (sp1 + 1) (upd rSTK sp1 i (upd rL i l s))
+  end.
+
+Fixpoint rights (fuel n1 : nat) (i n sp : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if i <? 1 then s
+      else
+        let sp1 := drop n1 sp (rd rA i s) s in
+        let r := if sp1 =? 0 then n + 1 else rd rSTK (sp1 - 1) s in
+        rights f n1 (i - 1) n (sp1 + 1) (upd rSTK sp1 i (upd rR i r s))
+  end.
+
+(* a bear is the smallest of the group between its two smaller neighbours: that group's size gets its height *)
+Fixpoint spread (fuel : nat) (i n : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if n <? i then s
+      else
+        let len := rd rR i s - rd rL i s - 1 in
+        let v := zmax (rd rANS len s) (rd rA i s) in
+        spread f (i + 1) n (upd rANS len v s)
+  end.
+
+(* a group of x bears contains a group of every smaller size *)
+Fixpoint fill (fuel : nat) (x best : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => if x <? 1 then s else let v := zmax best (rd rANS x s) in fill f (x - 1) v (upd rANS x v s)
+  end.
+
+Definition solve (n n1 : nat) (nz : int) (s : mem) : mem :=
+  fill n nz 0 (spread n 1 nz (rights n n1 nz nz 0 (lefts n n1 1 nz 0 s))).
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  kq_sum (solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_arg 0) (kq_input 0)).

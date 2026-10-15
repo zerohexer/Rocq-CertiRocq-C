@@ -1,0 +1,5 @@
+(* EXPECT: REFUSE *)
+(* a function that writes nothing but gives the memory back inside a pair is not a reader: what it gives back IS the
+   memory, and the caller goes on to use both *)
+Definition wrap (s : mem) : int * mem := (rd 0 0 s, s).
+Definition solve (s : mem) : int := let p := wrap s in let s1 := upd 0 0 7 (snd p) in rd 0 0 s + rd 0 0 s1.

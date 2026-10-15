@@ -1,0 +1,41 @@
+(* CF163A "Substring and Subsequence" (new problem, written by the guideline from the start):
+   the number of pairs (a substring of s, a subsequence of t) with the same letters, modulo 10^9 + 7.
+   A table filled row by row; only two rows are kept.
+     - rule 1: the cell just written (`left`) travels in a parameter;
+     - rule 4: "the letters agree" chooses between two numbers inside the one recursive call;
+     - rule 7: a sum of two numbers below the modulus is brought back by one comparison and one subtraction, not by a
+       remainder. *)
+Local Notation rS := 0.
+Local Notation rT := 1.
+Local Notation rD0 := 2.
+Local Notation rD1 := 3.
+Local Notation rST := 4.     (* cell 0: the answer so far *)
+Local Notation MD := 1000000007.
+
+(* one row for the letter c of s.  Cell j of hc: the pairs whose substring ends at this letter and whose subsequence
+   is taken from t[1..j] *)
+Fixpoint row (fuel : nat) (j m c hp hc left : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if m <? j then
+        let a := rd rST 0 s + left in
+        upd rST 0 (if MD <=? a then a - MD else a) s
+      else
+        let x := left + rd hp (j - 1) s + 1 in
+        let v := if rd rT j s =? c then (if MD <=? x then x - MD else x) else left in
+        row f (j + 1) m c hp hc v (upd hc j v s)
+  end.
+
+Fixpoint rows (fuel m1 : nat) (i n m hp hc : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => if n <? i then s else let c := rd rS i s in rows f m1 (i + 1) n m hc hp (row m1 1 m c hp hc 0 s)
+  end.
+
+Definition solve (n m1 : nat) (nz mz : int) (s : mem) : int :=
+  rd rST 0 (rows n m1 1 nz mz rD0 rD1 s).
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_arg 2) (kq_arg 3) (kq_input 0).

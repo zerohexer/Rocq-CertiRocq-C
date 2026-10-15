@@ -1,0 +1,56 @@
+(* CF385Cn WITH NARROW BLOCKS (4 bytes a cell; KQRun.v: rd32, upd32): rX, rC, rP, rQL, rQR; written by mknarrowbody.py from CF385C.body *)
+(* CF385C "Bear and Prime Numbers" (new problem, written by the guideline from the start):
+   f(p) = how many of the given numbers the prime p divides; a query asks for the sum of f over the primes of an
+   interval.  A sieve: the multiples of every prime are walked once -- their numbers are counted, and they are marked.
+     - rule 6: "how many numbers equal v" and "v is marked" are read at the same moment, so they share a cell;
+     - rules 1 and 5: the sum over a prime's multiples travels in a parameter and is written once, when that loop
+       ends -- the loop gives back the memory and nothing else. *)
+Local Notation rX := 0.   (* narrow *)
+Local Notation rC := 1.   (* narrow *)      (* cell v: 2 * (how many numbers equal v) + (1 when v is marked) *)
+Local Notation rP := 2.   (* narrow *)      (* cell v: the sum of f over the primes up to v *)
+Local Notation rQL := 3.   (* narrow *)
+Local Notation rQR := 4.   (* narrow *)
+Local Notation rANS := 5.
+
+Fixpoint count (fuel : nat) (i : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => let x := rd32 rX i s in count f (i + 1) (upd32 rC x (rd32 rC x s + 2) s)
+  end.
+
+(* the multiples m, m + p, .. of the prime p.  acc starts as the sum up to p - 1, ends with f(p) added, and goes into
+   cell p of rP *)
+Fixpoint multiples (fuel : nat) (m p mx acc : int) (s : mem) : mem :=
+  match fuel with
+  | O => upd32 rP p acc s
+  | S f =>
+      if mx <? m then upd32 rP p acc s
+      else let c := rd32 rC m s in multiples f (m + p) p mx (acc + (c >> 1)) (upd32 rC m (c lor 1) s)
+  end.
+
+Fixpoint sieve (fuel w : nat) (v mx : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if mx <? v then s
+      else
+        let base := rd32 rP (v - 1) s in
+        if (rd32 rC v s land 1) =? 1 then sieve f w (v + 1) mx (upd32 rP v base s)
+        else sieve f w (v + 1) mx (multiples w v v mx base s)
+  end.
+
+Fixpoint answers (fuel : nat) (i mx : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let hi := rd32 rP (zmin (rd32 rQR i s) mx) s in
+      let lo := rd32 rP (zmin (rd32 rQL i s - 1) mx) s in
+      answers f (i + 1) mx (upd rANS i (hi - lo) s)
+  end.
+
+Definition solve (n q w : nat) (mx : int) (s : mem) : mem :=
+  answers q 0 mx (sieve w w 2 mx (count n 0 s)).
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  kq_sum (solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_nat (kq_arg 2)) (kq_arg 2) (kq_input 0)).

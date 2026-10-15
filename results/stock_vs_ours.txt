@@ -1,0 +1,58 @@
+# stock CertiRocq (tests/stock.sh) against our pipeline, the same Rocq text, the same machine (work laptop, Core Ultra 9 285H)
+program        problem    stock ms    ours ms stock/ours
+E_C_CF1039D    CF1039D      6015.1      588.4     10.2
+E_C_CF1100F    CF1100F       628.9      165.4      3.8
+E_C_CF1172F    CF1172F      1375.2      195.1      7.0
+E_C_CF17E      CF17E         663.6       38.4     17.3
+E_C_CF20C      CF20C          79.2       14.0      5.7
+E_C_CF235C     CF235C        310.6      109.6      2.8
+E_C_CF380C     CF380C        298.8       82.7      3.6
+E_S3_CF432D    CF432D        405.3        8.1     49.9
+E_S4_CF453B    CF453B       4875.3      685.7      7.1
+E_C_CF455A     CF455A        357.0        5.8     61.1
+E_S5_CF622F    CF622F        606.8       90.9      6.7
+E_C_CF631E     CF631E         49.7        4.9     10.1
+E_C_CF813F     CF813F        315.9       59.1      5.3
+E_C_CF833B     CF833B       4593.4      504.2      9.1
+E_C_CF868F     CF868F       3042.9      160.0     19.0
+H_CF1100F      CF1100F       433.5      118.3      3.7
+H_CF1100Fv2    CF1100F       403.5       99.1      4.1
+H_CF1100Fv3    CF1100F       356.6       98.2      3.6
+H_CF1167C      CF1167C       181.0        8.9     20.3
+H_CF163A       CF163A        321.0       23.3     13.8
+H_CF165E       CF165E       3059.6      109.1     28.0
+H_CF165Ev2     CF165E        622.4       89.0      7.0
+H_CF165En      CF165E        633.0       62.2     10.2
+H_CF20C        CF20C          48.9        7.5      6.5
+H_CF235C       CF235C        249.3       76.5      3.3
+H_CF235Cv2     CF235C        226.9       83.9      2.7
+H_CF235Cn      CF235C        220.8       47.2      4.7
+H_CF295B       CF295B       2231.0      116.4     19.2
+H_CF295Bv2     CF295B        493.3       81.8      6.0
+H_CF295Bn      CF295B        497.1      105.4      4.7
+H_CF339D       CF339D        754.6      246.5      3.1
+H_CF339Dn      CF339D        715.3      124.1      5.8
+H_CF35C        CF35C         898.4       29.6     30.4
+H_CF35Cn       CF35C         814.6       22.2     36.7
+H_CF380C       CF380C        261.4       64.9      4.0
+H_CF380Cp      CF380C        204.0       51.6      4.0
+H_CF380Cn      CF380C        280.8       58.5      4.8
+H_CF385C       CF385C       3053.7      240.4     12.7
+H_CF385Cn      CF385C       2760.2      150.7     18.3
+H_CF453B       CF453B       3556.8      383.6      9.3
+H_CF460C       CF460C       1422.1       35.8     39.7
+H_CF547B       CF547B        508.3       35.8     14.2
+H_CF61E        CF61E         292.6       83.3      3.5
+H_CF61En       CF61E         274.8       59.9      4.6
+H_CF622F       CF622F        407.8       86.3      4.7
+H_CF7D         CF7D          875.6       20.5     42.7
+H_CF813F       CF813F        220.1       46.3      4.8
+H_CF813Fv2     CF813F        234.8       45.9      5.1
+H_CF833B       CF833B       1710.5      320.3      5.3
+H_CF868F       CF868F       3945.5      102.8     38.4
+H_CF868Fv2     CF868F       1459.4       63.5     23.0
+programs written by the guideline (36): stock / ours geometric mean 8.5x, median 5.9x, from 2.7x to 42.7x
+corpus texts (15), ours without the translator: stock / ours geometric mean 9.4x, median 7.1x, from 2.8x to 61.1x
+all: stock / ours geometric mean 8.8x, median 6.7x, from 2.7x to 61.1x
+per problem (26), the fastest Rocq build against the C++: stock median 13.3x (geometric mean 14.1x, from 3.7x to 82.4x); ours median 1.23x
+per problem, our fastest against stock's fastest: geometric mean 11.4x, median 10.1x

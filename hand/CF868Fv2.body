@@ -1,0 +1,114 @@
+(* CF868F, written for speed, second version: FIVE LOOPS THAT EACH DO ONE THING.
+   The same divide-and-conquer and the same moving window as the corpus program.  The first hand-written version was
+   ONE loop that asked up to six questions every round ("which end must move, which way, or is it time to try a
+   candidate?").  Here each question has its own loop, and a loop that is done hands over to the next:
+
+       growL -> growR -> shrinkL -> shrinkR -> cand
+
+   The four window loops bring the window to [p, mid] once per scan.  From then on `cand` needs no window questions at
+   all: trying candidate p and then dropping a[p] from the window IS the move to [p + 1, mid].
+   The window (two ends, cost) and what a scan found live in five cells of rST between scans, and in the loops'
+   parameters during one: nothing is built. *)
+Local Notation rA := 0.
+Local Notation rCNT := 1.
+Local Notation rD0 := 2.
+Local Notation rD1 := 3.
+Local Notation rST := 4.     (* 0, 1, 2: the window's ends and cost;  3, 4: the best value and where *)
+Local Notation INF := 1000000000000000000.
+
+(* the window is [p, mid] and costs cur: try p, then a[p] leaves the window *)
+Fixpoint cand (fuel : nat) (p hi cur best opt hprev : int) (s : mem) : mem :=
+  match fuel with
+  | O => upd rST 4 opt (upd rST 3 best (upd rST 2 cur (upd rST 0 p s)))
+  | S f =>
+      if hi <? p then upd rST 4 opt (upd rST 3 best (upd rST 2 cur (upd rST 0 p s)))
+      else
+        let v := rd hprev (p - 1) s + cur in
+        let x := rd rA p s in
+        let c := rd rCNT x s in
+        let s1 := upd rCNT x (c - 1) s in
+        cand f (p + 1) hi (cur - (c - 1)) (if v <? best then v else best) (if v <? best then p else opt) hprev s1
+  end.
+
+(* the right end comes back to mid *)
+Fixpoint shrinkR (fuel n4 : nat) (cr cur p hi mid hprev : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if mid <? cr then
+        let x := rd rA cr s in
+        let c := rd rCNT x s in
+        shrinkR f n4 (cr - 1) (cur - (c - 1)) p hi mid hprev (upd rCNT x (c - 1) s)
+      else cand n4 p hi cur INF (-1) hprev (upd rST 1 cr s)
+  end.
+
+(* the left end comes up to p *)
+Fixpoint shrinkL (fuel n4 : nat) (cl cr cur p hi mid hprev : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if cl <? p then
+        let x := rd rA cl s in
+        let c := rd rCNT x s in
+        shrinkL f n4 (cl + 1) cr (cur - (c - 1)) p hi mid hprev (upd rCNT x (c - 1) s)
+      else shrinkR n4 n4 cr cur p hi mid hprev s
+  end.
+
+(* the right end goes out to mid *)
+Fixpoint growR (fuel n4 : nat) (cl cr cur p hi mid hprev : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if cr <? mid then
+        let x := rd rA (cr + 1) s in
+        let c := rd rCNT x s in
+        growR f n4 cl (cr + 1) (cur + c) p hi mid hprev (upd rCNT x (c + 1) s)
+      else shrinkL n4 n4 cl cr cur p hi mid hprev s
+  end.
+
+(* the left end goes down to p *)
+Fixpoint growL (fuel n4 : nat) (cl cr cur p hi mid hprev : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if p <? cl then
+        let x := rd rA (cl - 1) s in
+        let c := rd rCNT x s in
+        growL f n4 (cl - 1) cr (cur + c) p hi mid hprev (upd rCNT x (c + 1) s)
+      else growR n4 n4 cl cr cur p hi mid hprev s
+  end.
+
+Fixpoint compute (h n4 : nat) (l r optl optr hprev hcur : int) (s : mem) : mem :=
+  match h with
+  | O => s
+  | S h' =>
+      if r <? l then s
+      else
+        let mid := (l + r) >> 1 in
+        let hi := if mid <=? optr then mid else optr in
+        let s1 := growL n4 n4 (rd rST 0 s) (rd rST 1 s) (rd rST 2 s) optl hi mid hprev s in
+        let opt := rd rST 4 s1 in
+        let s2 := upd hcur mid (rd rST 3 s1) s1 in
+        compute h' n4 (mid + 1) r opt optr hprev hcur (compute h' n4 l (mid - 1) optl opt hprev hcur s2)
+  end.
+
+Fixpoint layers (k h n4 : nat) (nz hprev hcur : int) (s : mem) : mem :=
+  match k with
+  | O => upd rST 3 (rd hprev nz s) s
+  | S k' => layers k' h n4 nz hcur hprev (upd hcur 0 INF (compute h n4 1 nz 1 nz hprev hcur s))
+  end.
+
+Fixpoint fill_inf (fuel : nat) (i : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => fill_inf f (i + 1) (upd rD0 i INF s)
+  end.
+
+(* n4: a budget of 4n + 4 rounds for each loop of a scan (a window end moves at most n cells; at most n candidates) *)
+Definition solve (k h n n4 : nat) (nz : int) (s : mem) : int :=
+  let s1 := upd rD0 0 0 (upd rST 2 0 (upd rST 1 0 (upd rST 0 1 s))) in
+  rd rST 3 (layers k h n4 nz rD0 rD1 (fill_inf n 1 s1)).
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_nat (kq_arg 2)) (kq_nat (4 * kq_arg 2 + 4)) (kq_arg 3) (kq_input 0).

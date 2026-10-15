@@ -1,0 +1,5 @@
+(* EXPECT: REFUSE *)
+(* a loop whose call to itself is not its last step *)
+Fixpoint count (fuel : nat) (i : int) (s : mem) : int :=
+  match fuel with O => 0 | S f => let r := count f (i + 1) s in r + rd 0 i s end.
+Definition solve (n : nat) (s : mem) : int := count n 0 s.

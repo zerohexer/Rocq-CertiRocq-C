@@ -1,0 +1,18 @@
+(* hw/fault_irq.body -- run AT THE MOMENT of a fault.  A page fault (vector 14) in the second GB: the 2 MB it falls in is
+   mapped to 64 MB + 2 MB * k in the second GB's table (narrow block 3), the processor told to forget the old entry,
+   and 1 added to the count (atomically); answers 0, and the instruction that faulted is tried again.  Anything else:
+   1, not handled (the machine stops). *)
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  let v := hw_irq_info 0 in
+  let s := kq_input 0 in
+  if v =? 14 then
+    let s1 := hw_fault_addr 3 0 s in                                   (* the address that faulted *)
+    let x := rd 3 0 s1 in
+    let k := (x - 1073741824) / 2097152 in
+    if (k <? 0) || (512 <=? k) then 1
+    else
+      let s2 := upd32 3 (2 * k + 1) 0 (upd32 3 (2 * k) (67108864 + k * 2097152 + 131) s1) in
+      let s3 := hw_atomic 0 4 (hw_addr 6) 1 3 1 (hw_tlb_page x s2) in
+      if rd 3 1 s3 <? 0 then 1 else 0
+  else 1.

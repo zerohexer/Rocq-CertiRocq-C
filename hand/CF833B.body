@@ -1,0 +1,82 @@
+(* CF833B, written for speed.  The same dp over the number of boxes and the same segment tree (add on a range, maximum
+   of a range) as the corpus program.  What changed:
+     - rule 5: the corpus program's `qmax` pushes pending additions down while it looks, so it must give back the
+       maximum AND the memory -- a pair built at every node it visits.  Here an addition stays at the node it was made
+       at (a node's maximum already includes its own), nothing is pushed, so `qmax` only reads and gives back ONE
+       number;
+     - the middle of an interval is a shift. *)
+Local Notation rA := 0.
+Local Notation rLAST := 1.
+Local Notation rPREV := 2.
+Local Notation rMX := 3.     (* the maximum below a node, additions made AT the node included *)
+Local Notation rLZ := 4.     (* what was added at the node (to all of its interval) *)
+Local Notation rD0 := 5.
+Local Notation rD1 := 6.
+Local Notation NEG := (-1000000000000000000).
+
+Fixpoint prevs (fuel : nat) (i : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => let x := rd rA i s in prevs f (i + 1) (upd rLAST x i (upd rPREV i (rd rLAST x s) s))
+  end.
+
+Fixpoint build (h : nat) (o l r src : int) (s : mem) : mem :=
+  match h with
+  | O => s
+  | S h' =>
+      if l =? r then upd rLZ o 0 (upd rMX o (rd src l s) s)
+      else
+        let m := (l + r) >> 1 in
+        let s2 := build h' (2 * o + 1) (m + 1) r src (build h' (2 * o) l m src s) in
+        upd rLZ o 0 (upd rMX o (zmax (rd rMX (2 * o) s2) (rd rMX (2 * o + 1) s2)) s2)
+  end.
+
+Fixpoint update (h : nat) (o l r ql qr v : int) (s : mem) : mem :=
+  match h with
+  | O => s
+  | S h' =>
+      if (qr <? l) || (r <? ql) then s
+      else if (ql <=? l) && (r <=? qr) then upd rLZ o (rd rLZ o s + v) (upd rMX o (rd rMX o s + v) s)
+      else
+        let m := (l + r) >> 1 in
+        let s2 := update h' (2 * o + 1) (m + 1) r ql qr v (update h' (2 * o) l m ql qr v s) in
+        upd rMX o (zmax (rd rMX (2 * o) s2) (rd rMX (2 * o + 1) s2) + rd rLZ o s2) s2
+  end.
+
+Fixpoint qmax (h : nat) (o l r ql qr : int) (s : mem) : int :=
+  match h with
+  | O => NEG
+  | S h' =>
+      if (qr <? l) || (r <? ql) then NEG
+      else if (ql <=? l) && (r <=? qr) then rd rMX o s
+      else
+        let m := (l + r) >> 1 in
+        zmax (qmax h' (2 * o) l m ql qr s) (qmax h' (2 * o + 1) (m + 1) r ql qr s) + rd rLZ o s
+  end.
+
+Fixpoint sweep (fuel h : nat) (i nz hcur : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let s1 := update h 1 0 (nz - 1) (rd rPREV i s) (i - 1) 1 s in
+      sweep f h (i + 1) nz hcur (upd hcur i (qmax h 1 0 (nz - 1) 0 (i - 1) s1) s1)
+  end.
+
+Fixpoint layers (k n h : nat) (nz hprev hcur : int) (s : mem) : int :=
+  match k with
+  | O => rd hprev nz s
+  | S k' => layers k' n h nz hcur hprev (sweep n h 1 nz hcur (upd hcur 0 NEG (build h 1 0 (nz - 1) hprev s)))
+  end.
+
+Fixpoint fill_neg (fuel : nat) (i : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => fill_neg f (i + 1) (upd rD0 i NEG s)
+  end.
+
+Definition solve (k n h : nat) (nz : int) (s : mem) : int :=
+  layers k n h nz rD0 rD1 (fill_neg n 1 (upd rD0 0 0 (prevs n 1 s))).
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_nat (kq_arg 2)) (kq_arg 3) (kq_input 0).

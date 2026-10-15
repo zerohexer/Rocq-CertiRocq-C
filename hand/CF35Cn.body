@@ -1,0 +1,77 @@
+(* CF35Cn WITH NARROW BLOCKS (4 bytes a cell; KQRun.v: rd32, upd32): rD, rQ, rSRC; written by mknarrowbody.py from CF35C.body *)
+(* CF35C "Fire Again" (new problem, written by the guideline from the start):
+   a forest of N x M trees, fire starts at K of them and reaches the four neighbours every minute; when does the last
+   tree catch fire (here also: how many trees catch fire in that last minute).
+   A walk in the order of the minutes, with a queue kept in the memory.
+     - rule 1: the queue's two ends are parameters of the loop;
+     - rule 5: looking at a neighbour gives back the memory only; whether the queue grew is a number chosen next to
+       it, from the same test;
+     - the cells round the forest count as reached, so the loop never asks whether a neighbour exists. *)
+Local Notation rD := 0.   (* narrow *)      (* cell r * w + c: 0 = not reached; else 1 + the minute the fire reaches it *)
+Local Notation rQ := 1.   (* narrow *)
+Local Notation rSRC := 2.   (* narrow *)
+Local Notation rANS := 3.    (* cell 0: the last minute; cell 1: how many trees catch fire then *)
+
+Fixpoint border_rows (fuel : nat) (c last : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => border_rows f (c + 1) last (upd32 rD (last + c) 1 (upd32 rD c 1 s))
+  end.
+
+Fixpoint border_cols (fuel : nat) (r w : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => border_cols f (r + 1) w (upd32 rD (r * w + w - 1) 1 (upd32 rD (r * w) 1 s))
+  end.
+
+Fixpoint sources (fuel : nat) (i : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => let c := rd32 rSRC i s in sources f (i + 1) (upd32 rQ i c (upd32 rD c 1 s))
+  end.
+
+(* a new cell c gets the number d and joins the queue at qt *)
+Definition put (isnew : bool) (c d qt : int) (s : mem) : mem :=
+  if isnew then upd32 rQ qt c (upd32 rD c d s) else s.
+
+Fixpoint bfs (fuel : nat) (qh qt w : int) (s : mem) : mem :=
+  match fuel with
+  | O => upd rANS 0 qt s
+  | S f =>
+      if qt <=? qh then upd rANS 0 qt s
+      else
+        let c := rd32 rQ qh s in
+        let d := rd32 rD c s + 1 in
+        let n1 := rd32 rD (c - 1) s =? 0 in
+        let s1 := put n1 (c - 1) d qt s in
+        let t1 := if n1 then qt + 1 else qt in
+        let n2 := rd32 rD (c + 1) s1 =? 0 in
+        let s2 := put n2 (c + 1) d t1 s1 in
+        let t2 := if n2 then t1 + 1 else t1 in
+        let n3 := rd32 rD (c - w) s2 =? 0 in
+        let s3 := put n3 (c - w) d t2 s2 in
+        let t3 := if n3 then t2 + 1 else t2 in
+        let n4 := rd32 rD (c + w) s3 =? 0 in
+        let s4 := put n4 (c + w) d t3 s3 in
+        let t4 := if n4 then t3 + 1 else t3 in
+        bfs f (qh + 1) t4 w s4
+  end.
+
+(* how many cells at the end of the queue carry the number dmax *)
+Fixpoint tail (fuel : nat) (i dmax acc : int) (s : mem) : int :=
+  match fuel with
+  | O => acc
+  | S f => if i <? 0 then acc else if rd32 rD (rd32 rQ i s) s =? dmax then tail f (i - 1) dmax (acc + 1) s else acc
+  end.
+
+Definition solve (rows cols k tot : nat) (w last kz : int) (s : mem) : mem :=
+  let s1 := sources k 0 (border_cols rows 0 w (border_rows cols 0 last s)) in
+  let s2 := bfs tot 0 kz w s1 in
+  let qt := rd rANS 0 s2 in
+  let dmax := rd32 rD (rd32 rQ (qt - 1) s2) s2 in
+  let cnt := tail tot (qt - 1) dmax 0 s2 in
+  upd rANS 1 cnt (upd rANS 0 (dmax - 1) s2).
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  kq_sum (solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_nat (kq_arg 2)) (kq_nat (kq_arg 3)) (kq_arg 1) (kq_arg 4) (kq_arg 2) (kq_input 0)).

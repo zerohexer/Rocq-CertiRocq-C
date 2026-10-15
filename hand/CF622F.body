@@ -1,0 +1,76 @@
+(* CF622F, written for speed.  The same sums of powers and the same formula of Lagrange as the corpus program.
+   What changed is rule 7 throughout -- say what the machine has:
+     - "is the exponent odd" and "half of the exponent" are a mask and a shift, not a remainder and a division;
+     - a sum of two numbers below the modulus is brought back by one comparison and one subtraction;
+   and rule 1: the number just written (the running sum, the running product) travels in a parameter instead of being
+   read back from the cell written the round before. *)
+Local Notation rY := 0.
+Local Notation rFACT := 1.
+Local Notation rINV := 2.
+Local Notation rPRE := 3.
+Local Notation rSUF := 4.
+Local Notation MD := 1000000007.
+
+Fixpoint mpow (fuel : nat) (b e acc : int) : int :=
+  match fuel with
+  | O => acc
+  | S f =>
+      if e =? 0 then acc
+      else mpow f ((b * b) mod MD) (e >> 1) (if (e land 1) =? 1 then (acc * b) mod MD else acc)
+  end.
+
+(* y[i] = 1^k + .. + i^k *)
+Fixpoint fill_y (fuel : nat) (i k y0 : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let x := y0 + mpow 31 i k 1 in
+      let y := if MD <=? x then x - MD else x in
+      fill_y f (i + 1) k y (upd rY i y s)
+  end.
+
+Fixpoint fill_fact (fuel : nat) (i a : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => let v := (a * i) mod MD in fill_fact f (i + 1) v (upd rFACT i v s)
+  end.
+
+Fixpoint fill_inv (fuel : nat) (i a : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => let v := (a * i) mod MD in fill_inv f (i - 1) v (upd rINV (i - 1) v s)
+  end.
+
+Fixpoint fill_pre (fuel : nat) (i n a : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => let v := (a * ((n - (i - 1)) mod MD)) mod MD in fill_pre f (i + 1) n v (upd rPRE i v s)
+  end.
+
+Fixpoint fill_suf (fuel : nat) (i n a : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => let v := (a * ((n - i) mod MD)) mod MD in fill_suf f (i - 1) n v (upd rSUF (i - 1) v s)
+  end.
+
+Fixpoint lagrange (fuel : nat) (i m acc : int) (s : mem) : int :=
+  match fuel with
+  | O => acc
+  | S f =>
+      let t := ((((rd rY i s * rd rPRE i s) mod MD) * rd rSUF i s) mod MD) * ((rd rINV i s * rd rINV (m - i) s) mod MD) in
+      let tm := t mod MD in
+      let t1 := if ((m - i) land 1) =? 1 then (if tm =? 0 then 0 else MD - tm) else tm in
+      let x := acc + t1 in
+      lagrange f (i + 1) m (if MD <=? x then x - MD else x) s
+  end.
+
+Definition solve (w w1 : nat) (n k : int) (s : mem) : int :=
+  let m := k + 1 in
+  let s2 := fill_fact w 1 1 (upd rFACT 0 1 (fill_y w 1 k 0 (upd rY 0 0 s))) in
+  let iv := mpow 31 (rd rFACT m s2) (MD - 2) 1 in
+  let s6 := fill_suf w m n 1 (upd rSUF m 1 (fill_pre w 1 n 1 (upd rPRE 0 1 (fill_inv w m iv (upd rINV m iv s2))))) in
+  if n <=? m then rd rY n s6 else lagrange w1 0 m 0 s6.
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_arg 2) (kq_arg 3) (kq_input 0).

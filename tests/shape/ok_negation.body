@@ -1,0 +1,5 @@
+(* EXPECT: OK *)
+(* the lowest set bit: `- i` is one machine operation *)
+Fixpoint down (fuel : nat) (i acc : int) (s : mem) : int :=
+  match fuel with O => acc | S f => if i <=? 0 then acc else down f (i - (i land (- i))) (acc + rd 0 i s) s end.
+Definition solve (n : int) (s : mem) : int := down 64 n 0 s.

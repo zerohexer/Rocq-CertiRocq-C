@@ -1,0 +1,34 @@
+# problems.tsv -- the timed problems.  Columns:
+#   name      big/<name>_timed.cpp is its C++ reference; big/<name>.in / .mem / .args its large input (mkbig.py)
+#   compare   how a Rocq run's answers are compared with the C++ run's output:
+#               -            the program's result is the first line of the C++ output
+#               h:start:n    cells start .. start+n-1 of block h are the lines of the C++ output
+#                            (n = r: as many as the result says)
+#   program   the corpus program (sv/<program>.sv)
+CF455A   -            C_CF455A
+CF380C   6:0:100000   C_CF380C
+CF1100F  6:0:500000   C_CF1100F
+CF868F   -            C_CF868F
+CF631E   -            C_CF631E
+CF833B   -            C_CF833B
+CF17E    -            C_CF17E
+CF20C    7:1:100000   C_CF20C
+CF1039D  9:1:100000   C_CF1039D
+CF813F   15:1:100000  C_CF813F
+CF235C   12:0:20000   C_CF235C
+CF1172F  7:0:200000   C_CF1172F
+CF432D   4:0:r        S3_CF432D
+CF453B   -            S4_CF453B
+CF622F   -            S5_CF622F
+# new problems: no corpus program, only a program written by the guideline from the start (hand.tsv)
+CF61E    -            -
+CF385C   5:0:50000    -
+CF1167C  4:1:500000   -
+CF163A   -            -
+CF460C   -            -
+CF35C    3:0:2        -
+CF295B   3:0:500      -
+CF339D   3:0:2000000  -
+CF547B   4:1:2000000  -
+CF165E   2:0:1000000  -
+CF7D     -            -

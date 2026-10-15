@@ -1,0 +1,47 @@
+(* CF165E "Compatible Numbers" (new problem, written by the guideline from the start):
+   for every number of the list, another number of the list that shares no bit with it (or -1).
+   A table over all sets of 22 bits: cell m holds one of the numbers whose bits all lie inside m.  It is filled bit by
+   bit: a set that has the bit and no number yet takes the number of the same set without the bit.
+     - rule 4: what goes into a cell is chosen between numbers inside the one recursive call (and always written);
+     - rule 7: the bit travels as a mask that is doubled, not as a count to shift by. *)
+Local Notation rA := 0.
+Local Notation rF := 1.      (* cell m: one of the numbers whose bits all lie inside m, or 0 *)
+Local Notation rANS := 2.
+
+Fixpoint place (fuel : nat) (i : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => let x := rd rA i s in place f (i + 1) (upd rF x x s)
+  end.
+
+Fixpoint pass (fuel : nat) (m full bit : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if full <=? m then s
+      else
+        let v := rd rF m s in
+        let w := if (m land bit) =? 0 then v else if v =? 0 then rd rF (m lxor bit) s else v in
+        pass f (m + 1) full bit (upd rF m w s)
+  end.
+
+Fixpoint bits (fuel fl : nat) (bit full : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => if full <=? bit then s else bits f fl (bit << 1) full (pass fl 0 full bit s)
+  end.
+
+Fixpoint answers (fuel : nat) (i full : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let x := rd rF ((full - 1) lxor rd rA i s) s in
+      answers f (i + 1) full (upd rANS i (if x =? 0 then -1 else x) s)
+  end.
+
+Definition solve (n fl : nat) (full : int) (s : mem) : mem :=
+  answers n 0 full (bits 24 fl 1 full (place n 0 s)).
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  kq_sum (solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_arg 1) (kq_input 0)).

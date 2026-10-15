@@ -1,0 +1,28 @@
+problem         C++      Rocq  no tests     share
+CF455A         4.42      5.33      5.26        1%  ok ok ok 
+CF380C        47.06     54.97     50.22        9%  ok ok ok 
+CF1100F       70.48     63.84     59.75        6%  ok ok ok 
+bench.sh: line 14:   742 Segmentation fault      KQ_MEM=$mem timeout 900 taskset -c $KQCPU $bin $(cat $args) > dbg/bench.out 2>&1
+CF868F        90.59     76.40      0.00      100%  ok ok core) 
+CF631E         5.42      5.89      4.69       20%  ok ok ok 
+CF833B       337.14    353.89    336.40        5%  ok ok ok 
+CF17E         32.62     42.13     35.38       16%  ok ok ok 
+CF20C         10.84      7.95      9.95      -25%  ok ok ok 
+CF1039D      623.34    709.98    957.19      -35%  ok ok ok 
+CF813F        30.00     42.54     38.81        9%  ok ok ok 
+CF235C        24.40     45.81     38.68       16%  ok ok ok 
+CF1172F      170.40    164.43    141.31       14%  ok ok ok 
+CF432D         5.83      7.77      7.54        3%  ok ok ok 
+CF453B       719.65    441.69    313.86       29%  ok ok ok 
+CF622F        53.59     80.53     80.61       -0%  ok ok ok 
+CF61E         68.59     79.85     79.87       -0%  ok ok ok 
+CF385C       134.79    180.13    165.30        8%  ok ok ok 
+CF1167C        6.05      9.43      9.55       -1%  ok ok ok 
+CF163A        34.52     28.35     22.79       20%  ok ok ok 
+CF460C        28.58     34.77     34.47        1%  ok ok ok 
+CF35C         15.77     23.02     23.49       -2%  ok ok ok 
+CF295B        35.26    116.54    102.49       12%  ok ok ok 
+CF339D        64.53    146.04    121.83       17%  ok ok ok 
+CF547B        29.68     35.98     30.16       16%  ok ok ok 
+CF165E        58.95     69.57     66.40        5%  ok ok ok 
+CF7D          18.36     19.08     19.27       -1%  ok ok ok 

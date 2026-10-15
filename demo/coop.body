@@ -1,0 +1,62 @@
+(* TWO TASKS AND A SCHEDULER, WITH INPUT AND OUTPUT -- a small program of the kind one writes in C, in the fragment.
+
+   Task A, the producer: reads the input one number at a time and puts each into a ring of 1024 cells.
+   Task B, the consumer: takes numbers out of the ring, keeps a running checksum of them, and writes the checksum to
+                         the output after every 2^17 numbers and once more at the end.
+   The scheduler gives each task one step in turn until both are done.
+
+   This is concurrency the way a single processor does it (and the way the verified systems CakeML / Pancake and
+   CompCert account for it): the tasks do not run at the same instant, they are INTERLEAVED, and here the interleaving
+   is the program's own -- so it is a function like any other and can be reasoned about like any other.
+     - A task is a STEP: a function from the memory to the memory.  What a C thread keeps on its stack between two
+       steps (where it is, its counters) it keeps in cells of its own (block rA, block rB).
+     - A task that cannot go on (the ring is full, the ring is empty) gives the memory back unchanged: that is "yield".
+     - Input and output are writers on the memory (KQRun.v: kq_in, kq_out), so the checker's one rule -- a memory
+       handed on is never touched again -- is what keeps them in order.
+   Nothing here builds a value: the generated C is two inlined step functions in one loop. *)
+Local Notation rQ := 0.      (* the ring *)
+Local Notation rA := 1.      (* task A:  0 = done *)
+Local Notation rB := 2.      (* task B:  0 = done;  1 = the checksum;  2 = how many numbers taken *)
+Local Notation rS := 3.      (* shared:  0 = where the consumer is;  1 = where the producer is;  2 = the number just read *)
+Local Notation MASK := 1023.
+Local Notation MD := 1000000007.
+
+Definition stepA (s : mem) : mem :=
+  if rd rA 0 s =? 1 then s
+  else
+    let h := rd rS 0 s in
+    let t := rd rS 1 s in
+    if (t - h) =? 1024 then s                                  (* the ring is full: the turn is given away *)
+    else
+      let s1 := kq_in rS 2 s in
+      let x := rd rS 2 s1 in
+      if x <? 0 then upd rA 0 1 s1                              (* no more input: done *)
+      else upd rS 1 (t + 1) (upd rQ (t land MASK) x s1).
+
+Definition stepB (s : mem) : mem :=
+  if rd rB 0 s =? 1 then s
+  else
+    let h := rd rS 0 s in
+    let t := rd rS 1 s in
+    if h =? t then
+      (if rd rA 0 s =? 1 then (let c := rd rB 1 s in kq_out c (upd rB 0 1 s)) else s)      (* empty: done, or wait *)
+    else
+      let x := rd rQ (h land MASK) s in
+      let c := (rd rB 1 s * 31 + x) mod MD in
+      let k := rd rB 2 s + 1 in
+      let s1 := upd rB 2 k (upd rB 1 c (upd rS 0 (h + 1) s)) in
+      if (k land 131071) =? 0 then kq_out c s1 else s1.
+
+Fixpoint sched (fuel : nat) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let s1 := stepB (stepA s) in
+      if (rd rA 0 s1 =? 1) && (rd rB 0 s1 =? 1) then s1 else sched f s1
+  end.
+
+Definition solve (fuel : nat) (s : mem) : mem := sched fuel s.
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  kq_sum (solve (kq_nat (kq_arg 0)) (kq_input 0)).

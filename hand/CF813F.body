@@ -1,0 +1,158 @@
+(* CF813F, written for speed.  The same offline method as the corpus program: sort the queries to pair every
+   switching-on with its switching-off, hang each interval on a segment tree over time, walk the tree with a
+   union-find that keeps parities and can undo.  What changed:
+     - rule 5: `find` gave back a pair (root, parity); here ONE number, 2 * root + parity.  `union` and `apply` gave
+       back (did it fit, memory); here `apply` gives back the memory and leaves the yes / no in a cell, once;
+     - rule 4: the merge step of the sort chooses between two NUMBERS (which index to take, which pointer to move)
+       inside one call: which key is smaller is a coin toss;
+     - the middle of an interval is a shift. *)
+Local Notation rQX := 0.
+Local Notation rQY := 1.
+Local Notation rKEY := 2.
+Local Notation rIDX := 3.
+Local Notation rTMP := 4.
+Local Notation rNH := 5.
+Local Notation rRU := 6.
+Local Notation rRV := 7.
+Local Notation rRN := 8.
+Local Notation rST := 9.     (* 0: records made;  1: size of the undo stack;  2: did the last `apply` fit *)
+Local Notation rP := 10.
+Local Notation rRK := 11.
+Local Notation rPX := 12.
+Local Notation rSTA := 13.
+Local Notation rSTB := 14.
+Local Notation rANS := 15.
+
+Fixpoint keys (fuel : nat) (i nz : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => keys f (i + 1) nz (upd rIDX (i - 1) i (upd rKEY i (rd rQX i s * (nz + 1) + rd rQY i s) s))
+  end.
+
+Fixpoint merge (fuel : nat) (i j k mid r : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if mid <? i then (if r <? j then s else merge f i (j + 1) (k + 1) mid r (upd rTMP k (rd rIDX j s) s))
+      else if r <? j then merge f (i + 1) j (k + 1) mid r (upd rTMP k (rd rIDX i s) s)
+      else
+        let a := rd rIDX i s in
+        let b := rd rIDX j s in
+        let c := rd rKEY a s <=? rd rKEY b s in
+        merge f (if c then i + 1 else i) (if c then j else j + 1) (k + 1) mid r (upd rTMP k (if c then a else b) s)
+  end.
+
+Fixpoint copy_back (fuel : nat) (k r : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => if r <? k then s else copy_back f (k + 1) r (upd rIDX k (rd rTMP k s) s)
+  end.
+
+Fixpoint msort (h q : nat) (l r : int) (s : mem) : mem :=
+  match h with
+  | O => s
+  | S h' =>
+      if r <=? l then s
+      else
+        let m := (l + r) >> 1 in
+        copy_back q l r (merge q l (m + 1) l m r (msort h' q (m + 1) r (msort h' q l m s)))
+  end.
+
+Definition push_rec (node u v : int) (s : mem) : mem :=
+  let c := rd rST 0 s + 1 in
+  upd rST 0 c (upd rNH node c (upd rRN c (rd rNH node s) (upd rRV c v (upd rRU c u s)))).
+
+Fixpoint add_iv (h : nat) (node l r a b u v : int) (s : mem) : mem :=
+  match h with
+  | O => s
+  | S h' =>
+      if (b <? l) || (r <? a) then s
+      else if (a <=? l) && (r <=? b) then push_rec node u v s
+      else
+        let m := (l + r) >> 1 in
+        add_iv h' (2 * node + 1) (m + 1) r a b u v (add_iv h' (2 * node) l m a b u v s)
+  end.
+
+Fixpoint pairs (fuel h : nat) (p qz : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if qz <=? p then s
+      else
+        let t1 := rd rIDX p s in
+        let x := rd rQX t1 s in
+        let y := rd rQY t1 s in
+        if (p + 1 <? qz) && (rd rKEY t1 s =? rd rKEY (rd rIDX (p + 1) s) s)
+        then pairs f h (p + 2) qz (add_iv h 1 1 qz t1 (rd rIDX (p + 1) s - 1) x y s)
+        else pairs f h (p + 1) qz (add_iv h 1 1 qz t1 qz x y s)
+  end.
+
+Fixpoint init_dsu (fuel : nat) (v : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => init_dsu f (v + 1) (upd rPX v 0 (upd rRK v 0 (upd rP v v s)))
+  end.
+
+(* 2 * (the root of v) + (the parity of v against its root) *)
+Fixpoint find (fuel : nat) (v par : int) (s : mem) : int :=
+  match fuel with
+  | O => 2 * v + par
+  | S f => let p := rd rP v s in if p =? v then 2 * v + par else find f p (par lxor rd rPX v s) s
+  end.
+
+(* root rs goes under root rb with parity px; the undo stack remembers it, and whether rb's rank grew *)
+Definition link (rs rb px : int) (s : mem) : mem :=
+  let t := rd rST 1 s in
+  let grew := if rd rRK rs s =? rd rRK rb s then 1 else 0 in
+  upd rST 1 (t + 1) (upd rSTB t grew (upd rSTA t rs (upd rRK rb (rd rRK rb s + grew) (upd rPX rs px (upd rP rs rb s))))).
+
+Fixpoint rollback (fuel : nat) (mark : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let t := rd rST 1 s in
+      if t <=? mark then s
+      else
+        let rs := rd rSTA (t - 1) s in
+        let rb := rd rP rs s in
+        rollback f mark (upd rST 1 (t - 1) (upd rPX rs 0 (upd rP rs rs (upd rRK rb (rd rRK rb s - rd rSTB (t - 1) s) s))))
+  end.
+
+(* the edges hung on one node of the tree, one after the other; cell 2 of rST: 1 when all of them fitted *)
+Fixpoint apply (fuel : nat) (e : int) (s : mem) : mem :=
+  match fuel with
+  | O => upd rST 2 1 s
+  | S f =>
+      if e =? 0 then upd rST 2 1 s
+      else
+        let fu := find 40 (rd rRU e s) 0 s in
+        let fv := find 40 (rd rRV e s) 0 s in
+        let ru := fu >> 1 in
+        let rv := fv >> 1 in
+        let px := ((fu lxor fv) land 1) lxor 1 in
+        let nx := rd rRN e s in
+        if ru =? rv then (if px =? 1 then upd rST 2 0 s else apply f nx s)
+        else if rd rRK ru s <? rd rRK rv s then apply f nx (link ru rv px s)
+        else apply f nx (link rv ru px s)
+  end.
+
+Fixpoint dfs (h q : nat) (node l r : int) (s : mem) : mem :=
+  match h with
+  | O => s
+  | S h' =>
+      let mark := rd rST 1 s in
+      let s1 := apply q (rd rNH node s) s in
+      if rd rST 2 s1 =? 1 then
+        (if l =? r then rollback q mark (upd rANS l 1 s1)
+         else
+           let m := (l + r) >> 1 in
+           rollback q mark (dfs h' q (2 * node + 1) (m + 1) r (dfs h' q (2 * node) l m s1)))
+      else rollback q mark s1
+  end.
+
+Definition solve (q n : nat) (qz nz : int) (s : mem) : mem :=
+  dfs 20 q 1 1 qz (init_dsu n 1 (pairs q 20 0 qz (msort 20 q 0 (qz - 1) (keys q 1 nz s)))).
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  kq_sum (solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_arg 2) (kq_arg 3) (kq_input 0)).

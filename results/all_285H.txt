@@ -1,0 +1,228 @@
+# all.sh on a second machine: Intel Core Ultra 9 285H (work laptop), the same image, Docker 29.5 in a VM on Windows, N=7, 2026-10-14
+setup: 37 memory images, 26 C++ references, 18 reference answers
+set F: 18 compiled, 0 failed
+set E: 18 compiled, 0 failed
+set H: 36 compiled, 0 failed
+set P: 36 compiled, 0 failed
+translator: 36 programs written by the guideline put in the standard form, each equal to its program (the kernel checks every proof: by computation, and by induction for the 17 step(s) of the second kind); 0 of them have a function kept as written; 0 of them built with the bounds proofs (the setting; 0 loop(s) without tests)
+GATE: every program written by the guideline is in the standard form, and equal to it
+bounds proofs (set P, every program with the setting KQProofs): 36 programs compiled, 0 failed; 98 loop(s) read and write without tests, each proved by the copy of the loop that carries the proofs (checked by the kernel)
+GATE: every program written by the guideline also compiles with the bounds proofs
+checker: corpus texts 16 accepted, 20 refused;  written by the guideline 36 accepted, 0 refused
+GATE: the checker accepts every program written by the guideline
+checker on programs with a known verdict: 18 as expected, 0 not
+GATE: the checker refuses the faulty test programs and accepts the sound ones
+  CF1100F: test 0   in qry            between the same steps on other numbers   met   10000000 times, true  53.6%, guessed wrong  49.4%  -> made without a jump (one sequence of steps)
+  CF1100F: test 1   in row            between the same steps on other numbers   met   10000000 times, true  50.2%, guessed wrong  50.0%  -> made without a jump (one sequence of steps)
+  CF1100F: test 3   in row            between the same steps on other numbers   met    4982347 times, true  69.8%, guessed wrong  36.5%  -> made without a jump (one sequence of steps)
+  CF1100Fv2: test 1   in row            between the same steps on other numbers   met   10000000 times, true  50.2%, guessed wrong  50.0%  -> made without a jump (one sequence of steps)
+  CF1100Fv2: test 3   in row            between the same steps on other numbers   met    4982347 times, true  69.8%, guessed wrong  36.5%  -> made without a jump (one sequence of steps)
+  CF380C: test 5   in build          between the same steps on other numbers   met    1000000 times, true  50.0%, guessed wrong  50.1%  -> made without a jump (one sequence of steps)
+  CF380Cn: test 5   in build          between the same steps on other numbers   met    1000000 times, true  50.0%, guessed wrong  50.1%  -> made without a jump (one sequence of steps)
+  CF813F: test 5   in apply          between the same steps on other numbers   met     732170 times, true  21.0%, guessed wrong  24.9%  -> made without a jump (one sequence of steps)
+  CF813F: test 14  in pairs          between the same steps on other numbers   met      62207 times, true  60.8%, guessed wrong  46.8%  -> made without a jump (one sequence of steps)
+choices: 85 tests that may be made without a jump were met; 45 of them are (guessed wrong 10% of the time or more), 9 of those by making two arms one sequence of steps
+GATE: the stored choices are what a fresh measurement gives
+Rocq's division and remainder against Z's (pairs tried, pairs wrong): =(961%nat,[])
+GATE: division agrees
+check fin F: 18 runs, 0 different
+check fin E: 18 runs, 0 different
+check sfin F: 18 runs, 0 different
+check sfin E: 18 runs, 0 different
+GATE: every corpus program agrees with the original, with both collectors
+GATE: with every save removed, both control programs go wrong under the stress collector
+arithmetic: 1183744 checks, 0 wrong
+arithmetic: 1183744 checks, 0 wrong
+--- what is left in the generated C (a program with nothing here never touches the collector in a loop)
+  E_C_CF1039D      1 values built inside loops, 0 closures built, 0 calls through a closure
+  E_C_CF1172F      5 values built inside loops, 0 closures built, 0 calls through a closure
+  E_C_CF17E        1 values built inside loops, 0 closures built, 0 calls through a closure
+  E_C_CF20C        4 values built inside loops, 0 closures built, 0 calls through a closure
+  E_C_CF235C       9 values built inside loops, 0 closures built, 0 calls through a closure
+  E_C_CF380C       18 values built inside loops, 0 closures built, 0 calls through a closure
+  E_C_CF813F       8 values built inside loops, 0 closures built, 0 calls through a closure
+  E_C_CF833B       6 values built inside loops, 0 closures built, 0 calls through a closure
+  E_C_CF868F       5 values built inside loops, 0 closures built, 0 calls through a closure
+  F_C_CF1039D      4 values built inside loops, 0 closures built, 0 calls through a closure
+  F_C_CF1172F      6 values built inside loops, 0 closures built, 0 calls through a closure
+  F_C_CF17E        1 values built inside loops, 0 closures built, 0 calls through a closure
+  F_C_CF20C        5 values built inside loops, 0 closures built, 0 calls through a closure
+  F_C_CF235C       13 values built inside loops, 0 closures built, 0 calls through a closure
+  F_C_CF380C       18 values built inside loops, 0 closures built, 0 calls through a closure
+  F_C_CF813F       9 values built inside loops, 0 closures built, 0 calls through a closure
+  F_C_CF833B       6 values built inside loops, 0 closures built, 0 calls through a closure
+  F_C_CF868F       8 values built inside loops, 0 closures built, 0 calls through a closure
+  nothing left (FLAT): E_C_CF1100F E_C_CF1100Fw E_C_CF455A E_C_CF631E E_S1_CF1096G E_S2_CF1182E E_S3_CF432D 
+E_S4_CF453B E_S5_CF622F F_C_CF1100F F_C_CF1100Fw F_C_CF455A F_C_CF631E F_S1_CF1096G F_S2_CF1182E F_S3_CF432D 
+F_S4_CF453B F_S5_CF622F H_C_CF1100F H_C_CF1100Fv2 H_C_CF1100Fv3 H_C_CF1167C H_C_CF163A H_C_CF165E H_C_CF165En 
+H_C_CF165Ev2 H_C_CF20C H_C_CF235C H_C_CF235Cn H_C_CF235Cv2 H_C_CF295B H_C_CF295Bn H_C_CF295Bv2 H_C_CF339D H_C_CF339Dn 
+H_C_CF35C H_C_CF35Cn H_C_CF380C H_C_CF380Cn H_C_CF380Cp H_C_CF385C H_C_CF385Cn H_C_CF453B H_C_CF460C H_C_CF547B 
+H_C_CF61E H_C_CF61En H_C_CF622F H_C_CF7D H_C_CF813F H_C_CF813Fv2 H_C_CF833B H_C_CF868F H_C_CF868Fv2 P_C_CF1100F 
+P_C_CF1100Fv2 P_C_CF1100Fv3 P_C_CF1167C P_C_CF163A P_C_CF165E P_C_CF165En P_C_CF165Ev2 P_C_CF20C P_C_CF235C 
+P_C_CF235Cn P_C_CF235Cv2 P_C_CF295B P_C_CF295Bn P_C_CF295Bv2 P_C_CF339D P_C_CF339Dn P_C_CF35C P_C_CF35Cn P_C_CF380C 
+P_C_CF380Cn P_C_CF380Cp P_C_CF385C P_C_CF385Cn P_C_CF453B P_C_CF460C P_C_CF547B P_C_CF61E P_C_CF61En P_C_CF622F 
+P_C_CF7D P_C_CF813F P_C_CF813Fv2 P_C_CF833B P_C_CF868F P_C_CF868Fv2
+GATE: every program written by the guideline is flat
+GATE: no closure is left in any program
+--- the same loop written many ways
+
+ways that must be the same: 50; 36 of them are the very same C as their kernel's first way; of the others the slowest is 1.06 times it, the fastest 0.87 (allowed: 1.15)
+GATE: every way of writing the same loop gives the same answer and the same speed
+--- two tasks, input and output
+KQ-FAST: 4 function(s) in the standard form, 0 kept as written, 15 test(s) numbered, 0 step(s) of the second kind, 0 loop(s) without tests (step 3; bounds: tests); every twin is equal to its function 
+KQ-SHAPE OK: 1 function(s) on the hot path, 2 outside it -- sched_kq
+KQ-SHAPE ADVICE (6), for speed only:
+left in the C: 0 values built, 0 of them inside a loop, 0 closures built, 0 calls through a closure
+2 000 000 numbers through the two tasks:  Rocq 30.683 ms,  C++ 14.460 ms;  16 lines of output
+GATE: the Rocq program's output is the C++ program's
+2000 numbers: Rocq itself computes the output 729339468; the compiled program wrote 729339468 
+GATE: the compiled program's output is what Rocq computes from the same text
+--- the table
+C++                                                                CF455A       4.33     4.62  ok
+C++ with 64-bit cells                                              CF455A       5.35     5.50  ok
+corpus text, exactly                                               CF455A       5.77     6.10  ok
+corpus text, pairs not rebuilt                                     CF455A       5.84     6.21  ok
+C++                                                                CF380C      54.75    57.39  ok
+C++ with 64-bit cells                                              CF380C      76.56    78.10  ok
+corpus text, exactly                                               CF380C      84.67    87.47  ok
+corpus text, pairs not rebuilt                                     CF380C      82.67    88.76  ok
+by the guideline, a query leaves its three numbers in cells        CF380C      64.89    67.48  ok
+by the guideline, a node's three numbers in one word               CF380C      51.63    56.88  ok
+by the guideline, narrow blocks (4 bytes a cell)                   CF380C      58.45    63.95  ok
+C++                                                                CF1100F     87.06    88.37  ok
+C++ with 64-bit cells                                              CF1100F     97.08   101.39  ok
+C++ written the way the fast Rocq is                               CF1100F    102.30   115.73  ok
+corpus text, exactly                                               CF1100F    166.26   172.10  ok
+corpus text, pairs not rebuilt                                     CF1100F    165.44   170.46  ok
+by the guideline, one pass                                         CF1100F    118.34   127.35  ok
+by the guideline, and base with position in one word               CF1100F     99.07   103.28  ok
+by the guideline, and no jump on a bit of the data                 CF1100F     98.17   100.19  ok
+C++                                                                CF868F      69.59    73.34  ok
+C++ with 64-bit cells                                              CF868F      71.11    76.20  ok
+corpus text, exactly                                               CF868F     489.31   547.55  ok
+corpus text, pairs not rebuilt                                     CF868F     159.97   167.83  ok
+by the guideline, the window in parameters, one loop               CF868F     102.75   107.33  ok
+by the guideline, and five loops, one question each                CF868F      63.49    72.16  ok
+C++                                                                CF631E       3.57     3.68  ok
+corpus text, exactly                                               CF631E       4.84     5.24  ok
+corpus text, pairs not rebuilt                                     CF631E       4.90     5.08  ok
+C++                                                                CF833B     304.60   306.53  ok
+C++ written the way the fast Rocq is                               CF833B     291.79   306.84  ok
+corpus text, exactly                                               CF833B     507.77   533.07  ok
+corpus text, pairs not rebuilt                                     CF833B     504.21   527.62  ok
+by the guideline, a query gives back one number                    CF833B     320.26   341.56  ok
+C++                                                                CF17E       31.30    32.17  ok
+corpus text, exactly                                               CF17E       38.16    40.67  ok
+corpus text, pairs not rebuilt                                     CF17E       38.43    40.83  ok
+C++                                                                CF20C        9.25     9.95  ok
+C++ written the way the fast Rocq is                               CF20C        5.70     5.99  ok
+corpus text, exactly                                               CF20C       11.67    14.06  ok
+corpus text, pairs not rebuilt                                     CF20C       13.96    16.44  ok
+by the guideline, heap entries in one word, look then remove       CF20C        7.55     7.81  ok
+C++                                                                CF1039D    472.30   489.48  ok
+corpus text, exactly                                               CF1039D   1493.41  1522.81  ok
+corpus text, pairs not rebuilt                                     CF1039D    588.41   607.11  ok
+C++                                                                CF813F      30.29    31.50  ok
+corpus text, exactly                                               CF813F      61.70    63.50  ok
+corpus text, pairs not rebuilt                                     CF813F      59.13    63.84  ok
+by the guideline, find gives back one number                       CF813F      46.30    52.41  ok
+by the guideline, and the sort compares what it moves              CF813F      45.92    51.36  ok
+C++                                                                CF235C      38.02    40.34  ok
+C++ with 64-bit cells                                              CF235C      52.66    57.74  ok
+corpus text, exactly                                               CF235C     117.01   118.16  ok
+corpus text, pairs not rebuilt                                     CF235C     109.56   115.80  ok
+by the guideline, no pairs, state in parameters                    CF235C      76.46    77.59  ok
+by the guideline, and one record per state (slower)                CF235C      83.86    89.25  ok
+by the guideline, narrow blocks (4 bytes a cell)                   CF235C      47.21    53.02  ok
+C++                                                                CF1172F    217.14   230.23  ok
+corpus text, exactly                                               CF1172F    228.26   232.50  ok
+corpus text, pairs not rebuilt                                     CF1172F    195.13   207.77  ok
+C++                                                                CF432D       6.68     7.30  ok
+corpus text, exactly                                               CF432D       8.73     9.08  ok
+corpus text, pairs not rebuilt                                     CF432D       8.12     8.51  ok
+C++                                                                CF453B     598.00   611.07  ok
+C++ written the way the fast Rocq is                               CF453B     296.57   300.13  ok
+corpus text, exactly                                               CF453B     693.55   700.47  ok
+corpus text, pairs not rebuilt                                     CF453B     685.74   693.98  ok
+by the guideline, the innermost loop decides nothing by a jump     CF453B     383.63   402.55  ok
+C++                                                                CF622F      60.71    62.06  ok
+corpus text, exactly                                               CF622F      91.57    93.24  ok
+corpus text, pairs not rebuilt                                     CF622F      90.94    94.74  ok
+by the guideline, a mask and a shift for the exponent              CF622F      86.35    87.81  ok
+C++                                                                CF61E       46.88    48.49  ok
+C++ with 64-bit cells                                              CF61E       79.50    81.64  ok
+by the guideline, a new problem, a tree of sums used twice         CF61E       83.31    85.52  ok
+by the guideline, narrow blocks (4 bytes a cell)                   CF61E       59.93    62.64  ok
+C++                                                                CF385C     159.55   162.26  ok
+C++ with 64-bit cells                                              CF385C     278.93   294.33  ok
+by the guideline, a new problem, a sieve that counts as it marks   CF385C     240.45   244.50  ok
+by the guideline, narrow blocks (4 bytes a cell)                   CF385C     150.73   162.32  ok
+C++                                                                CF1167C      5.11     5.42  ok
+C++ with 64-bit cells                                              CF1167C      6.29     7.82  ok
+by the guideline, a new problem, union-find with sizes             CF1167C      8.91     9.53  ok
+C++                                                                CF163A       8.80     9.33  ok
+by the guideline, a new problem, a table filled row by row         CF163A      23.28    24.06  ok
+C++                                                                CF460C      29.27    30.36  ok
+C++ with 64-bit cells                                              CF460C      31.91    32.73  ok
+by the guideline, a new problem, a search on the answer            CF460C      35.78    37.60  ok
+C++                                                                CF35C       20.47    21.84  ok
+C++ with 64-bit cells                                              CF35C       25.97    26.71  ok
+by the guideline, a new problem, a walk over a grid with a queue   CF35C       29.59    30.70  ok
+by the guideline, narrow blocks (4 bytes a cell)                   CF35C       22.19    23.47  ok
+C++                                                                CF295B      30.88    32.10  ok
+C++ with 64-bit cells                                              CF295B      58.30    60.28  ok
+by the guideline, a new problem, all shortest ways                 CF295B     116.40   121.08  ok
+by the guideline, the budget is the count                          CF295B      81.79    84.76  ok
+by the guideline, narrow blocks (4 bytes a cell)                   CF295B     105.42   108.94  ok
+C++                                                                CF339D      73.79    77.17  ok
+C++ with 64-bit cells                                              CF339D     147.66   158.20  ok
+by the guideline, a new problem, a tree updated from the bottom    CF339D     246.48   256.46  ok
+by the guideline, narrow blocks (4 bytes a cell)                   CF339D     124.12   133.79  ok
+C++                                                                CF547B      27.74    28.03  ok
+C++ with 64-bit cells                                              CF547B      30.99    31.85  ok
+by the guideline, a new problem, nearest smaller with a stack      CF547B      35.81    37.55  ok
+C++                                                                CF165E      57.33    61.49  ok
+C++ with 64-bit cells                                              CF165E      88.45    89.03  ok
+by the guideline, a new problem, a table over sets of bits         CF165E     109.13   113.81  ok
+by the guideline, a cell written only when it changes              CF165E      89.03    92.63  ok
+by the guideline, narrow blocks (4 bytes a cell)                   CF165E      62.22    63.68  ok
+C++                                                                CF7D        18.76    20.26  ok
+by the guideline, a new problem, two running hashes                CF7D        20.50    21.46  ok
+
+problem       C++   C++/64 C++/same unchanged guideline  unch/C  guid/C   (ms, best of 7)
+CF455A       4.33     5.35        -      5.84         -    1.35       -   
+CF380C      54.75    76.56        -     82.67     51.63    1.51    0.94   
+CF1100F     87.06    97.08   102.30    165.44     98.17    1.90    1.13   
+CF868F      69.59    71.11        -    159.97     63.49    2.30    0.91   
+CF631E       3.57        -        -      4.90         -    1.37       -   
+CF833B     304.60        -   291.79    504.21    320.26    1.66    1.05   
+CF17E       31.30        -        -     38.43         -    1.23       -   
+CF20C        9.25        -     5.70     13.96      7.55    1.51    0.82   
+CF1039D    472.30        -        -    588.41         -    1.25       -   
+CF813F      30.29        -        -     59.13     45.92    1.95    1.52   
+CF235C      38.02    52.66        -    109.56     47.21    2.88    1.24   
+CF1172F    217.14        -        -    195.13         -    0.90       -   
+CF432D       6.68        -        -      8.12         -    1.22       -   
+CF453B     598.00        -   296.57    685.74    383.63    1.15    0.64   
+CF622F      60.71        -        -     90.94     86.35    1.50    1.42   
+CF61E       46.88    79.50        -         -     59.93       -    1.28   
+CF385C     159.55   278.93        -         -    150.73       -    0.94   
+CF1167C      5.11     6.29        -         -      8.91       -    1.74   
+CF163A       8.80        -        -         -     23.28       -    2.65   
+CF460C      29.27    31.91        -         -     35.78       -    1.22   
+CF35C       20.47    25.97        -         -     22.19       -    1.08   
+CF295B      30.88    58.30        -         -     81.79       -    2.65   
+CF339D      73.79   147.66        -         -    124.12       -    1.68   
+CF547B      27.74    30.99        -         -     35.81       -    1.29   
+CF165E      57.33    88.45        -         -     62.22       -    1.09   
+CF7D        18.76        -        -         -     20.50       -    1.09   
+
+C++/64: the C++ with every array 64 bits wide (the layout a Rocq program is given).  C++/same: the C++ written the way the fast Rocq version is.
+guideline: the fastest program written by the guideline; where there is none, the corpus text already follows it.
+GATE: every answer equals the C++ run's
+--- the programs written by the guideline with the bounds proofs (set P): answers only
+answers: 66 agree, 0 do not
+GATE: with the bounds proofs every answer equals the C++ run's
+--- the stress collector on the large inputs (answers only)
+answers: 66 agree, 0 do not
+  and with the bounds proofs (set P): answers: 66 agree, 0 do not

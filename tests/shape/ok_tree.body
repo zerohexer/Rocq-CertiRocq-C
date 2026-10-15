@@ -1,0 +1,9 @@
+(* EXPECT: OK *)
+(* a tree: two calls on a path, the second on the memory the first gives back *)
+Fixpoint fill (h : nat) (o l r : int) (s : mem) : mem :=
+  match h with
+  | O => s
+  | S h' => if l =? r then upd 0 o l s
+            else let m := (l + r) >> 1 in fill h' (2 * o + 1) (m + 1) r (fill h' (2 * o) l m s)
+  end.
+Definition solve (h : nat) (n : int) (s : mem) : int := rd 0 1 (fill h 1 1 n s).

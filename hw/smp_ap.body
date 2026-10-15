@@ -1,0 +1,19 @@
+(* hw/smp_ap.body -- the program the SECOND processor runs (hw/kq_bare.c: kq_ap_main): says it has started, adds to the
+   two counters as the first one does -- after "go", so the two run at the same time -- says it has finished.  Its
+   own cells: wide block 3. *)
+Fixpoint add_n (f : nat) (a : int) (s : mem) : mem :=
+  match f with O => s | S f => add_n f a (hw_atomic 0 4 a 1 3 0 s) end.
+Fixpoint inc_n (f : nat) (a : int) (s : mem) : mem :=
+  match f with O => s | S f => let s1 := hw_load 4 a 3 1 s in inc_n f a (hw_store 4 a (rd 3 1 s1 + 1) s1) end.
+Fixpoint wait_go (f : nat) (a : int) (s : mem) : mem :=
+  match f with
+  | O => s
+  | S f => let s1 := hw_aload 4 a 3 2 s in if rd 3 2 s1 =? 1 then s1 else wait_go f a (hw_pause s1)
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  let a := hw_addr 6 in
+  let s1 := hw_astore 4 (a + 12) 1 (kq_input 0) in
+  let s2 := add_n (kq_nat 1000000) a (inc_n (kq_nat 1000000) (a + 4) (wait_go (kq_nat 2000000000) (a + 16) s1)) in
+  let s3 := hw_astore 4 (a + 8) 1 s2 in
+  if rd 3 0 s3 <? 0 then 1 else 0.

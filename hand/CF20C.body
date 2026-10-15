@@ -1,0 +1,132 @@
+(* CF20C, written for speed.  The same Dijkstra with the same binary heap kept in the memory as the corpus program.
+   What changed:
+     - rule 5: `pop` gave back the smallest entry AND the memory (a pair inside a pair, built for every vertex taken).
+       Here the loop LOOKS at the top of the heap, then removes it: two steps, each giving back one thing;
+     - rules 5 and 6: a heap entry (distance, vertex) is ONE cell, distance * 2^17 + vertex, where the corpus program
+       keeps two blocks: half the reads and writes, and comparing two entries is comparing two numbers;
+     - rule 1: the entry on its way up or down the heap travels in a parameter and is written once, where it stops
+       (the corpus program swaps two cells at every level);
+     - rule 4: which child is smaller is a choice between numbers. *)
+Local Notation rEU := 0.
+Local Notation rEV := 1.
+Local Notation rEW := 2.
+Local Notation rHEAD := 3.
+Local Notation rNXT := 4.
+Local Notation rTO := 5.
+Local Notation rWT := 6.
+Local Notation rDIST := 7.
+Local Notation rPAR := 8.
+Local Notation rHP := 9.     (* the heap: cells 1 .. size; an entry is distance * 2^17 + vertex *)
+Local Notation rST := 11.    (* cell 0: the heap's size;  cell 1: the length of the path found *)
+Local Notation rOUT := 12.
+Local Notation INF := 1000000000000000000.
+Local Notation VMASK := 131071.              (* 2^17 - 1 *)
+Local Notation TOP := 4611686018427387903.   (* larger than any entry *)
+
+Definition add_edge (e u v w : int) (s : mem) : mem :=
+  upd rHEAD u e (upd rNXT e (rd rHEAD u s) (upd rWT e w (upd rTO e v s))).
+
+Fixpoint build_adj (fuel : nat) (i : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let u := rd rEU i s in
+      let v := rd rEV i s in
+      let w := rd rEW i s in
+      build_adj f (i + 1) (add_edge (2 * i + 2) v u w (add_edge (2 * i + 1) u v w s))
+  end.
+
+Fixpoint init_dist (fuel : nat) (v : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => init_dist f (v + 1) (upd rDIST v INF s)
+  end.
+
+(* x looks for its place from cell i upwards: a larger parent moves down into the hole *)
+Fixpoint sift_up (fuel : nat) (i x : int) (s : mem) : mem :=
+  match fuel with
+  | O => upd rHP i x s
+  | S f =>
+      if i <=? 1 then upd rHP i x s
+      else
+        let p := rd rHP (i >> 1) s in
+        if x <? p then sift_up f (i >> 1) x (upd rHP i p s) else upd rHP i x s
+  end.
+
+(* x looks for its place from cell i downwards in a heap of sz entries: the smaller child moves up into the hole *)
+Fixpoint sift_down (fuel : nat) (i sz x : int) (s : mem) : mem :=
+  match fuel with
+  | O => upd rHP i x s
+  | S f =>
+      let l := 2 * i in
+      if sz <? l then upd rHP i x s
+      else
+        let a := rd rHP l s in
+        let b := if l <? sz then rd rHP (l + 1) s else TOP in
+        let c := if b <? a then l + 1 else l in
+        let cv := if b <? a then b else a in
+        if cv <? x then sift_down f c sz x (upd rHP i cv s) else upd rHP i x s
+  end.
+
+Definition push (h : nat) (x : int) (s : mem) : mem :=
+  let sz := rd rST 0 s + 1 in
+  sift_up h sz x (upd rST 0 sz s).
+
+(* the smallest entry (cell 1) leaves: the last entry looks for its place from the top *)
+Definition pop (h : nat) (s : mem) : mem :=
+  let sz := rd rST 0 s in
+  let x := rd rHP sz s in
+  sift_down h 1 (sz - 1) x (upd rST 0 (sz - 1) s).
+
+Fixpoint relax_edges (fuel h : nat) (e v dv : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if e =? 0 then s
+      else
+        let w := rd rTO e s in
+        let nd := dv + rd rWT e s in
+        let nx := rd rNXT e s in
+        if nd <? rd rDIST w s
+        then relax_edges f h nx v dv (push h ((nd << 17) + w) (upd rPAR w v (upd rDIST w nd s)))
+        else relax_edges f h nx v dv s
+  end.
+
+Fixpoint dijkstra (fuel m h : nat) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if rd rST 0 s =? 0 then s
+      else
+        let x := rd rHP 1 s in
+        let v := x land VMASK in
+        let k := x >> 17 in
+        let s1 := pop h s in
+        if rd rDIST v s1 <? k then dijkstra f m h s1
+        else dijkstra f m h (relax_edges m h (rd rHEAD v s1) v k s1)
+  end.
+
+Fixpoint reverse (fuel : nat) (i j : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if j <=? i then s
+      else let x := rd rOUT i s in let y := rd rOUT j s in reverse f (i + 1) (j - 1) (upd rOUT j x (upd rOUT i y s))
+  end.
+
+(* the path, from the last vertex back to vertex 1, then turned round; its length goes into cell 1 of rST *)
+Fixpoint trace (fuel n : nat) (v k : int) (s : mem) : mem :=
+  match fuel with
+  | O => upd rST 1 k s
+  | S f =>
+      if v =? 1 then reverse n 0 k (upd rST 1 (k + 1) (upd rOUT k v s))
+      else trace f n (rd rPAR v s) (k + 1) (upd rOUT k v s)
+  end.
+
+Definition solve (n m m2 h : nat) (nz : int) (s : mem) : int :=
+  let s5 := dijkstra (S m2) m2 h (push h 1 (upd rDIST 1 0 (init_dist n 1 (build_adj m 0 s)))) in
+  if rd rDIST nz s5 =? INF then -1 else rd rST 1 (trace n n nz 0 s5).
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_nat (kq_arg 2)) (kq_nat (kq_arg 3)) (kq_arg 4) (kq_input 0).

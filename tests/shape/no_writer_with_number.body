@@ -1,0 +1,5 @@
+(* EXPECT: REFUSE *)
+(* a loop that writes and gives back a number has still written: the memory given to it is gone *)
+Fixpoint mark (fuel : nat) (i acc : int) (s : mem) : int :=
+  match fuel with O => acc | S f => mark f (i + 1) (acc + rd 0 i s) (upd 1 i 1 s) end.
+Definition solve (n : nat) (s : mem) : int := let a := mark n 0 0 s in a + rd 1 0 s.

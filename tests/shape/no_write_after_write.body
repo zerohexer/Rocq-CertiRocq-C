@@ -1,0 +1,3 @@
+(* EXPECT: REFUSE *)
+(* a memory is written twice from the same starting point *)
+Definition solve (s : mem) : int := let s1 := upd 0 0 1 s in let s2 := upd 0 1 2 s in rd 0 0 s1 + rd 0 1 s2.

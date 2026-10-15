@@ -1,0 +1,9 @@
+(* EXPECT: OK *)
+(* a tree that only looks: both calls are given the same memory *)
+Fixpoint most (h : nat) (o l r : int) (s : mem) : int :=
+  match h with
+  | O => 0
+  | S h' => if l =? r then rd 0 o s
+            else let m := (l + r) >> 1 in zmax (most h' (2 * o) l m s) (most h' (2 * o + 1) (m + 1) r s) + rd 1 o s
+  end.
+Definition solve (h : nat) (n : int) (s : mem) : int := most h 1 1 n s.

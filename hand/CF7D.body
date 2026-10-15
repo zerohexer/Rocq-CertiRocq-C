@@ -1,0 +1,30 @@
+(* CF7D "Palindrome Degree" (new problem, written by the guideline from the start):
+   the degree of a string is 0 when it is not a palindrome, else one more than the degree of its first half; the sum
+   of the degrees of all the prefixes of a string of 5 million letters.
+   Two running hashes of the prefix, one read forwards and one backwards: the prefix is taken for a palindrome when
+   they agree.
+     - rule 1: the two hashes, the power and the total are parameters: the loop reads one cell and writes one;
+     - rule 7: every remainder is by a number written in the program. *)
+Local Notation rS := 0.
+Local Notation rDEG := 1.
+Local Notation HP := 1000000007.
+Local Notation HB := 131.
+
+Fixpoint scan (fuel : nat) (i n h1 h2 pw acc : int) (s : mem) : int :=
+  match fuel with
+  | O => acc
+  | S f =>
+      if n <? i then acc
+      else
+        let c := rd rS i s in
+        let a := (h1 * HB + c) mod HP in
+        let b := (h2 + c * pw) mod HP in
+        let d := if a =? b then rd rDEG (i >> 1) s + 1 else 0 in
+        scan f (i + 1) n a b ((pw * HB) mod HP) (acc + d) (upd rDEG i d s)
+  end.
+
+Definition solve (n : nat) (nz : int) (s : mem) : int := scan n 1 nz 0 0 1 0 s.
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_arg 0) (kq_input 0).

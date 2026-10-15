@@ -1,0 +1,71 @@
+the same loop, written this way    must be         ms x first  C    no jump   M instructions / M wrong guesses (host only)
+--- sum
+  first                            same         4.519    1.00  A    []        120/0.0
+  budget_last                      same         4.523    1.00  B    []        120/0.0
+  memory_first                     same         4.626    1.02  C    []        120/0.0
+  second_test                      rule 8       6.864    1.52  D    []        180/0.0
+  every_step_named                 same         4.834    1.07  A    []        120/0.0
+  helper                           same         4.889    1.08  A    []        120/0.0
+  helper_with_memory               same         4.559    1.01  A    []        120/0.0
+  wrapper                          same         4.634    1.03  A    []        120/0.0
+  unused_parameter                 same         4.602    1.02  E    []        120/0.0
+  block_as_parameter               same         4.556    1.01  F    []        120/0.0
+  block_as_definition              same         4.894    1.08  A    []        120/0.0
+  cases_other_way_round            same         4.802    1.06  A    []        120/0.0
+  sums_other_way_round             same         4.824    1.07  G    []        120/0.0
+  from_the_end                     arith        6.135    1.36  H    []        180/0.0
+  nine_parameters                  same         4.900    1.08  I    []        120/0.0
+  two_callers                      same         4.588    1.02  J    []        120/0.0
+  two_loops_in_turn                rule 2       5.264    1.16  K    []        170/0.0
+  state_in_a_cell                  rule 1       6.571    1.45  L    []        200/0.0
+--- toss
+  first                            same        10.273    1.00  A    [0]       220/0.0
+  test_named                       same        10.182    0.99  A    [0]       220/0.0
+  turned_round                     same         9.953    0.97  B    [0]       240/0.0
+  other_test                       same         9.994    0.97  C    [0]       240/0.0
+  helper                           same        10.587    1.03  A    [1]       220/0.0
+  result_named                     same        10.363    1.01  A    [0]       220/0.0
+  two_calls                        same        10.488    1.02  A    [0]       220/0.0
+  numbers_named_before             same         9.976    0.97  A    [0]       220/0.0
+  select_written                   same        10.452    1.02  A    []        220/0.0
+  by_arithmetic                    arith       10.138    0.99  D    []        220/0.0
+--- heavy
+  first                            same        17.773    1.00  A    [0]       460/0.0
+  numbers_named_before             same        17.653    0.99  A    [0]       460/0.0
+  select_written                   same        18.004    1.01  A    []        460/0.0
+  turned_round                     same        18.009    1.01  B    [0]       480/0.0
+  two_calls                        same        18.272    1.03  A    [0]       460/0.0
+--- rare
+  first                            same         6.847    1.00  A    []        121/0.2
+  numbers_named_before             same         6.893    1.01  A    []        121/0.2
+  two_calls                        same         6.793    0.99  B    []        121/0.2
+  select_written                   rule 4      26.606    3.89  C    []        220/0.0
+--- clamp
+  first                            same         6.239    1.00  A    [0]       161/0.0
+  helper_min                       same         6.270    1.00  B    []        141/0.0
+  every_step_named                 same         6.320    1.01  A    [0]       161/0.0
+  read_twice                       same         6.186    0.99  A    [0]       161/0.0
+  helper_writes                    same         6.428    1.03  A    [0]       161/0.0
+  turned_round                     same         6.355    1.02  C    [0]       141/0.0
+  two_writes                       same         6.044    0.97  A    [0]       161/0.0
+--- count
+  first                            same         8.238    1.00  A    []        160/0.0
+  helper_writes                    same         8.181    0.99  A    []        160/0.0
+  every_step_named                 same         8.340    1.01  A    []        160/0.0
+  read_twice                       same         8.399    1.02  A    []        160/0.0
+--- search
+  first                            same       149.159    1.00  A    [0]       3100/0.0
+  every_step_named                 same       149.931    1.01  A    [0]       3100/0.0
+  turned_round                     same       151.997    1.02  B    [0]       3260/0.0
+  helper                           same       149.058    1.00  A    [1]       3100/0.0
+  select_written                   same       152.339    1.02  A    []        3100/0.0
+  second_test                      rule 8     174.033    1.17  C    [1]       3620/0.0
+  two_calls                        same       147.040    0.99  A    [0]       3100/0.0
+--- tree
+  first                            same        10.418    1.00  A    []        203/0.1
+  every_step_named                 same        10.774    1.03  A    []        203/0.1
+  doubled_by_adding                arith       11.296    1.08  B    []        193/0.1
+  total_passed_on                  arith        9.122    0.88  C    []        206/0.2
+
+ways that must be the same: 50; 36 of them are the very same C as their kernel's first way; of the others the slowest is 1.08 times it, the fastest 0.97 (allowed: 1.15)
+GATE: every way of writing the same loop gives the same answer and the same speed

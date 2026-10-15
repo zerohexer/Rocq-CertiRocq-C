@@ -1,0 +1,40 @@
+# step 3 of the translator (reads and writes without the test in loops that count): every program of hand/ built
+# without it and with it (then an order setting of 13; now the bounds setting: tests / proofs), the same choices; machine counters on the host (millions; 3 runs, the best), 2026-10-14
+program    Mcycles without | with   Minstr without | with   cycles with / without
+CF380C        277.8    280.3      714      713   1.01
+CF380Cp       247.7    245.5      522      520   0.99
+CF1100F       385.2    382.4      842      798   0.99
+CF1100Fv2     295.2    282.9      716      682   0.96
+CF1100Fv3     318.7    278.8      766      663   0.87
+CF868F        590.0    598.4     3526     3525   1.01
+CF868Fv2      356.2    349.9     2139     2234   0.98
+CF833B       1566.7   1559.4     6304     6288   1.00
+CF235C        233.2    211.8      145      144   0.91
+CF235Cv2      244.5    250.6      165      172   1.02
+CF20C          42.2     41.1       56       54   0.97
+CF813F        235.7    228.7      410      411   0.97
+CF61E         390.8    391.4      644      634   1.00
+CF385C        791.9    817.9      773      707   1.03
+CF1167C        47.9     46.0       55       52   0.96
+CF163A        119.3    111.0      800      550   0.93
+CF460C        155.3    172.8      894      772   1.11
+CF35C         102.2    100.3      164      140   0.98
+CF295B        649.8    594.3     4264     3622   0.91
+CF339D        676.7    688.7     1332     1323   1.02
+CF547B        172.8    158.7      340      304   0.92
+CF165E        455.7    442.3     1749     1553   0.97
+CF7D           88.1     87.7      371      314   1.00
+CF813Fv2      202.9    212.7      392      389   1.05
+CF295Bv2      511.8    436.0     2992     1982   0.85
+CF165Ev2      352.7    322.3     1085      907   0.91
+CF453B       1817.4   1683.9    10623     8400   0.93
+CF622F        394.2    391.5      911      900   0.99
+CF339Dn       556.7    551.9     1558     1572   0.99
+CF35Cn         82.4     84.5      184      176   1.03
+CF295Bn       546.3    623.9     3742     2597   1.14
+CF235Cn       162.9    163.2      170      176   1.00
+CF385Cn       581.8    572.1      695      630   0.98
+CF380Cn       256.7    255.7      745      744   1.00
+CF165En       306.9    309.8     1122      932   1.01
+CF61En        318.1    315.7      690      680   0.99
+36 programs: cycles with / without: geometric mean 0.982; fewer by more than 3%: 10; more by more than 3%: 4

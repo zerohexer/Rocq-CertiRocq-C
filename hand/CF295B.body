@@ -1,0 +1,66 @@
+(* CF295B "Greg and Graph" (new problem, written by the guideline from the start):
+   the vertices of a complete directed graph are taken away one by one; before each step, the sum of the shortest
+   ways between all the vertices still there.  Backwards: the vertices come back one by one, and each one that comes
+   back may shorten every way (Floyd and Warshall).
+     - rule 4: the smaller of two numbers is chosen inside the one recursive call, and always written;
+     - rule 5: the sums are loops that only look and give back one number;
+     - a row's place in the table is worked out once per row, outside the loop over the row. *)
+Local Notation rD := 0.      (* cell i * n + j: the shortest way from i to j found so far *)
+Local Notation rX := 1.      (* the order in which the vertices are taken away *)
+Local Notation rIN := 2.     (* cell v: 1 when v is (again) in the graph *)
+Local Notation rANS := 3.
+
+(* row i against row v: d[i][j] = min(d[i][j], dik + d[v][j]).  bi, bv: where the two rows start *)
+Fixpoint relax (fuel : nat) (j n bi bv dik : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if n <=? j then s
+      else
+        let a := rd rD (bi + j) s in
+        let b := dik + rd rD (bv + j) s in
+        relax f (j + 1) n bi bv dik (upd rD (bi + j) (if b <? a then b else a) s)
+  end.
+
+Fixpoint relax_all (fuel n1 : nat) (i n v : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if n <=? i then s
+      else let dik := rd rD (i * n + v) s in relax_all f n1 (i + 1) n v (relax n1 0 n (i * n) (v * n) dik s)
+  end.
+
+Fixpoint rowsum (fuel : nat) (j n bi acc : int) (s : mem) : int :=
+  match fuel with
+  | O => acc
+  | S f =>
+      if n <=? j then acc
+      else rowsum f (j + 1) n bi (acc + (if rd rIN j s =? 1 then rd rD (bi + j) s else 0)) s
+  end.
+
+Fixpoint total (fuel n1 : nat) (i n acc : int) (s : mem) : int :=
+  match fuel with
+  | O => acc
+  | S f =>
+      if n <=? i then acc
+      else total f n1 (i + 1) n (if rd rIN i s =? 1 then rowsum n1 0 n (i * n) acc s else acc) s
+  end.
+
+(* k = n - 1 down to 0: the vertex taken away at step k comes back *)
+Fixpoint steps (fuel n1 : nat) (k n : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if k <? 0 then s
+      else
+        let v := rd rX k s in
+        let s1 := relax_all n1 n1 0 n v (upd rIN v 1 s) in
+        let t := total n1 n1 0 n 0 s1 in
+        steps f n1 (k - 1) n (upd rANS k t s1)
+  end.
+
+Definition solve (n n1 : nat) (nz : int) (s : mem) : mem := steps n n1 (nz - 1) nz s.
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  kq_sum (solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_arg 0) (kq_input 0)).

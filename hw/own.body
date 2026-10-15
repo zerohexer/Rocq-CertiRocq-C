@@ -1,0 +1,83 @@
+(* hw/own.body -- AN INTERRUPT ENTRY WRITTEN IN ROCQ.  The entry routine of the timer's interrupt (vector 32) is x86-64
+   code this program writes itself, byte by byte from Intel's manual, into narrow block 7 after hw/X86.v's routines
+   (slot 64 on): it saves the registers C may change, calls the runtime's C handler -- its address from hw_sym 0 --
+   with the vector, no error code and the interrupted address, and returns from the interrupt (iretq).  The program
+   puts it in its interrupt table for vector 32 and takes the timer's interrupts that come in through it.  Then what a
+   call through hw_run costs: 100 000 calls of a routine that only returns, then 100 000 reads of memory (no call),
+   timed with the time-stamp counter, 20 times over; the fastest time of each kept (a laptop changes its speed while
+   it runs: the two are compared at the same, full speed).  It prints:
+     own   timer interrupts that came in through the program's own entry routine (10)
+     sym   0 if the runtime's address table answers as it should
+     run   time-stamp ticks per 1000 calls of hw_run (a routine that only returns), the fastest round
+     load  time-stamp ticks per 1000 reads of memory (hw_load), the fastest round
+   The answer: 0 when own and sym are right. *)
+Local Notation R := 1.       (* wide block: results *)
+Local Notation IDT := 4.     (* narrow block: the interrupt table *)
+Local Notation VEC := 32.    (* the vector the entry routine hands to the runtime *)
+Definition own_entry (vec : int) (s : mem) : mem :=
+  let k := 64 in
+  let s := i5 k 0 0x50 0x51 0x52 0x56 0x57 s in                (* push rax, rcx, rdx, rsi, rdi     50 +r *)
+  let s := i4 k 5 0x41 0x50 0x41 0x51 s in                     (* push r8, r9                      REX.B 50 +r *)
+  let s := i4 k 9 0x41 0x52 0x41 0x53 s in                     (* push r10, r11 *)
+  let s := i5 k 13 0xBF vec 0 0 0 s in                         (* mov edi, vec                     B8 +r id *)
+  let s := i2 k 18 0x31 (modrm 3 RSI RSI) s in                 (* xor esi, esi: no error code      31 /r *)
+  let s := i5 k 20 0x48 0x8B (modrm 1 RDX 4) 0x24 72 s in      (* mov rdx, [rsp+72]: where the processor was *)
+  let s := i1 k 25 0xFC s in                                   (* cld *)
+  let s := i2 k 26 0x48 0xB8 s in                              (* mov rax, imm64: the runtime's C handler *)
+  let a := hw_sym 0 in
+  let s := hw_store 4 (at_slot k + 32) (a >> 32) (hw_store 4 (at_slot k + 28) (a land 4294967295) s) in
+  let s := i2 k 36 0xFF (modrm 3 2 RAX) s in                   (* call rax                         FF /2 *)
+  let s := i4 k 38 0x41 0x5B 0x41 0x5A s in                    (* pop r11, r10                     REX.B 58 +r *)
+  let s := i4 k 42 0x41 0x59 0x41 0x58 s in                    (* pop r9, r8 *)
+  let s := i5 k 46 0x5F 0x5E 0x5A 0x59 0x58 s in               (* pop rdi, rsi, rdx, rcx, rax *)
+  let s := i2 k 51 0x48 0xCF s in                              (* iretq                            REX.W CF *)
+  hw_code_sync (at_slot k) 53 s.
+(* gate v of the interrupt table t: the entry at address off (as hw/lib.body's idt_fill writes them) *)
+Definition gate (t v off : int) (s : mem) : mem :=
+  let s1 := upd32 t (4 * v) ((8 << 16) lor (off land 65535)) s in
+  let s2 := upd32 t (4 * v + 1) ((((off >> 16) land 65535) << 16) lor (142 << 8)) s1 in
+  upd32 t (4 * v + 3) 0 (upd32 t (4 * v + 2) (off >> 32) s2).
+(* take interrupts until `want` have come; those with vector 32 counted in n, any other in o; each acknowledged *)
+Fixpoint ticks (f : nat) (n o want : int) (s : mem) : mem :=
+  match f with
+  | O => upd R 0 n (upd R 1 o s)
+  | S f =>
+      if want <=? n + o then upd R 0 n (upd R 1 o s)
+      else
+        let s1 := hw_irq_take W 2 (hw_irq_wait s) in
+        let v := rd W 2 s1 in
+        if v <? 0 then ticks f n o want s1
+        else let s2 := hw_port_out 1 32 32 s1 in
+             if v =? 32 then ticks f (n + 1) o want s2 else ticks f n (o + 1) want s2
+  end.
+Fixpoint runs (f : nat) (a : int) (s : mem) : mem :=
+  match f with O => s | S f => runs f a (hw_run 0 a 0 0 0 0 0 0 0 0 s) end.
+Fixpoint loads (f : nat) (a : int) (s : mem) : mem :=
+  match f with O => s | S f => loads f a (hw_load 4 a W 20 s) end.
+Definition tsc (i : int) (s : mem) : int := rd W (i + 1) s * 4294967296 + rd W i s.
+(* the fastest of f rounds: ticks for 100 000 calls into cell 2 of block R, for 100 000 reads into cell 3 *)
+Fixpoint best (f : nat) (br bl : int) (s : mem) : mem :=
+  match f with
+  | O => upd R 3 bl (upd R 2 br s)
+  | S f =>
+      let s1 := hw_cycles W 4 s in
+      let s2 := hw_cycles W 6 (runs (kq_nat 100000) (at_slot 66) s1) in
+      let s3 := hw_cycles W 8 (loads (kq_nat 100000) (hw_addr 5) s2) in
+      let r := tsc 6 s3 - tsc 4 s3 in
+      let l := tsc 8 s3 - tsc 6 s3 in
+      best f (if r <? br then r else br) (if l <? bl then l else bl) s3
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  let want := kq_arg 0 in
+  let s0 := ser_init (x86_setup (kq_input 0)) in
+  let s1 := own_entry VEC (hw_code_sync (at_slot 66) 1 (i1 66 0 RET s0)) in        (* slot 66: a routine that only returns *)
+  let s2 := gate IDT 32 (at_slot 64) (idt_fill (kq_nat 256) IDT 0 s1) in
+  let s3 := hw_vectors (hw_addr IDT) 4095 s2 in
+  let s4 := hw_irq_off (ticks (kq_nat 1000000) 0 0 want (pit_init (pic_init s3))) in
+  let n := rd R 0 s4 in
+  let sym := if (hw_sym 0 =? 0 - 1) || (hw_sym 1 =? 0 - 1) || negb (hw_sym 2 =? 0 - 1) then 1 else 0 in
+  let s5 := line 115 121 109 32 sym (line 111 119 110 32 n s4) in
+  let s8 := best (kq_nat 20) 4611686018427387903 4611686018427387903 s5 in
+  let s9 := line 108 111 97 100 (rd R 3 s8 / 100) (line 114 117 110 32 (rd R 2 s8 / 100) s8) in
+  if (n =? want) && (sym =? 0) && (rd R 0 s9 =? n) then 0 else 1.

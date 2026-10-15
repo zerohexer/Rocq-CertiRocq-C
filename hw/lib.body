@@ -1,0 +1,55 @@
+(* hw/lib.body -- what every program of hw/ shares, put in front of it by hw/build.sh: a driver for the serial line
+   and the printing of numbers, the interrupt table, the two interrupt controllers and the timer, in Rocq.  It uses cell 0 of wide block 0 (the line's status) and wide block 2 (the
+   digits of a number being printed). *)
+Local Notation W := 0.
+Local Notation D := 2.
+Local Notation COM := 1016.  (* the serial line's data port, 0x3F8; its line status, 0x3FD = 1021 *)
+
+(* ---- THE SERIAL LINE: wait until it can take a byte (bit 5 of the status port), then send it *)
+Fixpoint tx_wait (f : nat) (s : mem) : mem :=
+  match f with
+  | O => s
+  | S f => let s1 := hw_port_in 1 1021 W 0 s in
+           if (rd W 0 s1 land 32) =? 0 then tx_wait f (hw_pause s1) else s1
+  end.
+Definition putc (c : int) (s : mem) : mem := hw_port_out 1 COM c (tx_wait (kq_nat 100000000) s).
+Definition ser_init (s : mem) : mem :=
+  hw_port_out 1 1020 11 (hw_port_out 1 1018 199 (hw_port_out 1 1019 3 (hw_port_out 1 1017 0 (hw_port_out 1 1016 3 (hw_port_out 1 1019 128 (hw_port_out 1 1017 0 s)))))).
+Definition say4 (a b c d : int) (s : mem) : mem := putc d (putc c (putc b (putc a s))).
+(* a number: its digits into block D, last first (cell 0: how many), then sent first to last *)
+Fixpoint digits (f : nat) (n k : int) (s : mem) : mem :=
+  match f with
+  | O => upd D 0 k s
+  | S f => let s1 := upd D (k + 1) (n mod 10) s in
+           if n <? 10 then upd D 0 (k + 1) s1 else digits f (n / 10) (k + 1) s1
+  end.
+Fixpoint emit (f : nat) (k : int) (s : mem) : mem :=
+  match f with
+  | O => s
+  | S f => if k <? 1 then s else emit f (k - 1) (putc (48 + rd D k s) s)
+  end.
+Definition putn (n : int) (s : mem) : mem := let s1 := digits (kq_nat 30) n 0 s in emit (kq_nat 30) (rd D 0 s1) s1.
+Definition line (a b c d n : int) (s : mem) : mem := putc 10 (putn n (putc 32 (say4 a b c d s))).
+Definition put4 (x : int) (s : mem) : mem :=
+  putc ((x >> 24) land 255) (putc ((x >> 16) land 255) (putc ((x >> 8) land 255) (putc (x land 255) s))).
+
+(* ---- INTERRUPTS: gate v of the table (narrow block t) is narrow cells 4v .. 4v + 3 (16 bytes): where its entry code is, the code
+   segment (8), "present, interrupt gate" (142) *)
+Fixpoint idt_fill (f : nat) (t v : int) (s : mem) : mem :=
+  match f with
+  | O => s
+  | S f =>
+      if 256 <=? v then s
+      else
+        let off := hw_irq_entry v in
+        let s1 := upd32 t (4 * v) ((8 << 16) lor (off land 65535)) s in
+        let s2 := upd32 t (4 * v + 1) ((((off >> 16) land 65535) << 16) lor (142 << 8)) s1 in
+        let s3 := upd32 t (4 * v + 2) (off >> 32) s2 in
+        idt_fill f t (v + 1) (upd32 t (4 * v + 3) 0 s3)
+  end.
+(* the two interrupt controllers: their lines to vectors 32.. and 40..; only line 0 (the timer) let through *)
+Definition pic_init (s : mem) : mem :=
+  hw_port_out 1 161 255 (hw_port_out 1 33 254 (hw_port_out 1 161 1 (hw_port_out 1 33 1 (hw_port_out 1 161 2 (hw_port_out 1 33 4
+    (hw_port_out 1 161 40 (hw_port_out 1 33 32 (hw_port_out 1 160 17 (hw_port_out 1 32 17 s))))))))).
+(* the timer: 1193182 / 11932 = 100 interrupts a second *)
+Definition pit_init (s : mem) : mem := hw_port_out 1 64 46 (hw_port_out 1 64 156 (hw_port_out 1 67 54 s)).

@@ -1,0 +1,11 @@
+# narrow.tsv -- the programs of hand/ that keep blocks NARROW (4 bytes a cell; KQRun.v: rd32 / upd32), made by
+# mknarrowbody.py from the program named in their first line.  Columns: the program; the memory image it starts
+# from; the wide blocks copied as its narrow blocks 0, 1, .. (setup.sh writes big/N_<program>.mem with mknarrow.py)
+CF339Dn   big/CF339D.mem     0 1 2
+CF35Cn    big/CF35C.mem      0 1 2
+CF295Bn   big/CF295B.mem     0 1 2
+CF235Cn   big/CF235C.mem     0 1 2 3 4 6 7 8 9 10 11
+CF385Cn   big/CF385C.mem     0 1 2 3 4
+CF380Cn   big/H_CF380C.mem   0 1 4 5
+CF165En   big/CF165E.mem     0 1
+CF61En    big/CF61E.mem      0 1 2

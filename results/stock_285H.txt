@@ -1,0 +1,55 @@
+# tests/stock.sh on the work laptop (Core Ultra 9 285H), 2026-10-14: every program built by unmodified CertiRocq (image
+# kernelq-certirocq:1b45a1aa, its defaults, its runtime and integer operations, a nat as a chain of cells, no translator,
+# no clean-up of the C), the same memory support and clang -O2 -flto; best of 3, one pinned core, answers against the C++
+what                               problem      best   median  answers
+stock H_CF380C                     CF380C     261.40   266.84  ok
+stock H_CF380Cp                    CF380C     204.03   205.19  ok
+stock H_CF1100F                    CF1100F    433.53   461.95  ok
+stock H_CF1100Fv2                  CF1100F    403.52   430.17  ok
+stock H_CF1100Fv3                  CF1100F    356.64   357.29  ok
+stock H_CF868F                     CF868F    3945.54  3977.53  ok
+stock H_CF868Fv2                   CF868F    1459.38  1516.61  ok
+stock H_CF833B                     CF833B    1710.50  1720.41  ok
+stock H_CF235C                     CF235C     249.31   250.19  ok
+stock H_CF235Cv2                   CF235C     226.89   235.72  ok
+stock H_CF20C                      CF20C       48.88    49.76  ok
+stock H_CF813F                     CF813F     220.05   239.31  ok
+stock H_CF61E                      CF61E      292.56   313.92  ok
+stock H_CF385C                     CF385C    3053.66  3282.64  ok
+stock H_CF1167C                    CF1167C    181.03   198.30  ok
+stock H_CF163A                     CF163A     320.97   351.52  ok
+stock H_CF460C                     CF460C    1422.10  1431.37  ok
+stock H_CF35C                      CF35C      898.44   906.28  ok
+stock H_CF295B                     CF295B    2231.03  2245.85  ok
+stock H_CF339D                     CF339D     754.63   764.58  ok
+stock H_CF547B                     CF547B     508.26   514.54  ok
+stock H_CF165E                     CF165E    3059.64  3064.33  ok
+stock H_CF7D                       CF7D       875.61   995.20  ok
+stock H_CF813Fv2                   CF813F     234.83   249.86  ok
+stock H_CF295Bv2                   CF295B     493.28   533.88  ok
+stock H_CF165Ev2                   CF165E     622.40   623.41  ok
+stock H_CF453B                     CF453B    3556.82  3583.23  ok
+stock H_CF622F                     CF622F     407.77   411.85  ok
+stock H_CF339Dn                    CF339D     715.26   729.87  ok
+stock H_CF35Cn                     CF35C      814.56   831.58  ok
+stock H_CF295Bn                    CF295B     497.14   498.58  ok
+stock H_CF235Cn                    CF235C     220.82   220.98  ok
+stock H_CF385Cn                    CF385C    2760.18  3006.80  ok
+stock H_CF380Cn                    CF380C     280.76   285.28  ok
+stock H_CF165En                    CF165E     633.05   634.27  ok
+stock H_CF61En                     CF61E      274.81   291.40  ok
+stock E_C_CF455A                   CF455A     357.00   374.71  ok
+stock E_C_CF380C                   CF380C     298.80   319.10  ok
+stock E_C_CF1100F                  CF1100F    628.90   642.88  ok
+stock E_C_CF868F                   CF868F    3042.95  3047.47  ok
+stock E_C_CF631E                   CF631E      49.73    52.83  ok
+stock E_C_CF833B                   CF833B    4593.40  4626.23  ok
+stock E_C_CF17E                    CF17E      663.58   670.99  ok
+stock E_C_CF20C                    CF20C       79.18    85.81  ok
+stock E_C_CF1039D                  CF1039D   6015.05  6084.04  ok
+stock E_C_CF813F                   CF813F     315.94   315.96  ok
+stock E_C_CF235C                   CF235C     310.58   325.76  ok
+stock E_C_CF1172F                  CF1172F   1375.19  1377.73  ok
+stock E_S3_CF432D                  CF432D     405.32   410.63  ok
+stock E_S4_CF453B                  CF453B    4875.33  4940.78  ok
+stock E_S5_CF622F                  CF622F     606.81   612.33  ok

@@ -1,0 +1,53 @@
+(* CF1100F, written for speed.  The same table of prefix bases as the corpus program; what changed is HOW it is
+   written:
+     - row r is made from row r-1 in ONE pass over the 20 bits (copy the cell, or put the new number in) instead of
+       a copying pass followed by an inserting pass;
+     - "is bit b of x set" is a shift, not a read of a table of powers of two. *)
+Local Notation rC := 0.
+Local Notation rBAS := 2.
+Local Notation rPOS := 3.
+Local Notation rQL := 4.
+Local Notation rQR := 5.
+Local Notation rANS := 6.
+
+(* bits 19 .. 0 of row `src` to row `dst`, x (at position p) worked in on the way; b counts down *)
+Fixpoint row (fuel : nat) (b x p src dst : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let cur := rd rBAS (src + b) s in
+      let q := rd rPOS (src + b) s in
+      if ((x >> b) land 1) =? 0 then row f (b - 1) x p src dst (upd rPOS (dst + b) q (upd rBAS (dst + b) cur s))
+      else if cur =? 0 then row f (b - 1) 0 p src dst (upd rPOS (dst + b) p (upd rBAS (dst + b) x s))
+      else if q <? p then row f (b - 1) (x lxor cur) q src dst (upd rPOS (dst + b) p (upd rBAS (dst + b) x s))
+      else row f (b - 1) (x lxor cur) p src dst (upd rPOS (dst + b) q (upd rBAS (dst + b) cur s))
+  end.
+
+Fixpoint build (fuel w : nat) (r : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => build f w (r + 1) (row w 19 (rd rC r s) r ((r - 1) * 20) (r * 20) s)
+  end.
+
+Fixpoint qry (fuel : nat) (b l base res : int) (s : mem) : int :=
+  match fuel with
+  | O => res
+  | S f =>
+      let cur := rd rBAS (base + b) s in
+      if (l <=? rd rPOS (base + b) s) && (res <? (res lxor cur)) then qry f (b - 1) l base (res lxor cur) s
+      else qry f (b - 1) l base res s
+  end.
+
+Fixpoint answer_all (fuel w : nat) (i : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => answer_all f w (i + 1) (upd rANS i (qry w 19 (rd rQL i s) (rd rQR i s * 20) 0 s) s)
+  end.
+
+Definition solve (n q : nat) (s : mem) : mem :=
+  let w := 20%nat in
+  answer_all q w 0 (build n w 1 s).
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  kq_sum (solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_input 0)).

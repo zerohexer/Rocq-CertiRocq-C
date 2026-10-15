@@ -1,0 +1,111 @@
+#LW 66
+C++                                                                CF455A       4.96     5.02  ok
+C++ with 64-bit cells                                              CF455A       5.52     5.73  ok
+corpus text, exactly                                               CF455A       5.90     6.20  ok
+corpus text, pairs not rebuilt                                     CF455A       5.69     5.84  ok
+C++                                                                CF380C      52.66    54.30  ok
+C++ with 64-bit cells                                              CF380C      69.78    71.92  ok
+corpus text, exactly                                               CF380C      84.38    86.67  ok
+corpus text, pairs not rebuilt                                     CF380C      85.24    87.00  ok
+by the guideline, a query leaves its three numbers in cells        CF380C      65.88    68.17  ok
+by the guideline, a node's three numbers in one word               CF380C      56.16    58.97  ok
+by the guideline, narrow blocks (4 bytes a cell)                   CF380C      61.39    63.03  ok
+C++                                                                CF1100F     73.64    75.76  ok
+C++ with 64-bit cells                                              CF1100F     77.56    78.46  ok
+C++ written the way the fast Rocq is                               CF1100F     82.49    84.72  ok
+corpus text, exactly                                               CF1100F    130.17   131.52  ok
+corpus text, pairs not rebuilt                                     CF1100F    130.94   132.32  ok
+by the guideline, one pass                                         CF1100F     85.57    86.37  ok
+by the guideline, and base with position in one word               CF1100F     65.74    67.15  ok
+by the guideline, and no jump on a bit of the data                 CF1100F     72.76    73.08  ok
+C++                                                                CF868F      94.88    96.35  ok
+C++ with 64-bit cells                                              CF868F      98.19   102.87  ok
+corpus text, exactly                                               CF868F     621.47   639.38  ok
+corpus text, pairs not rebuilt                                     CF868F     185.40   187.88  ok
+by the guideline, the window in parameters, one loop               CF868F     138.65   141.24  ok
+by the guideline, and five loops, one question each                CF868F      85.29    88.27  ok
+C++                                                                CF631E       6.19     6.49  ok
+corpus text, exactly                                               CF631E       6.09     6.16  ok
+corpus text, pairs not rebuilt                                     CF631E       5.95     6.04  ok
+C++                                                                CF833B     369.66   376.02  ok
+C++ written the way the fast Rocq is                               CF833B     371.37   373.59  ok
+corpus text, exactly                                               CF833B     644.84   657.56  ok
+corpus text, pairs not rebuilt                                     CF833B     657.94   664.47  ok
+by the guideline, a query gives back one number                    CF833B     390.61   395.75  ok
+C++                                                                CF17E       34.38    35.05  ok
+corpus text, exactly                                               CF17E       43.91    44.95  ok
+corpus text, pairs not rebuilt                                     CF17E       45.07    45.27  ok
+C++                                                                CF20C       11.44    11.69  ok
+C++ written the way the fast Rocq is                               CF20C        7.08     7.47  ok
+corpus text, exactly                                               CF20C       13.99    15.57  ok
+corpus text, pairs not rebuilt                                     CF20C       13.75    14.22  ok
+by the guideline, heap entries in one word, look then remove       CF20C        8.70     9.30  ok
+C++                                                                CF1039D    624.25   680.82  ok
+corpus text, exactly                                               CF1039D   2239.66  2253.27  ok
+corpus text, pairs not rebuilt                                     CF1039D    746.50   764.58  ok
+C++                                                                CF813F      32.95    34.73  ok
+corpus text, exactly                                               CF813F      68.23    70.08  ok
+corpus text, pairs not rebuilt                                     CF813F      67.76    70.46  ok
+by the guideline, find gives back one number                       CF813F      51.17    54.22  ok
+by the guideline, and the sort compares what it moves              CF813F      45.67    51.11  ok
+C++                                                                CF235C      28.52    31.31  ok
+C++ with 64-bit cells                                              CF235C      40.15    42.69  ok
+corpus text, exactly                                               CF235C      89.19    90.97  ok
+corpus text, pairs not rebuilt                                     CF235C      79.24    85.45  ok
+by the guideline, no pairs, state in parameters                    CF235C      52.50    53.48  ok
+by the guideline, and one record per state (slower)                CF235C      59.52    68.86  ok
+by the guideline, narrow blocks (4 bytes a cell)                   CF235C      40.37    41.36  ok
+C++                                                                CF1172F    185.73   187.08  ok
+corpus text, exactly                                               CF1172F    219.14   221.79  ok
+corpus text, pairs not rebuilt                                     CF1172F    180.07   183.53  ok
+C++                                                                CF432D       6.00     6.19  ok
+corpus text, exactly                                               CF432D       8.43     8.72  ok
+corpus text, pairs not rebuilt                                     CF432D       8.20     8.39  ok
+C++                                                                CF453B     781.88   782.85  ok
+C++ written the way the fast Rocq is                               CF453B     334.79   338.34  ok
+corpus text, exactly                                               CF453B     936.98   977.20  ok
+corpus text, pairs not rebuilt                                     CF453B     953.75   964.72  ok
+by the guideline, the innermost loop decides nothing by a jump     CF453B     470.86   477.62  ok
+C++                                                                CF622F      56.33    57.99  ok
+corpus text, exactly                                               CF622F      95.17    96.74  ok
+corpus text, pairs not rebuilt                                     CF622F      92.65    94.69  ok
+by the guideline, a mask and a shift for the exponent              CF622F      85.46    86.31  ok
+C++                                                                CF61E       73.64    74.21  ok
+C++ with 64-bit cells                                              CF61E       86.99    88.82  ok
+by the guideline, a new problem, a tree of sums used twice         CF61E       88.06    89.44  ok
+by the guideline, narrow blocks (4 bytes a cell)                   CF61E       75.89    86.11  ok
+C++                                                                CF385C     137.05   139.01  ok
+C++ with 64-bit cells                                              CF385C     266.87   274.11  ok
+by the guideline, a new problem, a sieve that counts as it marks   CF385C     180.12   182.75  ok
+by the guideline, narrow blocks (4 bytes a cell)                   CF385C     144.62   166.89  ok
+C++                                                                CF1167C      6.44     6.63  ok
+C++ with 64-bit cells                                              CF1167C      6.84     6.96  ok
+by the guideline, a new problem, union-find with sizes             CF1167C     10.57    11.33  ok
+C++                                                                CF163A      37.83    40.13  ok
+by the guideline, a new problem, a table filled row by row         CF163A      29.19    30.63  ok
+C++                                                                CF460C      31.82    33.40  ok
+C++ with 64-bit cells                                              CF460C      31.51    31.95  ok
+by the guideline, a new problem, a search on the answer            CF460C      36.81    37.62  ok
+C++                                                                CF35C       16.19    16.89  ok
+C++ with 64-bit cells                                              CF35C       19.74    20.00  ok
+by the guideline, a new problem, a walk over a grid with a queue   CF35C       22.85    23.64  ok
+by the guideline, narrow blocks (4 bytes a cell)                   CF35C       17.61    17.84  ok
+C++                                                                CF295B      37.72    38.07  ok
+C++ with 64-bit cells                                              CF295B      59.32    60.83  ok
+by the guideline, a new problem, all shortest ways                 CF295B     159.13   160.45  ok
+by the guideline, the budget is the count                          CF295B     122.30   127.27  ok
+by the guideline, narrow blocks (4 bytes a cell)                   CF295B     129.39   131.69  ok
+C++                                                                CF339D      77.73    78.81  ok
+C++ with 64-bit cells                                              CF339D      96.53   118.94  ok
+by the guideline, a new problem, a tree updated from the bottom    CF339D     132.34   153.19  ok
+by the guideline, narrow blocks (4 bytes a cell)                   CF339D     115.16   120.77  ok
+C++                                                                CF547B      31.66    32.00  ok
+C++ with 64-bit cells                                              CF547B      31.88    32.86  ok
+by the guideline, a new problem, nearest smaller with a stack      CF547B      41.11    41.78  ok
+C++                                                                CF165E      63.85    66.13  ok
+C++ with 64-bit cells                                              CF165E      71.63    73.11  ok
+by the guideline, a new problem, a table over sets of bits         CF165E     104.27   106.65  ok
+by the guideline, a cell written only when it changes              CF165E      74.90    77.59  ok
+by the guideline, narrow blocks (4 bytes a cell)                   CF165E      67.76    70.25  ok
+C++                                                                CF7D        18.77    18.93  ok
+by the guideline, a new problem, two running hashes                CF7D        19.07    20.01  ok

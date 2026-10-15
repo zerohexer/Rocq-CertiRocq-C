@@ -1,0 +1,31 @@
+(* hw/fault.body -- A FAULT THE PROGRAM HANDLES ITSELF.  Page tables of its own: the first GB mapped to itself; the second
+   GB has a table with nothing in it.  A write to 1 GB + 0x123456 faults (a page fault, vector 14); the Rocq program for
+   faults (hw/fault_irq.body) maps that 2 MB to 64 MB, and the write is tried again and succeeds.  Then: read back
+   through the same address, read at the physical address 64 MB + 0x123456, and the number of faults handled (1). *)
+Local Notation PML4 := 0.
+Local Notation PDPT := 1.
+Local Notation PD0 := 2.
+Local Notation PD1 := 3.     (* the second GB's table: empty; filled by the fault program *)
+Local Notation IDT := 4.
+Local Notation SH := 6.      (* narrow block: the fault program counts there *)
+Local Notation GB := 1073741824.
+Fixpoint pd_fill (f : nat) (k : int) (s : mem) : mem :=
+  match f with
+  | O => s
+  | S f => if 512 <=? k then s
+           else pd_fill f (k + 1) (upd32 PD0 (2 * k + 1) 0 (upd32 PD0 (2 * k) (k * 2097152 + 131) s))
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  let s0 := ser_init (x86_setup (kq_input 0)) in
+  let s1 := hw_vectors (hw_addr IDT) 4095 (idt_fill (kq_nat 256) IDT 0 s0) in
+  let s2 := pd_fill (kq_nat 512) 0 s1 in
+  let s3 := upd32 PDPT 2 (hw_addr PD1 + 3) (upd32 PDPT 0 (hw_addr PD0 + 3) s2) in
+  let s4 := hw_pt_set (hw_addr PML4) (upd32 PML4 0 (hw_addr PDPT + 3) s3) in
+  let s5 := hw_store 4 (GB + 1193046) 3405691582 s4 in                  (* 0xCAFEBABE at 1 GB + 0x123456: faults *)
+  let s6 := hw_load 4 (GB + 1193046) 1 0 s5 in                        (* through the same address *)
+  let s7 := hw_load 4 (67108864 + 1193046) 1 1 s6 in                  (* at 64 MB + 0x123456 *)
+  let s8 := hw_aload 4 (hw_addr SH) 1 2 s7 in                        (* faults handled *)
+  let ok := (rd 1 0 s8 =? 3405691582) && (rd 1 1 s8 =? 3405691582) && (rd 1 2 s8 =? 1) in
+  let s9 := line 102 108 116 32 (rd 1 2 s8) (line 109 97 112 32 (if ok then 0 else 1) s8) in
+  if ok && (rd 1 2 s9 =? 1) then 0 else 1.

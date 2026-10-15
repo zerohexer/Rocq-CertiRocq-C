@@ -1,0 +1,41 @@
+(* hw/smp.body -- TWO PROCESSORS.  This program starts the second one itself: the startup code copied to 0x8000
+   (hw_cpu_code), then INIT and STARTUP sent to "all the others" through the local interrupt controller's command register
+   (0xFEE00300).  The second processor runs hw/smp_ap.body.  Both then add 1 to the same counter 1 000 000 times each
+   with an ATOMIC add, and to a second counter 1 000 000 times each with a plain read and write.  The atomic counter
+   must be 2 000 000; the plain one shows what happens without atomics (updates lost when the two meet).  Memory
+   shared with the other processor (narrow block 6) is touched only through atomics; each program has its own cells
+   for what it reads (block 1 here, block 3 there).  The two start their loops together: the second processor says it
+   has started, then waits for "go" from this one. *)
+Local Notation SH := 6.
+Local Notation LAPIC := 4276092928.          (* 0xFEE00000 *)
+Local Notation N := 1000000.
+Fixpoint add_n (f : nat) (a : int) (s : mem) : mem :=
+  match f with O => s | S f => add_n f a (hw_atomic 0 4 a 1 1 3 s) end.
+Fixpoint inc_n (f : nat) (a : int) (s : mem) : mem :=
+  match f with O => s | S f => let s1 := hw_load 4 a 1 4 s in inc_n f a (hw_store 4 a (rd 1 4 s1 + 1) s1) end.
+Fixpoint spin (f : nat) (s : mem) : mem := match f with O => s | S f => spin f (hw_pause s) end.
+Fixpoint wait_flag (f : nat) (a : int) (s : mem) : mem :=
+  match f with
+  | O => s
+  | S f => let s1 := hw_aload 4 a 1 2 s in if rd 1 2 s1 =? 1 then s1 else wait_flag f a (hw_pause s1)
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  let a := hw_addr SH in        (* a: the atomic counter; a + 4: the plain one; + 8: done; + 12: started; + 16: go *)
+  let s0 := ser_init (x86_setup (kq_input 0)) in
+  let s1 := hw_copy 32768 (hw_cpu_code 0) (hw_cpu_code 1) s0 in
+  let s2 := spin (kq_nat 1000000) (hw_store 4 (LAPIC + 768) 804096 s1) in      (* INIT, to all the others *)
+  let s3 := spin (kq_nat 100000) (hw_store 4 (LAPIC + 768) 804360 s2) in       (* STARTUP at page 8 (0x8000) *)
+  let s4 := hw_store 4 (LAPIC + 768) 804360 s3 in                               (* and once more *)
+  let s5 := wait_flag (kq_nat 50000000) (a + 12) s4 in
+  if rd 1 2 s5 =? 1 then
+    let s6 := add_n (kq_nat N) a (inc_n (kq_nat N) (a + 4) (hw_astore 4 (a + 16) 1 s5)) in      (* the plain loop first: at the same moment *)
+    let s7 := wait_flag (kq_nat 2000000000) (a + 8) s6 in
+    let s8 := hw_aload 4 (a + 4) 1 1 (hw_aload 4 a 1 0 s7) in
+    let c := rd 1 0 s8 in
+    let p := rd 1 1 s8 in
+    let s9 := line 97 116 111 109 c (line 114 100 119 114 p (line 99 112 117 115 2 s8)) in
+    if (c =? 2 * N) && (rd 1 0 s9 =? c) then 0 else 1
+  else
+    let s6 := line 99 112 117 115 1 s5 in
+    if rd 1 2 s6 =? 1 then 0 else 1.

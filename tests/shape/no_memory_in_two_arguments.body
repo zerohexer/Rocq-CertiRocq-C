@@ -1,0 +1,4 @@
+(* EXPECT: REFUSE *)
+(* one memory handed to two writers in the arguments of one call *)
+Definition two (a b : mem) : int := rd 0 0 a + rd 0 0 b.
+Definition solve (s : mem) : int := two (upd 0 0 1 s) (upd 0 0 2 s).

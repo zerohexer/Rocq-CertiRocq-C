@@ -1,0 +1,54 @@
+(* CF380C, written for speed, second version: A NODE IN ONE MACHINE WORD.
+   A node's three numbers are each below 2^20 (the string has at most 10^6 brackets), so they are packed into one
+   integer -- t in bits 0..19, the unmatched '(' in bits 20..39, the unmatched ')' in bits 40..59.  A node is then one
+   cell, a query returns one number, and nothing is built or stored on the way. *)
+Local Notation rS := 0.      (* the brackets: cell i (1..n) holds 1 for '(' *)
+Local Notation rN := 1.      (* the tree: node o in cell o *)
+Local Notation rQL := 4.
+Local Notation rQR := 5.
+Local Notation rANS := 6.
+Local Notation M := 1048575.                     (* 2^20 - 1 *)
+Local Notation LEAF_OPEN := 1048576.             (* (0, 1, 0) *)
+Local Notation LEAF_CLOSE := 1099511627776.      (* (0, 0, 1) *)
+
+Definition merge (a b : int) : int :=
+  let o1 := (a >> 20) land M in
+  let c2 := b >> 40 in
+  let mm := if o1 <=? c2 then o1 else c2 in
+  ((a land M) + (b land M) + 2 * mm) + ((o1 + ((b >> 20) land M) - mm) << 20) + (((a >> 40) + c2 - mm) << 40).
+
+Fixpoint build (h : nat) (o l r : int) (s : mem) : mem :=
+  match h with
+  | O => s
+  | S h' =>
+      if l =? r then upd rN o (if rd rS l s =? 1 then LEAF_OPEN else LEAF_CLOSE) s
+      else
+        let m := (l + r) >> 1 in
+        let s2 := build h' (2 * o + 1) (m + 1) r (build h' (2 * o) l m s) in
+        upd rN o (merge (rd rN (2 * o) s2) (rd rN (2 * o + 1) s2)) s2
+  end.
+
+Fixpoint query (h : nat) (o l r ql qr : int) (s : mem) : int :=
+  match h with
+  | O => 0
+  | S h' =>
+      if qr <? l then 0
+      else if r <? ql then 0
+      else if (ql <=? l) && (r <=? qr) then rd rN o s
+      else
+        let m := (l + r) >> 1 in
+        merge (query h' (2 * o) l m ql qr s) (query h' (2 * o + 1) (m + 1) r ql qr s)
+  end.
+
+Fixpoint answer_all (fuel h : nat) (i nz : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => answer_all f h (i + 1) nz (upd rANS i ((query h 1 1 nz (rd rQL i s) (rd rQR i s) s) land M) s)
+  end.
+
+Definition solve (q h : nat) (nz : int) (s : mem) : mem :=
+  answer_all q h 0 nz (build h 1 1 nz s).
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  kq_sum (solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_arg 2) (kq_input 0)).

@@ -1,0 +1,41 @@
+# hand.tsv -- the programs REWRITTEN IN ROCQ by the guideline, and the new ones written by it from the start.  Columns:
+#   name      the program is hand/<name>.body; it is built as H_C_<name>
+#   problem   a name of problems.tsv
+#   memory    its memory file when that is not the problem's own (the layout of the blocks changed); else -
+#   what      what it is, in a few words (no colon, no equals sign)
+CF380C     CF380C   big/H_CF380C.mem   a query leaves its three numbers in cells
+CF380Cp    CF380C   -                  a node's three numbers in one word
+CF1100F    CF1100F  -                  one pass
+CF1100Fv2  CF1100F  -                  and base with position in one word
+CF1100Fv3  CF1100F  -                  and no jump on a bit of the data
+CF868F     CF868F   big/O_CF868F.mem   the window in parameters, one loop
+CF868Fv2   CF868F   big/O_CF868F.mem   and five loops, one question each
+CF833B     CF833B   -                  a query gives back one number
+CF235C     CF235C   -                  no pairs, state in parameters
+CF235Cv2   CF235C   big/H_CF235C.mem   and one record per state (slower)
+CF20C      CF20C    -                  heap entries in one word, look then remove
+CF813F     CF813F   -                  find gives back one number
+CF61E      CF61E    -                  a new problem, a tree of sums used twice
+CF385C     CF385C   -                  a new problem, a sieve that counts as it marks
+CF1167C    CF1167C  -                  a new problem, union-find with sizes
+CF163A     CF163A   -                  a new problem, a table filled row by row
+CF460C     CF460C   -                  a new problem, a search on the answer
+CF35C      CF35C    -                  a new problem, a walk over a grid with a queue
+CF295B     CF295B   -                  a new problem, all shortest ways
+CF339D     CF339D   -                  a new problem, a tree updated from the bottom
+CF547B     CF547B   -                  a new problem, nearest smaller with a stack
+CF165E     CF165E   -                  a new problem, a table over sets of bits
+CF7D       CF7D     -                  a new problem, two running hashes
+CF813Fv2   CF813F   -                  and the sort compares what it moves
+CF295Bv2   CF295B   -                  the budget is the count
+CF165Ev2   CF165E   -                  a cell written only when it changes
+CF453B     CF453B   -                  the innermost loop decides nothing by a jump
+CF622F     CF622F   -                  a mask and a shift for the exponent
+CF339Dn    CF339D   big/N_CF339Dn.mem  narrow blocks (4 bytes a cell)
+CF35Cn     CF35C    big/N_CF35Cn.mem   narrow blocks (4 bytes a cell)
+CF295Bn    CF295B   big/N_CF295Bn.mem  narrow blocks (4 bytes a cell)
+CF235Cn    CF235C   big/N_CF235Cn.mem  narrow blocks (4 bytes a cell)
+CF385Cn    CF385C   big/N_CF385Cn.mem  narrow blocks (4 bytes a cell)
+CF380Cn    CF380C   big/N_CF380Cn.mem  narrow blocks (4 bytes a cell)
+CF165En    CF165E   big/N_CF165En.mem  narrow blocks (4 bytes a cell)
+CF61En     CF61E    big/N_CF61En.mem   narrow blocks (4 bytes a cell)

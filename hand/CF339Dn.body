@@ -1,0 +1,61 @@
+(* CF339Dn WITH NARROW BLOCKS (4 bytes a cell; KQRun.v: rd32, upd32): rT, rQP, rQB; written by mknarrowbody.py from CF339D.body *)
+(* CF339D "Xenia and Bit Operations" (new problem, written by the guideline from the start; the input is larger than
+   the judge's largest: 2^20 numbers, 2 million changes):
+   a tree over 2^n numbers; the level above the numbers takes the OR of its two children, the next one the XOR, and so
+   on in turn; after every change of one number, the value at the top.
+     - rule 4: which of the two operations a level uses is a choice between two numbers inside the one recursive call;
+     - rule 1: where the walk is and whose turn it is are parameters. *)
+Local Notation rT := 0.   (* narrow *)      (* cell 1 is the top; the children of cell p are cells 2p and 2p + 1; the numbers come last *)
+Local Notation rQP := 1.   (* narrow *)
+Local Notation rQB := 2.   (* narrow *)
+Local Notation rANS := 3.
+
+(* the cells p .. e - 1 of one level, from their children *)
+Fixpoint level (fuel : nat) (p e isor : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if e <=? p then s
+      else
+        let a := rd32 rT (2 * p) s in
+        let b := rd32 rT (2 * p + 1) s in
+        level f (p + 1) e isor (upd32 rT p (if isor =? 1 then a lor b else a lxor b) s)
+  end.
+
+(* the level that starts at cell b, then the levels above it: OR and XOR take turns *)
+Fixpoint levels (fuel sz : nat) (b isor : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f => if b <=? 0 then s else levels f sz (b >> 1) (1 - isor) (level sz b (2 * b) isor s)
+  end.
+
+(* cell i has changed: the cells above it, from the bottom *)
+Fixpoint up (fuel : nat) (i isor : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      if i <=? 1 then s
+      else
+        let p := i >> 1 in
+        let a := rd32 rT (2 * p) s in
+        let b := rd32 rT (2 * p + 1) s in
+        up f p (1 - isor) (upd32 rT p (if isor =? 1 then a lor b else a lxor b) s)
+  end.
+
+Fixpoint queries (fuel : nat) (i leaf0 : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S f =>
+      let leaf := leaf0 + rd32 rQP i s in
+      let b := rd32 rQB i s in
+      let s1 := up 24 leaf 1 (upd32 rT leaf b s) in
+      let r := rd32 rT 1 s1 in
+      queries f (i + 1) leaf0 (upd rANS i r s1)
+  end.
+
+Definition solve (q sz : nat) (half : int) (s : mem) : mem :=
+  queries q 0 (2 * half - 1) (levels 24 sz half 1 s).
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  kq_sum (solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_arg 1) (kq_input 0)).
