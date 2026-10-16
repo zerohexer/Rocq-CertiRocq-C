@@ -105,8 +105,14 @@ KQ_INL value kq_rd_u(value h, value i, value s) { return *(const value *) KQ_CEL
 KQ_INL value kq_upd_u(value h, value i, value v, value s) { *KQ_CELL(&kq_b[(kq_u) h >> 1], i) = v; return s; }
 KQ_INL value kq_rd32_u(value h, value i, value s) { return KQ_V((long) *(const int *) KQ_CELL32(&kq_n[(kq_u) h >> 1], i)); }
 KQ_INL value kq_upd32_u(value h, value i, value v, value s) { *KQ_CELL32(&kq_n[(kq_u) h >> 1], i) = (int) KQ_N(v); return s; }
-KQ_INL value kq_len(value h) { kq_u hh = (kq_u) h >> 1; return KQ_V(hh < KQ_MAXB ? (long) kq_b[hh].len : 0L); }
+// kq_len h: block h's size when the program started (KQBound.v); a block that grew has more (kq_size below)
+extern unsigned int kq_len0[KQ_MAXB];
+KQ_INL value kq_len(value h) { kq_u hh = (kq_u) h >> 1; return KQ_V(hh < KQ_MAXB ? (long) kq_len0[hh] : 0L); }
 KQ_INL value kq_len32(value h) { kq_u hh = (kq_u) h >> 1; return KQ_V(hh < KQ_MAXB ? (long) kq_n[hh].len : 0L); }
+// GROWING A BLOCK (KQRun.v: kq_grow, kq_size).  kq_grow may move the block: called, it may change kq_b, and inlined its
+// stores are in sight, so either way the C compiler reads the block's address and limit again after it.
+KQ_INL value kq_size(value h, value s) { kq_u hh = (kq_u) h >> 1; return KQ_V(hh < KQ_MAXB ? (long) kq_b[hh].len : 0L); }
+extern value kq_grow(value h, value n, value s);
 KQ_INL value kq_fits(value L, value e, value n) {
   kq_u l = (kq_u) KQ_N(L), x = (kq_u) KQ_N(e), m = (kq_u) KQ_N(n);
   return (x <= l && m <= l - x) ? KQ_TRUE : KQ_FALSE;

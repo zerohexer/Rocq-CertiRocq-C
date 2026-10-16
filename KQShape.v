@@ -94,6 +94,29 @@ Fixpoint ncalls (fuel : nat) (ctx : list (bk * string)) (t : term) : nat :=
     end
   end.
 
+(* is the result of a function of this type a plain number (an int, a boolean, a nat)?  Only such a function can be a
+   reader: a result of any other type (a memory, a pair with a memory in it) could BE the memory it was given *)
+Fixpoint plain_result (fuel : nat) (ty : term) : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+    match ty with
+    | tProd _ _ b => plain_result fuel b
+    | tCast t _ _ => plain_result fuel t
+    | tConst kn _ => is_prim kn && String.eqb (snd kn) "int"
+    | tInd ind _ => String.eqb (ind_name ind) "bool" || String.eqb (ind_name ind) "nat"
+    | _ => false
+    end
+  end.
+
+(* a routine declared WITHOUT a body whose result is a plain number only looks at the memory it is given (kq_size, a
+   reader of the machine's): the same rule as for the writers below, read off its type *)
+Definition decl_reader (Σ : global_env) (kn : kername) : bool :=
+  match lookup_env Σ kn with
+  | Some (ConstantDecl cb) => match cst_body cb with None => plain_result 64 (cst_type cb) | Some _ => false end
+  | _ => false
+  end.
+
 Section Walk.
   (* readers: the file's functions that only look at a memory;  self_rd: the function being read is one of them;
      tree: it calls itself two or more times on some path *)
@@ -224,7 +247,7 @@ Section Walk.
           | tConst kn _ =>
               let ok := is_prim kn || String.eqb (mp_head (fst kn)) "KQRun" || String.eqb (mp_head (fst kn)) "KQBound" || is_boolfn kn || is_intfn kn || user kn || is_decl Σ kn in
               let '(e, d) := args_of (is_kq kn "kq_rd" || is_kq kn "rd" || is_kq kn "rd32" || is_kq kn "rd_u" || is_kq kn "rd32_u"
-                                      || is_kq kn "kq_sum" || memk kn readers) args dead in
+                                      || is_kq kn "kq_sum" || memk kn readers || decl_reader Σ kn) args dead in
               ((if hot && negb ok then ["calls `" ^ string_of_kername kn ^ "`, which is not a machine operation"] else []) ++ e, d)
           | tConstruct ind i _ =>
               let '(cn, ar) := ctor_info Σ ind i in
@@ -331,21 +354,6 @@ Fixpoint writes (decls : list kername) (fuel : nat) (t : term) : bool :=
     | _ => false
     end
   end.
-(* is the result of a function of this type a plain number (an int, a boolean, a nat)?  Only such a function can be a
-   reader: a result of any other type (a memory, a pair with a memory in it) could BE the memory it was given *)
-Fixpoint plain_result (fuel : nat) (ty : term) : bool :=
-  match fuel with
-  | O => false
-  | S fuel =>
-    match ty with
-    | tProd _ _ b => plain_result fuel b
-    | tCast t _ _ => plain_result fuel t
-    | tConst kn _ => is_prim kn && String.eqb (snd kn) "int"
-    | tInd ind _ => String.eqb (ind_name ind) "bool" || String.eqb (ind_name ind) "nat"
-    | _ => false
-    end
-  end.
-
 (* ---- for the advice of rule 1: the FIXED cells (block and cell number both written in the program) that a piece of
    text reads and writes -- its own, and those of the non-recursive definitions it calls *)
 Definition fixed_int (defs : list (kername * term)) (t : term) : option PrimInt63.int :=

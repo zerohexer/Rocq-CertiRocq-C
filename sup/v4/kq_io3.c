@@ -10,6 +10,7 @@
 #include "kq_io.h"
 extern value body(struct thread_info *);
 kq_block kq_b[KQ_MAXB];
+unsigned int kq_len0[KQ_MAXB];   /* each block's size when the program started (kq_len) */
 static long kq_nb;
 kq_block32 kq_n[KQ_MAXB];       /* the narrow blocks (KQRun.v: rd32, upd32) */
 static long kq_nn;
@@ -50,6 +51,21 @@ value kq_sum(value s) {
   long c = kq_checksum();
   clock_gettime(CLOCK_MONOTONIC, &b); kq_sum_ms += (b.tv_sec - a.tv_sec) * 1e3 + (b.tv_nsec - a.tv_nsec) / 1e6; kq_perf_resume();
   return KQ_V(c);
+}
+// GROWING A BLOCK (KQRun.v kq_grow): block h holds at least n cells; the cells it had keep their numbers, the new ones
+// hold 0.  For h 0 .. 63 and n below 2^31, nothing otherwise.  The block may move (realloc).  If the machine has no more
+// memory, the program stops (exit 3): the laws cannot hold then, and nothing is computed past that point.
+value kq_grow(value h, value n, value s) {
+  kq_u hh = (kq_u) h >> 1; long nn = KQ_N(n);
+  if (hh >= KQ_MAXB || nn < 0 || nn >= (1L << 31)) return s;
+  if ((long) hh >= kq_nb) kq_nb = (long) hh + 1;
+  kq_block *b = &kq_b[hh];
+  if ((unsigned long) nn <= b->len) return s;
+  value *p = realloc(b->p, (nn + 1) * sizeof(value));
+  if (!p) { fprintf(stderr, "kq_grow: no memory for %ld cells in block %lu\n", nn, hh); exit(3); }
+  for (long i = (long) b->len; i <= nn; i++) p[i] = KQ_V(0);
+  b->p = p; b->len = (unsigned int) nn; b->lim = 2 * (unsigned int) nn;
+  return s;
 }
 // INPUT AND OUTPUT.  The input is the file named by $KQ_IN (numbers separated by anything), read whole at the first
 // kq_in; the output is collected and written to the file named by $KQ_OUT when the program ends (or to the standard
@@ -98,6 +114,7 @@ int main(int argc, char **argv) {
       long len; if (fscanf(f, "%ld", &len) != 1) return 2;
       if (len < 0 || len >= (1L << 31)) return 2;
       kq_b[h].len = (unsigned int) len; kq_b[h].lim = 2 * (unsigned int) len; kq_b[h].p = malloc((len + 1) * sizeof(value));
+      kq_len0[h] = (unsigned int) len;
       if (!kq_b[h].p) return 2;
       int c; do c = fgetc(f); while (c == ' ' || c == '\n' || c == '\t' || c == '\r');
       if (c == 'z') { for (long i = 0; i < len; i++) kq_b[h].p[i] = KQ_V(0); continue; }

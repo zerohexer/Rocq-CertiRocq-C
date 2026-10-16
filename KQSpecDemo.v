@@ -19,7 +19,11 @@ Theorem lookup_index_in_bounds : forall a s,
 Proof.
   intros a s L0 L4 x.
   assert (B : in_lim 1 x = true).
-  { apply (load_lim real real_laws); [reflexivity | ]. unfold cell. cbn [Len real]. rewrite L0. reflexivity. }
+  { apply (load_lim real real_laws); [reflexivity | ]. unfold cell. cbn [Size real].
+    (* block 0 had more than 1 cell at the start, and a block never shrinks *)
+    pose proof (len_size real real_laws 0 s) as LS. cbn [Len Size real] in LS.
+    assert (L1 : (1 <? kq_size 0 s) = true) by (apply lt_Z; apply lt_Z in L0; apply le_Z in LS; lia).
+    rewrite L1. reflexivity. }
   unfold in_lim, lim in B. cbn in B. apply andb_prop in B as [B0 B1].
   rewrite B0. cbn [andb]. apply lt_Z. apply lt_Z in B1. apply le_Z in L4. change (Z_ 256) with 256%Z in *. lia.
 Qed.

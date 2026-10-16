@@ -158,6 +158,40 @@ Programs that are the machine's only program, built by the same pipeline and run
 | `smp` | a second processor started by the Rocq program; a shared atomic counter | the processor is never started |
 | `own` | an interrupt entry routine written in Rocq; the cost of `hw_run`: 0.8 ns a call under KVM | the routine reports the wrong vector |
 
+## Dynamic memory (`lib/Slab.v`)
+
+A block can grow while the program runs: `kq_grow h n s` gives block h at least n cells, `kq_size h s` is its size.
+The cells it had keep their numbers and the new ones read 0, so no read changes.  The laws (`KQSpec.v`) say so, and
+the model (`KQModel.v`) proves them consistent.
+
+`lib/Slab.v` is a heap of objects on one growing block, after ZER's `Slab`, written in plain Rocq.  A program that
+names a `slab_` function gets its text in front of the program's own.
+
+| Function | What it does |
+|---|---|
+| `slab_init b f cap grow` | block b becomes an empty slab of objects with f fields; it doubles when full, or stays a fixed pool (`grow` = 0) |
+| `slab_next b s`, then `slab_take b s` | the handle of the next object, then the allocation |
+| `slab_get b h k s`, `slab_set b h k v s` | field k of object h |
+| `slab_free b h s` | frees object h |
+| `slab_live b h s` | is h a live object of this slab |
+
+A handle is the block, the slot and the slot's generation in one number.  Freeing moves the generation on, so every
+copy of a freed handle is dead, also once its slot holds a new object, and a handle of another slab is never live.
+`slab_get` and `slab_set` on a handle that is not live read 0 and write nothing.
+
+`lib/SlabSpec.v` proves, against the memory's laws alone:
+
+| Theorem | Statement |
+|---|---|
+| `slab_take_live` | the handle `slab_next` gave is live after `slab_take`, also when the slab must double |
+| `slab_free_kills` | after `slab_free b h`, h is not live |
+| `slab_reuse_keeps_dead` | after `slab_free b h` and a `slab_take` that reuses h's slot, h is still not live |
+| `slab_get_set` | through a live handle, a field reads what was last written to it |
+
+`examples/slab_set.body` is a hash set on a slab, both of its blocks starting empty; `examples/slab_set_malloc.c` is the
+same set in C with `malloc` and `free`.  Both give the same set; the Rocq version takes 5-7x the C's time, most of it the
+handle test on every field access.
+
 ## Checked
 
 - Every program in `hand/` (36): what is compiled is proved equal to it by the kernel, with the bounds tests and with
@@ -168,7 +202,8 @@ Programs that are the machine's only program, built by the same pipeline and run
   every save is detected.
 - The integer operations against a reference (`tests/test_arith.c`); Rocq's division against Z's (`tests/TestDiv.v`).
 - The checker on 18 programs with known verdicts (`tests/shape/`).
-- `hw/check.sh`: the laws, the 5 kernels under QEMU's processor and under KVM, the 5 controls.
+- `hw/check.sh`: the laws, the 5 kernels under QEMU's processor and under KVM, the 5 controls.  Its first part,
+  `hw/spec.sh`, also checks that the heap's four theorems rest on the laws alone.
 - `all.sh` rebuilds and remeasures everything from an empty directory.
 
 ## Trusted
@@ -184,6 +219,8 @@ connect them.  The translator is not trusted: the kernel checks its output every
 - A cell is 8 bytes where C++ often uses 4, unless the program uses narrow blocks (`rd32`, `upd32`).
 - The C compiler vectorizes some C++ loops that it does not vectorize in the generated C (CF295B).
 - Integers are 63 bits; a 64-bit value travels as two halves.
+- A loop is a chain of C tail calls; with more than six parameters the C compiler may make them real calls, so a long
+  loop needs a large stack.  The scripts run programs with `ulimit -s unlimited`.
 
 ## Running it
 

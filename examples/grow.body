@@ -1,0 +1,19 @@
+(* examples/grow.body -- a block that grows while the program runs.  There is no grow.mem: the memory starts with no
+   cells at all.  Block 0 grows to 10 cells and is filled, then to a million: the first ten keep their numbers, the rest
+   read 0.  `compile.sh examples/grow.body` prints 10, 285 and 1000000, then main = 333332833333500000. *)
+Fixpoint fill (f : nat) (i n : int) (s : mem) : mem :=
+  match f with O => s | S f => if n <=? i then s else fill f (i + 1) n (upd 0 i (i * i) s) end.
+
+Fixpoint total (f : nat) (i n a : int) (s : mem) : int :=
+  match f with O => a | S f => if n <=? i then a else total f (i + 1) n (a + rd 0 i s) s end.
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  let s := kq_grow 0 10 (kq_input 0) in
+  let s := kq_out (kq_size 0 s) s in                              (* 10 *)
+  let s := fill (kq_nat 10) 0 10 s in
+  let s := kq_grow 0 1000000 s in
+  let s := kq_out (total (kq_nat 1000000) 0 1000000 0 s) s in     (* 285: 0 + 1 + 4 + .. + 81, the new cells 0 *)
+  let s := kq_out (kq_size 0 s) s in                              (* 1000000 *)
+  let s := fill (kq_nat 1000000) 0 1000000 s in
+  total (kq_nat 1000000) 0 1000000 0 s.

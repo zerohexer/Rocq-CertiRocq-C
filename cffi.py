@@ -8,7 +8,8 @@ after a prefix that says how it is called; every argument is a number (an addres
 
 Writes HEADER.h (the C that connects each one, with the C library's headers and those named in $CINCLUDE) and prints
 the entries for CertiRocq's `Extract Constants` (`, c_putchar => "kq_c_putchar"` ..).  A program that names hw_addr
-gets the address of a narrow block too, for a buffer handed to C."""
+gets the address of a narrow block too, for a buffer handed to C; one that names kq_grow or kq_size, those two.  They
+are added to the program's own footer, not the shared one, so no other program's C changes."""
 import os, re, sys
 
 body, header = sys.argv[1], sys.argv[2]
@@ -44,6 +45,8 @@ for pre, name, ty in decls:
         sys.exit('%s%s: a C function is int -> .. -> mem -> mem (c_), int -> .. -> int (c_, no effects), or '
                  'int -> .. -> int -> int -> mem -> mem (cr_: the result into cell i of block h)' % (pre, name))
     ext.append(', %s%s => "%s"' % (pre, name, w))
+if re.search(r'\bkq_(grow|size)\b', text):      # a block that grows (KQRun.v), named only by programs that use it
+    ext.append(', kq_grow => "kq_grow", kq_size => "kq_size"')
 if re.search(r'\bhw_addr\b', text):
     out.append('static inline value kq_hw_addr(value h) { kq_u k = (kq_u) h >> 1; '
                'return KQ_V(k < KQ_MAXB ? (long) (uintptr_t) kq_n[k].p : 0L); }')

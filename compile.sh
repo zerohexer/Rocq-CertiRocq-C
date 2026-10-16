@@ -6,7 +6,8 @@
 # C FUNCTIONS -- any, from the C library or another: declared in FILE.body as `Axiom c_NAME ..` or `Axiom cr_NAME ..`
 # (cffi.py says how); CINCLUDE="a.h b.h" adds headers, CLIBS="-lm" libraries.  FILE.c next to FILE.body, if there is
 # one, is compiled and linked too (C functions of the program's own, called the same way).  FILE.mem, if there is one,
-# is the starting memory (the format kq_io3.c reads).
+# is the starting memory (the format kq_io3.c reads).  A program that uses lib/Slab.v (a heap that grows) just calls its
+# slab_ functions.
 cd /w; eval $(opam env); ulimit -s unlimited
 f=$1; [ -n "$f" ] && [ -f "$f" ] || { echo "usage: compile.sh FILE.body [numbers..]"; exit 1; }; shift
 n=$(basename "$f" .body); n=U_${n//[^A-Za-z0-9_]/_}; base=${f%.body}
@@ -16,8 +17,12 @@ if [ $stale = 1 ]; then
   echo "compiling the kit's Rocq files (once)"
   for v in KQRun KQShape KQNat KQBound KQFast; do rocq c -R . KQ $v.v 2>&1 | grep -A4 "^Error" && exit 1; done
 fi
-ext=$(python3 cffi.py "$f" bld/user/${n}_ffi.h) || { echo "$ext"; exit 1; }
-{ cat hand/hdr.txt; echo; cat "$f"
+# a program that names a slab_ function gets lib/Slab.v's text in front of it: the checker and the translator read it
+# as the program's own
+src=bld/user/$n.full.body
+{ grep -q '\bslab_' "$f" && sed -n '/(\* SLAB-BEGIN \*)/,/(\* SLAB-END \*)/p' lib/Slab.v; cat "$f"; } > $src
+ext=$(python3 cffi.py "$src" bld/user/${n}_ffi.h) || { echo "$ext"; exit 1; }
+{ cat hand/hdr.txt; echo; cat "$src"
   sed -e "s/%s/$n/" -e "s/%m/(PUse [])/" -e "s/%o/3/" -e "s/%b/KQTests/" -e "s/kq_fits => \"kq_fits\" \]/kq_fits => \"kq_fits\"$ext ]/" hand/ftr_kq.txt
 } > fast/$n.v
 rocq c -R . KQ fast/$n.v > fast/$n.log 2>&1 || { grep -A12 "^Error" fast/$n.log | head -24; exit 1; }

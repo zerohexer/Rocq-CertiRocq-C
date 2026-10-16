@@ -22,6 +22,13 @@ Axiom kq_out : int -> mem -> mem.              (* the number v is added to the o
    fit, so twice as many in the machine's fast memory. *)
 Axiom rd32  : int -> int -> mem -> int.
 Axiom upd32 : int -> int -> int -> mem -> mem.
+(* GROWING A BLOCK while the program runs: `kq_grow h n s` makes wide block h hold at least n cells.  The cells it had
+   keep their numbers and the new ones hold 0 -- what a read outside the block gave before -- so no read changes; a
+   block only grows.  For a block 0 .. 63 and n below 2^31; otherwise nothing happens.  `kq_size h s` is block h's size
+   in the memory s (`kq_len h`, KQBound.v, stays the size it had when the program started).  What it is for: memory
+   whose size is not known when the program starts, a heap (lib/Slab.v). *)
+Axiom kq_grow : int -> int -> mem -> mem.
+Axiom kq_size : int -> mem -> int.
 
 Definition zmin (a b : int) : int := if a <=? b then a else b.
 Definition zmax (a b : int) : int := if a <=? b then b else a.

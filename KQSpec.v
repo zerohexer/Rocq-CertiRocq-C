@@ -30,6 +30,7 @@ Axiom hw_trace : mem -> list hw_ev.
 Record ops := mkOps {
   M : Type;
   Rd : int -> int -> M -> int;  Upd : int -> int -> int -> M -> M;  Len : int -> int;
+  Size : int -> M -> int;  Grow : int -> int -> M -> M;
   Rd32 : int -> int -> M -> int;  Upd32 : int -> int -> int -> M -> M;  Len32 : int -> int;
   Load : int -> int -> int -> int -> M -> M;
   Store : int -> int -> int -> M -> M;  Store64 : int -> int -> int -> M -> M;
@@ -56,7 +57,10 @@ Definition other (h i h' i' : int) : bool := negb ((h =? h') && (i =? i')).
 
 Section Laws.
 Variable m : ops.
-Definition cell (h i : int) : bool := (0 <=? h) && (0 <=? i) && (i <? Len m h).
+(* cell i of block h exists in the memory s: inside the block's size there (a block can grow, KQRun.v kq_grow) *)
+Definition cell (h i : int) (s : M m) : bool := (0 <=? h) && (0 <=? i) && (i <? Size m h s).
+(* the blocks and sizes kq_grow accepts *)
+Definition growable (h n : int) : bool := (0 <=? h) && (h <? 64) && (0 <=? n) && (n <? 2147483648).
 Definition nonneg2 (h i : int) : bool := (0 <=? h) && (0 <=? i).
 (* the bytes a .. a + n - 1 fall outside every narrow block *)
 Definition clear (a n : int) : Prop :=
@@ -66,9 +70,9 @@ Record laws : Prop := {
   (* ---- THE MEMORY *)
   len_nonneg   : forall h, (0 <=? Len m h) = true;
   len32_nonneg : forall h, (0 <=? Len32 m h) = true;
-  rd_out    : forall h i s, nonneg2 h i = true -> (Len m h <=? i) = true -> Rd m h i s = 0;
-  upd_out   : forall h i v s, nonneg2 h i = true -> (Len m h <=? i) = true -> Upd m h i v s = s;
-  rd_upd_eq : forall h i v s, cell h i = true -> Rd m h i (Upd m h i v s) = v;
+  rd_out    : forall h i s, nonneg2 h i = true -> (Size m h s <=? i) = true -> Rd m h i s = 0;
+  upd_out   : forall h i v s, nonneg2 h i = true -> (Size m h s <=? i) = true -> Upd m h i v s = s;
+  rd_upd_eq : forall h i v s, cell h i s = true -> Rd m h i (Upd m h i v s) = v;
   rd_upd_ne : forall h i h' i' v s, other h i h' i' = true -> Rd m h' i' (Upd m h i v s) = Rd m h' i' s;
   rd32_out    : forall h i s, nonneg2 h i = true -> (Len32 m h <=? i) = true -> Rd32 m h i s = 0;
   upd32_out   : forall h i v s, nonneg2 h i = true -> (Len32 m h <=? i) = true -> Upd32 m h i v s = s;
@@ -79,16 +83,16 @@ Record laws : Prop := {
   trace_upd   : forall h i v s, Trace m (Upd m h i v s) = Trace m s;
   trace_upd32 : forall h i v s, Trace m (Upd32 m h i v s) = Trace m s;
   (* ---- LOADS: some number of the right size, into the cell asked for; nothing else changes *)
-  load_lim  : forall w a h i s, byte_w w = true -> cell h i = true -> in_lim w (Rd m h i (Load m w a h i s)) = true;
-  load8_lim : forall a h i s, cell h i = true -> cell h (i + 1) = true ->
+  load_lim  : forall w a h i s, byte_w w = true -> cell h i s = true -> in_lim w (Rd m h i (Load m w a h i s)) = true;
+  load8_lim : forall a h i s, cell h i s = true -> cell h (i + 1) s = true ->
                 in_lim 4 (Rd m h i (Load m 8 a h i s)) && in_lim 4 (Rd m h (i + 1) (Load m 8 a h i s)) = true;
   load_rd   : forall w a h i h' i' s, other h i h' i' = true -> (negb (w =? 8) || other h (i + 1) h' i') = true ->
                 Rd m h' i' (Load m w a h i s) = Rd m h' i' s;
   load_rd32 : forall w a h i h' i' s, Rd32 m h' i' (Load m w a h i s) = Rd32 m h' i' s;
   load_trace : forall w a h i s, Trace m (Load m w a h i s) =
                  Trace m s ++ [EvLoad w a (Rd m h i (Load m w a h i s)) (if w =? 8 then Rd m h (i + 1) (Load m w a h i s) else 0)];
-  aload_lim  : forall w a h i s, byte_w w = true -> cell h i = true -> in_lim w (Rd m h i (ALoad m w a h i s)) = true;
-  aload8_lim : forall a h i s, cell h i = true -> cell h (i + 1) = true ->
+  aload_lim  : forall w a h i s, byte_w w = true -> cell h i s = true -> in_lim w (Rd m h i (ALoad m w a h i s)) = true;
+  aload8_lim : forall a h i s, cell h i s = true -> cell h (i + 1) s = true ->
                  in_lim 4 (Rd m h i (ALoad m 8 a h i s)) && in_lim 4 (Rd m h (i + 1) (ALoad m 8 a h i s)) = true;
   aload_rd   : forall w a h i h' i' s, other h i h' i' = true -> (negb (w =? 8) || other h (i + 1) h' i') = true ->
                  Rd m h' i' (ALoad m w a h i s) = Rd m h' i' s;
@@ -105,21 +109,21 @@ Record laws : Prop := {
   astore64_rd   : forall a lo hi h i s, Rd m h i (AStore64 m a lo hi s) = Rd m h i s;
   astore64_rd32 : forall a lo hi h i s, clear a 8 -> Rd32 m h i (AStore64 m a lo hi s) = Rd32 m h i s;
   (* ---- ATOMICS: the old value, of the right size, into the cell asked for *)
-  atomic_lim  : forall op w a v h i s, byte_w w = true -> cell h i = true -> in_lim w (Rd m h i (Atomic m op w a v h i s)) = true;
+  atomic_lim  : forall op w a v h i s, byte_w w = true -> cell h i s = true -> in_lim w (Rd m h i (Atomic m op w a v h i s)) = true;
   atomic_rd   : forall op w a v h i h' i' s, other h i h' i' = true -> Rd m h' i' (Atomic m op w a v h i s) = Rd m h' i' s;
   atomic_rd32 : forall op w a v h i h' i' s, clear a w -> Rd32 m h' i' (Atomic m op w a v h i s) = Rd32 m h' i' s;
-  atomic64_lim  : forall op a lo hi h i s, cell h i = true -> cell h (i + 1) = true ->
+  atomic64_lim  : forall op a lo hi h i s, cell h i s = true -> cell h (i + 1) s = true ->
                     in_lim 4 (Rd m h i (Atomic64 m op a lo hi h i s)) && in_lim 4 (Rd m h (i + 1) (Atomic64 m op a lo hi h i s)) = true;
   atomic64_rd   : forall op a lo hi h i h' i' s, other h i h' i' = true -> other h (i + 1) h' i' = true ->
                     Rd m h' i' (Atomic64 m op a lo hi h i s) = Rd m h' i' s;
   atomic64_rd32 : forall op a lo hi h i h' i' s, clear a 8 -> Rd32 m h' i' (Atomic64 m op a lo hi h i s) = Rd32 m h' i' s;
-  cas_lim   : forall w a o n h i s, byte_w w = true -> cell h i = true -> in_lim w (Rd m h i (Cas m w a o n h i s)) = true;
-  cas_flag  : forall w a o n h i s, cell h (i + 1) = true ->
+  cas_lim   : forall w a o n h i s, byte_w w = true -> cell h i s = true -> in_lim w (Rd m h i (Cas m w a o n h i s)) = true;
+  cas_flag  : forall w a o n h i s, cell h (i + 1) s = true ->
                 let r := Rd m h (i + 1) (Cas m w a o n h i s) in (r =? 0) || (r =? 1) = true;
   cas_rd    : forall w a o n h i h' i' s, other h i h' i' = true -> other h (i + 1) h' i' = true ->
                 Rd m h' i' (Cas m w a o n h i s) = Rd m h' i' s;
   cas_rd32  : forall w a o n h i h' i' s, clear a w -> Rd32 m h' i' (Cas m w a o n h i s) = Rd32 m h' i' s;
-  cas64_flag : forall a ol oh nl nh h i s, cell h (i + 2) = true ->
+  cas64_flag : forall a ol oh nl nh h i s, cell h (i + 2) s = true ->
                  let r := Rd m h (i + 2) (Cas64 m a ol oh nl nh h i s) in (r =? 0) || (r =? 1) = true;
   cas64_rd   : forall a ol oh nl nh h i h' i' s, other h i h' i' = true -> other h (i + 1) h' i' = true -> other h (i + 2) h' i' = true ->
                  Rd m h' i' (Cas64 m a ol oh nl nh h i s) = Rd m h' i' s;
@@ -132,15 +136,40 @@ Record laws : Prop := {
   copy_rd32 : forall d x n h i s, clear d n -> Rd32 m h i (Copy m d x n s) = Rd32 m h i s;
   fill_rd   : forall d b n h i s, Rd m h i (Fill m d b n s) = Rd m h i s;
   fill_rd32 : forall d b n h i s, clear d n -> Rd32 m h i (Fill m d b n s) = Rd32 m h i s;
-  cmp_val   : forall x y n h i s, cell h i = true ->
+  cmp_val   : forall x y n h i s, cell h i s = true ->
                 let r := Rd m h i (Cmp m x y n h i s) in (r =? -1) || (r =? 0) || (r =? 1) = true;
   cmp_rd    : forall x y n h i h' i' s, other h i h' i' = true -> Rd m h' i' (Cmp m x y n h i s) = Rd m h' i' s;
-  cmp_rd32  : forall x y n h i h' i' s, Rd32 m h' i' (Cmp m x y n h i s) = Rd32 m h' i' s
+  cmp_rd32  : forall x y n h i h' i' s, Rd32 m h' i' (Cmp m x y n h i s) = Rd32 m h' i' s;
+  (* ---- SIZES: a block is never smaller than when the program started; only kq_grow changes a size, and it changes no
+     cell (the new cells read 0, as they did outside the block), no narrow cell, nothing the devices saw *)
+  len_size   : forall h s, (Len m h <=? Size m h s) = true;
+  size_grow  : forall h n s, growable h n = true -> Size m h (Grow m h n s) = (if Size m h s <? n then n else Size m h s);
+  size_grow_ne : forall h n h' s, (h =? h') = false -> Size m h' (Grow m h n s) = Size m h' s;
+  grow_out   : forall h n s, growable h n = false -> Grow m h n s = s;
+  rd_grow    : forall h n h' i' s, Rd m h' i' (Grow m h n s) = Rd m h' i' s;
+  rd32_grow  : forall h n h' i' s, Rd32 m h' i' (Grow m h n s) = Rd32 m h' i' s;
+  trace_grow : forall h n s, Trace m (Grow m h n s) = Trace m s;
+  size_upd   : forall h i v h' s, Size m h' (Upd m h i v s) = Size m h' s;
+  size_upd32 : forall h i v h' s, Size m h' (Upd32 m h i v s) = Size m h' s;
+  size_load  : forall w a h i h' s, Size m h' (Load m w a h i s) = Size m h' s;
+  size_aload : forall w a h i h' s, Size m h' (ALoad m w a h i s) = Size m h' s;
+  size_store : forall w a v h' s, Size m h' (Store m w a v s) = Size m h' s;
+  size_store64 : forall a lo hi h' s, Size m h' (Store64 m a lo hi s) = Size m h' s;
+  size_astore : forall w a v h' s, Size m h' (AStore m w a v s) = Size m h' s;
+  size_astore64 : forall a lo hi h' s, Size m h' (AStore64 m a lo hi s) = Size m h' s;
+  size_atomic : forall op w a v h i h' s, Size m h' (Atomic m op w a v h i s) = Size m h' s;
+  size_atomic64 : forall op a lo hi h i h' s, Size m h' (Atomic64 m op a lo hi h i s) = Size m h' s;
+  size_cas   : forall w a o n h i h' s, Size m h' (Cas m w a o n h i s) = Size m h' s;
+  size_cas64 : forall a ol oh nl nh h i h' s, Size m h' (Cas64 m a ol oh nl nh h i s) = Size m h' s;
+  size_fence : forall k h' s, Size m h' (Fence m k s) = Size m h' s;
+  size_copy  : forall d x n h' s, Size m h' (Copy m d x n s) = Size m h' s;
+  size_fill  : forall d b n h' s, Size m h' (Fill m d b n s) = Size m h' s;
+  size_cmp   : forall x y n h i h' s, Size m h' (Cmp m x y n h i s) = Size m h' s
 }.
 End Laws.
 
 (* THE REAL OPERATIONS, and the one axiom: they obey the laws *)
-Definition real : ops := mkOps mem rd upd kq_len rd32 upd32 kq_len32 hw_load hw_store hw_store64 hw_atomic hw_atomic64
+Definition real : ops := mkOps mem rd upd kq_len kq_size kq_grow rd32 upd32 kq_len32 hw_load hw_store hw_store64 hw_atomic hw_atomic64
                                hw_cas hw_cas64 hw_aload hw_astore hw_astore64 hw_fence hw_copy hw_fill hw_cmp hw_call
                                hw_addr hw_trace.
 Axiom real_laws : laws real.
