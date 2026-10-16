@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 IMG=${IMG:-kernelq-certirocq:1b45a1aa-kq2}
 docker run --rm --memory=4g --memory-swap=6g -v "$PWD":/w -w /w "$IMG" bash -lc '
 set -e
-for f in KQL KQLGen KQLArith KQLProof KQLBack KQLTop KQLAuto KQLTrans KQLEx KQLSort KQLPrint Emit ExLcg ExSort; do
+for f in KQL KQLGen KQLArith KQLSigned KQLProof KQLBack KQLTop KQLAuto KQLTrans KQLEx KQLSort KQLPrint Emit ExLcg ExSort; do
   echo "== $f"; coqc -w -notation-overridden -w -abstract-large-number -Q . KQC $f.v
 done
 for n in lcg sumsq sort; do

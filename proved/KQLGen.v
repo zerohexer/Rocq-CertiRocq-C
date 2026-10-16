@@ -83,6 +83,11 @@ Fixpoint tr_exp (ps : list ident) (e : exp) : statement :=
   | Eop x o a b k => Ssequence (tr_op x o (tr_atom a) (tr_atom b)) (tr_exp ps k)
   | Eif c a b t f =>
       Sifthenelse (cmpe (tr_cmp c) (tr_atom a) (tr_atom b)) (tr_exp ps t) (tr_exp ps f)
+  | Esel x c a b t f k =>
+      Ssequence
+        (Sifthenelse (cmpe (tr_cmp c) (tr_atom a) (tr_atom b))
+           (Sset (tv x) (tr_atom t)) (Sset (tv x) (tr_atom f)))
+        (tr_exp ps k)
   | Ecall x g args k =>
       Ssequence (Scall (Some (tv x)) (Evar g (funty (length args))) (map tr_atom args))
                 (tr_exp ps k)
@@ -110,7 +115,7 @@ Fixpoint tr_exp (ps : list ident) (e : exp) : statement :=
 Fixpoint binders (e : exp) : list ident :=
   match e with
   | Eret _ | Eloop _ => []
-  | Eop x _ _ _ k | Ecall x _ _ k | Eload x _ _ k => tv x :: binders k
+  | Eop x _ _ _ k | Ecall x _ _ k | Eload x _ _ k | Esel x _ _ _ _ _ k => tv x :: binders k
   | Estore _ _ _ k => binders k
   | Eif _ _ _ t f => binders t ++ binders f
   end.

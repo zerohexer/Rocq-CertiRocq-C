@@ -24,6 +24,7 @@ Inductive exp :=
 | Eret (a : atom)
 | Eop (x : ident) (o : binop) (a b : atom) (k : exp)
 | Eif (c : cmpop) (a b : atom) (t f : exp)
+| Esel (x : ident) (c : cmpop) (a b : atom) (t f : atom) (k : exp)   (* x := if a c b then t else f *)
 | Ecall (x : ident) (g : ident) (args : list atom) (k : exp)
 | Eload (x : ident) (h : ident) (i : atom) (k : exp)
 | Estore (h : ident) (i a : atom) (k : exp)
@@ -111,6 +112,10 @@ Inductive eval (P : prog) : fn -> env -> kmem -> exp -> i63 -> kmem -> Prop :=
     aval rho a = Some va -> aval rho b = Some vb ->
     eval P f rho M (if cmp_sem c va vb then t else e) v M' ->
     eval P f rho M (Eif c a b t e) v M'
+| E_sel : forall f rho M x c a b t e va vb vt ve k v M',
+    aval rho a = Some va -> aval rho b = Some vb -> aval rho t = Some vt -> aval rho e = Some ve ->
+    eval P f (PTree.set x (if cmp_sem c va vb then vt else ve) rho) M k v M' ->
+    eval P f rho M (Esel x c a b t e k) v M'
 | E_call : forall f rho M x g args vs fg rho' w M1 k v M',
     find P g = Some fg ->
     avals rho args = Some vs ->

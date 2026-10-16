@@ -485,6 +485,12 @@ Proof.
     exists le1, m1, out. split; auto.
     eapply exec_Sifthenelse. eapply eval_cmp; eauto. apply bool_of.
     destruct (cmp_sem c va vb); auto.
+  - (* sel *)
+    destruct (IHeval _ m (agree_set rho le x _ AG) MR) as (le1 & m1 & out & X & R).
+    exists le1, m1, out. split; auto.
+    change E0 with (E0 ** E0). eapply exec_Sseq_1; eauto.
+    eapply exec_Sifthenelse. eapply eval_cmp; eauto. apply bool_of.
+    destruct (cmp_sem c va vb); apply exec_Sset; eapply eval_atom; eauto.
   - (* call *)
     destruct (funcall_ok fg vs rho' w M M1 m (params_norepet g fg H) H1
                 (fun le m AG MR => IHeval1 le m AG MR) MR) as (m1 & FC & MR1).
