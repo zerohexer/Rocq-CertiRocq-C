@@ -1,0 +1,10 @@
+(* examples/neg.body -- negative block and cell numbers are outside the memory (KQSpec.v): a read there gives 0 and a
+   write there changes nothing.  With neg.mem (one block: 10 20 30 40) the answer is 10000. *)
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  let s := kq_input 0 in
+  let a := rd 0 (-1) s in
+  let s := upd 0 (-1) 99 s in
+  let b := rd 0 0 s in
+  let c := rd (-1) 0 s in
+  a * 1000000 + b * 1000 + c.

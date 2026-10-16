@@ -19,14 +19,14 @@ value kq_arg(value i) { long k = KQ_N(i); return KQ_V((k >= 0 && k + 1 < kq_argc
 value kq_input(value x) { return 1; }
 // THE MEMORY, loaded from the file named by $KQ_MEM:  <number of blocks>, then per block <length> <cell> <cell> ..
 // (or <length> z for a block of zeros)
-// The model's edge rules: a negative block or cell number means 0; a read outside gives 0; a write outside does nothing.
+// The model's edge rules (KQSpec.v): a negative block or cell number is outside; a read outside gives 0; a write outside does nothing.
 __attribute__((noinline)) KQ_SLOW_ATTR value *kq_cell_slow(value h, value i) {
-  long hh = KQ_N(h), ii = KQ_N(i); if (hh < 0) hh = 0; if (ii < 0) ii = 0;
+  long hh = KQ_N(h), ii = KQ_N(i); if (hh < 0 || ii < 0) return 0;
   if (hh >= kq_nb || hh >= KQ_MAXB || (unsigned long) ii >= kq_b[hh].len) return 0;
   return kq_b[hh].p + ii;
 }
 __attribute__((noinline)) KQ_SLOW_ATTR int *kq_cell32_slow(value h, value i) {
-  long hh = KQ_N(h), ii = KQ_N(i); if (hh < 0) hh = 0; if (ii < 0) ii = 0;
+  long hh = KQ_N(h), ii = KQ_N(i); if (hh < 0 || ii < 0) return 0;
   if (hh >= kq_nn || hh >= KQ_MAXB || (unsigned long) ii >= kq_n[hh].len) return 0;
   return kq_n[hh].p + ii;
 }

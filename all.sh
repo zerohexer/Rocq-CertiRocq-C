@@ -38,6 +38,8 @@ QUIET=1 CHECK=1 bash prof.sh | grep "one sequence\|^choices\|^GATE"
 d=$(rocq c -R . KQ tests/TestDiv.v 2>&1 | grep "^     = " | tr -d ' ')
 echo "Rocq's division and remainder against Z's (pairs tried, pairs wrong): $d"
 case "$d" in *',[])') echo "GATE: division agrees";; *) echo "GATE: DIVISION DIFFERS";; esac
+r=$(bash compile.sh examples/neg.body 2>&1 | grep "^main = ")
+[ "$r" = "main = 10000" ] && echo "GATE: a negative block or cell number is outside the memory (a read gives 0, a write does nothing)" || echo "GATE: A NEGATIVE NUMBER REACHES A CELL (got: $r)"
 ALL=""; for r in case/*.ref; do b=$(basename $r .ref); ALL="$ALL F_$b E_$b"; done
 H=""; for b in hand/*.body; do H="$H H_C_$(basename $b .body) P_C_$(basename $b .body)"; done
 SET="$ALL $H" bash mk.sh fin | tail -3;                c1=$(bash check.sh fin F gc);  c2=$(bash check.sh fin E gc);  echo "$c1"; echo "$c2"

@@ -21,8 +21,8 @@ typedef unsigned long kq_u;                       /* the machine word, unsigned 
 #define KQ_MAXB 64
 typedef struct { value *p; unsigned int len; unsigned int lim; } kq_block;      /* len < 2^31 */
 extern kq_block kq_b[KQ_MAXB];
-// the slow path: where the cell of (h, i) is under the model's edge rules (a negative number means 0), or 0 when there
-// is none.  It only LOOKS, and says so.
+// the slow path: where the cell of (h, i) is under the model's edge rules (a negative number is outside, as a number
+// past the end), or 0 when there is none.  It only LOOKS, and says so.
 #ifndef KQ_SLOW_ATTR
 #define KQ_SLOW_ATTR
 #endif

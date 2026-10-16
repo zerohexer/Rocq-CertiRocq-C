@@ -34,12 +34,12 @@ static value kq_wide[KQ_BARE_NB][KQ_BARE_WLEN + 1];
 static int kq_narrow[KQ_BARE_NN][KQ_BARE_NLEN] __attribute__((aligned(4096)));
 uintptr_t kq_hw_wlo, kq_hw_whi;        /* where the wide blocks are: hw/kq_hw.h lets no raw store reach them */
 __attribute__((noinline)) value *kq_cell_slow(value h, value i) {
-  long hh = KQ_N(h), ii = KQ_N(i); if (hh < 0) hh = 0; if (ii < 0) ii = 0;
+  long hh = KQ_N(h), ii = KQ_N(i); if (hh < 0 || ii < 0) return 0;
   if (hh >= kq_nb || hh >= KQ_MAXB || (unsigned long) ii >= kq_b[hh].len) return 0;
   return kq_b[hh].p + ii;
 }
 __attribute__((noinline)) int *kq_cell32_slow(value h, value i) {
-  long hh = KQ_N(h), ii = KQ_N(i); if (hh < 0) hh = 0; if (ii < 0) ii = 0;
+  long hh = KQ_N(h), ii = KQ_N(i); if (hh < 0 || ii < 0) return 0;
   if (hh >= kq_nn || hh >= KQ_MAXB || (unsigned long) ii >= kq_n[hh].len) return 0;
   return kq_n[hh].p + ii;
 }
