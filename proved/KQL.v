@@ -1,0 +1,138 @@
+(** KQL: a small first-order language for kit-style integer programs.
+
+    Values are Rocq's primitive 63-bit integers.  A program is a list of
+    functions and a list of memory blocks (fixed-size arrays of
+    integers, zero at the start).  A function body is in A-normal form:
+    arithmetic on atoms, a two-way branch on a comparison, a call whose
+    result is bound, a load and a store (out of range: a load gives 0,
+    a store does nothing, as in the kit), a return, and [Eloop], a call
+    of the function itself in tail position (compiled to a jump).  The
+    semantics is big-step and relational and threads the memory. *)
+
+From Stdlib Require Import ZArith List Uint63.
+From compcert Require Import Coqlib Maps AST.
+Import ListNotations.
+
+Notation i63 := PrimInt63.int.
+
+Inductive binop := Badd | Bsub | Bmul | Bland | Blor | Blxor | Bdiv | Bmod | Blsl | Blsr.
+Inductive cmpop := Ceq | Clt | Cle.
+
+Inductive atom := Avar (x : ident) | Aint (n : i63).
+
+Inductive exp :=
+| Eret (a : atom)
+| Eop (x : ident) (o : binop) (a b : atom) (k : exp)
+| Eif (c : cmpop) (a b : atom) (t f : exp)
+| Ecall (x : ident) (g : ident) (args : list atom) (k : exp)
+| Eload (x : ident) (h : ident) (i : atom) (k : exp)
+| Estore (h : ident) (i a : atom) (k : exp)
+| Eloop (args : list atom).
+
+Record fn := mkfn { kparams : list ident; kbody : exp }.
+
+Record prog := mkprog { pfuns : list (ident * fn); parrs : list (ident * Z) }.
+
+Definition binop_sem (o : binop) (a b : i63) : i63 :=
+  match o with
+  | Badd => PrimInt63.add a b
+  | Bsub => PrimInt63.sub a b
+  | Bmul => PrimInt63.mul a b
+  | Bland => PrimInt63.land a b
+  | Blor => PrimInt63.lor a b
+  | Blxor => PrimInt63.lxor a b
+  | Bdiv => PrimInt63.div a b
+  | Bmod => PrimInt63.mod a b
+  | Blsl => PrimInt63.lsl a b
+  | Blsr => PrimInt63.lsr a b
+  end.
+
+Definition cmp_sem (c : cmpop) (a b : i63) : bool :=
+  match c with
+  | Ceq => PrimInt63.eqb a b
+  | Clt => PrimInt63.ltb a b
+  | Cle => PrimInt63.leb a b
+  end.
+
+Definition env := PTree.t i63.
+
+Definition aval (rho : env) (a : atom) : option i63 :=
+  match a with Avar x => rho ! x | Aint n => Some n end.
+
+Fixpoint avals (rho : env) (l : list atom) : option (list i63) :=
+  match l with
+  | [] => Some []
+  | a :: l => match aval rho a, avals rho l with
+              | Some v, Some vs => Some (v :: vs)
+              | _, _ => None end
+  end.
+
+(** Binding the parameters; the lengths must agree. *)
+Fixpoint bind (xs : list ident) (vs : list i63) (rho : env) : option env :=
+  match xs, vs with
+  | [], [] => Some rho
+  | x :: xs, v :: vs => bind xs vs (PTree.set x v rho)
+  | _, _ => None
+  end.
+
+Fixpoint assoc {A} (l : list (ident * A)) (g : ident) : option A :=
+  match l with
+  | [] => None
+  | (h, f) :: l => if peq g h then Some f else assoc l g
+  end.
+
+Definition find (P : prog) (g : ident) : option fn := assoc (pfuns P) g.
+Definition asize (P : prog) (h : ident) : option Z := assoc (parrs P) h.
+
+(** Memory: block [h], cell [j].  Only cells [0 <= j < size] matter. *)
+Definition kmem := ident -> Z -> i63.
+Definition mem0 : kmem := fun _ _ => 0%uint63.
+
+Definition inb (n : Z) (i : i63) : bool := Z.ltb (to_Z i) n.
+
+Definition rd (M : kmem) (n : Z) (h : ident) (i : i63) : i63 :=
+  if inb n i then M h (to_Z i) else 0%uint63.
+
+Definition upd (M : kmem) (h : ident) (j : Z) (v : i63) : kmem :=
+  fun h' j' => if peq h' h then (if Z.eq_dec j' j then v else M h' j') else M h' j'.
+
+Definition wr (M : kmem) (n : Z) (h : ident) (i : i63) (v : i63) : kmem :=
+  if inb n i then upd M h (to_Z i) v else M.
+
+Inductive eval (P : prog) : fn -> env -> kmem -> exp -> i63 -> kmem -> Prop :=
+| E_ret : forall f rho M a v,
+    aval rho a = Some v ->
+    eval P f rho M (Eret a) v M
+| E_op : forall f rho M x o a b va vb k v M',
+    aval rho a = Some va -> aval rho b = Some vb ->
+    eval P f (PTree.set x (binop_sem o va vb) rho) M k v M' ->
+    eval P f rho M (Eop x o a b k) v M'
+| E_if : forall f rho M c a b t e va vb v M',
+    aval rho a = Some va -> aval rho b = Some vb ->
+    eval P f rho M (if cmp_sem c va vb then t else e) v M' ->
+    eval P f rho M (Eif c a b t e) v M'
+| E_call : forall f rho M x g args vs fg rho' w M1 k v M',
+    find P g = Some fg ->
+    avals rho args = Some vs ->
+    bind (kparams fg) vs (PTree.empty _) = Some rho' ->
+    eval P fg rho' M (kbody fg) w M1 ->
+    eval P f (PTree.set x w rho) M1 k v M' ->
+    eval P f rho M (Ecall x g args k) v M'
+| E_load : forall f rho M x h i n vi k v M',
+    asize P h = Some n -> aval rho i = Some vi ->
+    eval P f (PTree.set x (rd M n h vi) rho) M k v M' ->
+    eval P f rho M (Eload x h i k) v M'
+| E_store : forall f rho M h i a n vi va k v M',
+    asize P h = Some n -> aval rho i = Some vi -> aval rho a = Some va ->
+    eval P f rho (wr M n h vi va) k v M' ->
+    eval P f rho M (Estore h i a k) v M'
+| E_loop : forall f rho M args vs rho' v M',
+    avals rho args = Some vs ->
+    bind (kparams f) vs (PTree.empty _) = Some rho' ->
+    eval P f rho' M (kbody f) v M' ->
+    eval P f rho M (Eloop args) v M'.
+
+(** Running function [g] of [P] on [vs] from memory [M]. *)
+Definition run (P : prog) (g : ident) (vs : list i63) (M : kmem) (v : i63) (M' : kmem) : Prop :=
+  exists fg rho, find P g = Some fg /\
+    bind (kparams fg) vs (PTree.empty _) = Some rho /\ eval P fg rho M (kbody fg) v M'.

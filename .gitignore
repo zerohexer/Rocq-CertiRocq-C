@@ -26,3 +26,7 @@
 /cppw/*_w
 /hw/*.elf
 /hw/control_*
+/proved/*.out
+/proved/bench/*.o
+/proved/bench/run_*
+/proved/bench/*_gen.c

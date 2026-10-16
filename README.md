@@ -192,6 +192,13 @@ copy of a freed handle is dead, also once its slot holds a new object, and a han
 same set in C with `malloc` and `free`.  Both give the same set; the Rocq version takes 5-7x the C's time, most of it the
 handle test on every field access.
 
+## A proved route (`proved/`)
+
+A second route from Rocq to C, with proofs: a plain Rocq program is translated to KQL, a small first-order language,
+with a kernel-checked statement per function that the KQL computes the Rocq function; KQL goes to CompCert's Clight by
+a generator proved once; CompCert's own proofs take it to assembly.  It covers counters, 63-bit integers, calls, loops
+and memory blocks.  `proved/README.md` has the steps, what is proved and what is not, and the speed.
+
 ## Checked
 
 - Every program in `hand/` (36): what is compiled is proved equal to it by the kernel, with the bounds tests and with
