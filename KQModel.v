@@ -141,10 +141,14 @@ Proof.
   - intro h. unfold mlen32. destruct ((0 <=? h) && (h <? 8)); reflexivity.
   - intros h i s N0 L. unfold mrd, okc. unfold nonneg2 in N0. rewrite N0, (lt_of_le_false _ _ L). reflexivity.
   - intros h i v s N0 L. unfold mupd, okc. unfold nonneg2 in N0. rewrite N0, (lt_of_le_false _ _ L). reflexivity.
+  - intros h i s N0. unfold mrd, okc. unfold nonneg2 in N0. rewrite N0. reflexivity.
+  - intros h i v s N0. unfold mupd, okc. unfold nonneg2 in N0. rewrite N0. reflexivity.
   - intros h i v s C. rewrite mrd_upd. change (cell model h i s) with (okc h i (Z s)) in C. rewrite C, !Uint63.eqb_refl. reflexivity.
   - intros h i h' i' v s O. apply mrd_upd_other, O.
   - intros h i s N0 L. unfold mrd32, okn. unfold nonneg2 in N0. rewrite N0, (lt_of_le_false _ _ L). reflexivity.
   - intros h i v s N0 L. unfold mupd32, okn. unfold nonneg2 in N0. rewrite N0, (lt_of_le_false _ _ L). reflexivity.
+  - intros h i s N0. unfold mrd32, okn. unfold nonneg2 in N0. rewrite N0. reflexivity.
+  - intros h i v s N0. unfold mupd32, okn. unfold nonneg2 in N0. rewrite N0. reflexivity.
   - intros h i v s C. rewrite mrd32_upd32. change (nonneg2 h i && (i <? mlen32 h)) with (okn h i) in C.
     rewrite C, !Uint63.eqb_refl. reflexivity.
   - intros h i h' i' v s O. apply mrd32_upd32_other, O.

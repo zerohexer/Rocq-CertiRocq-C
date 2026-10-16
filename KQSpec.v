@@ -72,10 +72,15 @@ Record laws : Prop := {
   len32_nonneg : forall h, (0 <=? Len32 m h) = true;
   rd_out    : forall h i s, nonneg2 h i = true -> (Size m h s <=? i) = true -> Rd m h i s = 0;
   upd_out   : forall h i v s, nonneg2 h i = true -> (Size m h s <=? i) = true -> Upd m h i v s = s;
+  (* a negative block or cell number is outside: a read gives 0, a write does nothing *)
+  rd_neg    : forall h i s, nonneg2 h i = false -> Rd m h i s = 0;
+  upd_neg   : forall h i v s, nonneg2 h i = false -> Upd m h i v s = s;
   rd_upd_eq : forall h i v s, cell h i s = true -> Rd m h i (Upd m h i v s) = v;
   rd_upd_ne : forall h i h' i' v s, other h i h' i' = true -> Rd m h' i' (Upd m h i v s) = Rd m h' i' s;
   rd32_out    : forall h i s, nonneg2 h i = true -> (Len32 m h <=? i) = true -> Rd32 m h i s = 0;
   upd32_out   : forall h i v s, nonneg2 h i = true -> (Len32 m h <=? i) = true -> Upd32 m h i v s = s;
+  rd32_neg    : forall h i s, nonneg2 h i = false -> Rd32 m h i s = 0;
+  upd32_neg   : forall h i v s, nonneg2 h i = false -> Upd32 m h i v s = s;
   rd32_upd32_eq : forall h i v s, nonneg2 h i && (i <? Len32 m h) = true -> Rd32 m h i (Upd32 m h i v s) = sx32 v;
   rd32_upd32_ne : forall h i h' i' v s, other h i h' i' = true -> Rd32 m h' i' (Upd32 m h i v s) = Rd32 m h' i' s;
   rd32_upd : forall h i v h' i' s, Rd32 m h' i' (Upd m h i v s) = Rd32 m h' i' s;
