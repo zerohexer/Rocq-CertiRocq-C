@@ -22,10 +22,12 @@ open('case/%s_ref.v' % name, 'w').write('''From Stdlib Require Import List ZArit
 Import ListNotations.
 Open Scope Z_scope.
 Notation mem := (list (list Z)).
-Definition rd (h i : Z) (s : mem) : Z := nth (Z.to_nat i) (nth (Z.to_nat h) s []) 0.
+(* a negative block or cell number is outside the memory, as in KQSpec.v: a read gives 0, a write does nothing *)
+Definition rd (h i : Z) (s : mem) : Z := if orb (h <? 0) (i <? 0) then 0 else nth (Z.to_nat i) (nth (Z.to_nat h) s []) 0.
 Fixpoint updL {A : Type} (i : nat) (x : A) (l : list A) : list A :=
   match i, l with | _, [] => [] | O, _ :: t => x :: t | S i', hh :: t => hh :: updL i' x t end.
-Definition upd (h i v : Z) (s : mem) : mem := updL (Z.to_nat h) (updL (Z.to_nat i) v (nth (Z.to_nat h) s [])) s.
+Definition upd (h i v : Z) (s : mem) : mem :=
+  if orb (h <? 0) (i <? 0) then s else updL (Z.to_nat h) (updL (Z.to_nat i) v (nth (Z.to_nat h) s [])) s.
 Definition chk (s : mem) : Z :=
   snd (fold_left (fun (st : Z * Z) (b : list Z) =>
          let h := fst st in
