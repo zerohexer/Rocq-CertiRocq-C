@@ -6,7 +6,7 @@
 From Stdlib Require Import ZArith List Uint63 Lia.
 From compcert Require Import Coqlib Maps Integers AST Values Memory Events Globalenvs
   Ctypes Cop Clight ClightBigstep.
-From KQC Require Import KQL KQLGen KQLArith.
+From KQC Require Import KQL KQLGen KQTArith KQLSigned.
 Import ListNotations.
 
 (** ** Generic facts *)
@@ -65,6 +65,12 @@ Qed.
 
 Local Open Scope Z_scope.
 
+Lemma lt1_iword : Int64.ltu Int64.one Int64.iwordsize = true.
+Proof. vm_compute. reflexivity. Qed.
+
+Lemma lt63_iword : Int64.ltu (Int64.repr 63) Int64.iwordsize = true.
+Proof. vm_compute. reflexivity. Qed.
+
 Section SIM.
 
 Variable P : prog.
@@ -80,6 +86,21 @@ Hypothesis sizes : forall h n, asize P h = Some n -> 0 < n <= 2 ^ 28.
 
 Notation exec := (ClightBigstep.exec_stmt function_entry2 ge).
 Notation funcall := (ClightBigstep.eval_funcall function_entry2 ge).
+
+Lemma cast_ls : forall x m, sem_cast (Vlong x) tls tls m = Some (Vlong x).
+Proof. reflexivity. Qed.
+
+Lemma cast_ll : forall x m, sem_cast (Vlong x) tyl tyl m = Some (Vlong x).
+Proof. reflexivity. Qed.
+
+Lemma cast_lsl : forall x m, sem_cast (Vlong x) tls tyl m = Some (Vlong x).
+Proof. reflexivity. Qed.
+
+Lemma cast_lls : forall x m, sem_cast (Vlong x) tyl tls m = Some (Vlong x).
+Proof. reflexivity. Qed.
+
+Lemma typeof_cmpe : forall c A B, typeof (tr_cmpe c A B) = tyb.
+Proof. destruct c; reflexivity. Qed.
 
 Section EXPR.
 Variables (e : Clight.env) (le : temp_env) (m : mem) (rho : KQL.env).
@@ -102,34 +123,111 @@ Proof.
     econstructor. eapply eval_atom; eauto. rewrite typeof_atom. reflexivity. auto.
 Qed.
 
-Lemma eval_bin : forall op A B x y v ty,
+Lemma eval_binT : forall op A B x y v ty tA tB,
   eval_expr ge e le m A (Vlong x) -> eval_expr ge e le m B (Vlong y) ->
-  typeof A = tyl -> typeof B = tyl ->
-  sem_binary_operation ge op (Vlong x) tyl (Vlong y) tyl m = Some v ->
+  typeof A = tA -> typeof B = tB ->
+  sem_binary_operation ge op (Vlong x) tA (Vlong y) tB m = Some v ->
   eval_expr ge e le m (Ebinop op A B ty) v.
 Proof.
   intros. econstructor; eauto. rewrite H1, H2. auto.
 Qed.
 
+Lemma eval_bin : forall op A B x y v ty,
+  eval_expr ge e le m A (Vlong x) -> eval_expr ge e le m B (Vlong y) ->
+  typeof A = tyl -> typeof B = tyl ->
+  sem_binary_operation ge op (Vlong x) tyl (Vlong y) tyl m = Some v ->
+  eval_expr ge e le m (Ebinop op A B ty) v.
+Proof. intros. eapply eval_binT; eauto. Qed.
+
+Lemma eval_shr : forall A B x y,
+  eval_expr ge e le m A (Vlong x) -> eval_expr ge e le m B (Vlong y) ->
+  typeof A = tyl -> typeof B = tyl -> Int64.ltu y Int64.iwordsize = true ->
+  eval_expr ge e le m (Ebinop Oshr A B tyl) (Vlong (Int64.shru x y)).
+Proof.
+  intros. eapply eval_bin; eauto. simpl. unfold sem_shr, sem_shift. simpl. rewrite H3. reflexivity.
+Qed.
+
+Lemma eval_shr_s : forall A B x y tB,
+  eval_expr ge e le m A (Vlong x) -> eval_expr ge e le m B (Vlong y) ->
+  typeof A = tls -> typeof B = tB -> Int64.ltu y Int64.iwordsize = true ->
+  (tB = tyl \/ tB = tls) ->
+  eval_expr ge e le m (Ebinop Oshr A B tls) (Vlong (Int64.shr x y)).
+Proof.
+  intros A B x y tB EA EB TA TB L [-> | ->]; (eapply eval_binT; [exact EA | exact EB | exact TA | exact TB | ]);
+    simpl; unfold sem_shr, sem_shift; simpl; rewrite L; reflexivity.
+Qed.
+
+Lemma eval_c1 : eval_expr ge e le m c1 (Vlong Int64.one).
+Proof. apply eval_Econst_long. Qed.
+
+Lemma eval_sh1 : forall A x,
+  eval_expr ge e le m A (Vlong x) -> typeof A = tyl ->
+  eval_expr ge e le m (sh1 A) (Vlong (Int64.shru x Int64.one)).
+Proof.
+  intros A x EA TA. eapply eval_shr; [exact EA | apply eval_c1 | exact TA | reflexivity | apply lt1_iword].
+Qed.
+
+Lemma eval_sg : forall E x,
+  eval_expr ge e le m E (Vlong x) -> typeof E = tyl -> eval_expr ge e le m (sg E) (Vlong x).
+Proof. intros E x EE TE. econstructor; [exact EE | rewrite TE; reflexivity]. Qed.
+
+Lemma eval_ssh1 : forall A x,
+  eval_expr ge e le m A (Vlong x) -> typeof A = tyl ->
+  eval_expr ge e le m (ssh1 A) (Vlong (Int64.shr x Int64.one)).
+Proof.
+  intros A x EA TA. eapply eval_shr_s; [apply eval_sg; eassumption | apply eval_c1 | reflexivity | reflexivity | apply lt1_iword | left; reflexivity].
+Qed.
+
+Lemma eval_tagup : forall E q,
+  eval_expr ge e le m E (Vlong q) -> (typeof E = tyl \/ typeof E = tls) ->
+  eval_expr ge e le m (tagup E) (Vlong (Int64.or (Int64.shl q Int64.one) Int64.one)).
+Proof.
+  intros E q EE TE. unfold tagup.
+  eapply eval_binT; [ | apply eval_c1 | reflexivity | reflexivity | ].
+  - eapply eval_binT; [exact EE | apply eval_c1 | exact (eq_refl (typeof E)) | reflexivity | ].
+    destruct TE as [T | T]; rewrite T; simpl; unfold sem_shl, sem_shift; simpl; rewrite lt1_iword; reflexivity.
+  - simpl. unfold sem_or, sem_binarith. simpl. reflexivity.
+Qed.
+
+Lemma eval_eq1 : forall A x,
+  eval_expr ge e le m A (Vlong x) -> typeof A = tyl ->
+  eval_expr ge e le m (cmpe Oeq A c1) (Val.of_bool (Int64.eq x Int64.one)).
+Proof.
+  intros A x EA TA. eapply eval_bin; [exact EA | apply eval_c1 | exact TA | reflexivity | ].
+  simpl. unfold sem_cmp, sem_binarith. simpl. rewrite !cast_ll. reflexivity.
+Qed.
+
+Lemma eval_ltlit : forall A x n,
+  eval_expr ge e le m A (Vlong x) -> typeof A = tyl ->
+  eval_expr ge e le m (cmpe Olt A (c64 n)) (Val.of_bool (Int64.ltu x (Int64.repr n))).
+Proof.
+  intros A x n EA TA. eapply eval_bin; [exact EA | apply eval_Econst_long | exact TA | reflexivity | ].
+  simpl. unfold sem_cmp, sem_binarith. simpl. rewrite !cast_ll. reflexivity.
+Qed.
+
 Lemma eval_cmp : forall c a b va vb,
   aval rho a = Some va -> aval rho b = Some vb ->
-  eval_expr ge e le m (cmpe (tr_cmp c) (tr_atom a) (tr_atom b)) (Val.of_bool (cmp_sem c va vb)).
+  eval_expr ge e le m (tr_cmpe c (tr_atom a) (tr_atom b)) (Val.of_bool (cmp_sem c va vb)).
 Proof.
   intros c a b va vb Ha Hb.
-  eapply eval_bin; try apply eval_atom; eauto; try apply typeof_atom.
-  destruct c; simpl.
-  - rewrite <- enc_inj_eq. reflexivity.
-  - rewrite <- enc_ltu. reflexivity.
-  - rewrite <- enc_leu. reflexivity.
+  pose proof (eval_atom a va Ha) as EA. pose proof (eval_atom b vb Hb) as EB.
+  destruct c; simpl tr_cmpe.
+  - eapply eval_bin; [exact EA | exact EB | apply typeof_atom | apply typeof_atom | ]. simpl.
+    unfold sem_cmp, sem_binarith. simpl. rewrite !cast_ll. simpl. rewrite eq_t. reflexivity.
+  - eapply eval_bin; [exact EA | exact EB | apply typeof_atom | apply typeof_atom | ]. simpl.
+    unfold sem_cmp, sem_binarith. simpl. rewrite !cast_ll. simpl. rewrite ltu_t. reflexivity.
+  - eapply eval_bin; [exact EA | exact EB | apply typeof_atom | apply typeof_atom | ]. simpl.
+    unfold sem_cmp, sem_binarith. simpl. rewrite !cast_ll. simpl. unfold Int64.cmpu. rewrite leu_t. reflexivity.
+  - eapply eval_binT; [apply eval_sg; [exact EA | apply typeof_atom] | apply eval_sg; [exact EB | apply typeof_atom] | reflexivity | reflexivity | ].
+    simpl. unfold sem_cmp, sem_binarith. simpl. rewrite !cast_ls. simpl. rewrite slt_t. reflexivity.
+  - eapply eval_binT; [apply eval_sg; [exact EA | apply typeof_atom] | apply eval_sg; [exact EB | apply typeof_atom] | reflexivity | reflexivity | ].
+    simpl. unfold sem_cmp, sem_binarith. simpl. rewrite !cast_ls. simpl. unfold Int64.cmp. rewrite sle_t. reflexivity.
 Qed.
 
 End EXPR.
 
 Lemma bool_of : forall b m, bool_val (Val.of_bool b) tyb m = Some b.
 Proof. destruct b; reflexivity. Qed.
-
-Lemma cast_ll : forall x m, sem_cast (Vlong x) tyl (Tlong Unsigned noattr) m = Some (Vlong x).
-Proof. reflexivity. Qed.
 
 Ltac ev := repeat first [ eapply eval_bin | eassumption | apply eval_Econst_long | reflexivity ].
 
@@ -142,41 +240,75 @@ Proof.
   assert (EA := eval_atom empty_env le m rho AG a va Ha).
   assert (EB := eval_atom empty_env le m rho AG b vb Hb).
   pose proof (typeof_atom a) as TA. pose proof (typeof_atom b) as TB.
-  assert (Z0 : eval_expr ge empty_env le m (c64 0) (Vlong (Int64.repr 0))) by apply eval_Econst_long.
-  assert (Z63 : eval_expr ge empty_env le m (c64 63) (Vlong (Int64.repr 63))) by apply eval_Econst_long.
+  pose proof (eval_c1 empty_env le m) as E1.
+  pose proof (eval_sh1 empty_env le m _ _ EA TA) as SA.
+  pose proof (eval_sh1 empty_env le m _ _ EB TB) as SB.
+  pose proof (eval_ssh1 empty_env le m _ _ EA TA) as SSA.
+  pose proof (eval_ssh1 empty_env le m _ _ EB TB) as SSB.
   unfold enc in *.
   destruct o; simpl; unfold tr_op.
-  - apply exec_Sset. rewrite <- add_enc. ev.
-  - apply exec_Sset. rewrite <- sub_enc. ev.
-  - apply exec_Sset. rewrite <- mul_enc. ev.
-  - apply exec_Sset. rewrite <- land_enc. ev.
-  - apply exec_Sset. rewrite <- lor_enc. ev.
-  - apply exec_Sset. rewrite <- lxor_enc. ev.
-  - eapply exec_Sifthenelse. ev. apply bool_of.
-    simpl. rewrite eq_zero. destruct (PrimInt63.eqb vb 0) eqn:Z.
-    + apply exec_Sset. rewrite <- (div0_enc va vb Z). apply eval_Econst_long.
-    + apply exec_Sset. rewrite <- div_enc. eapply eval_bin; eauto.
+  - apply exec_Sset. rewrite <- add_t. ev.
+  - apply exec_Sset. rewrite <- sub_t. ev.
+  - apply exec_Sset. rewrite <- mul_t. ev.
+  - apply exec_Sset. rewrite <- land_t. ev.
+  - apply exec_Sset. rewrite <- lor_t. ev.
+  - apply exec_Sset. rewrite <- lxor_t. ev.
+  - (* div *)
+    eapply exec_Sifthenelse; [eapply eval_eq1; [exact EB | exact TB] | apply bool_of | ].
+    simpl. rewrite isone_t. destruct (PrimInt63.eqb vb 0) eqn:Z.
+    + apply exec_Sset. rewrite (eqb_zero_div va vb Z), tg_zero. apply eval_c1.
+    + apply exec_Sset. rewrite <- div_t.
+      apply eval_tagup; [ | left; reflexivity].
+      eapply eval_bin; [exact SA | exact SB | reflexivity | reflexivity | ].
       simpl. unfold sem_div, sem_binarith. simpl. rewrite !cast_ll.
-      change Int64.zero with (Int64.repr 0). rewrite eq_zero, Z. reflexivity.
-  - eapply exec_Sifthenelse. ev. apply bool_of.
-    simpl. rewrite eq_zero. destruct (PrimInt63.eqb vb 0) eqn:Z.
-    + apply exec_Sset. rewrite <- (mod0_enc va vb Z). auto.
-    + apply exec_Sset. rewrite <- mod_enc. eapply eval_bin; eauto.
+      rewrite !shr1_t, eq_zero_t, Z. reflexivity.
+  - (* mod *)
+    eapply exec_Sifthenelse; [eapply eval_eq1; [exact EB | exact TB] | apply bool_of | ].
+    simpl. rewrite isone_t. destruct (PrimInt63.eqb vb 0) eqn:Z.
+    + apply exec_Sset. rewrite (eqb_zero_mod va vb Z). exact EA.
+    + apply exec_Sset. rewrite <- mod_t.
+      apply eval_tagup; [ | left; reflexivity].
+      eapply eval_bin; [exact SA | exact SB | reflexivity | reflexivity | ].
       simpl. unfold sem_mod, sem_binarith. simpl. rewrite !cast_ll.
-      change Int64.zero with (Int64.repr 0). rewrite eq_zero, Z. reflexivity.
-  - eapply exec_Sifthenelse. ev. apply bool_of.
-    simpl. rewrite ltu_63. destruct (Z.ltb_spec (to_Z vb) 63) as [L|L].
-    + apply exec_Sset. rewrite <- (lsl_enc va vb L).
-      eapply eval_bin; [ | apply eval_Econst_long | reflexivity | reflexivity | reflexivity ].
-      eapply eval_bin; eauto.
-      simpl. unfold sem_shl, sem_shift. simpl. rewrite ltu_iword by auto. reflexivity.
-    + apply exec_Sset. rewrite <- (lsl_big va vb L). apply eval_Econst_long.
-  - eapply exec_Sifthenelse. ev. apply bool_of.
-    simpl. rewrite ltu_63. destruct (Z.ltb_spec (to_Z vb) 63) as [L|L].
-    + apply exec_Sset. rewrite <- (lsr_enc va vb L).
-      eapply eval_bin; eauto.
-      simpl. unfold sem_shr, sem_shift. simpl. rewrite ltu_iword by auto. reflexivity.
-    + apply exec_Sset. rewrite <- (lsr_big va vb L). apply eval_Econst_long.
+      rewrite !shr1_t, eq_zero_t, Z. reflexivity.
+  - (* lsl *)
+    eapply exec_Sifthenelse; [eapply eval_ltlit; [exact EB | exact TB] | apply bool_of | ].
+    simpl. rewrite lt127_t. destruct (Z.ltb_spec (to_Z vb) 63) as [L|L].
+    + apply exec_Sset. rewrite <- (lsl_t va vb L).
+      eapply eval_bin; [ | apply eval_c1 | reflexivity | reflexivity | reflexivity ].
+      eapply eval_bin; [ | exact SB | reflexivity | reflexivity | ].
+      * ev.
+      * simpl. unfold sem_shl, sem_shift. simpl. rewrite (ltu_iword_t vb L). reflexivity.
+    + apply exec_Sset. rewrite <- (lsl_big_t va vb L). apply eval_c1.
+  - (* lsr *)
+    eapply exec_Sifthenelse; [eapply eval_ltlit; [exact EB | exact TB] | apply bool_of | ].
+    simpl. rewrite lt127_t. destruct (Z.ltb_spec (to_Z vb) 63) as [L|L].
+    + apply exec_Sset. rewrite <- (lsr_t2 va vb L).
+      apply eval_tagup; [ | left; reflexivity].
+      eapply eval_shr; [exact SA | exact SB | reflexivity | reflexivity | apply (ltu_iword_t vb L)].
+    + apply exec_Sset. rewrite <- (lsr_big_t va vb L). apply eval_c1.
+  - (* asr *)
+    eapply exec_Sifthenelse; [eapply eval_ltlit; [exact EB | exact TB] | apply bool_of | ].
+    simpl. rewrite lt127_t. destruct (Z.ltb_spec (to_Z vb) 63) as [L|L].
+    + apply exec_Sset. rewrite <- (asr_t va vb L).
+      apply eval_tagup; [ | right; reflexivity].
+      eapply eval_shr_s; [exact SSA | exact SB | reflexivity | reflexivity | apply (ltu_iword_t vb L) | left; reflexivity].
+    + eapply exec_Sifthenelse; [eapply eval_ltlit; [exact EB | exact TB] | apply bool_of | ].
+      simpl. rewrite lt263_t. destruct (Z.ltb_spec (to_Z vb) (2 ^ 62)) as [L2|L2].
+      * apply exec_Sset. rewrite <- (asr_big_t va vb L L2).
+        eapply eval_binT; [ | apply eval_c1 | reflexivity | reflexivity | ].
+        -- eapply eval_shr_s; [apply eval_sg; [exact EA | exact TA] | apply eval_Econst_long | reflexivity | reflexivity | apply lt63_iword | left; reflexivity].
+        -- simpl. unfold sem_or, sem_binarith. simpl. reflexivity.
+      * apply exec_Sset. rewrite <- (asr_huge_t va vb L2). apply eval_c1.
+  - (* mods *)
+    eapply exec_Sifthenelse; [eapply eval_eq1; [exact EB | exact TB] | apply bool_of | ].
+    simpl. rewrite isone_t. destruct (PrimInt63.eqb vb 0) eqn:Z.
+    + apply exec_Sset. rewrite (eqb_zero_mods va vb Z). exact EA.
+    + apply exec_Sset. rewrite <- mods_t.
+      apply eval_tagup; [ | right; reflexivity].
+      destruct (mods_guard va vb Z) as [Hy Hx].
+      eapply eval_binT; [exact SSA | exact SSB | reflexivity | reflexivity | ].
+      simpl. unfold sem_mod, sem_binarith. simpl. rewrite !cast_ls. simpl. rewrite Hy, Hx. reflexivity.
 Qed.
 
 (** ** Memory blocks *)
@@ -213,33 +345,40 @@ Proof.
   destruct (zlt (to_Z i) n); symmetry; [apply Z.ltb_lt | apply Z.ltb_ge]; lia.
 Qed.
 
-Lemma eval_cell_addr : forall le m h n b i vi,
+Lemma eval_cell_addr : forall le m h n b E vi,
   Genv.find_symbol ge h = Some b ->
-  eval_expr ge empty_env le m (tr_atom i) (enc vi) -> to_Z vi < 2 ^ 28 ->
-  eval_expr ge empty_env le m (Ebinop Oadd (Evar h (tarr n)) (tr_atom i) (Tpointer tyl noattr))
+  eval_expr ge empty_env le m E (Vlong (Int64.repr (to_Z vi))) -> typeof E = tyl -> to_Z vi < 2 ^ 28 ->
+  eval_expr ge empty_env le m (Ebinop Oadd (Evar h (tarr n)) E (Tpointer tyl noattr))
             (Vptr b (Ptrofs.repr (8 * to_Z vi))).
 Proof.
-  intros le m h n b i vi FS EI L.
+  intros le m h n b E vi FS EI TE L.
   econstructor.
   - eapply eval_Elvalue. apply eval_Evar_global; [apply PTree.gempty | exact FS].
     apply deref_loc_reference. reflexivity.
   - exact EI.
-  - rewrite typeof_atom. simpl. unfold sem_add. simpl.
+  - rewrite TE. simpl. unfold sem_add. simpl.
     rewrite offset_ok by (pose proof (phi_range vi); lia). reflexivity.
+Qed.
+
+Lemma eval_idx : forall le m rho i vi, agree rho le -> aval rho i = Some vi ->
+  eval_expr ge empty_env le m (sh1 (tr_atom i)) (Vlong (Int64.repr (to_Z vi))).
+Proof.
+  intros le m rho i vi AG Hi. rewrite <- (shr1_t vi).
+  eapply eval_sh1; [eapply eval_atom; eauto | apply typeof_atom].
 Qed.
 
 Lemma exec_load : forall le m rho M x h i n vi,
   agree rho le -> mrel M m -> asize P h = Some n -> aval rho i = Some vi ->
   exec empty_env le m
-    (Sifthenelse (cmpe Olt (tr_atom i) (c64 n))
-       (Sset (tv x) (cell h n (tr_atom i))) (Sset (tv x) (c64 0)))
+    (Sifthenelse (cmpe Olt (sh1 (tr_atom i)) (c64 n))
+       (Sset (tv x) (cell h n (sh1 (tr_atom i)))) (Sset (tv x) c1))
     E0 (PTree.set (tv x) (enc (rd M n h vi)) le) m Out_normal.
 Proof.
   intros le m rho M x h i n vi AG MR SZ Hi.
   pose proof (sizes h n SZ) as SN.
-  assert (EI := eval_atom empty_env le m rho AG i vi Hi).
+  assert (EI := eval_idx le m rho i vi AG Hi).
   eapply exec_Sifthenelse.
-  - eapply eval_bin; [exact EI | apply eval_Econst_long | apply typeof_atom | reflexivity | reflexivity].
+  - eapply eval_ltlit; [exact EI | reflexivity].
   - apply bool_of.
   - simpl. rewrite ltu_n by auto. unfold rd. destruct (inb n vi) eqn:IN.
     + apply exec_Sset. unfold inb in IN. apply Z.ltb_lt in IN.
@@ -247,9 +386,9 @@ Proof.
       pose proof (phi_range vi) as PR.
       destruct (CELLS (to_Z vi)) as (LD & _). lia.
       eapply eval_Elvalue.
-      * apply eval_Ederef. eapply eval_cell_addr; eauto. lia.
+      * apply eval_Ederef. eapply eval_cell_addr; [eassumption | exact EI | reflexivity | lia].
       * eapply deref_loc_value. reflexivity. unfold Mem.loadv. rewrite uns_off by lia. exact LD.
-    + apply exec_Sset. apply eval_Econst_long.
+    + apply exec_Sset. unfold enc. rewrite tg_zero. apply eval_c1.
 Qed.
 
 Lemma mrel_store : forall M m h n b j v m',
@@ -274,13 +413,13 @@ Qed.
 Lemma exec_store : forall le m rho M h i a n vi va,
   agree rho le -> mrel M m -> asize P h = Some n -> aval rho i = Some vi -> aval rho a = Some va ->
   exists m', exec empty_env le m
-    (Sifthenelse (cmpe Olt (tr_atom i) (c64 n))
-       (Sassign (cell h n (tr_atom i)) (tr_atom a)) Sskip)
+    (Sifthenelse (cmpe Olt (sh1 (tr_atom i)) (c64 n))
+       (Sassign (cell h n (sh1 (tr_atom i))) (tr_atom a)) Sskip)
     E0 le m' Out_normal /\ mrel (wr M n h vi va) m'.
 Proof.
   intros le m rho M h i a n vi va AG MR SZ Hi Ha.
   pose proof (sizes h n SZ) as SN.
-  assert (EI := eval_atom empty_env le m rho AG i vi Hi).
+  assert (EI := eval_idx le m rho i vi AG Hi).
   assert (EA := eval_atom empty_env le m rho AG a va Ha).
   unfold wr. destruct (inb n vi) eqn:IN.
   - unfold inb in IN. apply Z.ltb_lt in IN. pose proof (phi_range vi) as PR.
@@ -289,19 +428,19 @@ Proof.
     destruct (Mem.valid_access_store m Mint64 b (8 * to_Z vi) (enc va) VA) as (m' & ST).
     exists m'. split.
     + eapply exec_Sifthenelse.
-      * eapply eval_bin; [exact EI | apply eval_Econst_long | apply typeof_atom | reflexivity | reflexivity].
+      * eapply eval_ltlit; [exact EI | reflexivity].
       * apply bool_of.
       * simpl. rewrite ltu_n by auto.
         assert (inb n vi = true) as -> by (unfold inb; apply Z.ltb_lt; lia).
         eapply exec_Sassign.
-        -- apply eval_Ederef. eapply eval_cell_addr; eauto. lia.
+        -- apply eval_Ederef. eapply eval_cell_addr; [eassumption | exact EI | reflexivity | lia].
         -- exact EA.
         -- rewrite typeof_atom. reflexivity.
         -- eapply assign_loc_value. reflexivity. unfold Mem.storev. rewrite uns_off by lia. exact ST.
     + eapply mrel_store; eauto. lia.
   - exists m. split; auto.
     eapply exec_Sifthenelse.
-    + eapply eval_bin; [exact EI | apply eval_Econst_long | apply typeof_atom | reflexivity | reflexivity].
+    + eapply eval_ltlit; [exact EI | reflexivity].
     + apply bool_of.
     + simpl. rewrite ltu_n, IN by auto. constructor.
 Qed.
@@ -483,13 +622,13 @@ Proof.
   - (* if *)
     destruct (IHeval le m AG MR) as (le1 & m1 & out & X & R).
     exists le1, m1, out. split; auto.
-    eapply exec_Sifthenelse. eapply eval_cmp; eauto. apply bool_of.
+    eapply exec_Sifthenelse. eapply eval_cmp; eauto. rewrite typeof_cmpe. apply bool_of.
     destruct (cmp_sem c va vb); auto.
   - (* sel *)
     destruct (IHeval _ m (agree_set rho le x _ AG) MR) as (le1 & m1 & out & X & R).
     exists le1, m1, out. split; auto.
     change E0 with (E0 ** E0). eapply exec_Sseq_1; eauto.
-    eapply exec_Sifthenelse. eapply eval_cmp; eauto. apply bool_of.
+    eapply exec_Sifthenelse. eapply eval_cmp; eauto. rewrite typeof_cmpe. apply bool_of.
     destruct (cmp_sem c va vb); apply exec_Sset; eapply eval_atom; eauto.
   - (* call *)
     destruct (funcall_ok fg vs rho' w M M1 m (params_norepet g fg H) H1

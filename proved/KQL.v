@@ -15,8 +15,9 @@ Import ListNotations.
 
 Notation i63 := PrimInt63.int.
 
-Inductive binop := Badd | Bsub | Bmul | Bland | Blor | Blxor | Bdiv | Bmod | Blsl | Blsr.
-Inductive cmpop := Ceq | Clt | Cle.
+Inductive binop := Badd | Bsub | Bmul | Bland | Blor | Blxor | Bdiv | Bmod | Blsl | Blsr | Basr | Bmods.
+(* Clt, Cle: the unsigned order; Cslt, Csle: the signed order *)
+Inductive cmpop := Ceq | Clt | Cle | Cslt | Csle.
 
 Inductive atom := Avar (x : ident) | Aint (n : i63).
 
@@ -28,6 +29,10 @@ Inductive exp :=
 | Ecall (x : ident) (g : ident) (args : list atom) (k : exp)
 | Eload (x : ident) (h : ident) (i : atom) (k : exp)
 | Estore (h : ident) (i a : atom) (k : exp)
+| Ekld (x : ident) (h i : atom) (k : exp)        (* x := cell i of block h of the kit's memory (KQM.v) *)
+| Ekst (h i a : atom) (k : exp)                  (* cell i of block h of the kit's memory := a *)
+| Ekld32 (x : ident) (h i : atom) (k : exp)      (* x := cell i of narrow block h (4-byte cells), signed *)
+| Ekst32 (h i a : atom) (k : exp)                (* cell i of narrow block h := a, kept modulo 2^32 *)
 | Eloop (args : list atom).
 
 Record fn := mkfn { kparams : list ident; kbody : exp }.
@@ -46,6 +51,8 @@ Definition binop_sem (o : binop) (a b : i63) : i63 :=
   | Bmod => PrimInt63.mod a b
   | Blsl => PrimInt63.lsl a b
   | Blsr => PrimInt63.lsr a b
+  | Basr => PrimInt63.asr a b
+  | Bmods => PrimInt63.mods a b
   end.
 
 Definition cmp_sem (c : cmpop) (a b : i63) : bool :=
@@ -53,6 +60,8 @@ Definition cmp_sem (c : cmpop) (a b : i63) : bool :=
   | Ceq => PrimInt63.eqb a b
   | Clt => PrimInt63.ltb a b
   | Cle => PrimInt63.leb a b
+  | Cslt => PrimInt63.ltsb a b
+  | Csle => PrimInt63.lesb a b
   end.
 
 Definition env := PTree.t i63.

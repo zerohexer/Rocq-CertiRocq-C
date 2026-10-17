@@ -36,9 +36,16 @@ Definition opstr (o : Cop.binary_operation) : string :=
 
 Definition tystr (t : type) : string :=
   match t with
-  | Tlong _ _ => "unsigned long long"
+  | Tlong Signed _ => "long long"
+  | Tlong Unsigned _ => "unsigned long long"
+  | Tint _ Unsigned _ => "unsigned int"
+  | Tpointer (Tint I8 _ _) _ => "char *"
+  | Tpointer (Tint I32 _ _) _ => "int *"
+  | Tpointer (Tlong _ _) _ => "unsigned long long *"
   | _ => "int"
   end.
+
+Definition tyb' : type := Tint I32 Signed noattr.
 
 Fixpoint estr (e : expr) : string :=
   match e with
@@ -49,6 +56,33 @@ Fixpoint estr (e : expr) : string :=
   | Evar id _ => gname id
   | Ederef a _ => "(*" ++ estr a ++ ")"
   | _ => "/*?*/"
+  end.
+
+(** A choice between two atoms on a comparison is the kit's [kq_sel_*] (a conditional move written out, kq_io.h), not a jump. *)
+Definition atomic (e : expr) : bool :=
+  match e with Etempvar _ _ | Econst_long _ _ => true | _ => false end.
+
+Definition is_signed_cast (e : expr) : option expr :=
+  match e with Ecast a (Tlong Signed _) => Some a | _ => None end.
+
+Definition selkind (op : Cop.binary_operation) (X Y : expr) : option (string * expr * expr) :=
+  match op with
+  | Oeq => Some ("kq_sel_eq", X, Y)
+  | Olt => match is_signed_cast X, is_signed_cast Y with
+           | Some x, Some y => Some ("kq_sel_lts", x, y)
+           | _, _ => Some ("kq_sel_ltu", X, Y) end
+  | Ole => match is_signed_cast X, is_signed_cast Y with
+           | Some x, Some y => Some ("kq_sel_les", x, y)
+           | _, _ => Some ("kq_sel_leu", X, Y) end
+  | _ => None
+  end.
+
+(** the guards of the kit's memory (block number below 64, cell below the size) are met nearly always *)
+Definition likely (c : expr) : bool :=
+  match c with
+  | Ebinop Olt _ (Econst_long n _) _ => Int64.eq n (Int64.repr 128)
+  | Ebinop Olt _ (Ecast (Ederef _ _) _) _ => true
+  | _ => false
   end.
 
 Fixpoint args (l : list expr) : string :=
@@ -64,7 +98,15 @@ Fixpoint sstr (s : statement) : string :=
   | Sset id e => tname id ++ " = " ++ estr e ++ ";" ++ nl
   | Sassign a e => estr a ++ " = " ++ estr e ++ ";" ++ nl
   | Ssequence a b => sstr a ++ sstr b
-  | Sifthenelse c a b => "if " ++ estr c ++ " {" ++ nl ++ sstr a ++ "} else {" ++ nl ++ sstr b ++ "}" ++ nl
+  | Sifthenelse (Ebinop op X Y _) (Sset t a) (Sset t' b) =>
+      match selkind op X Y with
+      | Some (nm, X', Y') =>
+          if Pos.eqb t t' && atomic a && atomic b then
+            tname t ++ " = " ++ nm ++ "(" ++ estr X' ++ ", " ++ estr Y' ++ ", " ++ estr a ++ ", " ++ estr b ++ ");" ++ nl
+          else "if " ++ estr (Ebinop op X Y tyb') ++ " {" ++ nl ++ (tname t ++ " = " ++ estr a ++ ";" ++ nl) ++ "} else {" ++ nl ++ (tname t' ++ " = " ++ estr b ++ ";" ++ nl) ++ "}" ++ nl
+      | None => "if " ++ estr (Ebinop op X Y tyb') ++ " {" ++ nl ++ (tname t ++ " = " ++ estr a ++ ";" ++ nl) ++ "} else {" ++ nl ++ (tname t' ++ " = " ++ estr b ++ ";" ++ nl) ++ "}" ++ nl
+      end
+  | Sifthenelse c a b => (if likely c then "if (__builtin_expect(" ++ estr c ++ ", 1)) {" else "if " ++ estr c ++ " {") ++ nl ++ sstr a ++ "} else {" ++ nl ++ sstr b ++ "}" ++ nl
   | Sloop a _ => "for (;;) {" ++ nl ++ sstr a ++ "}" ++ nl
   | Sreturn (Some e) => "return " ++ estr e ++ ";" ++ nl
   | Scall (Some id) f l => tname id ++ " = " ++ estr f ++ "(" ++ args l ++ ");" ++ nl
@@ -91,7 +133,12 @@ Definition protos (l : list (ident * globdef fundef type)) : string :=
   String.concat "" (map (fun d => match snd d with
                                   | Gfun (Internal f) => head (fst d) f ++ ";" ++ nl
                                   | Gvar v => match gvar_info v with
-                                              | Tarray _ n _ => "unsigned long long " ++ gname (fst d) ++ "[" ++ zstr n ++ "];" ++ nl
+                                              | Tarray (Tpointer (Tint _ _ _) _) n _ => "extern int *" ++ gname (fst d) ++ "[" ++ zstr n ++ "];" ++ nl
+                                              | Tarray (Tpointer _ _) n _ => "extern unsigned long long *" ++ gname (fst d) ++ "[" ++ zstr n ++ "];" ++ nl
+                                              | Tarray (Tint _ _ _) n _ => "extern unsigned int " ++ gname (fst d) ++ "[" ++ zstr n ++ "];" ++ nl
+                                              | Tarray _ n _ =>
+                                                  (if Pos.ltb 89999 (fst d) then "extern " else "") ++
+                                                  "unsigned long long " ++ gname (fst d) ++ "[" ++ zstr n ++ "];" ++ nl
                                               | _ => "" end
                                   | _ => "" end) l).
 

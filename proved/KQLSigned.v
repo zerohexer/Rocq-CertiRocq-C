@@ -16,6 +16,9 @@ Proof. reflexivity. Qed.
 Lemma wB63 : wB = 2 ^ 63.
 Proof. reflexivity. Qed.
 
+Lemma phi_range : forall v : PrimInt63.int, 0 <= φ v%uint63 < 2 ^ 63.
+Proof. intros v. pose proof (Uint63.to_Z_bounded v) as H. exact H. Qed.
+
 Lemma sZ_cases : forall x, sZ x = if φ x%uint63 <? 2 ^ 62 then φ x%uint63 else φ x%uint63 - 2 ^ 63.
 Proof.
   intros x. pose proof (Uint63.to_Z_bounded x) as B. rewrite wB63 in B.

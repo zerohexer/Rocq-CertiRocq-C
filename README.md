@@ -194,10 +194,11 @@ handle test on every field access.
 
 ## A proved route (`proved/`)
 
-A second route from Rocq to C, with proofs: a plain Rocq program is translated to KQL, a small first-order language,
-with a kernel-checked statement per function that the KQL computes the Rocq function; KQL goes to CompCert's Clight by
-a generator proved once; CompCert's own proofs take it to assembly.  It covers counters, 63-bit integers, calls, loops
-and memory blocks.  `proved/README.md` has the steps, what is proved and what is not, and the speed.
+A second route from Rocq to C, with proofs: a program of `hand/` is translated to KQL, a small first-order language,
+with a kernel-checked statement per function that the KQL computes the Rocq function; KQL goes to CompCert's Clight
+by a generator proved once, over the kit's memory (`KQRun.v`, with its laws).  The C printed from that Clight runs as
+fast as the kit's own build.  `proved/README.md` has the steps, what is proved and what is not, the corpus and the
+speed.
 
 ## Checked
 
@@ -211,6 +212,8 @@ and memory blocks.  `proved/README.md` has the steps, what is proved and what is
 - The checker on 18 programs with known verdicts (`tests/shape/`).
 - `hw/check.sh`: the laws, the 5 kernels under QEMU's processor and under KVM, the 5 controls.  Its first part,
   `hw/spec.sh`, also checks that the heap's four theorems rest on the laws alone.
+- The proved route (`proved/corpus.sh`): every proof accepted by the kernel; every program of `hand/` that it reads
+  proved, built, and giving the C++ answer.
 - `all.sh` rebuilds and remeasures everything from an empty directory.
 
 ## Trusted

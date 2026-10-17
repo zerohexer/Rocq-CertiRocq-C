@@ -14,7 +14,8 @@
 #   6  THE SAME LOOP WRITTEN MANY WAYS (tests/same.sh): same answers, same speed, and how many come out as the same C;
 #   7  the two tasks with input and output (demo/run.sh): same output as the C++, and as Rocq's own run of the text;
 #   8  THE TABLE: every timed problem against its C++ reference, every answer compared;
-#   9  the same answers once more with the stress collector.
+#   9  the same answers once more with the stress collector;
+#  10  the proved route (proved/): every proof, every program of hand.tsv through it, every answer, timed.
 # A line that starts with GATE says whether one of these went wrong.
 cd /w && bash setup.sh || exit 1
 eval $(opam env)
@@ -69,6 +70,10 @@ grep -q "DIFFERS\|WRONG\|missing" dbg/table_fin.txt && echo "GATE: AN ANSWER DIF
 echo "--- the programs written by the guideline with the bounds proofs (set P): answers only"
 pa=$(HP=P bash table.sh fin answers | tail -1); echo "$pa"
 echo "$pa" | grep -q " 0 do not" && echo "GATE: with the bounds proofs every answer equals the C++ run's" || echo "GATE: WITH THE BOUNDS PROOFS AN ANSWER DIFFERS"
+echo "--- the proved route (proved/): every proof, every program of hand.tsv through it, every answer, timed next to the kit's build"
+pr=$(N=${N:-5} bash proved/corpus.sh times | tee dbg/proved_run.txt | tail -1); echo "$pr"
+grep -q "^core-ok" dbg/proved_run.txt && echo "GATE: every proof of the proved route is accepted by the kernel" || echo "GATE: A PROOF OF THE PROVED ROUTE FAILS"
+echo "$pr" | grep -q " 0 do not agree" && echo "GATE: every program through the proved route gives the C++ run's answer" || echo "GATE: A PROGRAM THROUGH THE PROVED ROUTE DIFFERS"
 mkdir -p results; cp dbg/table_fin.txt results/table.txt; python3 mktable.py results/table.txt > results/table.md       # the table, as lines and as Markdown
 cp dbg/same.txt results/same.txt 2>/dev/null
 echo "--- the stress collector on the large inputs (answers only)"

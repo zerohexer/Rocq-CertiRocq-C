@@ -30,3 +30,4 @@
 /proved/bench/*.o
 /proved/bench/run_*
 /proved/bench/*_gen.c
+/proved/gen/
