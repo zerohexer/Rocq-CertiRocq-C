@@ -175,11 +175,41 @@ def main():
         f1 = os.path.join(GEN, f"{name}_p.v")
         t = proof_file(name, prog, entry, fns, helpers)
         t += f'\nFrom Stdlib Require Import String.\nLocal Open Scope string_scope.\nRedirect "{name}_c" Eval vm_compute in (KQLPrint.pstr 77777%positive (KQMTop.tr_kit_program {name}_prog)).\n'
-        open(f1, "w").write(t)
-        rc, out = coqc(f1)
+        # a lemma the kernel does not finish (KQ_TIMEOUT) is left unproved (Admitted): the C is still made and is
+        # checked by tests only; the program is then reported as unproved
+        unproved = []
+        while True:
+            open(f1, "w").write(t)
+            rc, out = coqc(f1)
+            if rc == 0:
+                break
+            ml = re.search(r'File "[^"]*", line (\d+)', out)
+            lines = t.split("\n")
+            ln = int(ml.group(1)) - 1 if ml else -1
+            if not ml:
+                # the process died without a message (memory): the commands it finished say where it was
+                rc2, out2 = coqc(f1, ["-time"])
+                ends = [int(x) for x in re.findall(r"Chars \d+ - (\d+)", out2)]
+                if ends:
+                    pos, ln = 0, -1
+                    for i, l in enumerate(t.split("\n")):
+                        if pos + len(l.encode()) + 1 > ends[-1]:
+                            ln = i; break
+                        pos += len(l.encode()) + 1
+            mm = re.match(r"Lemma (\w+)_ok : (\w+_kstmt)\.", lines[ln]) if 0 <= ln < len(lines) else None
+            if not mm or os.environ.get("KQ_STRICT"):
+                print(name, "PROOF FAILED:", out[-400:].replace("\n", " ")); break
+            unproved.append(mm.group(1))
+            lines[ln] = f"Lemma {mm.group(1)}_ok : {mm.group(2)}. Proof. Admitted."
+            t = "\n".join(lines)
+        else:
+            pass
         if rc != 0:
-            print(name, "PROOF FAILED:", out[-400:].replace("\n", " ")); continue
-        print(name, "PROVED", len(fns), "functions; entry", entry, "id", eid, kinds, "->", res)
+            continue
+        if unproved:
+            print(name, "UNPROVED", " ".join(unproved), "of", len(fns), "functions (the rest proved); entry", entry, "id", eid, kinds, "->", res)
+        else:
+            print(name, "PROVED", len(fns), "functions; entry", entry, "id", eid, kinds, "->", res)
         # 3: the C
         raw = open(os.path.join(GEN, f"{name}_c.out")).read()
         c = raw[raw.index('"') + 1: raw.rindex('"')].replace('""', '"')

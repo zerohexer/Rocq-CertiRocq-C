@@ -73,9 +73,11 @@ Outside the proofs: the loader that fills the tables, the driver in `kitc.py`, t
 ## Corpus and speed
 
 `proved/corpus.sh` takes every program of `hand.tsv` through the route, builds it, and compares its answer with the
-C++ run's.  Of the 36 programs, 33 are proved, built and give the C++ answer.  Three are not done: CF20C (its function
-`solve`), CF61E and CF61En (their function `rights`).  The kernel's check of that function's lemma does not finish
-within `KQ_TIMEOUT`, 300 seconds (CF61E was given 25 minutes, with no result).
+C++ run's.  All 36 programs are built and give the C++ answer.  33 are fully proved.  Three are built with some function
+left unproved: CF20C (`solve`), CF61E (`rights`, `lefts`, `solve`) and CF61En.  For those functions the kernel's check
+of the lemma does not finish within `KQ_TIMEOUT`, 300 seconds, or runs out of memory; `kitc.py` then leaves the lemma
+`Admitted`, still makes the C from the same proved generator, and reports `UNPROVED` with the function names.  Their
+answers are checked by the comparison with the C++ run only.  `KQ_STRICT=1` makes an unfinished lemma an error instead.
 
 Best of 5, ms, one pinned core (`bench.sh`); the kit's build is `bin/fin_H_C_NAME_gc`:
 
