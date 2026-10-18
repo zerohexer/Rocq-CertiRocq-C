@@ -80,6 +80,8 @@ Definition q_Zofnat := <% Z.of_nat %>.
 Definition q_natadd := <% Nat.add %>.
 Definition q_wB := <% wB %>.
 Definition q_cb := <% cb %>.
+Definition q_cbk := <% cbk %>.
+Fixpoint natq (n : nat) : term := match n with O => <% 0 %> | S n => tApp <% S %> [natq n] end.
 Definition q_and := <% and %>.
 Definition q_kmem := <% KQ.KQRun.mem %>.
 Definition q_ex := <% @ex %>.
@@ -928,10 +930,13 @@ Definition stmt (prog : term) (f : finfo) : term :=
   let mvar d := tRel d in
   let nats := map fst (filter (fun ik => match snd ik with KNat => true | _ => false end)
                                (combine (seq 0 n) vks)) in
+  (* the bound of a counter is lower for a function later in the file, so that a caller's counter plus a few is still
+     inside the bound of the callee *)
+  let cbf := tApp q_cbk [natq (Nat.sub (Pos.to_nat (fi_id f)) 1000)] in
   let bnd d := match nats with
-               | [] => tApp q_Zlt [tApp q_Zofnat [<% 0 %>]; q_cb]
-               | i :: l => fold_left (fun acc j => tApp q_and [acc; tApp q_Zlt [tApp q_Zofnat [var j d]; q_cb]])
-                                     l (tApp q_Zlt [tApp q_Zofnat [var i d]; q_cb])
+               | [] => tApp q_Zlt [tApp q_Zofnat [<% 0 %>]; cbf]
+               | i :: l => fold_left (fun acc j => tApp q_and [acc; tApp q_Zlt [tApp q_Zofnat [var j d]; cbf]])
+                                     l (tApp q_Zlt [tApp q_Zofnat [var i d]; cbf])
                end in
   let arg i k d := match k with KNat => tApp q_ofn [var i d] | _ => var i d end in
   let args d := qlist q_i63 (map (fun ik => arg (fst ik) (snd ik) d) (combine (seq 0 n) vks)) in
@@ -1047,7 +1052,9 @@ Notation kqm_translate x name :=
 (* ------------------------------------------------------------------ the proof of a statement *)
 Ltac kqm_auto :=
   hnf;
-  first [ solve [ kqm_prove ]
-        | solve [ kqm_prove0 ]
-        | solve [ kqx_prove ]
-        | solve [ kqx_prove0 ] ].
+  (* a function that writes the memory and gives a number is stated with [runx]; the other proofs do not apply to
+     it and, tried first, can run a long time before they fail *)
+  lazymatch goal with
+  | |- context [runx _ _ _ _ _] => first [ solve [ kqx_prove ] | solve [ kqx_prove0 ] ]
+  | _ => first [ solve [ kqm_prove ] | solve [ kqm_prove0 ] ]
+  end.

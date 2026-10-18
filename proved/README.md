@@ -73,51 +73,52 @@ Outside the proofs: the loader that fills the tables, the driver in `kitc.py`, t
 ## Corpus and speed
 
 `proved/corpus.sh` takes every program of `hand.tsv` through the route, builds it, and compares its answer with the
-C++ run's.  All 36 programs are built and give the C++ answer.  33 are fully proved.  Three are built with some function
-left unproved: CF20C (`solve`), CF61E (`rights`, `lefts`, `solve`) and CF61En.  For those functions the kernel's check
-of the lemma does not finish within `KQ_TIMEOUT`, 300 seconds, or runs out of memory; `kitc.py` then leaves the lemma
-`Admitted`, still makes the C from the same proved generator, and reports `UNPROVED` with the function names.  Their
-answers are checked by the comparison with the C++ run only.  `KQ_STRICT=1` makes an unfinished lemma an error instead.
+C++ run's.  All 36 programs are proved, built and give the C++ answer.  A lemma the kernel does not finish within
+`KQ_TIMEOUT` (300 s) is left `Admitted` by `kitc.py`, which then reports the program as `UNPROVED` with the function
+names (the C is still made from the same proved generator); `KQ_STRICT=1` makes it an error.  None is left unproved.
 
 Best of 5, ms, one pinned core (`bench.sh`); the kit's build is `bin/fin_H_C_NAME_gc`:
 
 | program | problem | kit ms | proved ms | proved / kit |
 |---|---|---|---|---|
-| CF380C | CF380C | 71.4 | 73.5 | 1.03 |
-| CF380Cp | CF380C | 60.6 | 56.3 | 0.93 |
-| CF1100F | CF1100F | 144.5 | 144.1 | 1.00 |
-| CF1100Fv2 | CF1100F | 108.5 | 131.9 | 1.22 |
-| CF1100Fv3 | CF1100F | 105.1 | 138.1 | 1.31 |
-| CF868F | CF868F | 107.7 | 110.4 | 1.03 |
-| CF868Fv2 | CF868F | 66.2 | 78.1 | 1.18 |
-| CF833B | CF833B | 331.9 | 361.8 | 1.09 |
-| CF235C | CF235C | 81.2 | 80.0 | 0.98 |
-| CF235Cv2 | CF235C | 78.4 | 80.9 | 1.03 |
-| CF813F | CF813F | 45.9 | 48.0 | 1.05 |
-| CF385C | CF385C | 254.1 | 253.2 | 1.00 |
-| CF1167C | CF1167C | 10.8 | 9.8 | 0.91 |
-| CF163A | CF163A | 23.9 | 26.0 | 1.09 |
-| CF460C | CF460C | 38.0 | 38.6 | 1.01 |
-| CF35C | CF35C | 30.3 | 41.0 | 1.35 |
-| CF295B | CF295B | 159.6 | 157.4 | 0.99 |
-| CF339D | CF339D | 267.9 | 218.0 | 0.81 |
-| CF547B | CF547B | 36.6 | 37.3 | 1.02 |
-| CF165E | CF165E | 119.2 | 101.2 | 0.85 |
-| CF7D | CF7D | 20.6 | 22.9 | 1.11 |
-| CF813Fv2 | CF813F | 54.1 | 74.7 | 1.38 |
-| CF295Bv2 | CF295B | 107.6 | 140.5 | 1.31 |
-| CF165Ev2 | CF165E | 89.6 | 94.8 | 1.06 |
-| CF453B | CF453B | 413.2 | 461.4 | 1.12 |
-| CF622F | CF622F | 91.5 | 116.9 | 1.28 |
-| CF339Dn | CF339D | 155.8 | 167.4 | 1.07 |
-| CF35Cn | CF35C | 23.2 | 27.8 | 1.20 |
-| CF295Bn | CF295B | 109.4 | 155.2 | 1.42 |
-| CF235Cn | CF235C | 61.4 | 80.9 | 1.32 |
-| CF385Cn | CF385C | 181.9 | 199.2 | 1.10 |
-| CF380Cn | CF380C | 67.9 | 72.2 | 1.06 |
-| CF165En | CF165E | 68.4 | 72.5 | 1.06 |
+| CF380C | CF380C | 66.7 | 68.2 | 1.02 |
+| CF380Cp | CF380C | 49.5 | 54.1 | 1.09 |
+| CF1100F | CF1100F | 139.0 | 141.0 | 1.01 |
+| CF1100Fv2 | CF1100F | 98.4 | 124.6 | 1.27 |
+| CF1100Fv3 | CF1100F | 95.6 | 105.2 | 1.10 |
+| CF868F | CF868F | 103.2 | 116.2 | 1.13 |
+| CF868Fv2 | CF868F | 63.3 | 66.9 | 1.06 |
+| CF833B | CF833B | 336.7 | 343.7 | 1.02 |
+| CF235C | CF235C | 67.9 | 67.6 | 1.00 |
+| CF235Cv2 | CF235C | 79.9 | 84.3 | 1.05 |
+| CF20C | CF20C | 7.2 | 7.0 | 0.97 |
+| CF813F | CF813F | 46.5 | 47.6 | 1.03 |
+| CF61E | CF61E | 88.8 | 78.8 | 0.89 |
+| CF385C | CF385C | 235.4 | 240.1 | 1.02 |
+| CF1167C | CF1167C | 9.4 | 9.9 | 1.05 |
+| CF163A | CF163A | 24.3 | 25.5 | 1.05 |
+| CF460C | CF460C | 46.4 | 44.9 | 0.97 |
+| CF35C | CF35C | 33.1 | 37.9 | 1.14 |
+| CF295B | CF295B | 114.2 | 138.3 | 1.21 |
+| CF339D | CF339D | 211.7 | 207.3 | 0.98 |
+| CF547B | CF547B | 35.5 | 32.4 | 0.91 |
+| CF165E | CF165E | 108.3 | 96.4 | 0.89 |
+| CF7D | CF7D | 20.6 | 22.4 | 1.09 |
+| CF813Fv2 | CF813F | 43.7 | 44.6 | 1.02 |
+| CF295Bv2 | CF295B | 83.0 | 128.3 | 1.55 |
+| CF165Ev2 | CF165E | 88.2 | 85.7 | 0.97 |
+| CF453B | CF453B | 385.1 | 447.7 | 1.16 |
+| CF622F | CF622F | 86.4 | 87.0 | 1.01 |
+| CF339Dn | CF339D | 120.6 | 120.3 | 1.00 |
+| CF35Cn | CF35C | 22.3 | 27.1 | 1.21 |
+| CF295Bn | CF295B | 100.9 | 146.2 | 1.45 |
+| CF235Cn | CF235C | 46.6 | 44.3 | 0.95 |
+| CF385Cn | CF385C | 161.1 | 175.4 | 1.09 |
+| CF380Cn | CF380C | 61.0 | 60.2 | 0.99 |
+| CF165En | CF165E | 56.9 | 60.6 | 1.06 |
+| CF61En | CF61E | 57.6 | 51.1 | 0.89 |
 
-Proved over kit: median 1.06, between 0.81 and 1.42.  The same program timed twice on that machine varies by about
+Proved over kit: median 1.02, between 0.89 and 1.55.  The same program timed twice on that machine varies by about
 15%.
 
 ## Running it

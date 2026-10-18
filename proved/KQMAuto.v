@@ -151,7 +151,10 @@ Definition cb : Z := 4611686018427387904.
 Lemma wB_num : wB = 9223372036854775808%Z.
 Proof. reflexivity. Qed.
 
-Ltac kqm_bound := first [ (pose proof wB_num; unfold cb in *; lia) | (vm_compute; reflexivity) ].
+(** a function later in the file has a lower bound, so that its callers' counters plus a few stay inside the callee's *)
+Definition cbk (i : nat) : Z := (cb - 64 * Z.of_nat i)%Z.
+
+Ltac kqm_bound := first [ (pose proof wB_num; try unfold cbk in *; unfold cb in *; lia) | (vm_compute; reflexivity) ].
 
 Lemma eqb00 : PrimInt63.eqb 0%uint63 0%uint63 = true.
 Proof. reflexivity. Qed.
@@ -173,14 +176,20 @@ Ltac kqm_norm :=
 
 (** a call or a loop: some hypothesis in the context proves it -- a callee's statement (put there with
     [pose proof]) or the induction hypothesis *)
+(** The hypothesis is chosen by the callee's number [g], which both must show: a hypothesis for another function is
+    never tried (trying it makes Rocq unfold the program's function table to see the two differ). *)
 Ltac kqm_call :=
   match goal with
-  | H : _ |- runk _ _ _ _ _ _ => eapply H; kqm_bound
+  | |- runk _ ?g _ _ _ _ =>
+      tryif is_evar g then (match goal with H : _ |- _ => eapply H; kqm_bound end)
+      else (match goal with H : context [runk _ g _ _ _ _] |- _ => eapply H; kqm_bound end)
   end.
 
 Ltac kqm_call_ex :=
   match goal with
-  | H : _ |- exists M1, runk _ _ _ _ _ M1 => eapply H; kqm_bound
+  | |- exists M1, runk _ ?g _ _ _ M1 =>
+      tryif is_evar g then (match goal with H : _ |- _ => eapply H; kqm_bound end)
+      else (match goal with H : context [runk _ g _ _ _ _] |- _ => eapply H; kqm_bound end)
   end.
 
 (** the value of a chosen number against the Rocq text: equal as they stand, or after a split on each test *)
@@ -233,10 +242,10 @@ Ltac kqm_enter :=
   eapply runk_intro; [reflexivity | reflexivity | simpl kbody ];
   match goal with
   | |- evalk _ _ _ _ _ ?v ?m =>
-      first [ let h := kqm_head v in progress cbn [h]
-            | let h := kqm_head v in progress unfold h
-            | let h := kqm_head m in progress cbn [h]
+      first [ let h := kqm_head v in progress unfold h
+            | let h := kqm_head v in progress cbn [h]
             | let h := kqm_head m in progress unfold h
+            | let h := kqm_head m in progress cbn [h]
             | idtac ]
   end;
   kqm_unf.
@@ -262,7 +271,9 @@ Ltac kqx_test :=
 
 Ltac kqx_call :=
   match goal with
-  | H : _ |- runx _ _ _ _ _ => eapply H; kqm_bound
+  | |- runx _ ?g _ _ _ =>
+      tryif is_evar g then (match goal with H : _ |- _ => eapply H; kqm_bound end)
+      else (match goal with H : context [runx _ g _ _ _] |- _ => eapply H; kqm_bound end)
   end.
 
 Ltac kqx_walk :=
@@ -288,8 +299,8 @@ Ltac kqx_enter :=
   eapply runx_intro; [reflexivity | reflexivity | simpl kbody ];
   match goal with
   | |- evalx _ _ _ _ _ ?v =>
-      first [ let h := kqm_head v in progress cbn [h]
-            | let h := kqm_head v in progress unfold h
+      first [ let h := kqm_head v in progress unfold h
+            | let h := kqm_head v in progress cbn [h]
             | idtac ]
   end;
   kqm_unf.
