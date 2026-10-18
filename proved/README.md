@@ -1,5 +1,7 @@
 # A proved route from Rocq to C
 
+The goal, and what is proved against what is assumed: `GOAL.md`.
+
 A plain Rocq program (the programs of `hand/`: counters, 63-bit integers, loops, calls, the kit's memory blocks) is
 translated to a small first-order language, KQL.  For every function the kernel checks the statement "the KQL function
 computes this Rocq function".  KQL goes to CompCert's Clight by a generator that is proved once for all programs.  The
