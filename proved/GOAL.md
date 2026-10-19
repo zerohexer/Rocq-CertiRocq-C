@@ -127,9 +127,9 @@ Proved and in the corpus (36 programs, all proved, answers equal to the C++ run,
 
 ## What is left, in order
 
-1. Records and pairs as results of functions, and a choice between two records; mutual recursion;
-   native 8- and 16-bit accesses (the library is in).  (Records and pairs as parameters, `let`s and `match`es are done;
-   function-id tables and known functions as arguments are done.)
+1. Records and pairs as results of functions, and a choice between two records; native 8- and 16-bit accesses (the
+   library is in).  (Done: records and pairs as parameters, `let`s and `match`es; mutual recursion; function-id tables
+   and known functions as arguments.)
 2. The hardware primitives are in (the C bodies assumed, `hw_law`, `hwf_law`), and the kernels of `hw/` go through the
    proved route and boot (`hw/build_proved.sh`): several programs per kernel (interrupt, fault, second processor) and
    the program's own assembly/C routines are done.  Left: a freestanding build of the generated C checked on its own,

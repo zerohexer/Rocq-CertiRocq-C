@@ -79,6 +79,11 @@ read outside the block is 0 and a write outside it does nothing.  They cost a sh
 load, and a read-modify-write for a store; a native byte access with its own proof is a later general pass.
 `proved/examples/bytes.body` writes bytes and halfwords over each other and reads them back.
 
+Mutual recursion.  `Fixpoint ping (n : nat) .. with pong (n : nat) ..` (the counter first in each, as always; every call
+to the other function passes a smaller counter) is read as one KQL function for each; a call of the other is a plain
+call (clang turns a call in tail position into a jump).  The kernel checks the group with one lemma, by induction on the
+counter, whose two parts are the statements of the two functions (`proved/examples/mutual.body`).
+
 Functions as values.  A function known where it is used is a macro's argument: a helper that does not call itself and takes
 a function (`twice f x := f (f x)`) is written out with the function put in, whether the function is a constant
 (`twice add3 x`), a constant given numbers (`twice (scale 5) x`) or a lambda (`twice (fun z => z - 1) x`).  A recursive

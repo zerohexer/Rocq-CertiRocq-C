@@ -89,13 +89,33 @@ def parse_main(mt):
                 raise SystemExit("main passes something this tool does not read: " + t)
     return entry, args, wrap
 
-def proof_file(name, prog, entry, fns, helpers):
+def proof_file(name, prog, entry, fns, helpers, groups=()):
     t = HDR + prog + f'\nMetaRocq Run (kqm_translate {entry} "{name}_prog").\n'
     t += f"Set Default Timeout {os.environ.get('KQ_TIMEOUT', '300')}.\n"
     if helpers:
         t += "Ltac kqm_unf ::= cbv beta zeta iota delta [" + " ".join(helpers) + "].\n"
+    done = set()
     for i, f in enumerate(fns):
+        if f in done:
+            continue
         pre = "".join(f"pose proof {g}_ok as H{j}; hnf in H{j}. " for j, g in enumerate(fns[:i]))
+        grp = next((g for g in groups if g[0] == f), None)
+        if grp:
+            # functions that call each other: one lemma for all, by induction on the counter they share
+            n = len(grp)
+            conj = lambda ms: ms[0] + "_kat d" if len(ms) == 1 else ms[0] + "_kat d /\\ (" + conj(ms[1:]) + ")"
+            pat = lambda k: f"IH{k}" if k == n else f"[IH{k} " + pat(k + 1) + "]"
+            hn = "; ".join(f"hnf in IH{k}" for k in range(1, n + 1))
+            t += f"Lemma {f}_grp : forall d : nat, {conj(grp)}.\nProof. {pre}induction d as [|d {pat(1)}]; [ | {hn} ]; repeat split; kqm_auto. Qed.\n"
+            for k, m in enumerate(grp):
+                proj = "(G d)" if False else f"({f}_grp d)"
+                for _ in range(k):
+                    proj = f"(proj2 {proj})"
+                if k < n - 1:
+                    proj = f"(proj1 {proj})"
+                t += f"Lemma {m}_ok : {m}_kstmt. Proof. exact (fun d => {proj}). Qed.\n"
+                done.add(m)
+            continue
         t += f"Lemma {f}_ok : {f}_kstmt. Proof. {pre}kqm_auto. Qed.\n"
     return t
 
@@ -258,7 +278,8 @@ def main():
         _, eid, kinds, res = me.groups()
         # 2: prove, and print the C
         f1 = os.path.join(GEN, f"{name}_p.v")
-        t = proof_file(name, prog, entry, fns, helpers)
+        groups = [g.split() for g in re.findall(r"KQM group: ([\w' ]+)", out)]
+        t = proof_file(name, prog, entry, fns, helpers, groups)
         t += f'\nFrom Stdlib Require Import String.\nLocal Open Scope string_scope.\nRedirect "{name}_c" Eval vm_compute in (KQLPrint.pstr 77777%positive (KQMTop.tr_kit_program {name}_prog)).\n'
         # a lemma the kernel does not finish (KQ_TIMEOUT) is left unproved (Admitted): the C is still made and is
         # checked by tests only; the program is then reported as unproved

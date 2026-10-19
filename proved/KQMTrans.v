@@ -171,6 +171,7 @@ Record finfo := mkFI {
   fi_rmem : bool;             (* it gives back a memory *)
   fi_rec : bool;              (* it calls itself *)
   fi_wr : bool;               (* it writes the memory (or calls a function that does) *)
+  fi_bi : nat;                (* the place whose counter bound it has: its own, or for a mutual group the first one's *)
   fi_name : string;           (* its name: that of the Rocq function, and for a copy made for the functions it was given, one more *)
   fi_fixed : list (nat * term) }. (* the parameters (by place) that are functions given when it is called, and those functions *)
 
@@ -183,6 +184,7 @@ Inductive ent :=
 | EMem (ver : nat)      (* a memory: the one the program has now when [ver] is the current version *)
 | ERec (es : list ent)  (* a record or pair: its fields *)
 | ESelf                 (* the function being read, calling itself *)
+| ESib (kn : kername)    (* another function of the same mutual fixpoint *)
 | EFun (f : term).       (* a parameter that is a function known where the function is called: that function, closed *)
 
 Record st := mkSt { s_next : positive; s_ver : nat }.
@@ -684,6 +686,16 @@ Fixpoint tr_int (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struc
                  let s1 := if fi_wr self then bump s else s in
                  let '(x, s1) := fresh s1 in
                  wrap1 q_Ecall [qpos x; qpos (fi_id self); As] (k (avar x) s1))
+      | Some (ESib kn) =>
+          match find_fn kn with
+          | Some f =>
+              if fi_rmem f then TErr "a call of a function giving back a memory, used as a number"
+              else tr_call fuel Γ f args s (fun As s =>
+                     let s1 := if fi_wr f then bump s else s in
+                     let '(x, s1) := fresh s1 in
+                     wrap1 q_Ecall [qpos x; qpos (fi_id f); As] (k (avar x) s1))
+          | None => TErr "a call of a function of the same fixpoint that is not translated"
+          end
       | _ => TErr "a call of a variable"
       end
   | tConst kn _ =>
@@ -851,6 +863,16 @@ with tr_mem (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : K) {struct fue
               let '(x, s) := fresh (bump s) in
               wrap1 q_Ecall [qpos x; qpos (fi_id self); As] (k s))
           else TErr "a number used as a memory"
+      | Some (ESib kn) =>
+          match find_fn kn with
+          | Some f =>
+              if fi_rmem f then
+                tr_call fuel Γ f args s (fun As s =>
+                  let '(x, s) := fresh (bump s) in
+                  wrap1 q_Ecall [qpos x; qpos (fi_id f); As] (k s))
+              else TErr "a number used as a memory"
+          | None => TErr "a call of a function of the same fixpoint that is not translated"
+          end
       | _ => TErr "a call of a variable"
       end
   | _ => TErr "not a memory this translator reads"
@@ -1194,6 +1216,9 @@ Fixpoint tr_tail (fuel : nat) (Γ : list ent) (t : term) (s : st) {struct fuel} 
   | tApp (tRel n) args =>
       match nth_error Γ n with
       | Some ESelf => tr_call fuel Γ self args s (fun As s => TOk (tApp q_Eloop [As], s))
+      | Some (ESib _) =>
+          if fi_rmem self then tr_mem fuel Γ t s (fun s => TOk (tApp q_Eret [aint q_zero], s))
+          else tr_int fuel Γ t s (fun A s => TOk (tApp q_Eret [A], s))
       | _ => TErr "a call of a variable"
       end
   | _ =>
@@ -1215,8 +1240,10 @@ Definition result_mem (Σ : global_env) (ty : term) : option bool :=
 (* the parts of a function: whether it calls itself, its parameter types, its body *)
 Definition fparts (b : term) : option (bool * list term * term) :=
   match b with
-  | tFix [d] 0 => if Nat.eqb (rarg d) 0 then let '(l, r) := lams (dbody d) in Some (true, l, r) else None
-  | tFix _ _ => None
+  | tFix mfix k => match nth_error mfix k with
+                   | Some d => if Nat.eqb (rarg d) 0 then let '(l, r) := lams (dbody d) in Some (true, l, r) else None
+                   | None => None
+                   end
   | _ => let '(l, r) := lams b in Some (false, l, r)
   end.
 
@@ -1377,6 +1404,19 @@ Definition inst_body (Σ : global_env) (key : fkey) : option term :=
   | None => None
   end.
 
+(* the functions defined together with a fixpoint's (its own included), in the order of the definition *)
+Definition group_keys (Σ : global_env) (key : fkey) : list fkey :=
+  match snd key with
+  | [] => match body_of Σ (fst key) with
+          | Some (_, tFix mfix _) =>
+              if Nat.ltb 1 (length mfix)
+              then map (fun d => ((fst (fst key), match binder_name (dname d) with nNamed s => s | nAnon => "" end), @nil (nat * term))) mfix
+              else [key]
+          | _ => [key]
+          end
+  | _ => [key]
+  end.
+
 Definition is_fun_key (Σ : global_env) (mp : modpath) (root : kername) (key : fkey) : bool :=
   match snd key with
   | [] => is_fun Σ mp root (fst key)
@@ -1396,7 +1436,7 @@ Fixpoint reach (fuel : nat) (Σ : global_env) (mp : modpath) (root : kername) (k
                let done := fold_left (fun d c =>
                              if key_eqb c key then d
                              else if eq_mp (fst (fst c)) mp || eq_mp (fst (fst c)) kit_mp then reach fuel Σ mp root c d else d) cs done in
-               if is_fun_key Σ mp root key then List.app done [key] else done
+               if is_fun_key Σ mp root key then List.app done (group_keys Σ key) else done
            | None => done
            end
   end.
@@ -1426,7 +1466,19 @@ Definition mk_info (Σ : global_env) (fns : list finfo) (i : nat) (key : fkey) :
       match fparts b, result_mem Σ ty with
       | Some (isrec, tys, body), Some rm =>
           let tys := map snd (filter (fun jt => negb (existsb (fun f => Nat.eqb (fst f) (fst jt)) fixed)) (combine (seq 0 (length tys)) tys)) in
-          option_map (fun ks => mkFI kn (Pos.of_nat (1000 + i)) ks rm isrec (writes 10000 fns body)
+          let grp := match b with tFix mfix _ => if Nat.ltb 1 (length mfix) then Some mfix else None | _ => None end in
+          let wr := match grp with
+                    | Some mfix => existsb (fun d => writes 10000 fns (dbody d)) mfix
+                    | None => writes 10000 fns body
+                    end in
+          (* a function of the same fixpoint just before this one: its bound index *)
+          let bi := match grp, rev fns with
+                    | Some mfix, p :: _ =>
+                        if existsb (fun d => match binder_name (dname d) with nNamed s => String.eqb s (snd (fi_kn p)) | nAnon => false end) mfix
+                        then fi_bi p else i
+                    | _, _ => i
+                    end in
+          option_map (fun ks => mkFI kn (Pos.of_nat (1000 + i)) ks rm isrec wr bi
                                      (match fixed with [] => snd kn | _ => snd kn ^ "_" ^ string_of_nat i end) fixed)
                      (opt_all (map (kind_of 20 Σ) tys))
       | _, _ => None
@@ -1492,7 +1544,15 @@ Definition tr_fun (Σ : global_env) (mp : modpath) (fns : list finfo) (f : finfo
                              | None => match es with e :: r => e :: ins (S j) fuel r | [] => [] end
                              end
                          end) 0 (length ents0 + length (fi_fixed f)) ents0 in
-          let Γ := List.app (rev ents) (if fi_rec f then [ESelf] else []) in
+          (* the fixpoint's functions, the last first (de Bruijn): this one, the others by name *)
+          let fixents :=
+            match body_of Σ (fi_kn f) with
+            | Some (_, tFix mfix k) =>
+                rev (mapi (fun j d => if Nat.eqb j k then ESelf
+                                      else ESib (fst (fi_kn f), match binder_name (dname d) with nNamed s => s | nAnon => "" end)) mfix)
+            | _ => if fi_rec f then [ESelf] else []
+            end in
+          let Γ := List.app (rev ents) fixents in
           let kpids := firstn (length (flat_map (leaves 20) ks)) pids in
           match tr_tail Σ mp fns f 2000 Γ body (mkSt (Pos.of_nat (S n)) 0) with
           | TOk (e, _) => TOk (tApp q_mkfn [qlist q_ident (map qpos kpids); e])
@@ -1527,7 +1587,8 @@ Fixpoint stmt_arg (fuel : nat) (var : nat -> term) (k : kind) (j : nat) : term *
       end
   end.
 
-Definition stmt (prog : term) (f : finfo) : term :=
+(* [kat]: the statement for one value of the first parameter (a counter): a function of it, for the lemma of a mutual group *)
+Definition stmt (prog : term) (f : finfo) (kat : bool) : term :=
   let ks := fi_kinds f in
   let hasM := existsb (fun k => match k with KMem => true | _ => false end) ks in
   let vks := flat_map (leaves 20) ks in
@@ -1539,7 +1600,7 @@ Definition stmt (prog : term) (f : finfo) : term :=
                                (combine (seq 0 n) vks)) in
   (* the bound of a counter is lower for a function later in the file, so that a caller's counter plus a few is still
      inside the bound of the callee *)
-  let cbf := tApp q_cbk [natq (Nat.sub (Pos.to_nat (fi_id f)) 1000)] in
+  let cbf := tApp q_cbk [natq (fi_bi f)] in
   let bnd d := match nats with
                | [] => tApp q_Zlt [tApp q_Zofnat [<% 0 %>]; cbf]
                | i :: l => fold_left (fun acc j => tApp q_and [acc; tApp q_Zlt [tApp q_Zofnat [var j d]; cbf]])
@@ -1569,7 +1630,8 @@ Definition stmt (prog : term) (f : finfo) : term :=
                 (bnd 0) (body 1) in
   let withM := tProd {| binder_name := nNamed "M"; binder_relevance := Relevant |} q_kmem core in
   fold_right (fun ik acc =>
-                tProd {| binder_name := nNamed ("x" ^ string_of_nat (fst ik)); binder_relevance := Relevant |}
+                (if andb kat (Nat.eqb (fst ik) 0) then tLambda else tProd)
+                      {| binder_name := nNamed ("x" ^ string_of_nat (fst ik)); binder_relevance := Relevant |}
                       (match snd ik with KNat => <% nat %> | _ => q_i63 end) acc)
              withM (combine (seq 0 n) vks).
 
@@ -1598,8 +1660,44 @@ Definition help_name (kn : kername) : string :=
 
 Definition last_error {A} (l : list A) : option A := match rev l with [] => None | x :: _ => Some x end.
 
+(* the functions of one mutual fixpoint: consecutive, with the same bound index *)
+Fixpoint group_runs (l : list finfo) (cur : list finfo) : list (list finfo) :=
+  match l with
+  | [] => match cur with _ :: _ :: _ => [rev cur] | _ => [] end
+  | f :: l => match cur with
+              | p :: _ => if Nat.eqb (fi_bi p) (fi_bi f) then group_runs l (f :: cur)
+                          else (match cur with _ :: _ :: _ => [rev cur] | _ => [] end) ++ group_runs l [f]
+              | [] => group_runs l [f]
+              end
+  end.
+
+(* A function of a mutual fixpoint that the program does not name is not among the quoted constants (the others reach it
+   by the fixpoint's own binder): add it, as the constant it is, with the fixpoint for its body. *)
+Definition extend_siblings (Σ : global_env) : global_env :=
+  let news := flat_map (fun kd =>
+                match snd kd with
+                | ConstantDecl cb =>
+                    match cst_body cb with
+                    | Some (tFix mfix k) =>
+                        if Nat.ltb 1 (length mfix) then
+                          flat_map (fun jd =>
+                            let kn : kername := (fst (fst kd), match binder_name (dname (snd jd)) with nNamed s => s | nAnon => "" end) in
+                            match lookup_env Σ kn with
+                            | Some _ => []
+                            | None => [(kn, ConstantDecl {| cst_type := dtype (snd jd); cst_body := Some (tFix mfix (fst jd));
+                                                            cst_universes := cst_universes cb;
+                                                            cst_relevance := cst_relevance cb |})]
+                            end) (combine (seq 0 (length mfix)) mfix)
+                        else []
+                    | _ => []
+                    end
+                | _ => []
+                end) (declarations Σ) in
+  {| universes := universes Σ; declarations := List.app news (declarations Σ); retroknowledge := retroknowledge Σ |}.
+
 Definition kqm_gen (p : program) (prog_name : ident) : tout :=
-  let '(Σ, t) := p in
+  let '(Σ0, t) := p in
+  let Σ := extend_siblings Σ0 in
   match t with
   | tConst root _ =>
       let mp := fst root in
@@ -1623,14 +1721,18 @@ Definition kqm_gen (p : program) (prog_name : ident) : tout :=
                                                           tConst (mp, fi_name (fst fe) ^ "_kqm") []]) tfs) in
               let parrs := tApp q_nil [tApp q_prod [q_ident; q_Z]] in
               let pdef := KDef prog_name <% prog %> (tApp q_mkprog [pfuns; parrs]) in
-              let sdefs := map (fun fe => KDef (fi_name (fst fe) ^ "_kstmt") <% Prop %> (stmt (tConst pkn []) (fst fe))) tfs in
+              let sdefs := map (fun fe => KDef (fi_name (fst fe) ^ "_kstmt") <% Prop %> (stmt (tConst pkn []) (fst fe) false)) tfs in
               let used := fold_left (fun acc fe => match body_of Σ (fi_kn (fst fe)) with
                                                    | Some (_, b) => List.app (consts 10000 b []) (List.app (flat_map (fun jt => consts 10000 (snd jt) []) (fi_fixed (fst fe))) acc)
                                                    | None => acc end) tfs [] in
+              let grps := group_runs (map fst tfs) [] in
+              let katdefs := flat_map (fun g => map (fun f => KDef (fi_name f ^ "_kat") <% nat -> Prop %> (stmt (tConst pkn []) f true)) g) grps in
               let hs := filter (fun kn => negb (Kername.eqb kn kn_kq_nat)) (helpers_of 10000 Σ mp fns used []) in
-              mkOut (List.app fdefs (pdef :: sdefs))
+              mkOut (List.app fdefs (pdef :: List.app sdefs katdefs))
                     ("KQM: " ^ string_of_nat (length tfs) ^ " functions: " ^
                      String.concat " " (map (fun fe => fi_name (fst fe)) tfs) ^
+                     String.concat "" (map (fun g => "
+KQM group: " ^ String.concat " " (map fi_name g)) grps) ^
                      "
 KQM helpers: " ^ String.concat " " (map help_name hs) ^
                      "
