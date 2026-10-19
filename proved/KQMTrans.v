@@ -170,7 +170,9 @@ Record finfo := mkFI {
   fi_kinds : list kind;       (* its parameters *)
   fi_rmem : bool;             (* it gives back a memory *)
   fi_rec : bool;              (* it calls itself *)
-  fi_wr : bool }.             (* it writes the memory (or calls a function that does) *)
+  fi_wr : bool;               (* it writes the memory (or calls a function that does) *)
+  fi_name : string;           (* its name: that of the Rocq function, and for a copy made for the functions it was given, one more *)
+  fi_fixed : list (nat * term) }. (* the parameters (by place) that are functions given when it is called, and those functions *)
 
 (* what a variable of the text stands for *)
 Inductive ent :=
@@ -180,7 +182,8 @@ Inductive ent :=
 | ECmp (c a b : term)   (* a boolean that is one comparison [a c b] of two atoms: kept as it is *)
 | EMem (ver : nat)      (* a memory: the one the program has now when [ver] is the current version *)
 | ERec (es : list ent)  (* a record or pair: its fields *)
-| ESelf.                (* the function being read, calling itself *)
+| ESelf                 (* the function being read, calling itself *)
+| EFun (f : term).       (* a parameter that is a function known where the function is called: that function, closed *)
 
 Record st := mkSt { s_next : positive; s_ver : nat }.
 
@@ -213,13 +216,42 @@ Fixpoint nat_lit (fuel : nat) (t : term) : bool :=
       end
   end.
 
-(* beta-reduce a helper's body against its arguments, as [let]s *)
-Fixpoint beta_lets (b : term) (args : list term) : term :=
-  match b, args with
-  | tLambda na ty body, a :: args => tLetIn na a ty (beta_lets body (map (lift0 1) args))
-  | _, [] => b
-  | _, _ => mkApps b args
+(* beta-reduce a helper's body against its arguments, as [let]s; an argument that is a function (the parameter has an
+   arrow type) is put in where the parameter stands, as a macro's argument is: a function known where it is used *)
+Fixpoint beta_lets_go (fuel : nat) (b : term) (args : list term) : term :=
+  match fuel with
+  | O => mkApps b args
+  | S fuel =>
+      match b, args with
+      | tLambda na ty body, a :: args =>
+          match ty with
+          | tProd _ _ _ => beta_lets_go fuel (subst [a] 0 body) args
+          | _ => tLetIn na a ty (beta_lets_go fuel body (map (lift0 1) args))
+          end
+      | _, [] => b
+      | _, _ => mkApps b args
+      end
   end.
+Definition beta_lets (b : term) (args : list term) : term := beta_lets_go (S (length args)) b args.
+
+(* an application whose head is an application or a lambda, as the head of a plain application: what putting a function
+   in (above) leaves, [f (f x)] with [f] a function written in place *)
+Fixpoint app_norm_go (fuel : nat) (Γ : list ent) (t : term) : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      match t with
+      | tApp (tApp f a) b => app_norm_go fuel Γ (tApp f (List.app a b))
+      | tApp (tLambda na ty body) (a :: rest) => app_norm_go fuel Γ (beta_lets (tLambda na ty body) (a :: rest))
+      | tApp (tRel n) args =>
+          match nth_error Γ n with
+          | Some (EFun f) => app_norm_go fuel Γ (mkApps f args)
+          | _ => t
+          end
+      | _ => t
+      end
+  end.
+Definition app_norm (Γ : list ent) (t : term) : term := app_norm_go 100 Γ t.
 
 (* arithmetic on variables and numbers only: worked out whether or not it is wanted, without a jump *)
 Fixpoint simple_term (fuel : nat) (t : term) : bool :=
@@ -417,6 +449,11 @@ Fixpoint term_same (fuel : nat) (a b : term) : bool :=
       | tRel i, tRel j => Nat.eqb i j
       | tInt x, tInt y => PrimInt63.eqb x y
       | tConst k _, tConst k' _ => Kername.eqb k k'
+      | tLambda _ ty b, tLambda _ ty' b' => term_same fuel ty ty' && term_same fuel b b'
+      | tProd _ ty b, tProd _ ty' b' => term_same fuel ty ty' && term_same fuel b b'
+      | tInd i _, tInd i' _ => Kername.eqb (inductive_mind i) (inductive_mind i') && Nat.eqb (inductive_ind i) (inductive_ind i')
+      | tConstruct i n _, tConstruct i' n' _ =>
+          Kername.eqb (inductive_mind i) (inductive_mind i') && Nat.eqb (inductive_ind i) (inductive_ind i') && Nat.eqb n n'
       | tApp f xs, tApp g ys =>
           term_same fuel f g && Nat.eqb (length xs) (length ys)
           && forallb (fun p => term_same fuel (fst p) (snd p)) (combine xs ys)
@@ -531,6 +568,21 @@ Variable self : finfo.
 Definition find_fn (kn : kername) : option finfo :=
   List.find (fun f => Kername.eqb (fi_kn f) kn) fns.
 
+(* a call's argument that is a function parameter of the function being read stands for the function it was given *)
+Definition res_arg (Γ : list ent) (a : term) : term :=
+  match a with
+  | tRel n => match nth_error Γ n with Some (EFun f) => f | _ => a end
+  | _ => a
+  end.
+
+(* the function a call is of: the one of that name, or for a function that takes functions, the copy made for the
+   functions this call gives it *)
+Definition find_fn_args (Γ : list ent) (kn : kername) (args : list term) : option finfo :=
+  List.find (fun f => Kername.eqb (fi_kn f) kn &&
+                      forallb (fun jt => match nth_error args (fst jt) with
+                                         | Some a => term_same 10000 (res_arg Γ a) (snd jt)
+                                         | None => false end) (fi_fixed f)) fns.
+
 (* a helper: a definition of the file or of KQRun.v that does not call itself, written out where it is used *)
 Definition helper_body (kn : kername) : option term :=
   if eq_mp (fst kn) mp || eq_mp (fst kn) kit_mp || eq_mp (fst kn) uint63_mp then
@@ -551,11 +603,18 @@ Definition with_ver (v : nat) (s : st) : st := mkSt (s_next s) v.
 Definition wrap1 (c : term) (pre : list term) (r : tres (term * st)) : tres (term * st) :=
   match r with TOk (e, s) => TOk (tApp c (pre ++ [e]), s) | TErr m => TErr m end.
 
+(* the arguments of a call without those that are the functions the copy was made for *)
+Fixpoint dropfix (j : nat) (fixed : list (nat * term)) (args : list term) : list term :=
+  match args with
+  | [] => []
+  | a :: r => if existsb (fun jt => Nat.eqb (fst jt) j) fixed then dropfix (S j) fixed r else a :: dropfix (S j) fixed r
+  end.
+
 Fixpoint tr_int (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struct fuel} : tres (term * st) :=
   match fuel with
   | O => TErr "out of fuel"
   | S fuel =>
-  match t with
+  match app_norm Γ t with
   | tRel n => match nth_error Γ n with
               | Some (EInt a) => k a s
               | _ => TErr "a variable used as a number is not one"
@@ -604,7 +663,7 @@ Fixpoint tr_int (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struc
               wrap1 q_Ekld32 [qpos x; H; I] (k (avar x) s))))
         | _ => TErr "rd32"
         end
-      else match find_fn kn with
+      else match find_fn_args Γ kn args with
       | Some f =>
           if fi_rmem f then TErr "a function giving back a memory, used as a number"
           else tr_call fuel Γ f args s (fun As s =>
@@ -614,7 +673,7 @@ Fixpoint tr_int (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struc
       | None =>
           match helper_body kn with
           | Some b => tr_int fuel Γ (beta_lets b args) s k
-          | None => TErr ("not readable: " ^ snd kn)
+          | None => TErr ("not readable: " ^ snd kn ^ " (if it takes a function, the function given must name no variable of the caller: pass the variable as an argument)")
           end
       end
   | tApp (tRel n) args =>
@@ -630,7 +689,7 @@ Fixpoint tr_int (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struc
   | tConst kn _ =>
       match helper_body kn with
       | Some b => tr_int fuel Γ b s k
-      | None => TErr ("not readable: " ^ snd kn)
+      | None => TErr ("not readable: " ^ snd kn ^ " (if it takes a function, the function given must name no variable of the caller: pass the variable as an argument)")
       end
   | tCase ci p c [b0; b1] =>
       if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_bool) then
@@ -694,7 +753,7 @@ with tr_nat (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struct fu
   match fuel with
   | O => TErr "out of fuel"
   | S fuel =>
-  match t with
+  match app_norm Γ t with
   | tRel n => match nth_error Γ n with
               | Some (ENat a) => k a s
               | _ => TErr "a variable used as a counter is not one"
@@ -729,7 +788,7 @@ with tr_call (fuel : nat) (Γ : list ent) (f : finfo) (args : list term) (s : st
     | [KMem], [m] => tr_mem fuel Γ m s (fun s => k (qlist q_atom (rev acc)) s)
     | _, _ => TErr "a call with the wrong arguments"
     end in
-  go (fi_kinds f) args [] s
+  go (fi_kinds f) (dropfix 0 (fi_fixed f) args) [] s
   end
 
 (* the work of a memory expression, then [k] *)
@@ -737,7 +796,7 @@ with tr_mem (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : K) {struct fue
   match fuel with
   | O => TErr "out of fuel"
   | S fuel =>
-  match t with
+  match app_norm Γ t with
   | tRel n => match nth_error Γ n with
               | Some (EMem v) => if Nat.eqb v (s_ver s) then k s else TErr "a memory used after it was handed on"
               | _ => TErr "not a memory"
@@ -771,7 +830,7 @@ with tr_mem (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : K) {struct fue
                 wrap1 q_Ehw [op; qlist q_atom As] (k (bump s))))
           else TErr "a machine operation with the wrong number of arguments"
       | None =>
-      match find_fn kn with
+      match find_fn_args Γ kn args with
       | Some f =>
           if fi_rmem f then
             tr_call fuel Γ f args s (fun As s =>
@@ -780,7 +839,7 @@ with tr_mem (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : K) {struct fue
           else TErr "a number used as a memory"
       | None => match helper_body kn with
                 | Some b => tr_mem fuel Γ (beta_lets b args) s k
-                | None => TErr ("not readable: " ^ snd kn)
+                | None => TErr ("not readable: " ^ snd kn ^ " (if it takes a function, the function given must name no variable of the caller: pass the variable as an argument)")
                 end
       end
       end
@@ -803,7 +862,7 @@ with tr_cond (fuel : nat) (Γ : list ent) (t : term) (s : st) (kT kF : K) {struc
   match fuel with
   | O => TErr "out of fuel"
   | S fuel =>
-  match t with
+  match app_norm Γ t with
   | tConstruct i 0 _ => if Kername.eqb (inductive_mind i) (inductive_mind ind_bool) then kT s else TErr "a constructor"
   | tConstruct i 1 _ => if Kername.eqb (inductive_mind i) (inductive_mind ind_bool) then kF s else TErr "a constructor"
   | tApp (tConst kn _) args =>
@@ -934,7 +993,7 @@ with tr_recv (fuel : nat) (Γ : list ent) (mk : term) (ks : list kind) (t : term
   match fuel with
   | O => TErr "out of fuel"
   | S fuel =>
-  match t with
+  match app_norm Γ t with
   | tRel n => match nth_error Γ n with
               | Some (ERec es) => kk (ERec es) s
               | _ => TErr "a variable used as a record is not one"
@@ -957,13 +1016,13 @@ with tr_recv (fuel : nat) (Γ : list ent) (mk : term) (ks : list kind) (t : term
       | Some _ => TErr "a function giving back a record: not read yet"
       | None => match helper_body kn with
                 | Some b => tr_recv fuel Γ mk ks (beta_lets b args) s kk
-                | None => TErr ("not readable: " ^ snd kn)
+                | None => TErr ("not readable: " ^ snd kn ^ " (if it takes a function, the function given must name no variable of the caller: pass the variable as an argument)")
                 end
       end
   | tConst kn _ =>
       match helper_body kn with
       | Some b => tr_recv fuel Γ mk ks b s kk
-      | None => TErr ("not readable: " ^ snd kn)
+      | None => TErr ("not readable: " ^ snd kn ^ " (if it takes a function, the function given must name no variable of the caller: pass the variable as an argument)")
       end
   | tProj pr c => tr_field fuel Γ (tInd (proj_ind pr) []) (proj_arg pr) c s kk
   | _ => TErr "not a record this translator reads"
@@ -1036,7 +1095,7 @@ with tr_boolval (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struc
   match fuel with
   | O => TErr "out of fuel"
   | S fuel =>
-  match t with
+  match app_norm Γ t with
   | tConstruct i 0 _ => if Kername.eqb (inductive_mind i) (inductive_mind ind_bool) then k (aint q_one) s else TErr "a constructor"
   | tConstruct i 1 _ => if Kername.eqb (inductive_mind i) (inductive_mind ind_bool) then k (aint q_zero) s else TErr "a constructor"
   | tRel n =>
@@ -1100,7 +1159,7 @@ Fixpoint tr_tail (fuel : nat) (Γ : list ent) (t : term) (s : st) {struct fuel} 
   match fuel with
   | O => TErr "out of fuel"
   | S fuel =>
-  match t with
+  match app_norm Γ t with
   | tCase ci p c [b0; b1] =>
       if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_nat) then
         match c with
@@ -1226,20 +1285,118 @@ Definition is_fun (Σ : global_env) (mp : modpath) (root kn : kername) : bool :=
   (eq_mp (fst kn) mp &&
    (match body_of Σ kn with Some (_, tFix _ _) => true | _ => false end || big_fun Σ kn)).
 
-(* every function reachable from the root, callees first *)
-Fixpoint reach (fuel : nat) (Σ : global_env) (mp : modpath) (root : kername) (kn : kername)
-               (done : list kername) : list kername :=
+(* A recursive function of the file that takes functions (a comparison, a step) is not translated by itself: each call that
+   gives it known functions (closed terms: constants, applications of constants to numbers, lambdas that name no variable
+   of the caller) makes a copy for those functions, as a template does.  A function that would need a variable of the
+   caller (a closure) is refused: its variables are passed as arguments. *)
+Definition is_prod (t : term) : bool := match t with tProd _ _ _ => true | _ => false end.
+
+Definition template_places (Σ : global_env) (mp : modpath) (kn : kername) : list nat :=
+  if eq_mp (fst kn) mp then
+    match body_of Σ kn with
+    | Some (_, tFix [d] 0) =>
+        let tys := fst (lams (dbody d)) in
+        filter (fun j => match nth_error tys j with Some ty => is_prod ty | None => false end) (seq 0 (length tys))
+    | _ => []
+    end
+  else [].
+
+Definition fkey := (kername * list (nat * term))%type.
+
+Definition key_eqb (a b : fkey) : bool :=
+  Kername.eqb (fst a) (fst b) && Nat.eqb (length (snd a)) (length (snd b)) &&
+  forallb (fun jt => jt) (map (fun p => Nat.eqb (fst (fst p)) (fst (snd p)) && term_same 10000 (snd (fst p)) (snd (snd p)))
+                               (combine (snd a) (snd b))).
+
+(* the copy a call asks for, when every function it is given is a closed term *)
+Definition site_key (Σ : global_env) (mp : modpath) (kn : kername) (args : list term) : option fkey :=
+  match template_places Σ mp kn with
+  | [] => None
+  | js => match opt_all (map (fun j => match nth_error args j with
+                                       | Some a => if closedn 0 a then Some (j, a) else None
+                                       | None => None end) js) with
+          | Some fx => Some (kn, fx)
+          | None => None
+          end
+  end.
+
+(* a helper of the file (not recursive) that takes functions: it is written out where it is used, with them put in, so its
+   body is read that way *)
+Definition helper_hof (Σ : global_env) (mp : modpath) (kn : kername) : option term :=
+  if eq_mp (fst kn) mp then
+    match body_of Σ kn with
+    | Some (_, b) => if has_fix 1000 b then None else if existsb is_prod (fst (lams b)) then Some b else None
+    | None => None
+    end
+  else None.
+
+(* the functions a term calls: its constants, and for a template the copy the call asks for *)
+Fixpoint site_keys (fuel : nat) (Σ : global_env) (mp : modpath) (t : term) (acc : list fkey) : list fkey :=
+  match fuel with
+  | O => acc
+  | S fuel =>
+      let add (k : fkey) (acc : list fkey) := if existsb (key_eqb k) acc then acc else k :: acc in
+      match t with
+      | tConst kn _ => match template_places Σ mp kn with [] => add (kn, []) acc | _ => acc end
+      | tApp (tConst kn _) args =>
+          let acc := fold_left (fun acc a => site_keys fuel Σ mp a acc) args acc in
+          match template_places Σ mp kn with
+          | [] => let acc := add (kn, []) acc in
+                  match helper_hof Σ mp kn with Some b => site_keys fuel Σ mp (beta_lets b args) acc | None => acc end
+          | _ => match site_key Σ mp kn args with Some k => add k acc | None => acc end
+          end
+      | tApp f args => fold_left (fun acc a => site_keys fuel Σ mp a acc) args (site_keys fuel Σ mp f acc)
+      | tLambda _ ty b | tProd _ ty b => site_keys fuel Σ mp b (site_keys fuel Σ mp ty acc)
+      | tLetIn _ b ty body => site_keys fuel Σ mp body (site_keys fuel Σ mp ty (site_keys fuel Σ mp b acc))
+      | tCase _ p c brs => fold_left (fun acc br => site_keys fuel Σ mp (bbody br) acc) brs
+                              (site_keys fuel Σ mp c (site_keys fuel Σ mp (preturn p) acc))
+      | tFix mfix _ => fold_left (fun acc d => site_keys fuel Σ mp (dbody d) (site_keys fuel Σ mp (dtype d) acc)) mfix acc
+      | _ => acc
+      end
+  end.
+
+(* the body of a copy: the template's body with the given functions put in for their parameters *)
+Definition inst_body (Σ : global_env) (key : fkey) : option term :=
+  match body_of Σ (fst key) with
+  | Some (_, b) =>
+      match fparts b with
+      | Some (isrec, tys, inner) =>
+          let n := length tys in
+          let fixed := snd key in
+          let m := Nat.sub n (length fixed) in
+          (* surviving parameter p (0 = first) is at the place [count of survivors after it] *)
+          let after p := length (filter (fun q => negb (existsb (fun jt => Nat.eqb (fst jt) q) fixed)) (seq (S p) (Nat.sub n (S p)))) in
+          let sub := map (fun i => let p := Nat.sub (Nat.sub n 1) i in
+                                   match List.find (fun jt => Nat.eqb (fst jt) p) fixed with
+                                   | Some jt => snd jt
+                                   | None => tRel (after p)
+                                   end) (seq 0 n) in
+          Some (subst (List.app sub (if isrec then [tRel m] else [])) 0 inner)
+      | None => None
+      end
+  | None => None
+  end.
+
+Definition is_fun_key (Σ : global_env) (mp : modpath) (root : kername) (key : fkey) : bool :=
+  match snd key with
+  | [] => is_fun Σ mp root (fst key)
+  | _ => true
+  end.
+
+(* every function reachable from the root, callees first: a function of the file, or a copy of a template *)
+Fixpoint reach (fuel : nat) (Σ : global_env) (mp : modpath) (root : kername) (key : fkey)
+               (done : list fkey) : list fkey :=
   match fuel with
   | O => done
   | S fuel =>
-      if existsb (Kername.eqb kn) done then done
-      else match body_of Σ kn with
-           | Some (_, b) =>
-               let cs := rev (consts 10000 b []) in
+      if existsb (key_eqb key) done then done
+      else match (match snd key with [] => option_map snd (body_of Σ (fst key)) | _ => inst_body Σ key end) with
+           | Some b =>
+               let cs := rev (site_keys 10000 Σ mp b []) in
                let done := fold_left (fun d c =>
-                             if Kername.eqb c kn then d
-                             else if eq_mp (fst c) mp || eq_mp (fst c) kit_mp then reach fuel Σ mp root c d else d) cs done in
-               if is_fun Σ mp root kn then List.app done [kn] else done
+                             if key_eqb c key then d
+                             else if eq_mp (fst (fst c)) mp || eq_mp (fst (fst c)) kit_mp then reach fuel Σ mp root c d else d) cs done in
+               if is_fun_key Σ mp root key then List.app done [key] else done
            | None => done
            end
   end.
@@ -1261,19 +1418,23 @@ Fixpoint writes (fuel : nat) (fns : list finfo) (t : term) : bool :=
       end
   end.
 
-Definition mk_info (Σ : global_env) (fns : list finfo) (i : nat) (kn : kername) : option finfo :=
+Definition mk_info (Σ : global_env) (fns : list finfo) (i : nat) (key : fkey) : option finfo :=
+  let kn := fst key in
+  let fixed := snd key in
   match body_of Σ kn with
   | Some (ty, b) =>
       match fparts b, result_mem Σ ty with
       | Some (isrec, tys, body), Some rm =>
-          option_map (fun ks => mkFI kn (Pos.of_nat (1000 + i)) ks rm isrec (writes 10000 fns body))
+          let tys := map snd (filter (fun jt => negb (existsb (fun f => Nat.eqb (fst f) (fst jt)) fixed)) (combine (seq 0 (length tys)) tys)) in
+          option_map (fun ks => mkFI kn (Pos.of_nat (1000 + i)) ks rm isrec (writes 10000 fns body)
+                                     (match fixed with [] => snd kn | _ => snd kn ^ "_" ^ string_of_nat i end) fixed)
                      (opt_all (map (kind_of 20 Σ) tys))
       | _, _ => None
       end
   | None => None
   end.
 
-Fixpoint build_infos (Σ : global_env) (kns : list kername) (i : nat) (acc : list finfo) : option (list finfo) :=
+Fixpoint build_infos (Σ : global_env) (kns : list fkey) (i : nat) (acc : list finfo) : option (list finfo) :=
   match kns with
   | [] => Some acc
   | kn :: kns =>
@@ -1320,7 +1481,17 @@ Definition tr_fun (Σ : global_env) (mp : modpath) (fns : list finfo) (f : finfo
                 let '(es, ids2) := ents_of ks ids1 in
                 (e :: es, ids2)
             end in
-          let ents := fst (ents_of ks pids) in
+          let ents0 := fst (ents_of ks pids) in
+          (* the parameters that are functions given by the caller stand where they were, as known functions *)
+          let ents := (fix ins (j : nat) (fuel : nat) (es : list ent) : list ent :=
+                         match fuel with
+                         | O => es
+                         | S fuel =>
+                             match List.find (fun jt => Nat.eqb (fst jt) j) (fi_fixed f) with
+                             | Some jt => EFun (snd jt) :: ins (S j) fuel es
+                             | None => match es with e :: r => e :: ins (S j) fuel r | [] => [] end
+                             end
+                         end) 0 (length ents0 + length (fi_fixed f)) ents0 in
           let Γ := List.app (rev ents) (if fi_rec f then [ESelf] else []) in
           let kpids := firstn (length (flat_map (leaves 20) ks)) pids in
           match tr_tail Σ mp fns f 2000 Γ body (mkSt (Pos.of_nat (S n)) 0) with
@@ -1380,7 +1551,16 @@ Definition stmt (prog : term) (f : finfo) : term :=
                                             else let '(ts, j) := acc in
                                                  let '(t, j') := stmt_arg 20 (fun i => var i d) k j in (List.app ts [t], j'))
                                ks ([], 0)) in
-  let fapp d := mkApps (tConst (fi_kn f) []) (List.app (fargs d) (if hasM then [mvar d] else [])) in
+  let full d := (fix ins (j : nat) (fuel : nat) (es : list term) : list term :=
+                   match fuel with
+                   | O => es
+                   | S fuel =>
+                       match List.find (fun jt => Nat.eqb (fst jt) j) (fi_fixed f) with
+                       | Some jt => snd jt :: ins (S j) fuel es
+                       | None => match es with e :: r => e :: ins (S j) fuel r | [] => [] end
+                       end
+                   end) 0 (length (fargs d) + length (fi_fixed f)) (fargs d) in
+  let fapp d := mkApps (tConst (fi_kn f) []) (List.app (full d) (if hasM then [mvar d] else [])) in
   let body d :=
     if fi_rmem f then tApp q_runk [prog; qpos (fi_id f); args d; mvar d; q_zero; fapp d]
     else if andb hasM (fi_wr f) then tApp q_runx [prog; qpos (fi_id f); args d; mvar d; fapp d]
@@ -1423,7 +1603,7 @@ Definition kqm_gen (p : program) (prog_name : ident) : tout :=
   match t with
   | tConst root _ =>
       let mp := fst root in
-      let kns := reach 1000 Σ mp root root [] in
+      let kns := reach 1000 Σ mp root (root, []) [] in
       match build_infos Σ kns 0 [] with
       | Some fns =>
           let fix go (fs : list finfo) (acc : list (finfo * term)) :=
@@ -1437,26 +1617,26 @@ Definition kqm_gen (p : program) (prog_name : ident) : tout :=
           match go fns [] with
           | TOk tfs =>
               let pkn : kername := (mp, prog_name) in
-              let fdefs := map (fun fe => KDef (snd (fi_kn (fst fe)) ^ "_kqm") q_fn (snd fe)) tfs in
+              let fdefs := map (fun fe => KDef (fi_name (fst fe) ^ "_kqm") q_fn (snd fe)) tfs in
               let pfuns := qlist (tApp q_prod [q_ident; q_fn])
                              (map (fun fe => tApp q_pair [q_ident; q_fn; qpos (fi_id (fst fe));
-                                                          tConst (mp, snd (fi_kn (fst fe)) ^ "_kqm") []]) tfs) in
+                                                          tConst (mp, fi_name (fst fe) ^ "_kqm") []]) tfs) in
               let parrs := tApp q_nil [tApp q_prod [q_ident; q_Z]] in
               let pdef := KDef prog_name <% prog %> (tApp q_mkprog [pfuns; parrs]) in
-              let sdefs := map (fun fe => KDef (snd (fi_kn (fst fe)) ^ "_kstmt") <% Prop %> (stmt (tConst pkn []) (fst fe))) tfs in
+              let sdefs := map (fun fe => KDef (fi_name (fst fe) ^ "_kstmt") <% Prop %> (stmt (tConst pkn []) (fst fe))) tfs in
               let used := fold_left (fun acc fe => match body_of Σ (fi_kn (fst fe)) with
-                                                   | Some (_, b) => List.app (consts 10000 b []) acc
+                                                   | Some (_, b) => List.app (consts 10000 b []) (List.app (flat_map (fun jt => consts 10000 (snd jt) []) (fi_fixed (fst fe))) acc)
                                                    | None => acc end) tfs [] in
               let hs := filter (fun kn => negb (Kername.eqb kn kn_kq_nat)) (helpers_of 10000 Σ mp fns used []) in
               mkOut (List.app fdefs (pdef :: sdefs))
                     ("KQM: " ^ string_of_nat (length tfs) ^ " functions: " ^
-                     String.concat " " (map (fun fe => snd (fi_kn (fst fe))) tfs) ^
+                     String.concat " " (map (fun fe => fi_name (fst fe)) tfs) ^
                      "
 KQM helpers: " ^ String.concat " " (map help_name hs) ^
                      "
 KQM entry: " ^ (match last_error tfs with
                       | Some fe => let f := fst fe in
-                                   snd (fi_kn f) ^ " " ^ string_of_nat (Pos.to_nat (fi_id f)) ^ " " ^
+                                   fi_name f ^ " " ^ string_of_nat (Pos.to_nat (fi_id f)) ^ " " ^
                                    String.concat "" (map (fun k => match k with KNat => "N" | KInt => "I" | KMem => "M" | KRec _ _ => "R" end) (fi_kinds f)) ^
                                    " " ^ (if fi_rmem f then "M" else "I")
                       | None => ""

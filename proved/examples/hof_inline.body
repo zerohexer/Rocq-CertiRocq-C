@@ -1,0 +1,13 @@
+(* a function known where it is used, passed to a helper that does not call itself: written out, as a macro would be *)
+Definition twice (f : int -> int) (x : int) : int := f (f x).
+Definition add3 (x : int) : int := x + 3.
+Definition scale (k x : int) : int := x * k.
+Fixpoint go (fuel : nat) (i acc : int) (s : mem) : int :=
+  match fuel with
+  | O => acc
+  | S f => let x := rd 0 (i land 1023) s in
+           go f (i + 1) (acc + twice add3 x + twice (scale 5) x + twice (fun z => z - 1) i) s
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  go (kq_nat (kq_arg 1)) 0 0 (kq_input 0).

@@ -79,8 +79,19 @@ read outside the block is 0 and a write outside it does nothing.  They cost a sh
 load, and a read-modify-write for a store; a native byte access with its own proof is a later general pass.
 `proved/examples/bytes.body` writes bytes and halfwords over each other and reads them back.
 
+Functions as values.  A function known where it is used is a macro's argument: a helper that does not call itself and takes
+a function (`twice f x := f (f x)`) is written out with the function put in, whether the function is a constant
+(`twice add3 x`), a constant given numbers (`twice (scale 5) x`) or a lambda (`twice (fun z => z - 1) x`).  A recursive
+function that takes functions (`Fixpoint fold_cells (n : nat) (f : int -> int -> int) ..`, the counter first as always) is
+a template: every call that gives it known functions (closed terms) makes a copy for them, a KQL function of its own
+(`fold_cells_3`), proved against the original applied to those functions (`proved/examples/hof_rec.body`,
+`hof_cells.body`).  A function that names a variable of the caller (a closure) is refused with that reason: pass the
+variable as an argument.  A function chosen at run time is a dispatch on an id with the environment as an argument,
+an ordinary `if id =? 0 then f0 env x else if id =? 1 then ..` (`proved/examples/dispatch.body`); clang turns such a
+chain into a jump table.
+
 Anything else is refused with the reason.  Not read yet: a function that gives back a record or pair (and a choice
-between two records), growing blocks (`kq_grow`), functions as values.
+between two records), growing blocks (`kq_grow`), closures.
 
 ## Machine operations
 

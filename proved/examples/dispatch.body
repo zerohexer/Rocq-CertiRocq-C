@@ -1,0 +1,15 @@
+(* a function chosen at run time: its id is read from a table in memory, the environment is an argument *)
+Definition op_add (env x : int) : int := x + env.
+Definition op_mul (env x : int) : int := (x * env) land 1048575.
+Definition op_xor (env x : int) : int := x lxor env.
+Definition call (id env x : int) : int :=
+  if id =? 0 then op_add env x else if id =? 1 then op_mul env x else if id =? 2 then op_xor env x else x.
+Fixpoint go (fuel : nat) (i acc : int) (s : mem) : int :=
+  match fuel with
+  | O => acc
+  | S f => let id := rd 0 (i land 1023) s mod 4 in
+           go f (i + 1) (call id (i land 255) acc) s
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  go (kq_nat (kq_arg 1)) 0 0 (kq_input 0).

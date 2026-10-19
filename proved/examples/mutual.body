@@ -1,0 +1,19 @@
+(* two functions that call each other (a state machine whose states are functions); the counter shrinks at every call *)
+Fixpoint ping (n : nat) (a b : int) (s : mem) : int :=
+  match n with
+  | O => a
+  | S m => pong m (a + rd 0 (b land 1023) s) (b + 3) s
+  end
+with pong (n : nat) (a b : int) (s : mem) : int :=
+  match n with
+  | O => a + b
+  | S m => if (a land 1) =? 0 then ping m ((a * 3) land 65535) (b + 1) s else pong m (a + 5) (b + 2) s
+  end.
+Fixpoint rounds (r : nat) (n : nat) (acc : int) (s : mem) : int :=
+  match r with
+  | O => acc
+  | S r => rounds r n (acc + ping n acc 0 s) s
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  rounds (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) 0 (kq_input 0).

@@ -1,0 +1,19 @@
+(* functions as arguments: a fold, a map that writes, a helper that passes its function on; each call with its own known function *)
+Fixpoint fold_cells (n : nat) (f : int -> int -> int) (i acc : int) (s : mem) : int :=
+  match n with O => acc | S n => fold_cells n f (i + 1) (f acc (rd 1 i s)) s end.
+Fixpoint map_cells (n : nat) (f : int -> int) (src dst i : int) (s : mem) : mem :=
+  match n with O => s | S n => map_cells n f src dst (i + 1) (upd dst i (f (rd src i s)) s) end.
+Definition sum_with (n : nat) (f : int -> int -> int) (s : mem) : int := fold_cells n f 0 0 s.
+Definition addm (a x : int) : int := a + x.
+Definition maxm (a x : int) : int := if a <? x then x else a.
+Definition sq (x : int) : int := (x * x) land 1048575.
+Fixpoint rounds (r : nat) (n : nat) (acc : int) (s : mem) : int :=
+  match r with
+  | O => acc
+  | S r => let s1 := map_cells n sq 0 1 0 s in
+           let s2 := map_cells n (fun x => x + 7) 1 1 0 s1 in
+           rounds r n (acc + sum_with n addm s2 + fold_cells n maxm 0 0 s2 + fold_cells n (fun a x => a + (x land 3)) 0 0 s2) s2
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  rounds (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) 0 (kq_input 0).

@@ -1,0 +1,14 @@
+(* a recursive function that takes a function: one copy for each function it is given *)
+Fixpoint applyn (n : nat) (f : int -> int) (x : int) : int :=
+  match n with O => x | S n => applyn n f (f x) end.
+Definition add3 (x : int) : int := x + 3.
+Definition mix (x : int) : int := (x * 5 + 1) land 65535.
+Fixpoint go (fuel : nat) (i acc : int) (s : mem) : int :=
+  match fuel with
+  | O => acc
+  | S f => let x := rd 0 (i land 1023) s in
+           go f (i + 1) (acc + applyn (kq_nat 7) add3 x + applyn (kq_nat 4) mix x) s
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  go (kq_nat (kq_arg 1)) 0 0 (kq_input 0).
