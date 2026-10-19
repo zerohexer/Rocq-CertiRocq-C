@@ -754,6 +754,14 @@ Hypothesis cp_funs : forall g f, find P g = Some f ->
             Genv.find_funct_ptr ge b = Some (Internal (tr_fn P f)).
 Hypothesis params_norepet : forall g f, find P g = Some f -> list_norepet (kparams f).
 
+(** The machine's operations are external functions of [cp] ([hw_defs]).  What is ASSUMED of their C bodies (hw/kq_hw.h):
+    called on the numbers of a run from a Clight memory that holds the kit's memory [M], each one finishes with no
+    event and leaves a Clight memory that holds the memory the abstract operation gives ([hw_sem]): the cell it was
+    told to fill holds what it read, no other cell of any block changes.  The devices' own behaviour is not modelled. *)
+Hypothesis hw_funs : forall o, exists b, Genv.find_symbol ge (hwid o) = Some b /\ Genv.find_funct_ptr ge b = Some (External (hw_ef o) (tylist (hw_arity o)) tyl cc_default).
+Hypothesis hw_law : forall o vs M m, length vs = hw_arity o -> kmrel cp M m ->
+  (exists vres m1, external_call (hw_ef o) ge (map enc vs) m E0 vres m1) /\ (forall t vres m1, external_call (hw_ef o) ge (map enc vs) m t vres m1 -> t = E0 /\ kmrel cp (hw_sem o vs M) m1).
+
 Notation execk := (exec_stmt function_entry2 ge).
 Notation funcallk := (eval_funcall function_entry2 ge).
 
@@ -836,6 +844,24 @@ Proof.
     destruct (IHevalk le m1 AG MR1) as (le2 & m2 & out & X & R).
     exists le2, m2, out. split; auto.
     change E0 with (E0 ** E0). eapply exec_Sseq_1; eauto.
+  - (* machine operation *)
+    destruct (hw_funs o) as (b & FS & FP).
+    pose proof (avals_length _ _ _ H0) as LEN.
+    assert (LV : length vs = hw_arity o) by (rewrite <- LEN; exact H).
+    destruct (hw_law o vs M m LV MR) as ((vres & m1 & EC) & SEM).
+    destruct (SEM E0 vres m1 EC) as (_ & MR1).
+    destruct (IHevalk le m1 AG MR1) as (le2 & m2 & out & X & R).
+    exists le2, m2, out. split; auto.
+    change E0 with (E0 ** E0). eapply exec_Sseq_1; eauto.
+    change le with (set_opttemp None vres le).
+    eapply exec_Scall with (vf := Vptr b Ptrofs.zero) (tyargs := tylist (length args)).
+    + reflexivity.
+    + eapply eval_Elvalue. apply eval_Evar_global; [apply PTree.gempty | exact FS].
+      apply deref_loc_reference. reflexivity.
+    + eapply eval_atoms; eauto.
+    + rewrite Genv.find_funct_find_funct_ptr. exact FP.
+    + simpl. rewrite H. reflexivity.
+    + eapply eval_funcall_external. exact EC.
   - (* loop *)
     destruct (exec_scratch cp rho args vs 0 le m AG H) as (le1 & X1 & AG1 & SC).
     destruct (exec_params cp (kparams f) vs 0 (PTree.empty _) rho' le1 m (agree_empty le1) H0 SC)

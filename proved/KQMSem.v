@@ -30,6 +30,28 @@ Notation klen32 := KQ.KQBound.kq_len32.
 
 (** ** The semantics *)
 
+Definition hw_sem (o : hwop) (vs : list i63) (M : kmemt) : kmemt :=
+  match o, vs with
+  | HLoad, [a0 ; a1 ; a2 ; a3] => KQ.KQRun.hw_load a0 a1 a2 a3 M
+  | HStore, [a0 ; a1 ; a2] => KQ.KQRun.hw_store a0 a1 a2 M
+  | HStore64, [a0 ; a1 ; a2] => KQ.KQRun.hw_store64 a0 a1 a2 M
+  | HAtomic, [a0 ; a1 ; a2 ; a3 ; a4 ; a5] => KQ.KQRun.hw_atomic a0 a1 a2 a3 a4 a5 M
+  | HAtomic64, [a0 ; a1 ; a2 ; a3 ; a4 ; a5] => KQ.KQRun.hw_atomic64 a0 a1 a2 a3 a4 a5 M
+  | HCas, [a0 ; a1 ; a2 ; a3 ; a4 ; a5] => KQ.KQRun.hw_cas a0 a1 a2 a3 a4 a5 M
+  | HCas64, [a0 ; a1 ; a2 ; a3 ; a4 ; a5 ; a6] => KQ.KQRun.hw_cas64 a0 a1 a2 a3 a4 a5 a6 M
+  | HALoad, [a0 ; a1 ; a2 ; a3] => KQ.KQRun.hw_aload a0 a1 a2 a3 M
+  | HAStore, [a0 ; a1 ; a2] => KQ.KQRun.hw_astore a0 a1 a2 M
+  | HAStore64, [a0 ; a1 ; a2] => KQ.KQRun.hw_astore64 a0 a1 a2 M
+  | HFence, [a0] => KQ.KQRun.hw_fence a0 M
+  | HCopy, [a0 ; a1 ; a2] => KQ.KQRun.hw_copy a0 a1 a2 M
+  | HFill, [a0 ; a1 ; a2] => KQ.KQRun.hw_fill a0 a1 a2 M
+  | HCmp, [a0 ; a1 ; a2 ; a3 ; a4] => KQ.KQRun.hw_cmp a0 a1 a2 a3 a4 M
+  | HCall, [a0 ; a1 ; a2 ; a3] => KQ.KQRun.hw_call a0 a1 a2 a3 M
+  | HRun, [a0 ; a1 ; a2 ; a3 ; a4 ; a5 ; a6 ; a7 ; a8 ; a9] => KQ.KQRun.hw_run a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 M
+  | HCodeSync, [a0 ; a1] => KQ.KQRun.hw_code_sync a0 a1 M
+  | _, _ => M
+  end.
+
 Inductive evalk (P : prog) : fn -> env -> kmemt -> exp -> i63 -> kmemt -> Prop :=
 | K_ret : forall f rho M a v,
     aval rho a = Some v ->
@@ -69,6 +91,10 @@ Inductive evalk (P : prog) : fn -> env -> kmemt -> exp -> i63 -> kmemt -> Prop :
     aval rho h = Some vh -> aval rho i = Some vi -> aval rho a = Some va ->
     evalk P f rho (kupd32 vh vi va M) k v M' ->
     evalk P f rho M (Ekst32 h i a k) v M'
+| K_hw : forall f rho M o args vs k v M',
+    length args = hw_arity o -> avals rho args = Some vs ->
+    evalk P f rho (hw_sem o vs M) k v M' ->
+    evalk P f rho M (Ehw o args k) v M'
 | K_loop : forall f rho M args vs rho' v M',
     avals rho args = Some vs ->
     bind (kparams f) vs (PTree.empty _) = Some rho' ->

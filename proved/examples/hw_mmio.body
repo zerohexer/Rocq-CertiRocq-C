@@ -1,0 +1,15 @@
+(* machine operations: stores to a device, a fence, loads back into a cell (a page at 0x10000000 stands for the device) *)
+Fixpoint go (fuel : nat) (i acc : int) (s : mem) : int :=
+  match fuel with
+  | O => acc
+  | S f =>
+    let a := 268435456 + 4 * (i land 15) in
+    let s1 := hw_store 4 a (i * 3) s in
+    let s2 := hw_fence 0 s1 in
+    let s3 := hw_load 4 a 3 0 s2 in
+    go f (i + 1) (acc + rd 3 0 s3) s3
+  end.
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  go (kq_nat (kq_arg 1)) 0 0 (kq_input 0).

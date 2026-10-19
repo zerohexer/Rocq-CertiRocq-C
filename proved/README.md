@@ -26,6 +26,7 @@ python3 proved/kitc.py CF1100F        # translate, prove every function, print t
 | Clight -> assembly | CompCert 3.17 | CompCert's pass theorems, composed in `KQLBack.v` (the builds measured here use clang instead) |
 | Clight -> C text | `KQLPrint.v` | not proved.  It prints each Clight construct as the C that means the same, and a choice between two atoms as the kit's `kq_sel_*` |
 | tables, driver | `kitc.py`, `sup/v4/kq_io3.c` | trusted C: fills the two tables below from the loader's blocks and calls the entry function |
+| machine operations | `hw/kq_hw.h` | trusted C bodies of the external functions the generated code calls (see Machine operations) |
 
 `kit_function_correct` (`KQMTop.v`): if the KQL program runs function `g` on `vs` from the kit's memory `M` to `v`
 and `M'`, then the Clight function the generator made from it, called on the numbers of `vs`, from any Clight memory
@@ -75,13 +76,31 @@ Two rewrites keep the C free of jumps on data, as the kit's own translator does:
 Anything else is refused with the reason.  Not read yet: a function that gives back a record or pair (and a choice
 between two records), growing blocks (`kq_grow`), functions as values.
 
+## Machine operations
+
+The operations of `KQRun.v` that reach the machine (`hw_load`, `hw_store`, `hw_store64`, the atomics and compare-and-swap,
+`hw_fence`, `hw_copy`, `hw_fill`, `hw_cmp`, `hw_call`, `hw_run`, `hw_code_sync`) are read like `upd`: each takes the memory
+and gives it back, and what one reads goes into the cell it is told to fill.  In KQL they are one instruction, `Ehw`,
+whose meaning is the kit's own operation on the abstract memory (`hw_sem`).  The generator emits it as a call of an
+external function (`f91000` ..), and the C bodies are the kit's (`hw/kq_hw.h`: `volatile` accesses, C11 atomics,
+`memmove`), so a device access is never merged, moved or left out.
+
+`kit_function_correct` takes one more hypothesis, `hw_law`: called from a Clight memory that holds the kit's memory `M`,
+each external function finishes with no event and leaves a Clight memory that holds `hw_sem o vs M`.  It is not an
+axiom of Rocq; it is what the theorem assumes of the C bodies and of the machine, the same kind of statement as the
+loader's.  `KQSpec.real_laws` says what each operation does to the memory (a load fills its cell and no other, a store
+changes no wide cell, the trace records it); a proof about a program holds for every number a device could give back.
+`hw_addr` and the interrupt operations are not read yet.  `proved/examples/hw_mmio.body` stores to and loads from a page
+at `0x10000000` that the test driver maps to stand for a device.
+
 ## What is trusted
 
 `Print Assumptions kit_function_correct` (`ASSUME=1 proved/make.sh`): Rocq's 63-bit integer axioms; one fact about
 signed division that Rocq's axioms leave open and its own computation settles, `divs_min_neg1` (the smallest number
 divided by -1 is the smallest number; `vm_compute` gives that); the kit's memory primitives `KQRun.rd` / `upd` /
 `kq_size` / `mem` and `KQSpec.real_laws`; classical axioms CompCert uses.  No admits.
-Outside the proofs: the loader that fills the tables, the driver in `kitc.py`, the printer, clang.
+Outside the proofs: the loader that fills the tables, the driver in `kitc.py`, the printer, clang, and the C bodies of
+the machine operations with the law `hw_law` that the theorem assumes of them.
 
 ## Corpus and speed
 

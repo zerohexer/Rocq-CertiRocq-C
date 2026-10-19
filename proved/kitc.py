@@ -99,7 +99,27 @@ def proof_file(name, prog, entry, fns, helpers):
         t += f"Lemma {f}_ok : {f}_kstmt. Proof. {pre}kqm_auto. Qed.\n"
     return t
 
-def driver(name, entry_id, kinds, res, args, wrap):
+HW_WRAPPERS = r"""
+unsigned long long f91000(unsigned long long a0, unsigned long long a1, unsigned long long a2, unsigned long long a3) { kq_hw_load(a0, a1, a2, a3, KQ_V(0)); return 1ULL; }
+unsigned long long f91001(unsigned long long a0, unsigned long long a1, unsigned long long a2) { kq_hw_store(a0, a1, a2, KQ_V(0)); return 1ULL; }
+unsigned long long f91002(unsigned long long a0, unsigned long long a1, unsigned long long a2) { kq_hw_store64(a0, a1, a2, KQ_V(0)); return 1ULL; }
+unsigned long long f91003(unsigned long long a0, unsigned long long a1, unsigned long long a2, unsigned long long a3, unsigned long long a4, unsigned long long a5) { kq_hw_atomic(a0, a1, a2, a3, a4, a5, KQ_V(0)); return 1ULL; }
+unsigned long long f91004(unsigned long long a0, unsigned long long a1, unsigned long long a2, unsigned long long a3, unsigned long long a4, unsigned long long a5) { kq_hw_atomic64(a0, a1, a2, a3, a4, a5, KQ_V(0)); return 1ULL; }
+unsigned long long f91005(unsigned long long a0, unsigned long long a1, unsigned long long a2, unsigned long long a3, unsigned long long a4, unsigned long long a5) { kq_hw_cas(a0, a1, a2, a3, a4, a5, KQ_V(0)); return 1ULL; }
+unsigned long long f91006(unsigned long long a0, unsigned long long a1, unsigned long long a2, unsigned long long a3, unsigned long long a4, unsigned long long a5, unsigned long long a6) { kq_hw_cas64(a0, a1, a2, a3, a4, a5, a6, KQ_V(0)); return 1ULL; }
+unsigned long long f91007(unsigned long long a0, unsigned long long a1, unsigned long long a2, unsigned long long a3) { kq_hw_aload(a0, a1, a2, a3, KQ_V(0)); return 1ULL; }
+unsigned long long f91008(unsigned long long a0, unsigned long long a1, unsigned long long a2) { kq_hw_astore(a0, a1, a2, KQ_V(0)); return 1ULL; }
+unsigned long long f91009(unsigned long long a0, unsigned long long a1, unsigned long long a2) { kq_hw_astore64(a0, a1, a2, KQ_V(0)); return 1ULL; }
+unsigned long long f91010(unsigned long long a0) { kq_hw_fence(a0, KQ_V(0)); return 1ULL; }
+unsigned long long f91011(unsigned long long a0, unsigned long long a1, unsigned long long a2) { kq_hw_copy(a0, a1, a2, KQ_V(0)); return 1ULL; }
+unsigned long long f91012(unsigned long long a0, unsigned long long a1, unsigned long long a2) { kq_hw_fill(a0, a1, a2, KQ_V(0)); return 1ULL; }
+unsigned long long f91013(unsigned long long a0, unsigned long long a1, unsigned long long a2, unsigned long long a3, unsigned long long a4) { kq_hw_cmp(a0, a1, a2, a3, a4, KQ_V(0)); return 1ULL; }
+unsigned long long f91014(unsigned long long a0, unsigned long long a1, unsigned long long a2, unsigned long long a3) { kq_hw_call(a0, a1, a2, a3, KQ_V(0)); return 1ULL; }
+unsigned long long f91015(unsigned long long a0, unsigned long long a1, unsigned long long a2, unsigned long long a3, unsigned long long a4, unsigned long long a5, unsigned long long a6, unsigned long long a7, unsigned long long a8, unsigned long long a9) { kq_hw_run(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, KQ_V(0)); return 1ULL; }
+unsigned long long f91016(unsigned long long a0, unsigned long long a1) { kq_hw_code_sync(a0, a1, KQ_V(0)); return 1ULL; }
+"""
+
+def driver(name, entry_id, kinds, res, args, wrap, uses_hw=False):
     # the entry's parameters, in order, from what `main` passes
     vals = [a for a in args if a[0] != "M"]
     ks = [k for k in kinds if k != "M"]
@@ -118,6 +138,13 @@ def driver(name, entry_id, kinds, res, args, wrap):
             cargs.append(f"argI({a[1]})")
     call = f"f{entry_id}({', '.join(cargs)})"
     ret = "return kq_sum(KQ_V(0));" if res == "M" else "return (value) r;"
+    hwdef = ("#include <sys/mman.h>\n/* ---- the machine's operations: the kit's C bodies (hw/kq_hw.h) behind the external functions of the theorem */\n"
+             "uintptr_t kq_hw_wlo, kq_hw_whi;\n" + HW_WRAPPERS) if uses_hw else ""
+    hwset = ("  kq_hw_wlo = (uintptr_t) -1; kq_hw_whi = 0;\n"
+             "  for (int h = 0; h < KQ_MAXB; h++) if (kq_b[h].lim) { uintptr_t p = (uintptr_t) kq_b[h].p, e = p + 4 * (uintptr_t) kq_b[h].lim;\n"
+             "    if (p < kq_hw_wlo) kq_hw_wlo = p; if (e > kq_hw_whi) kq_hw_whi = e; }\n"
+             "  /* a hosted test: a page of memory at 0x10000000 stands for a device */\n"
+             "  mmap((void *) 0x10000000, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);\n") if uses_hw else ""
     return f"""
 /* ---- the driver: the loader's blocks into the tables of the theorem, the entry called, its answer returned */
 unsigned long long *f90000[64];
@@ -131,9 +158,10 @@ static unsigned long long argN(long k) {{ long n = KQ_N(kq_arg(KQ_V(k))); return
 static unsigned long long natW(unsigned long long r) {{ long n = ((long) (r << 1)) >> 1; return (unsigned long long) KQ_V(n > 0 ? n : 0L); }}
 static unsigned long long intW(unsigned long long r) {{ return (r << 1) | 1ULL; }}
 static unsigned long long argI(long k) {{ return (unsigned long long) kq_arg(KQ_V(k)); }}
+{hwdef}
 value body(struct thread_info *ti) {{
   for (int h = 0; h < KQ_MAXB; h++) {{ f90000[h] = (unsigned long long *) kq_b[h].p; f90001[h] = kq_b[h].lim; f90002[h] = kq_n[h].p; f90003[h] = kq_n[h].lim; }}
-  unsigned long long r = {call};
+{hwset}  unsigned long long r = {call};
   (void) r;
   {ret}
 }}
@@ -214,13 +242,15 @@ def main():
         raw = open(os.path.join(GEN, f"{name}_c.out")).read()
         c = raw[raw.index('"') + 1: raw.rindex('"')].replace('""', '"')
         cfile = os.path.join(GEN, f"{name}_proved.c")
-        open(cfile, "w").write('#include "gc_stack.h"\n#include "kq_io.h"\n' + c + driver(name, eid, kinds, res, args, wrap))
+        uses_hw = re.search(r"\bf910\d\d\b", c) is not None
+        open(cfile, "w").write('#include "gc_stack.h"\n#include "kq_io.h"\n' + ('#include "kq_hw.h"\n' if uses_hw else "") + c
+                               + driver(name, eid, kinds, res, args, wrap, uses_hw))
         if not build:
             continue
         # 4: build, as the kit builds its programs
         rt = glob.glob(os.path.expanduser("~/.opam/*/lib/coq/user-contrib/CertiRocq/Plugin/runtime"))[0]
         os.makedirs("bld/user", exist_ok=True); os.makedirs("bin", exist_ok=True)
-        for f in glob.glob("sup/v4/*.h") + glob.glob("sup/v4/*.c"):
+        for f in glob.glob("sup/v4/*.h") + glob.glob("sup/v4/*.c") + ["hw/kq_hw.h"]:
             run(["cp", f, "bld/user/"])
         cf = ["-w", "-O2", "-flto", "-fomit-frame-pointer", "-Ibld/user", f"-I{rt}", "-I."]
         r = run(["clang", *cf, "-o", f"bin/P_{name}", "bld/user/kq_io3.c", cfile, f"{rt}/gc_stack.c", "bld/user/kq_prim63.c"])

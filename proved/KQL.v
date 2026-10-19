@@ -21,6 +21,30 @@ Inductive cmpop := Ceq | Clt | Cle | Cslt | Csle.
 
 Inductive atom := Avar (x : ident) | Aint (n : i63).
 
+(** The machine's operations (KQRun.v, hw/kq_hw.h): a device access, an atomic, a fence, bytes in bulk, code at an address.
+    Each takes the memory and gives it back; what one reads goes into a cell of a wide block. *)
+Inductive hwop := HLoad | HStore | HStore64 | HAtomic | HAtomic64 | HCas | HCas64 | HALoad | HAStore | HAStore64 | HFence | HCopy | HFill | HCmp | HCall | HRun | HCodeSync.
+Definition hw_arity (o : hwop) : nat :=
+  match o with
+  | HLoad => 4
+  | HStore => 3
+  | HStore64 => 3
+  | HAtomic => 6
+  | HAtomic64 => 6
+  | HCas => 6
+  | HCas64 => 7
+  | HALoad => 4
+  | HAStore => 3
+  | HAStore64 => 3
+  | HFence => 1
+  | HCopy => 3
+  | HFill => 3
+  | HCmp => 5
+  | HCall => 4
+  | HRun => 10
+  | HCodeSync => 2
+  end.
+
 Inductive exp :=
 | Eret (a : atom)
 | Eop (x : ident) (o : binop) (a b : atom) (k : exp)
@@ -33,6 +57,7 @@ Inductive exp :=
 | Ekst (h i a : atom) (k : exp)                  (* cell i of block h of the kit's memory := a *)
 | Ekld32 (x : ident) (h i : atom) (k : exp)      (* x := cell i of narrow block h (4-byte cells), signed *)
 | Ekst32 (h i a : atom) (k : exp)                (* cell i of narrow block h := a, kept modulo 2^32 *)
+| Ehw (o : hwop) (args : list atom) (k : exp)    (* a machine operation on the kit's memory (KQM.v) *)
 | Eloop (args : list atom).
 
 Record fn := mkfn { kparams : list ident; kbody : exp }.

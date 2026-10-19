@@ -7,7 +7,7 @@
     [Eloop]'s scratch temporaries are [xI _], so the two never meet.  Each function body is wrapped in [Sloop];
     [Eloop] assigns the parameters and [continue]s. *)
 
-From Stdlib Require Import ZArith List Uint63.
+From Stdlib Require Import ZArith List Uint63 String.
 From compcert Require Import Coqlib Maps Integers AST Ctypes Cop Clight.
 From KQC Require Import KQL KQTArith.
 Import ListNotations.
@@ -88,6 +88,57 @@ Fixpoint tylist (n : nat) : list type :=
   match n with O => [] | S n => tyl :: tylist n end.
 
 Definition funty (n : nat) : type := Tfunction (tylist n) tyl cc_default.
+
+Definition hwid (o : hwop) : ident :=
+  match o with
+  | HLoad => 91000
+  | HStore => 91001
+  | HStore64 => 91002
+  | HAtomic => 91003
+  | HAtomic64 => 91004
+  | HCas => 91005
+  | HCas64 => 91006
+  | HALoad => 91007
+  | HAStore => 91008
+  | HAStore64 => 91009
+  | HFence => 91010
+  | HCopy => 91011
+  | HFill => 91012
+  | HCmp => 91013
+  | HCall => 91014
+  | HRun => 91015
+  | HCodeSync => 91016
+  end%positive.
+
+Definition hwname (o : hwop) : String.string :=
+  match o with
+  | HLoad => "kq_hw_load"
+  | HStore => "kq_hw_store"
+  | HStore64 => "kq_hw_store64"
+  | HAtomic => "kq_hw_atomic"
+  | HAtomic64 => "kq_hw_atomic64"
+  | HCas => "kq_hw_cas"
+  | HCas64 => "kq_hw_cas64"
+  | HALoad => "kq_hw_aload"
+  | HAStore => "kq_hw_astore"
+  | HAStore64 => "kq_hw_astore64"
+  | HFence => "kq_hw_fence"
+  | HCopy => "kq_hw_copy"
+  | HFill => "kq_hw_fill"
+  | HCmp => "kq_hw_cmp"
+  | HCall => "kq_hw_call"
+  | HRun => "kq_hw_run"
+  | HCodeSync => "kq_hw_code_sync"
+  end%string.
+
+Definition hw_all : list hwop := [HLoad; HStore; HStore64; HAtomic; HAtomic64; HCas; HCas64; HALoad; HAStore; HAStore64; HFence; HCopy; HFill; HCmp; HCall; HRun; HCodeSync].
+
+(** the operations are external functions: C bodies, written once (hw/kq_hw.h), that the theorem assumes obey KQSpec *)
+Definition hw_ef (o : hwop) : external_function :=
+  EF_external (hwname o) (mksignature (List.repeat Xlong (hw_arity o)) Xlong cc_default).
+
+Definition hw_defs : list (ident * globdef fundef type) :=
+  map (fun o => (hwid o, Gfun (External (hw_ef o) (tylist (hw_arity o)) tyl cc_default))) hw_all.
 
 Fixpoint set_scratch (i : nat) (args : list atom) : statement :=
   match args with
@@ -211,6 +262,8 @@ Fixpoint tr_exp (ps : list ident) (e : exp) : statement :=
         (kit_guard32 (tr_atom h) (tr_atom i)
            (Sassign (kld_cell32 (sh1 (tr_atom h)) (tr_atom i)) (Ecast (sh1 (tr_atom a)) tint32)) Sskip)
         (tr_exp ps k)
+  | Ehw o args k =>
+      Ssequence (Scall None (Evar (hwid o) (funty (length args))) (map tr_atom args)) (tr_exp ps k)
   | Eloop args => Ssequence (set_scratch 0 args) (Ssequence (set_params 0 ps) Scontinue)
   end.
 
@@ -223,6 +276,7 @@ Fixpoint binders (e : exp) : list ident :=
   | Ekld x _ _ k => tv x :: binders k
   | Ekld32 x _ _ k => tv x :: binders k
   | Ekst32 _ _ _ k => binders k
+  | Ehw _ _ k => binders k
   | Eif _ _ _ t f => binders t ++ binders f
   end.
 

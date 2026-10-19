@@ -110,6 +110,7 @@ Fixpoint sstr (s : statement) : string :=
   | Sloop a _ => "for (;;) {" ++ nl ++ sstr a ++ "}" ++ nl
   | Sreturn (Some e) => "return " ++ estr e ++ ";" ++ nl
   | Scall (Some id) f l => tname id ++ " = " ++ estr f ++ "(" ++ args l ++ ");" ++ nl
+  | Scall None f l => estr f ++ "(" ++ args l ++ ");" ++ nl
   | Scontinue => "continue;" ++ nl
   | _ => "/*?*/" ++ nl
   end.
@@ -132,6 +133,9 @@ Definition fstr (id : ident) (f : function) : string :=
 Definition protos (l : list (ident * globdef fundef type)) : string :=
   String.concat "" (map (fun d => match snd d with
                                   | Gfun (Internal f) => head (fst d) f ++ ";" ++ nl
+                                  | Gfun (External _ targs _ _) =>
+                                      "unsigned long long " ++ gname (fst d) ++ "(" ++
+                                      String.concat ", " (map (fun _ => "unsigned long long") targs) ++ ");" ++ nl
                                   | Gvar v => match gvar_info v with
                                               | Tarray (Tpointer (Tint _ _ _) _) n _ => "extern int *" ++ gname (fst d) ++ "[" ++ zstr n ++ "];" ++ nl
                                               | Tarray (Tpointer _ _) n _ => "extern unsigned long long *" ++ gname (fst d) ++ "[" ++ zstr n ++ "];" ++ nl
@@ -139,8 +143,7 @@ Definition protos (l : list (ident * globdef fundef type)) : string :=
                                               | Tarray _ n _ =>
                                                   (if Pos.ltb 89999 (fst d) then "extern " else "") ++
                                                   "unsigned long long " ++ gname (fst d) ++ "[" ++ zstr n ++ "];" ++ nl
-                                              | _ => "" end
-                                  | _ => "" end) l).
+                                              | _ => "" end end) l).
 
 Definition pstr (p : Clight.program) : string :=
   protos (prog_defs p) ++

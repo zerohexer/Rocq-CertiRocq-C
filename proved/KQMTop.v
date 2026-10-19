@@ -28,7 +28,7 @@ Definition kit_lens32_var : globvar type :=
 
 (** the program's functions and the four tables (the blocks of 8-byte cells, the narrow blocks) *)
 Definition tr_kit_program (P : prog) : Clight.program :=
-  {| prog_defs := tr_defs P ++ [(kq_tab, Gvar kit_tab_var); (kq_lens, Gvar kit_lens_var);
+  {| prog_defs := tr_defs P ++ hw_defs ++ [(kq_tab, Gvar kit_tab_var); (kq_lens, Gvar kit_lens_var);
                                 (kq_tab32, Gvar kit_tab32_var); (kq_lens32, Gvar kit_lens32_var)];
      prog_public := [];
      prog_main := 1%positive;
@@ -38,7 +38,7 @@ Definition tr_kit_program (P : prog) : Clight.program :=
 
 (** two checks on the program, both decided by computation *)
 Definition names_ok (P : prog) : bool :=
-  if list_norepet_dec peq (map fst (pfuns P) ++ [kq_tab; kq_lens; kq_tab32; kq_lens32]) then true else false.
+  if list_norepet_dec peq (map fst (pfuns P) ++ map hwid hw_all ++ [kq_tab; kq_lens; kq_tab32; kq_lens32]) then true else false.
 Definition params_ok (P : prog) : bool :=
   forallb (fun gf => if list_norepet_dec peq (kparams (snd gf)) then true else false) (pfuns P).
 
@@ -58,13 +58,13 @@ Hypothesis PARAMS : params_ok P = true.
 Let cp := tr_kit_program P.
 Let ge := Clight.globalenv cp.
 
-Lemma defs_names : prog_defs_names cp = map fst (pfuns P) ++ [kq_tab; kq_lens; kq_tab32; kq_lens32].
+Lemma defs_names : prog_defs_names cp = map fst (pfuns P) ++ map hwid hw_all ++ [kq_tab; kq_lens; kq_tab32; kq_lens32].
 Proof.
-  unfold prog_defs_names, cp, tr_kit_program, tr_defs. simpl.
-  rewrite map_app, map_map. reflexivity.
+  unfold prog_defs_names, cp, tr_kit_program, tr_defs, hw_defs. simpl.
+  rewrite !map_app, !map_map. reflexivity.
 Qed.
 
-Lemma norepet : list_norepet (map fst (pfuns P) ++ [kq_tab; kq_lens; kq_tab32; kq_lens32]).
+Lemma norepet : list_norepet (map fst (pfuns P) ++ map hwid hw_all ++ [kq_tab; kq_lens; kq_tab32; kq_lens32]).
 Proof. unfold names_ok in NAMES. destruct (list_norepet_dec peq _); [exact l | discriminate]. Qed.
 
 Lemma lookup_def : forall id fd, In (id, Gfun fd) (prog_defs cp) ->
@@ -85,9 +85,24 @@ Proof.
   unfold tr_defs. apply in_map_iff. exists (g, f). split; auto. apply assoc_in; auto.
 Qed.
 
+Lemma hw_funs : forall o, exists b, Genv.find_symbol ge (hwid o) = Some b /\
+  Genv.find_funct_ptr ge b = Some (External (hw_ef o) (tylist (hw_arity o)) tyl cc_default).
+Proof.
+  intros o. apply lookup_def.
+  assert (Hin : In (hwid o, Gfun (External (hw_ef o) (tylist (hw_arity o)) tyl cc_default)) hw_defs).
+  { unfold hw_defs. apply in_map_iff. exists o. split; [reflexivity | ]. destruct o; simpl; tauto. }
+  change (prog_defs cp) with (tr_defs P ++ hw_defs ++ [(kq_tab, Gvar kit_tab_var); (kq_lens, Gvar kit_lens_var);
+                                                      (kq_tab32, Gvar kit_tab32_var); (kq_lens32, Gvar kit_lens32_var)]).
+  apply in_or_app. right. apply in_or_app. left. exact Hin.
+Qed.
+
 (** The generated function [g] of the program, called on [vs] from any Clight memory that holds the kit's
     memory [M], ends with the result and a Clight memory that holds the memory the KQL run ends with. *)
-Theorem kit_function_correct : forall g vs M v M', runk P g vs M v M' ->
+Theorem kit_function_correct :
+  (forall o vs M m, length vs = hw_arity o -> kmrel cp M m ->
+    (exists vres m1, external_call (hw_ef o) ge (map enc vs) m E0 vres m1) /\
+    (forall t vres m1, external_call (hw_ef o) ge (map enc vs) m t vres m1 -> t = E0 /\ kmrel cp (hw_sem o vs M) m1)) ->
+  forall g vs M v M', runk P g vs M v M' ->
   exists fg b, Genv.find_symbol ge g = Some b /\
     Genv.find_funct_ptr ge b = Some (Internal (tr_fn P fg)) /\
     length (kparams fg) = length vs /\
@@ -95,8 +110,8 @@ Theorem kit_function_correct : forall g vs M v M', runk P g vs M v M' ->
       exists m', eval_funcall function_entry2 ge m (Internal (tr_fn P fg)) (map enc vs) E0 m' (enc v) /\
                  kmrel cp M' m'.
 Proof.
-  intros g vs M v M' R.
-  exact (runk_funcall P cp cp_funs (params_ok_sound P PARAMS) g vs M v M' R).
+  intros HW g vs M v M' R.
+  exact (runk_funcall P cp cp_funs (params_ok_sound P PARAMS) hw_funs HW g vs M v M' R).
 Qed.
 
 End TOP.

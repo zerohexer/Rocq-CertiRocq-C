@@ -105,6 +105,11 @@ Lemma X_st32 : forall rho M h i a vh vi va k v,
   evalx P f rho (kupd32 vh vi va M) k v -> evalx P f rho M (Ekst32 h i a k) v.
 Proof. intros * A B C (M' & E). exists M'. eapply K_st32; eauto. Qed.
 
+Lemma X_hw : forall rho M o args vs k v,
+  length args = hw_arity o -> avals rho args = Some vs ->
+  evalx P f rho (hw_sem o vs M) k v -> evalx P f rho M (Ehw o args k) v.
+Proof. intros * L A (M' & E). exists M'. eapply K_hw; eauto. Qed.
+
 Lemma X_call_run : forall rho M x g args vs w M1 k v,
   avals rho args = Some vs -> runk P g vs M w M1 ->
   evalx P f (PTree.set x w rho) M1 k v -> evalx P f rho M (Ecall x g args k) v.
@@ -222,6 +227,7 @@ Ltac kqm_walk :=
     | |- evalk _ _ _ _ (Ekst _ _ _ _) _ _ => eapply K_st; [reflexivity | reflexivity | reflexivity | ]
     | |- evalk _ _ _ _ (Ekld32 _ _ _ _) _ _ => eapply K_ld32; [reflexivity | reflexivity | ]
     | |- evalk _ _ _ _ (Ekst32 _ _ _ _) _ _ => eapply K_st32; [reflexivity | reflexivity | reflexivity | ]
+    | |- evalk _ _ _ _ (Ehw _ _ _) _ _ => eapply K_hw; [reflexivity | reflexivity | ]
     | |- evalk _ _ _ _ (Eif _ _ _ _ _) _ _ => eapply K_if; [reflexivity | reflexivity | kqm_test]
     | |- evalk _ _ _ _ (Esel _ _ _ _ _ _ _) _ _ => eapply K_sel; [reflexivity | reflexivity | reflexivity | reflexivity | kqm_norm]
     | |- evalk _ _ _ _ (Ecall _ _ _ _) _ _ =>
@@ -285,6 +291,7 @@ Ltac kqx_walk :=
     | |- evalx _ _ _ _ (Ekst _ _ _ _) _ => eapply X_st; [reflexivity | reflexivity | reflexivity | ]
     | |- evalx _ _ _ _ (Ekld32 _ _ _ _) _ => eapply X_ld32; [reflexivity | reflexivity | ]
     | |- evalx _ _ _ _ (Ekst32 _ _ _ _) _ => eapply X_st32; [reflexivity | reflexivity | reflexivity | ]
+    | |- evalx _ _ _ _ (Ehw _ _ _) _ => eapply X_hw; [reflexivity | reflexivity | ]
     | |- evalx _ _ _ _ (Eif _ _ _ _ _) _ => eapply X_if; [reflexivity | reflexivity | kqx_test]
     | |- evalx _ _ _ _ (Esel _ _ _ _ _ _ _) _ => eapply X_sel; [reflexivity | reflexivity | reflexivity | reflexivity | kqm_norm]
     | |- evalx _ _ _ _ (Ecall _ _ _ _) _ =>

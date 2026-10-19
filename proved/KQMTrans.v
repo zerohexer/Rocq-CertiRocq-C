@@ -45,6 +45,32 @@ Definition kn_fst := kn_of <% @fst %>.
 Definition kn_snd := kn_of <% @snd %>.
 Definition ind_prod := ind_of <% @prod %>.
 Definition kit_mp : modpath := fst kn_rd.
+(* the machine's operations (KQRun.v): the Rocq constant, the KQL operation, how many numbers it takes before the memory *)
+Definition hw_table : list (kername * term * nat) :=
+  [ (kn_of <% KQ.KQRun.hw_load %>, <% HLoad %>, 4)
+  ; (kn_of <% KQ.KQRun.hw_store %>, <% HStore %>, 3)
+  ; (kn_of <% KQ.KQRun.hw_store64 %>, <% HStore64 %>, 3)
+  ; (kn_of <% KQ.KQRun.hw_atomic %>, <% HAtomic %>, 6)
+  ; (kn_of <% KQ.KQRun.hw_atomic64 %>, <% HAtomic64 %>, 6)
+  ; (kn_of <% KQ.KQRun.hw_cas %>, <% HCas %>, 6)
+  ; (kn_of <% KQ.KQRun.hw_cas64 %>, <% HCas64 %>, 7)
+  ; (kn_of <% KQ.KQRun.hw_aload %>, <% HALoad %>, 4)
+  ; (kn_of <% KQ.KQRun.hw_astore %>, <% HAStore %>, 3)
+  ; (kn_of <% KQ.KQRun.hw_astore64 %>, <% HAStore64 %>, 3)
+  ; (kn_of <% KQ.KQRun.hw_fence %>, <% HFence %>, 1)
+  ; (kn_of <% KQ.KQRun.hw_copy %>, <% HCopy %>, 3)
+  ; (kn_of <% KQ.KQRun.hw_fill %>, <% HFill %>, 3)
+  ; (kn_of <% KQ.KQRun.hw_cmp %>, <% HCmp %>, 5)
+  ; (kn_of <% KQ.KQRun.hw_call %>, <% HCall %>, 4)
+  ; (kn_of <% KQ.KQRun.hw_run %>, <% HRun %>, 10)
+  ; (kn_of <% KQ.KQRun.hw_code_sync %>, <% HCodeSync %>, 2) ].
+Definition hw_lookup (kn : kername) : option (term * nat) :=
+  match List.find (fun e => Kername.eqb (fst (fst e)) kn) hw_table with
+  | Some e => Some (snd (fst e), snd e)
+  | None => None
+  end.
+Definition q_Ehw := <% Ehw %>.
+
 Definition prim_mp : modpath := fst (kn_of <% PrimInt63.add %>).
 Definition uint63_mp : modpath := fst (kn_of <% Uint63.opp %>).
 
@@ -699,7 +725,15 @@ with tr_mem (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : K) {struct fue
               tr_mem fuel Γ m s (fun s => wrap1 q_Ekst32 [H; I; V] (k (bump s))))))
         | _ => TErr "upd32"
         end
-      else match find_fn kn with
+      else match hw_lookup kn with
+      | Some (op, n) =>
+          if Nat.eqb (length args) (S n) then
+            tr_ints fuel Γ (firstn n args) s (fun As s =>
+              tr_mem fuel Γ (nth n args (tRel 0)) s (fun s =>
+                wrap1 q_Ehw [op; qlist q_atom As] (k (bump s))))
+          else TErr "a machine operation with the wrong number of arguments"
+      | None =>
+      match find_fn kn with
       | Some f =>
           if fi_rmem f then
             tr_call fuel Γ f args s (fun As s =>
@@ -710,6 +744,7 @@ with tr_mem (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : K) {struct fue
                 | Some b => tr_mem fuel Γ (beta_lets b args) s k
                 | None => TErr ("not readable: " ^ snd kn)
                 end
+      end
       end
   | tApp (tRel n) args =>
       match nth_error Γ n with
@@ -839,6 +874,18 @@ with tr_let (fuel : nat) (Γ : list ent) (b ty : term) (s : st) (kk : list ent -
       else TErr "a let of a type this translator does not read"
   | _ => TErr "a let of a type this translator does not read"
   end
+  end
+  end
+
+(* a list of numbers, worked out in order *)
+with tr_ints (fuel : nat) (Γ : list ent) (ts : list term) (s : st)
+             (kk : list term -> st -> tres (term * st)) {struct fuel} : tres (term * st) :=
+  match fuel with
+  | O => TErr "out of fuel"
+  | S fuel =>
+  match ts with
+  | [] => kk [] s
+  | t :: ts => tr_int fuel Γ t s (fun A s => tr_ints fuel Γ ts s (fun As s => kk (A :: As) s))
   end
   end
 
@@ -1132,7 +1179,7 @@ Fixpoint writes (fuel : nat) (fns : list finfo) (t : term) : bool :=
   | O => true
   | S fuel =>
       match t with
-      | tConst kn _ => Kername.eqb kn kn_upd || Kername.eqb kn kn_upd32 ||
+      | tConst kn _ => Kername.eqb kn kn_upd || Kername.eqb kn kn_upd32 || (match hw_lookup kn with Some _ => true | None => false end) ||
                        match List.find (fun f => Kername.eqb (fi_kn f) kn) fns with Some f => fi_wr f | None => false end
       | tApp f args => writes fuel fns f || existsb (writes fuel fns) args
       | tLambda _ _ b => writes fuel fns b
