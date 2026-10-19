@@ -60,6 +60,12 @@ Definition tr_mods (t : ident) (A B : expr) : statement :=
   Sifthenelse (cmpe Oeq B c1) (Sset t A)
     (Sset t (tagup (Ebinop Omod (ssh1 A) (ssh1 B) tls))).
 
+(** the signed quotient, taken on the signed readings; a zero divisor gives zero.  The smallest number divided by -1 gives a
+    quotient that does not fit; tagging it wraps it to the smallest number, which is what [divs] gives (KQTArith.v) *)
+Definition tr_divs (t : ident) (A B : expr) : statement :=
+  Sifthenelse (cmpe Oeq B c1) (Sset t c1)
+    (Sset t (tagup (Ebinop Odiv (ssh1 A) (ssh1 B) tls))).
+
 Definition tr_op (x : ident) (o : binop) (A B : expr) : statement :=
   let t := tv x in
   match o with
@@ -75,6 +81,7 @@ Definition tr_op (x : ident) (o : binop) (A B : expr) : statement :=
   | Blsr => Sifthenelse (cmpe Olt B (c64 127)) (Sset t (tagup (bin Oshr (sh1 A) (sh1 B)))) (Sset t c1)
   | Basr => tr_asr t A B
   | Bmods => tr_mods t A B
+  | Bdivs => tr_divs t A B
   end.
 
 Fixpoint tylist (n : nat) : list type :=

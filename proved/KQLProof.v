@@ -309,6 +309,15 @@ Proof.
       destruct (mods_guard va vb Z) as [Hy Hx].
       eapply eval_binT; [exact SSA | exact SSB | reflexivity | reflexivity | ].
       simpl. unfold sem_mod, sem_binarith. simpl. rewrite !cast_ls. simpl. rewrite Hy, Hx. reflexivity.
+  - (* divs *)
+    eapply exec_Sifthenelse; [eapply eval_eq1; [exact EB | exact TB] | apply bool_of | ].
+    simpl. rewrite isone_t. destruct (PrimInt63.eqb vb 0) eqn:Z.
+    + apply exec_Sset. rewrite (eqb_zero_divs va vb Z), tg_zero. apply eval_c1.
+    + apply exec_Sset. rewrite <- divs_t.
+      apply eval_tagup; [ | right; reflexivity].
+      destruct (mods_guard va vb Z) as [Hy Hx].
+      eapply eval_binT; [exact SSA | exact SSB | reflexivity | reflexivity | ].
+      simpl. unfold sem_div, sem_binarith. simpl. rewrite !cast_ls. simpl. rewrite Hy, Hx. reflexivity.
 Qed.
 
 (** ** Memory blocks *)

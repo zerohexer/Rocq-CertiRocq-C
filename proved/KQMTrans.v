@@ -97,7 +97,8 @@ Definition binop_of (s : ident) : option term :=
   else if s == "lor" then Some <% Blor %> else if s == "lxor" then Some <% Blxor %>
   else if s == "lsl" then Some <% Blsl %> else if s == "lsr" then Some <% Blsr %>
   else if s == "asr" then Some <% Basr %> else if s == "div" then Some <% Bdiv %>
-  else if s == "mod" then Some <% Bmod %> else if s == "mods" then Some <% Bmods %> else None.
+  else if s == "mod" then Some <% Bmod %> else if s == "mods" then Some <% Bmods %>
+  else if s == "divs" then Some <% Bdivs %> else None.
 
 Definition cmp_of (s : ident) : option term :=
   if s == "eqb" then Some <% Ceq %> else if s == "ltb" then Some <% Clt %>

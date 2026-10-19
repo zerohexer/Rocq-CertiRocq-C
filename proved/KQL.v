@@ -15,7 +15,7 @@ Import ListNotations.
 
 Notation i63 := PrimInt63.int.
 
-Inductive binop := Badd | Bsub | Bmul | Bland | Blor | Blxor | Bdiv | Bmod | Blsl | Blsr | Basr | Bmods.
+Inductive binop := Badd | Bsub | Bmul | Bland | Blor | Blxor | Bdiv | Bmod | Blsl | Blsr | Basr | Bmods | Bdivs.
 (* Clt, Cle: the unsigned order; Cslt, Csle: the signed order *)
 Inductive cmpop := Ceq | Clt | Cle | Cslt | Csle.
 
@@ -53,6 +53,7 @@ Definition binop_sem (o : binop) (a b : i63) : i63 :=
   | Blsr => PrimInt63.lsr a b
   | Basr => PrimInt63.asr a b
   | Bmods => PrimInt63.mods a b
+  | Bdivs => PrimInt63.divs a b
   end.
 
 Definition cmp_sem (c : cmpop) (a b : i63) : bool :=

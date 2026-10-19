@@ -53,7 +53,7 @@ or a write moves the word as it is.
 
 Parameters `nat` (a counter; the one the function recurses on comes first), `int`, records and pairs of those, and at
 most one memory, last; results `int` or `mem`.  In a body: `match` on a counter, `if` on comparisons joined by `&&`,
-`||`, `negb`, `let` (numbers, booleans, memories, records), `PrimInt63` arithmetic, `rd`, `upd`, `rd32`, `upd32`, calls
+`||`, `negb`, `let` (numbers, booleans, memories, records), `PrimInt63` arithmetic (signed division `divs` and remainder `mods` included), `rd`, `upd`, `rd32`, `upd32`, calls
 of the file's functions, closed constants.  A helper that does not call itself is written out where it is used.  A
 memory is used only while it is the current one.
 
@@ -73,13 +73,14 @@ Two rewrites keep the C free of jumps on data, as the kit's own translator does:
   move in its place makes each round wait for the one before.
 
 Anything else is refused with the reason.  Not read yet: a function that gives back a record or pair (and a choice
-between two records), signed division (`/` on `int` is unspecified at the smallest number), growing blocks
-(`kq_grow`), functions as values.
+between two records), growing blocks (`kq_grow`), functions as values.
 
 ## What is trusted
 
-`Print Assumptions kit_function_correct` (`ASSUME=1 proved/make.sh`): Rocq's 63-bit integer axioms; the kit's memory
-primitives `KQRun.rd` / `upd` / `kq_size` / `mem` and `KQSpec.real_laws`; classical axioms CompCert uses.  No admits.
+`Print Assumptions kit_function_correct` (`ASSUME=1 proved/make.sh`): Rocq's 63-bit integer axioms; one fact about
+signed division that Rocq's axioms leave open and its own computation settles, `divs_min_neg1` (the smallest number
+divided by -1 is the smallest number; `vm_compute` gives that); the kit's memory primitives `KQRun.rd` / `upd` /
+`kq_size` / `mem` and `KQSpec.real_laws`; classical axioms CompCert uses.  No admits.
 Outside the proofs: the loader that fills the tables, the driver in `kitc.py`, the printer, clang.
 
 ## Corpus and speed
