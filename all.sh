@@ -74,6 +74,8 @@ echo "--- the proved route (proved/): every proof, every program of hand.tsv thr
 pr=$(N=${N:-5} bash proved/corpus.sh times | tee dbg/proved_run.txt | tail -1); echo "$pr"
 grep -q "^core-ok" dbg/proved_run.txt && echo "GATE: every proof of the proved route is accepted by the kernel" || echo "GATE: A PROOF OF THE PROVED ROUTE FAILS"
 echo "$pr" | grep -q " 0 do not agree" && echo "GATE: every program through the proved route gives the C++ run's answer" || echo "GATE: A PROGRAM THROUGH THE PROVED ROUTE DIFFERS"
+ex=$(bash proved/examples.sh 2>&1 | tee dbg/proved_examples.txt | tail -1); echo "$ex"
+echo "$ex" | grep -q " 0 do not" && echo "GATE: every example of the proved route (records, pairs) is proved and gives the expected answer" || echo "GATE: AN EXAMPLE OF THE PROVED ROUTE FAILS"
 mkdir -p results; cp dbg/table_fin.txt results/table.txt; python3 mktable.py results/table.txt > results/table.md       # the table, as lines and as Markdown
 cp dbg/same.txt results/same.txt 2>/dev/null
 echo "--- the stress collector on the large inputs (answers only)"

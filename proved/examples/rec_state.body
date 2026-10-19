@@ -1,0 +1,15 @@
+(* a record as the state of a loop *)
+Record st := mkst { acc : int; cnt : int }.
+Fixpoint inner (fuel : nat) (i : int) (r : st) (s : mem) : int :=
+  match fuel with
+  | O => acc r + cnt r
+  | S f => let x := rd 0 i s in
+           inner f (i + 1) (mkst (acc r + x) (if x <? 500 then cnt r + 1 else cnt r)) s
+  end.
+Fixpoint outer (fuel n : nat) (a : int) (s : mem) : int :=
+  match fuel with O => a | S f => outer f n (inner n 0 (mkst 0 a) s) s end.
+Definition solve (r n : nat) (nz : int) (s : mem) : int := outer r n 0 s.
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_arg 1) (kq_input 0).

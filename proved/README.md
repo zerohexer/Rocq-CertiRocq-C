@@ -51,10 +51,17 @@ or a write moves the word as it is.
 
 ## What the translator reads
 
-Parameters `nat` (a counter; the one the function recurses on comes first), `int`, and at most one memory, last;
-results `int` or `mem`.  In a body: `match` on a counter, `if` on comparisons joined by `&&`, `||`, `negb`, `let`
-(numbers, booleans, memories), `PrimInt63` arithmetic, `rd`, `upd`, `rd32`, `upd32`, calls of the file's functions, closed constants.
-A helper that does not call itself is written out where it is used.  A memory is used only while it is the current one.
+Parameters `nat` (a counter; the one the function recurses on comes first), `int`, records and pairs of those, and at
+most one memory, last; results `int` or `mem`.  In a body: `match` on a counter, `if` on comparisons joined by `&&`,
+`||`, `negb`, `let` (numbers, booleans, memories, records), `PrimInt63` arithmetic, `rd`, `upd`, `rd32`, `upd32`, calls
+of the file's functions, closed constants.  A helper that does not call itself is written out where it is used.  A
+memory is used only while it is the current one.
+
+A record (`Record st := mkst { acc : int; cnt : int }`) or a pair of numbers and counters is never built: the
+function takes its fields as separate KQL variables, `mkst a b` in a call passes the fields, and `match r with
+mkst a b => ..`, a field function (`acc r`), `fst` and `snd` pick them.  A helper may give a record, a `let` or
+`match` may end in one, and records nest.  The statement the kernel checks is about the original function applied to
+`mkst x1 x2`.  `proved/examples/` has a record and a pair as the state of a loop (`proved/examples.sh`).
 
 Two rewrites keep the C free of jumps on data, as the kit's own translator does:
 - a choice between numbers (`if c then a else b`, nested ones included) is worked out both ways and taken with a
@@ -65,8 +72,9 @@ Two rewrites keep the C free of jumps on data, as the kit's own translator does:
   choices.  These stay plain arithmetic: a chain of tests on a state that cycles is predicted well, and a conditional
   move in its place makes each round wait for the one before.
 
-Anything else is refused with the reason.  Not read yet: signed division (`/` on `int` is unspecified at the smallest
-number), growing blocks (`kq_grow`), functions as values, pairs.
+Anything else is refused with the reason.  Not read yet: a function that gives back a record or pair (and a choice
+between two records), signed division (`/` on `int` is unspecified at the smallest number), growing blocks
+(`kq_grow`), functions as values.
 
 ## What is trusted
 

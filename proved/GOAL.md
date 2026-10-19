@@ -43,7 +43,7 @@ offers, and what takes its place:
 |---|---|---|
 | integers, bit operations, loops, calls | `PrimInt63` operations, `Fixpoint`s whose last step is the call | proved; signed division missing |
 | arrays, buffers | memory blocks read and written with `rd`, `upd` | wide and 32-bit cells proved; 8- and 16-bit cells missing |
-| structs, unions, bit fields | records split into integers, or a layout in a block; bit fields are bit operations | missing |
+| structs, unions, bit fields | records split into integers, or a layout in a block; bit fields are bit operations | records and pairs of numbers as parameters, `let`s, `match`es and fields are proved; a function giving back a record, and unions, missing |
 | pointers, raw addresses | an integer address into a region; for an OS, RAM is one block at its base address | missing |
 | `malloc`, `free` | an allocator written in Rocq on a growing block | in the kit route (`lib/Slab.v`); not proved |
 | function pointers, callbacks | a table of function ids, a proved dispatch on the id, the environment passed as arguments | missing |
@@ -127,8 +127,8 @@ Proved and in the corpus (36 programs, all proved, answers equal to the C++ run,
 
 ## What is left, in order
 
-1. Records and pairs split into integers; signed division; mutual recursion; 8- and 16-bit cells; known functions
-   inlined.
+1. Records and pairs as results of functions, and a choice between two records; signed division; mutual recursion; 8-
+   and 16-bit cells; known functions inlined.  (Records and pairs as parameters, `let`s and `match`es are done.)
 2. Raw addresses and the hardware primitives, as assumed operations with laws and a trace: load and store of 1, 2, 4
    and 8 bytes, atomics and compare-and-swap, fences, copy and fill.  The kernel of `hw/` then goes through the
    proved route, and driver and OS logic around the primitives is proved.
