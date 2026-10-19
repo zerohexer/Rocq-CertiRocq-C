@@ -33,6 +33,36 @@ Widening means reading more of ordinary Rocq that still compiles without a runti
 integers, closures with a known function inlined or specialized, polymorphism erased.  What would need a runtime
 (a value of run-time size that outlives a call) is refused with the reason, not compiled slowly.
 
+## What C can do, and its counterpart in Rocq
+
+The aim is that anything a C program does can be written in Rocq: operating systems and general programs.  C has no
+collector either; a C program lays out its data and manages its memory, and so does a Rocq program here.  What C
+offers, and what takes its place:
+
+| C | In Rocq | State |
+|---|---|---|
+| integers, bit operations, loops, calls | `PrimInt63` operations, `Fixpoint`s whose last step is the call | proved; signed division missing |
+| arrays, buffers | memory blocks read and written with `rd`, `upd` | wide and 32-bit cells proved; 8- and 16-bit cells missing |
+| structs, unions, bit fields | records split into integers, or a layout in a block; bit fields are bit operations | missing |
+| pointers, raw addresses | an integer address into a region; for an OS, RAM is one block at its base address | missing |
+| `malloc`, `free` | an allocator written in Rocq on a growing block | in the kit route (`lib/Slab.v`); not proved |
+| function pointers, callbacks | a table of function ids, a proved dispatch on the id, the environment passed as arguments | missing |
+| hardware access, atomics, inline assembly | primitives with a stated law and a trace; hand-written `.S` once per architecture | works in the kit route (`hw/`); not proved |
+| floating point | `PrimFloat` as C `double` | not started |
+| files, sockets, system calls | primitives with a trace, as for hardware | not started |
+| threads, SMP | one program per thread, marked shared cells, a launcher | designed, not built |
+| calling existing C libraries | declared as assumed primitives with stated laws | not started |
+| strings, `printf` | byte blocks and a formatting library written in Rocq | missing |
+
+Higher-order functions are not on the list because C has none.  A function known where it is used is inlined
+(what a macro or a template does) and costs nothing.  A function chosen at run time is a function-pointer table
+with an explicit environment, as `qsort` takes a comparison and a context pointer.  A closure that captures
+variables and outlives the call is what a C programmer builds by hand as a struct; written implicitly it allocates
+behind the programmer's back, and it is refused.
+
+Data that needs a collector is not translated: lists and trees that outlive a call are laid out in blocks with an
+allocator, as in C.
+
 ## What an optimization may be
 
 The program as written decides the speed.  The translation reflects the structure of the Rocq text in the C it
@@ -92,14 +122,19 @@ Proved and in the corpus (36 programs, all proved, answers equal to the C++ run,
 
 ## What is left, in order
 
-1. Signed division; mutual recursion; pairs and records split into integers.
-2. Growing blocks and the heap library on them.
-3. The hardware primitives, as assumed operations with laws and a trace: raw-address load and store of 1, 2, 4 and
-   8 bytes, atomics and compare-and-swap, fences, copy and fill.  Driver and OS logic around them is then proved.
-4. The general passes above, each proved once and measured against C written the same way.
-5. Checks of the trusted tools: the printed C against `ccomp`, UBSan.
-6. Shared memory between programs for concurrency: marked shared operations whose proof allows the environment to change
-   the cell, and a launcher that runs the programs.  Each program stays a sequential proof.
+1. Records and pairs split into integers; signed division; mutual recursion; 8- and 16-bit cells; known functions
+   inlined.
+2. Raw addresses and the hardware primitives, as assumed operations with laws and a trace: load and store of 1, 2, 4
+   and 8 bytes, atomics and compare-and-swap, fences, copy and fill.  The kernel of `hw/` then goes through the
+   proved route, and driver and OS logic around the primitives is proved.
+3. Growing blocks, the heap library on them, and function-id dispatch tables.
+4. The general passes of the section above, each proved once and measured against C written the same way:
+   if-conversion with early reads first, then removal of the test on an access whose index is in range.  These run
+   alongside the other items and block none of them.
+5. Floating point, system calls and declarations of C libraries, for hosted programs.
+6. Shared memory between programs for concurrency: marked shared operations whose proof allows the environment to
+   change the cell, and a launcher that runs the programs.  Each program stays a sequential proof.
+7. Checks of the trusted tools: the printed C against `ccomp`, UBSan.
 
 ## Not goals
 
