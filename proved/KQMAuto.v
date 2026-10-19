@@ -55,6 +55,11 @@ Lemma runk_intro : forall P g f vs rho M v M',
   runk P g vs M v M'.
 Proof. intros. exists f, rho. auto. Qed.
 
+(** a return whose memory is compared with the text's afterwards (the two are equal, not always the same term) *)
+Lemma K_ret_m : forall P f rho M M' a v,
+  aval rho a = Some v -> M = M' -> evalk P f rho M (Eret a) v M'.
+Proof. intros. subst. apply K_ret; auto. Qed.
+
 (** ** The same with the end memory hidden: for a function that writes the memory and gives a number *)
 
 Definition evalx (P : prog) (f : fn) (rho : env) (M : kmemt) (e : exp) (v : i63) : Prop :=
@@ -110,6 +115,11 @@ Lemma X_hw : forall rho M o args vs k v,
   evalx P f rho (hw_sem o vs M) k v -> evalx P f rho M (Ehw o args k) v.
 Proof. intros * L A (M' & E). exists M'. eapply K_hw; eauto. Qed.
 
+Lemma X_hwf : forall rho M o x a va k v,
+  aval rho a = Some va ->
+  evalx P f (PTree.set x (hwf_sem o va) rho) M k v -> evalx P f rho M (Ehwf o x a k) v.
+Proof. intros * A (M' & E). exists M'. eapply K_hwf; eauto. Qed.
+
 Lemma X_call_run : forall rho M x g args vs w M1 k v,
   avals rho args = Some vs -> runk P g vs M w M1 ->
   evalx P f (PTree.set x w rho) M1 k v -> evalx P f rho M (Ecall x g args k) v.
@@ -137,9 +147,28 @@ Proof. intros * F B (M' & E). exists M'. eapply runk_intro; eauto. Qed.
 (** ** The tactic *)
 
 (** reduce the choices of the KQL text (a comparison of numbers written in the program included) *)
-Ltac kqm_red := cbv beta iota delta [cmp_sem binop_sem andb orb negb
+(** a choice on [a && b], [a || b], [negb a] is the same as choices on [a] and [b]: the translator writes it that way, the
+    goal is rewritten to match, so no case split is needed to compare them (the splits multiply: one per test) *)
+Lemma if_andb_l : forall (T : Type) (a b : bool) (x y : T), (if andb a b then x else y) = (if a then (if b then x else y) else y).
+Proof. intros. destruct a; reflexivity. Qed.
+Lemma if_orb_l : forall (T : Type) (a b : bool) (x y : T), (if orb a b then x else y) = (if a then x else (if b then x else y)).
+Proof. intros. destruct a; reflexivity. Qed.
+Lemma if_negb_l : forall (T : Type) (a : bool) (x y : T), (if negb a then x else y) = (if a then y else x).
+Proof. intros. destruct a; reflexivity. Qed.
+Lemma if_andb_u : forall (T : Type) (a b : bool) (x y : T), (if (if a then b else false) then x else y) = (if a then (if b then x else y) else y).
+Proof. intros. destruct a; reflexivity. Qed.
+Lemma if_orb_u : forall (T : Type) (a b : bool) (x y : T), (if (if a then true else b) then x else y) = (if a then x else (if b then x else y)).
+Proof. intros. destruct a; reflexivity. Qed.
+Lemma if_negb_u : forall (T : Type) (a : bool) (x y : T), (if (if a then false else true) then x else y) = (if a then y else x).
+Proof. intros. destruct a; reflexivity. Qed.
+Ltac kqm_ifs :=
+  repeat first [ rewrite if_andb_l | rewrite if_orb_l | rewrite if_negb_l
+               | rewrite if_andb_u | rewrite if_orb_u | rewrite if_negb_u ].
+
+Ltac kqm_red0 := cbv beta iota delta [cmp_sem binop_sem hw_sem hwf_sem andb orb negb
   PrimInt63.ltsb PrimInt63.lesb PrimInt63.eqb PrimInt63.ltb PrimInt63.leb
   PrimInt63.land PrimInt63.lor PrimInt63.lxor PrimInt63.add PrimInt63.sub PrimInt63.mul].
+Ltac kqm_red := kqm_red0.
 
 (** a test already split on is known: every later copy of it in the goal is replaced by its outcome *)
 Ltac kqm_known :=
@@ -159,7 +188,67 @@ Proof. reflexivity. Qed.
 (** a function later in the file has a lower bound, so that its callers' counters plus a few stay inside the callee's *)
 Definition cbk (i : nat) : Z := (cb - 64 * Z.of_nat i)%Z.
 
-Ltac kqm_bound := first [ (pose proof wB_num; try unfold cbk in *; unfold cb in *; lia) | (vm_compute; reflexivity) ].
+(** [kq_nat x] for a number written in the program (a budget, [kq_nat 100000000]): its value, without building the number *)
+Lemma kq_nat_go_val : forall k (x : i63),
+  (0 <= Sint63.to_Z x < 2 ^ Z.of_nat k)%Z -> Z.of_nat (KQ.KQRun.kq_nat_go k x) = Sint63.to_Z x.
+Proof.
+  induction k as [|k IH]; intros x [H0 H1].
+  - cbn in H1. cbn. lia.
+  - cbn [KQ.KQRun.kq_nat_go].
+    destruct (PrimInt63.lesb x 0%uint63) eqn:E.
+    + apply Sint63.leb_spec in E. change (Sint63.to_Z 0%uint63) with 0%Z in E.
+      assert (E2 : (Sint63.to_Z x <= 0)%Z) by exact E. cbn. lia.
+    + assert (E' : (0 < Sint63.to_Z x)%Z).
+      { destruct (Z.eq_dec (Sint63.to_Z x) 0) as [Z0 | Z0]; [ | lia].
+        exfalso. assert (PrimInt63.lesb x 0%uint63 = true) as T.
+        { apply Sint63.leb_spec. change (Sint63.to_Z 0%uint63) with 0%Z.
+          assert (Hle : (Sint63.to_Z x <= 0)%Z) by lia. exact Hle. }
+        congruence. }
+      pose proof (Sint63Axioms.asr_spec x 1%uint63) as A.
+      change (Sint63.to_Z 1%uint63) with 1%Z in A. change (2 ^ 1)%Z with 2%Z in A.
+      rewrite Nat2Z.inj_succ in H1. rewrite Z.pow_succ_r in H1 by lia.
+      assert (Hsh : (0 <= Sint63.to_Z (PrimInt63.asr x 1%uint63) < 2 ^ Z.of_nat k)%Z).
+      { rewrite A. split; [apply Z.div_pos; lia | apply Z.div_lt_upper_bound; lia]. }
+      pose proof (IH _ Hsh) as IHv. rewrite A in IHv.
+      assert (Hx : Uint63.to_Z x = Sint63.to_Z x).
+      { symmetry. apply sZ_small. apply ge0_iff. lia. }
+      assert (HL : Uint63.to_Z (PrimInt63.land x 1%uint63) = Z.land (Uint63.to_Z x) 1%Z).
+      { rewrite Uint63.land_spec'. reflexivity. }
+      assert (HM : Z.land (Sint63.to_Z x) 1%Z = (Sint63.to_Z x) mod 2).
+      { change 1%Z with (Z.ones 1) at 1. rewrite Z.land_ones by lia. reflexivity. }
+      rewrite Hx in HL. rewrite HM in HL.
+      pose proof (Z.div_mod (Sint63.to_Z x) 2 ltac:(lia)) as DM.
+      pose proof (Z.mod_pos_bound (Sint63.to_Z x) 2 ltac:(lia)) as MB.
+      destruct (PrimInt63.eqb (PrimInt63.land x 1%uint63) 1%uint63) eqn:P.
+      * apply Uint63.eqb_spec in P. rewrite P in HL. change (Uint63.to_Z 1%uint63) with 1%Z in HL.
+        rewrite Nat2Z.inj_succ, Nat2Z.inj_add, IHv. lia.
+      * assert (Q : Uint63.to_Z (PrimInt63.land x 1%uint63) <> 1%Z).
+        { intro Hc. assert (Hc' : PrimInt63.land x 1%uint63 = 1%uint63) by (apply Uint63.to_Z_inj; exact Hc).
+          apply Uint63.eqb_spec in Hc'. congruence. }
+        rewrite Nat2Z.inj_add, IHv. lia.
+Qed.
+
+Local Strategy 0 [KQ.KQRun.kq_nat].
+Lemma kq_nat_val : forall x : i63, (0 <= Sint63.to_Z x < 2 ^ 62)%Z -> Z.of_nat (KQ.KQRun.kq_nat x) = Sint63.to_Z x.
+Proof.
+  intros x H. unfold KQ.KQRun.kq_nat. apply kq_nat_go_val.
+  change (Z.of_nat 63) with 63%Z. split; [lia | ]. destruct H as [_ H]. eapply Z.lt_trans; [exact H | ]. vm_compute. reflexivity.
+Qed.
+
+Local Strategy opaque [KQ.KQRun.kq_nat].
+
+(** a budget written as a number is looked up first: [lia] on a goal that holds [kq_nat 100000000] is not safe *)
+Ltac kqm_bound := first
+  [ (match goal with
+     | |- context [Z.of_nat (KQ.KQRun.kq_nat ?x)] =>
+         rewrite (kq_nat_val x) by (vm_compute; split; [ (intros; discriminate) | reflexivity ]); vm_compute; reflexivity
+     end)
+  | (match goal with
+     | |- context [Z.of_nat (KQ.KQRun.kq_nat_go 63 ?x)] =>
+         rewrite (kq_nat_go_val 63 x) by (vm_compute; split; [ (intros; discriminate) | reflexivity ]); vm_compute; reflexivity
+     end)
+  | (pose proof wB_num; try unfold cbk in *; unfold cb in *; lia)
+  | (vm_compute; reflexivity) ].
 
 Lemma eqb00 : PrimInt63.eqb 0%uint63 0%uint63 = true.
 Proof. reflexivity. Qed.
@@ -200,8 +289,9 @@ Ltac kqm_call_ex :=
 (** the value of a chosen number against the Rocq text: equal as they stand, or after a split on each test *)
 Ltac kqm_inner c := lazymatch c with context [if ?d then _ else _] => kqm_inner d | _ => c end.
 Ltac kqm_fin :=
-  first [ exact eq_refl
-        | kqm_red;
+  first [ (kqm_ifs; kqm_red; exact eq_refl)
+        | exact eq_refl
+        | kqm_ifs; kqm_red;
           repeat (first [ exact eq_refl
                         | match goal with
                           | |- context [if ?c then _ else _] =>
@@ -221,13 +311,16 @@ Ltac kqm_splitall :=
 Ltac kqm_walk :=
   repeat
     match goal with
-    | |- evalk _ _ _ _ (Eret _) _ _ => apply K_ret; kqm_fin
+    | H : false = true |- _ => discriminate H
+    | H : true = false |- _ => discriminate H
+    | |- evalk _ _ _ _ (Eret _) _ _ => eapply K_ret_m; [ kqm_fin | kqm_fin ]
     | |- evalk _ _ _ _ (Eop _ _ _ _ _) _ _ => eapply K_op; [reflexivity | reflexivity | kqm_norm]
     | |- evalk _ _ _ _ (Ekld _ _ _ _) _ _ => eapply K_ld; [reflexivity | reflexivity | ]
     | |- evalk _ _ _ _ (Ekst _ _ _ _) _ _ => eapply K_st; [reflexivity | reflexivity | reflexivity | ]
     | |- evalk _ _ _ _ (Ekld32 _ _ _ _) _ _ => eapply K_ld32; [reflexivity | reflexivity | ]
     | |- evalk _ _ _ _ (Ekst32 _ _ _ _) _ _ => eapply K_st32; [reflexivity | reflexivity | reflexivity | ]
     | |- evalk _ _ _ _ (Ehw _ _ _) _ _ => eapply K_hw; [reflexivity | reflexivity | ]
+    | |- evalk _ _ _ _ (Ehwf _ _ _ _) _ _ => eapply K_hwf; [reflexivity | ]
     | |- evalk _ _ _ _ (Eif _ _ _ _ _) _ _ => eapply K_if; [reflexivity | reflexivity | kqm_test]
     | |- evalk _ _ _ _ (Esel _ _ _ _ _ _ _) _ _ => eapply K_sel; [reflexivity | reflexivity | reflexivity | reflexivity | kqm_norm]
     | |- evalk _ _ _ _ (Ecall _ _ _ _) _ _ =>
@@ -285,6 +378,8 @@ Ltac kqx_call :=
 Ltac kqx_walk :=
   repeat
     match goal with
+    | H : false = true |- _ => discriminate H
+    | H : true = false |- _ => discriminate H
     | |- evalx _ _ _ _ (Eret _) _ => apply X_ret; kqm_fin
     | |- evalx _ _ _ _ (Eop _ _ _ _ _) _ => eapply X_op; [reflexivity | reflexivity | kqm_norm]
     | |- evalx _ _ _ _ (Ekld _ _ _ _) _ => eapply X_ld; [reflexivity | reflexivity | ]
@@ -292,6 +387,7 @@ Ltac kqx_walk :=
     | |- evalx _ _ _ _ (Ekld32 _ _ _ _) _ => eapply X_ld32; [reflexivity | reflexivity | ]
     | |- evalx _ _ _ _ (Ekst32 _ _ _ _) _ => eapply X_st32; [reflexivity | reflexivity | reflexivity | ]
     | |- evalx _ _ _ _ (Ehw _ _ _) _ => eapply X_hw; [reflexivity | reflexivity | ]
+    | |- evalx _ _ _ _ (Ehwf _ _ _ _) _ => eapply X_hwf; [reflexivity | ]
     | |- evalx _ _ _ _ (Eif _ _ _ _ _) _ => eapply X_if; [reflexivity | reflexivity | kqx_test]
     | |- evalx _ _ _ _ (Esel _ _ _ _ _ _ _) _ => eapply X_sel; [reflexivity | reflexivity | reflexivity | reflexivity | kqm_norm]
     | |- evalx _ _ _ _ (Ecall _ _ _ _) _ =>

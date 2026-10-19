@@ -117,9 +117,15 @@ unsigned long long f91013(unsigned long long a0, unsigned long long a1, unsigned
 unsigned long long f91014(unsigned long long a0, unsigned long long a1, unsigned long long a2, unsigned long long a3) { kq_hw_call(a0, a1, a2, a3, KQ_V(0)); return 1ULL; }
 unsigned long long f91015(unsigned long long a0, unsigned long long a1, unsigned long long a2, unsigned long long a3, unsigned long long a4, unsigned long long a5, unsigned long long a6, unsigned long long a7, unsigned long long a8, unsigned long long a9) { kq_hw_run(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, KQ_V(0)); return 1ULL; }
 unsigned long long f91016(unsigned long long a0, unsigned long long a1) { kq_hw_code_sync(a0, a1, KQ_V(0)); return 1ULL; }
+unsigned long long f91017(unsigned long long a0, unsigned long long a1) { kq_hw_irq_take(a0, a1, KQ_V(0)); return 1ULL; }
+unsigned long long f91100(unsigned long long a) { return kq_hw_addr(a); }
+unsigned long long f91101(unsigned long long a) { return kq_hw_irq_info(a); }
+unsigned long long f91102(unsigned long long a) { return kq_hw_irq_entry(a); }
+unsigned long long f91103(unsigned long long a) { return kq_hw_cpu_code(a); }
+unsigned long long f91104(unsigned long long a) { return kq_hw_sym(a); }
 """
 
-def driver(name, entry_id, kinds, res, args, wrap, uses_hw=False):
+def driver(name, entry_id, kinds, res, args, wrap, uses_hw=False, bare=False):
     # the entry's parameters, in order, from what `main` passes
     vals = [a for a in args if a[0] != "M"]
     ks = [k for k in kinds if k != "M"]
@@ -138,9 +144,9 @@ def driver(name, entry_id, kinds, res, args, wrap, uses_hw=False):
             cargs.append(f"argI({a[1]})")
     call = f"f{entry_id}({', '.join(cargs)})"
     ret = "return kq_sum(KQ_V(0));" if res == "M" else "return (value) r;"
-    hwdef = ("#include <sys/mman.h>\n/* ---- the machine's operations: the kit's C bodies (hw/kq_hw.h) behind the external functions of the theorem */\n"
-             "uintptr_t kq_hw_wlo, kq_hw_whi;\n" + HW_WRAPPERS) if uses_hw else ""
-    hwset = ("  kq_hw_wlo = (uintptr_t) -1; kq_hw_whi = 0;\n"
+    hwdef = ("/* ---- the machine's operations: the kit's C bodies (hw/kq_hw.h) behind the external functions of the theorem */\n"
+             + ("" if bare else "#include <sys/mman.h>\nuintptr_t kq_hw_wlo, kq_hw_whi;\n") + HW_WRAPPERS) if uses_hw else ""
+    hwset = "" if bare else ("  kq_hw_wlo = (uintptr_t) -1; kq_hw_whi = 0;\n"
              "  for (int h = 0; h < KQ_MAXB; h++) if (kq_b[h].lim) { uintptr_t p = (uintptr_t) kq_b[h].p, e = p + 4 * (uintptr_t) kq_b[h].lim;\n"
              "    if (p < kq_hw_wlo) kq_hw_wlo = p; if (e > kq_hw_whi) kq_hw_whi = e; }\n"
              "  /* a hosted test: a page of memory at 0x10000000 stands for a device */\n"
@@ -172,10 +178,13 @@ def run(cmd, **kw):
 
 def main():
     build = True
+    bare = False
     names = []
     for a in sys.argv[1:]:
         if a == "--no-build":
             build = False
+        elif a == "--bare":
+            build = False; bare = True
         else:
             names.append(a)
     for src in names:
@@ -241,10 +250,10 @@ def main():
         # 3: the C
         raw = open(os.path.join(GEN, f"{name}_c.out")).read()
         c = raw[raw.index('"') + 1: raw.rindex('"')].replace('""', '"')
-        cfile = os.path.join(GEN, f"{name}_proved.c")
-        uses_hw = re.search(r"\bf910\d\d\b", c) is not None
+        cfile = os.path.join(GEN, f"{name}_bare.c" if bare else f"{name}_proved.c")
+        uses_hw = re.search(r"\bf91[01]\d\d\b", c) is not None
         open(cfile, "w").write('#include "gc_stack.h"\n#include "kq_io.h"\n' + ('#include "kq_hw.h"\n' if uses_hw else "") + c
-                               + driver(name, eid, kinds, res, args, wrap, uses_hw))
+                               + driver(name, eid, kinds, res, args, wrap, uses_hw, bare))
         if not build:
             continue
         # 4: build, as the kit builds its programs

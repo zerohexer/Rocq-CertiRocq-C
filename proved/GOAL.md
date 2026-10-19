@@ -47,7 +47,7 @@ offers, and what takes its place:
 | pointers, raw addresses | an integer address into a region; for an OS, RAM is one block at its base address | missing |
 | `malloc`, `free` | an allocator written in Rocq on a growing block | in the kit route (`lib/Slab.v`); not proved |
 | function pointers, callbacks | a table of function ids, a proved dispatch on the id, the environment passed as arguments | missing |
-| hardware access, atomics, inline assembly | primitives with a stated law and a trace; hand-written `.S` once per architecture | loads, stores, atomics, fences, bulk bytes, `hw_run` proved against the kit's laws, the C bodies assumed (`hw_law`); `hw_addr`, interrupts, the `hw/` kernel not yet |
+| hardware access, atomics, inline assembly | primitives with a stated law and a trace; hand-written `.S` once per architecture | loads, stores, atomics, fences, bulk bytes, `hw_run`, `hw_addr`, interrupt-take proved against the kit's laws, the C bodies assumed (`hw_law`, `hwf_law`); the `hw/` kernel (20 functions) is proved and boots in QEMU |
 | floating point | `PrimFloat` as C `double` | not started |
 | files, sockets, system calls | primitives with a trace, as for hardware | not started |
 | threads, SMP | one program per thread, marked shared cells, a launcher | designed, not built |
@@ -129,9 +129,10 @@ Proved and in the corpus (36 programs, all proved, answers equal to the C++ run,
 
 1. Records and pairs as results of functions, and a choice between two records; mutual recursion; 8-
    and 16-bit cells; known functions inlined.  (Records and pairs as parameters, `let`s and `match`es are done.)
-2. The hardware primitives: load and store of 1, 2, 4 and 8 bytes, atomics and compare-and-swap, fences, copy and fill
-   are in (the C bodies assumed, `hw_law`).  Left: `hw_addr`, the interrupt operations, a freestanding build, and the
-   kernel of `hw/` through the proved route; driver and OS logic around the primitives is then proved.
+2. The hardware primitives are in (the C bodies assumed, `hw_law`, `hwf_law`) and the kernel of `hw/` goes through the
+   proved route and boots (`hw/build_proved.sh`).  Left: the kernel's own assembly routines and the interrupt and
+   second-processor programs through the proved route, a freestanding build of the generated C checked on its own, and
+   the proof time of long straight-line code (the 100-store instruction table takes two minutes).
 3. Growing blocks, the heap library on them, and function-id dispatch tables.
 4. The general passes of the section above, each proved once and measured against C written the same way:
    if-conversion with early reads is done; next the removal of the test on an access whose index is in range.

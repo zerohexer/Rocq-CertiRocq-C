@@ -1,0 +1,172 @@
+(* hw/kernel_p.body (the kernel for the proved route: hw/kernel.body without its own assembly routines)
+   -- hw/kernel.body -- A KERNEL WRITTEN IN ROCQ: the machine's only program, no operating system under it.  Every driver
+   below is Rocq; the machine itself is reached through the generic operations of KQRun.v (hw_load, hw_store, atomics ..: plain C) and the x86 instructions of hw/X86.v (machine code written in Rocq from Intel's manual, run through hw_run)
+   (hw/kq_hw.h).  It checks, and prints on the serial line:
+     mmio  16 cells of the screen written and read back (memory-mapped device, 16-bit accesses)
+     page  its OWN page tables, built in narrow blocks: the first 1 GB mapped to itself and the screen once more at
+           1 GB; the processor switched to them (cr3); written through the new address, read through the old; cr3 read back
+     time  its OWN interrupt table (256 entries, built here from the entry addresses), the interrupt controller and the
+           timer programmed through ports, then the timer's interrupts counted -- each one taken (hw_irq_take) and
+           acknowledged by this program; the time-stamp counter before and after
+     cpu   the long-mode bits of the EFER register (rdmsr); cpuid's vendor string
+     ram   64-, 32- and 8-bit accesses to memory, read back, and seen by the narrow block that owns that memory
+     pci   the PCI configuration space through 32- and 16-bit ports: the host bridge's vendor
+     atom  32- and 64-bit atomic add, exchange, compare-and-swap (one that succeeds, one that does not), acquire
+           loads and release stores
+     bulk  bytes filled and copied in bulk, and read back
+     asm   two routines of its OWN in assembly (hw/kernel.S, listed in hw/kernel.ext): a pure one, and one that writes
+           memory and gives the memory back
+   The answer is the number of checks that failed (0: all passed). *)
+(* wide block 0 (W): what the machine's reads put in cells; wide block 2 (D): digits (hw/lib.body) *)
+Local Notation R := 1.       (* wide block: one cell per check (0: passed) *)
+Local Notation PML4 := 0.    (* narrow blocks, one page each: the page tables *)
+Local Notation PDPT := 1.
+Local Notation PD0 := 2.
+Local Notation PD1 := 3.
+Local Notation IDT := 4.     (* the interrupt table *)
+Local Notation RAM := 5.     (* a page of plain memory for the access test *)
+Local Notation VGA := 753664.         (* the text screen, 0xB8000 *)
+Local Notation GB := 1073741824.
+Local Notation MB2 := 2097152.
+
+(* ---- THE SCREEN: cell k of the text screen at address a + 2k holds a character and its colour *)
+Fixpoint scr_wr (f : nat) (a v k n : int) (s : mem) : mem :=
+  match f with
+  | O => s
+  | S f => if n <=? k then s else scr_wr f a v (k + 1) n (hw_store 2 (a + 2 * k) (v + k) s)
+  end.
+Fixpoint scr_chk (f : nat) (a v r k n bad : int) (s : mem) : mem :=
+  match f with
+  | O => upd R r bad s
+  | S f => if n <=? k then upd R r bad s
+           else let s1 := hw_load 2 (a + 2 * k) W 0 s in
+                scr_chk f a v r (k + 1) n (if rd W 0 s1 =? v + k then bad else bad + 1) s1
+  end.
+Definition t_mmio (s : mem) : mem :=
+  let s1 := scr_chk (kq_nat 16) VGA 3905 0 0 16 0 (scr_wr (kq_nat 16) VGA 3905 0 16 s) in      (* 'A'.. white *)
+  line 109 109 105 111 (rd R 0 s1) s1.
+
+(* ---- PAGE TABLES: entry k of a table is the 64-bit number in narrow cells 2k (low half) and 2k + 1 (high half) *)
+Fixpoint pd_fill (f : nat) (k : int) (s : mem) : mem :=
+  match f with
+  | O => s
+  | S f => if 512 <=? k then s
+           else pd_fill f (k + 1) (upd32 PD0 (2 * k + 1) 0 (upd32 PD0 (2 * k) (k * MB2 + 131) s))   (* 2 MB page, present, writable *)
+  end.
+Definition t_pages (s : mem) : mem :=
+  let s1 := pd_fill (kq_nat 512) 0 s in
+  let s2 := upd32 PD1 0 131 s1 in                                         (* 1 GB + x -> x, for the first 2 MB *)
+  let s3 := upd32 PDPT 2 (hw_addr PD1 + 3) (upd32 PDPT 0 (hw_addr PD0 + 3) s2) in
+  let s4 := upd32 PML4 0 (hw_addr PDPT + 3) s3 in
+  let s5 := hw_tlb_page (GB + VGA) (hw_pt_set (hw_addr PML4) s4) in    (* the processor now uses these tables *)
+  let s6 := scr_wr (kq_nat 16) (GB + VGA) 2657 0 16 s5 in                (* 'a'.., green: through the new address *)
+  let s7 := scr_chk (kq_nat 16) VGA 2657 1 0 16 0 s6 in                 (* read through the old one *)
+  let s8 := hw_pt_get W 1 s7 in
+  let ok := rd W 1 s8 =? hw_addr PML4 in
+  let s9 := upd R 2 (if ok then 0 else 1) s8 in
+  line 112 97 103 101 (rd R 1 s9 + rd R 2 s9) s9.
+
+(* wait for interrupts until `want` timer ticks have come; each one taken and acknowledged (port 32, 32) *)
+Fixpoint ticks (f : nat) (n want other : int) (s : mem) : mem :=
+  match f with
+  | O => upd R 4 n (upd R 5 other s)
+  | S f =>
+      if want <=? n then upd R 4 n (upd R 5 other s)
+      else
+        let s1 := hw_irq_take W 2 (hw_irq_wait s) in
+        let v := rd W 2 s1 in
+        if v =? 32 then ticks f (n + 1) want other (hw_port_out 1 32 32 s1)
+        else if v <? 0 then ticks f n want other s1
+        else ticks f n want (other + 1) s1
+  end.
+Definition t_irq (want : int) (s : mem) : mem :=
+  let s1 := idt_fill (kq_nat 256) IDT 0 s in
+  let s2 := hw_vectors (hw_addr IDT) 4095 s1 in
+  let s3 := hw_cycles W 4 (pit_init (pic_init s2)) in
+  let s4 := hw_irq_off (ticks (kq_nat 1000000) 0 want 0 s3) in
+  let s5 := hw_cycles W 6 s4 in
+  let t0 := rd W 5 s5 * 4294967296 + rd W 4 s5 in
+  let t1 := rd W 7 s5 * 4294967296 + rd W 6 s5 in
+  let n := rd R 4 s5 in
+  let s6 := upd R 6 (if t0 <? t1 then 0 else 1) (upd R 3 (if n =? want then 0 else 1) s5) in
+  line 116 105 109 101 n s6.
+
+(* ---- THE PROCESSOR: EFER (0xC0000080) has long mode enabled (bit 8) and active (bit 10); cpuid leaf 0 *)
+Definition t_cpu (s : mem) : mem :=
+  let s1 := hw_sysreg_get 3221225600 W 8 s in
+  let s2 := upd R 7 (if (rd W 8 s1 land 1280) =? 1280 then 0 else 1) s1 in
+  let s3 := hw_cpuid 0 0 W 10 s2 in
+  let s4 := upd R 8 (if 1 <=? rd W 10 s3 then 0 else 1) s3 in
+  let b := rd W 11 s4 in
+  let d := rd W 13 s4 in
+  let c := rd W 12 s4 in
+  putc 10 (put4 c (put4 d (put4 b (putc 32 (say4 99 112 117 32 s4))))).
+
+(* ---- MEMORY through the machine's accesses, at the address of narrow block RAM: read back, and seen by the block *)
+Definition t_ram (s : mem) : mem :=
+  let a := hw_addr RAM in
+  let s1 := hw_fence 0 (hw_store64 a 305419896 2596069104 s) in           (* 0x9ABCDEF0_12345678 *)
+  let s2 := hw_load 8 a W 14 s1 in
+  let s3 := hw_load 1 (a + 8) W 16 (hw_store 1 (a + 8) 171
+              (upd R 9 (if (rd W 14 s2 =? 305419896) && (rd W 15 s2 =? 2596069104)
+                           && (rd32 RAM 0 s2 =? 305419896) && (rd32 RAM 1 s2 =? 0 - 1698898192) then 0 else 1) s2)) in
+  let s4 := upd R 10 (if rd W 16 s3 =? 171 then 0 else 1) s3 in
+  let s5 := hw_load 4 (a + 12) W 17 (hw_store 4 (a + 12) 3735928559 s4) in    (* 0xDEADBEEF *)
+  let s6 := upd R 11 (if rd W 17 s5 =? 3735928559 then 0 else 1) s5 in
+  line 114 97 109 32 (rd R 9 s6 + rd R 10 s6 + rd R 11 s6) s6.
+
+(* ---- PCI: bus 0, device 0, register 0 through ports 0xCF8 (the address) and 0xCFC (the data) *)
+Definition t_pci (s : mem) : mem :=
+  let s1 := hw_port_in 4 3324 W 18 (hw_port_out 4 3320 2147483648 s) in
+  let s2 := hw_port_in 2 3324 W 19 s1 in
+  let s3 := upd R 12 (if (rd W 18 s2 land 65535) =? 32902 then 0 else 1) s2 in     (* 0x8086 *)
+  let s4 := upd R 13 (if rd W 19 s3 =? 32902 then 0 else 1) s3 in
+  line 112 99 105 32 (rd W 18 s4 >> 16) s4.
+
+(* ---- ATOMICS at the address of narrow block RAM, from byte 32 on (in two parts, each a function of its own) *)
+Definition t_atom_a (s : mem) : mem :=
+  let a := hw_addr RAM + 32 in
+  let s1 := hw_aload 4 a W 21 (hw_atomic 0 4 a 5 W 20 (hw_astore 4 a 100 s)) in               (* 100 + 5 *)
+  let s2 := hw_cas 4 a 105 7 W 22 s1 in                                            (* succeeds: 105 -> 7 *)
+  let s3 := hw_aload 4 a W 26 (hw_cas 4 a 105 9 W 24 s2) in                           (* fails: 7 is found *)
+  let s4 := hw_atomic 5 4 a 42 W 27 s3 in                                             (* exchange: 7 out, 42 in *)
+  upd R 14 ((if rd W 20 s4 =? 100 then 0 else 1) + (if rd W 21 s4 =? 105 then 0 else 1)
+           + (if (rd W 22 s4 =? 105) && (rd W 23 s4 =? 1) then 0 else 1)
+           + (if (rd W 24 s4 =? 7) && (rd W 25 s4 =? 0) && (rd W 26 s4 =? 7) then 0 else 1)
+           + (if rd W 27 s4 =? 7 then 0 else 1)) s4.
+Definition t_atom_b (s : mem) : mem :=
+  let b := hw_addr RAM + 32 + 8 in
+  let s5 := hw_atomic64 0 b 4294967295 0 W 28 (hw_astore64 b 1 2 s) in                   (* 2^33 + 1, + (2^32 - 1) *)
+  let s6 := hw_cas64 b 0 3 5 6 W 32 (hw_aload 8 b W 30 s5) in                         (* 3 * 2^32 -> 6 * 2^32 + 5 *)
+  let s7 := hw_fence 0 (hw_aload 8 b W 35 s6) in
+  upd R 16 ((if (rd W 28 s7 =? 1) && (rd W 29 s7 =? 2) then 0 else 1)
+           + (if (rd W 30 s7 =? 0) && (rd W 31 s7 =? 3) then 0 else 1)
+           + (if (rd W 32 s7 =? 0) && (rd W 33 s7 =? 3) && (rd W 34 s7 =? 1) then 0 else 1)
+           + (if (rd W 35 s7 =? 5) && (rd W 36 s7 =? 6) then 0 else 1)) s7.
+Definition t_atom (s : mem) : mem :=
+  let s1 := t_atom_b (t_atom_a s) in
+  line 97 116 111 109 (rd R 14 s1 + rd R 16 s1) s1.
+
+(* ---- BYTES IN BULK: 16 bytes of 171 at byte 64, copied to byte 96, read back as two 64-bit words *)
+Definition t_bulk (s : mem) : mem :=
+  let a := hw_addr RAM in
+  let s1 := hw_load 8 (a + 104) W 39 (hw_load 8 (a + 96) W 37 (hw_copy (a + 96) (a + 64) 16 (hw_fill (a + 64) 171 16 s))) in
+  let s2 := upd R 15 (if (rd W 37 s1 =? 2880154539) && (rd W 38 s1 =? 2880154539) && (rd W 39 s1 =? 2880154539) && (rd W 40 s1 =? 2880154539) then 0 else 1) s1 in
+  line 98 117 108 107 (rd R 15 s2) s2.
+
+Fixpoint fails (f : nat) (k acc : int) (s : mem) : int :=
+  match f with
+  | O => acc
+  | S f => if 18 <=? k then acc
+           else fails f (k + 1) (if (k =? 4) || (k =? 5) then acc else acc + rd R k s) s
+  end.
+
+Definition kmain (want : int) (s : mem) : int :=
+  let s0 := ser_init (x86_setup s) in
+  let s1 := say4 110 101 108 10 (say4 32 107 101 114 (say4 82 111 99 113 s0)) in              (* "Rocq kernel" *)
+  let s2 := t_bulk (t_atom (t_pci (t_ram (t_cpu (t_irq want (t_pages (t_mmio s1))))))) in
+  fails (kq_nat 20) 0 0 s2.
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  kmain (kq_arg 0) (kq_input 0).

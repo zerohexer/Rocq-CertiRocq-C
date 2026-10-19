@@ -759,6 +759,11 @@ Hypothesis params_norepet : forall g f, find P g = Some f -> list_norepet (kpara
     event and leaves a Clight memory that holds the memory the abstract operation gives ([hw_sem]): the cell it was
     told to fill holds what it read, no other cell of any block changes.  The devices' own behaviour is not modelled. *)
 Hypothesis hw_funs : forall o, exists b, Genv.find_symbol ge (hwid o) = Some b /\ Genv.find_funct_ptr ge b = Some (External (hw_ef o) (tylist (hw_arity o)) tyl cc_default).
+Hypothesis hwf_funs : forall o, exists b, Genv.find_symbol ge (hwfid o) = Some b /\ Genv.find_funct_ptr ge b = Some (External (hwf_ef o) (tylist 1) tyl cc_default).
+(** the machine's numbers: the external function gives the number the abstract one names, and changes nothing *)
+Hypothesis hwf_law : forall o v M m, kmrel cp M m ->
+  (exists m1, external_call (hwf_ef o) ge [enc v] m E0 (enc (hwf_sem o v)) m1) /\
+  (forall t vres m1, external_call (hwf_ef o) ge [enc v] m t vres m1 -> t = E0 /\ vres = enc (hwf_sem o v) /\ kmrel cp M m1).
 Hypothesis hw_law : forall o vs M m, length vs = hw_arity o -> kmrel cp M m ->
   (exists vres m1, external_call (hw_ef o) ge (map enc vs) m E0 vres m1) /\ (forall t vres m1, external_call (hw_ef o) ge (map enc vs) m t vres m1 -> t = E0 /\ kmrel cp (hw_sem o vs M) m1).
 
@@ -861,6 +866,26 @@ Proof.
     + eapply eval_atoms; eauto.
     + rewrite Genv.find_funct_find_funct_ptr. exact FP.
     + simpl. rewrite H. reflexivity.
+    + eapply eval_funcall_external. exact EC.
+  - (* machine number *)
+    destruct (hwf_funs qo) as (b & FS & FP).
+    destruct (hwf_law qo qva M m MR) as ((m1 & EC) & SEM).
+    destruct (SEM E0 _ m1 EC) as (_ & _ & MR1).
+    destruct (IHevalk _ m1 (agree_set rho le qx _ AG) MR1) as (le2 & m2 & out & X & R).
+    exists le2, m2, out. split; auto.
+    change E0 with (E0 ** E0). eapply exec_Sseq_1; eauto.
+    change (PTree.set (tv qx) (enc (hwf_sem qo qva)) le) with (set_opttemp (Some (tv qx)) (enc (hwf_sem qo qva)) le).
+    eapply exec_Scall with (vf := Vptr b Ptrofs.zero) (tyargs := tylist 1).
+    + reflexivity.
+    + eapply eval_Elvalue. apply eval_Evar_global; [apply PTree.gempty | exact FS].
+      apply deref_loc_reference. reflexivity.
+    + assert (AV : avals rho [qa] = Some [qva]) by (simpl; rewrite H; reflexivity).
+      change [tr_atom qa] with (map tr_atom [qa]).
+      change (tylist 1) with (tylist (length [qa])).
+      change [enc qva] with (map enc [qva]).
+      eapply eval_atoms; eauto.
+    + rewrite Genv.find_funct_find_funct_ptr. exact FP.
+    + reflexivity.
     + eapply eval_funcall_external. exact EC.
   - (* loop *)
     destruct (exec_scratch cp rho args vs 0 le m AG H) as (le1 & X1 & AG1 & SC).

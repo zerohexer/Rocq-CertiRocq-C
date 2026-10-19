@@ -12,7 +12,7 @@ Fixpoint tx_wait (f : nat) (s : mem) : mem :=
   | S f => let s1 := hw_port_in 1 1021 W 0 s in
            if (rd W 0 s1 land 32) =? 0 then tx_wait f (hw_pause s1) else s1
   end.
-Definition putc (c : int) (s : mem) : mem := hw_port_out 1 COM c (tx_wait (kq_nat 100000000) s).
+Definition putc (c : int) (s : mem) : mem := hw_port_out 1 COM c (tx_wait (kq_nat 1000000) s).
 Definition ser_init (s : mem) : mem :=
   hw_port_out 1 1020 11 (hw_port_out 1 1018 199 (hw_port_out 1 1019 3 (hw_port_out 1 1017 0 (hw_port_out 1 1016 3 (hw_port_out 1 1019 128 (hw_port_out 1 1017 0 s)))))).
 Definition say4 (a b c d : int) (s : mem) : mem := putc d (putc c (putc b (putc a s))).

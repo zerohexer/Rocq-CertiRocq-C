@@ -20,7 +20,7 @@ From MetaRocq.Utils Require Import utils bytestring.
 From MetaRocq.Template Require Import All.
 From compcert Require Import Maps.
 From KQC Require Import KQL KQLAuto KQMSem KQMAuto.
-Require KQ.KQRun.
+Require KQ.KQRun KQ.hw.Runtime.
 Import MonadNotation ListNotations.
 Open Scope bs.
 
@@ -35,6 +35,7 @@ Definition kn_upd := kn_of <% KQ.KQRun.upd %>.
 Definition kn_rd32 := kn_of <% KQ.KQRun.rd32 %>.
 Definition kn_upd32 := kn_of <% KQ.KQRun.upd32 %>.
 Definition kn_kmem := kn_of <% KQ.KQRun.mem %>.
+Definition kn_kq_nat := kn_of <% KQ.KQRun.kq_nat %>.
 Definition kn_int := kn_of <% PrimInt63.int %>.
 Definition kn_andb := kn_of <% andb %>.
 Definition kn_orb := kn_of <% orb %>.
@@ -63,13 +64,24 @@ Definition hw_table : list (kername * term * nat) :=
   ; (kn_of <% KQ.KQRun.hw_cmp %>, <% HCmp %>, 5)
   ; (kn_of <% KQ.KQRun.hw_call %>, <% HCall %>, 4)
   ; (kn_of <% KQ.KQRun.hw_run %>, <% HRun %>, 10)
-  ; (kn_of <% KQ.KQRun.hw_code_sync %>, <% HCodeSync %>, 2) ].
+  ; (kn_of <% KQ.KQRun.hw_code_sync %>, <% HCodeSync %>, 2)
+  ; (kn_of <% KQ.hw.Runtime.hw_irq_take %>, <% HIrqTake %>, 2) ].
 Definition hw_lookup (kn : kername) : option (term * nat) :=
   match List.find (fun e => Kername.eqb (fst (fst e)) kn) hw_table with
   | Some e => Some (snd (fst e), snd e)
   | None => None
   end.
 Definition q_Ehw := <% Ehw %>.
+Definition q_Ehwf := <% Ehwf %>.
+(* the machine's numbers: the Rocq constant and the KQL operation *)
+Definition hwf_table : list (kername * term) :=
+  [ (kn_of <% KQ.KQRun.hw_addr %>, <% FAddr %>)
+  ; (kn_of <% KQ.hw.Runtime.hw_irq_info %>, <% FIrqInfo %>)
+  ; (kn_of <% KQ.hw.Runtime.hw_irq_entry %>, <% FIrqEntry %>)
+  ; (kn_of <% KQ.hw.Runtime.hw_cpu_code %>, <% FCpuCode %>)
+  ; (kn_of <% KQ.hw.Runtime.hw_sym %>, <% FSym %>) ].
+Definition hwf_lookup (kn : kername) : option term :=
+  match List.find (fun e => Kername.eqb (fst e) kn) hwf_table with Some e => Some (snd e) | None => None end.
 
 Definition prim_mp : modpath := fst (kn_of <% PrimInt63.add %>).
 Definition uint63_mp : modpath := fst (kn_of <% Uint63.opp %>).
@@ -563,6 +575,14 @@ Fixpoint tr_int (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struc
               wrap1 q_Eop [qpos x; o; A; B] (k (avar x) s)))
         | _, _ => TErr ("not a supported operation: " ^ snd kn)
         end
+      else if (match hwf_lookup kn with Some _ => true | None => false end) then
+        match hwf_lookup kn, args with
+        | Some op, [a] =>
+            tr_int fuel Γ a s (fun A s =>
+              let '(x, s) := fresh s in
+              wrap1 q_Ehwf [op; qpos x; A] (k (avar x) s))
+        | _, _ => TErr ("a machine number with the wrong number of arguments: " ^ snd kn)
+        end
       else if Kername.eqb kn kn_rd then
         match args with
         | [h; i; m] =>
@@ -610,9 +630,19 @@ Fixpoint tr_int (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struc
   | tCase ci p c [b0; b1] =>
       if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_bool) then
         if choice_ok (bbody b0) (bbody b1) then
-          (* both numbers are worked out, one is taken: a conditional move, no jump *)
+          (* both numbers are worked out, one is taken: a conditional move, no jump.  A choice on [a && b], [a || b],
+             [negb a] is written as choices on the parts (KQMAuto.v's kqm_ifs rewrites the Rocq text the same way) *)
           match c with
+          | tApp (tConst kn _) [ca] =>
+              if Kername.eqb kn kn_negb then tr_int fuel Γ (tCase ci p ca [b1; b0]) s k
+              else tr_boolval fuel Γ c s (fun C s =>
+                tr_int fuel Γ (bbody b0) s (fun A0 s => tr_int fuel Γ (bbody b1) s (fun A1 s =>
+                  let '(x, s) := fresh s in
+                  wrap1 q_Esel [qpos x; <% Ceq %>; C; aint q_zero; A1; A0] (k (avar x) s))))
           | tApp (tConst kn _) [ca; cb] =>
+              if Kername.eqb kn kn_andb then tr_int fuel Γ (tCase ci p ca [mk_br (tCase ci p cb [b0; b1]); b1]) s k
+              else if Kername.eqb kn kn_orb then tr_int fuel Γ (tCase ci p ca [b0; mk_br (tCase ci p cb [b0; b1])]) s k
+              else
               match (if eq_mp (fst kn) prim_mp then cmp_of (snd kn) else None) with
               | Some cmp =>
                   tr_int fuel Γ ca s (fun CA s => tr_int fuel Γ cb s (fun CB s =>
@@ -671,6 +701,9 @@ with tr_nat (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struct fu
           let '(x, s) := fresh s in
           wrap1 q_Eop [qpos x; <% Badd %>; A; aint q_one] (k (avar x) s))
       else TErr "a constructor"
+  | tApp (tConst kn _) [tInt _] =>
+      (* a budget written as a number: [kq_nat 30] *)
+      if Kername.eqb kn kn_kq_nat then k (aint (tApp q_ofn [t])) s else TErr "not a counter this translator reads"
   | _ => if nat_lit 10000000 t then k (aint (tApp q_ofn [t])) s else TErr "not a counter this translator reads"
   end
   end
@@ -1150,10 +1183,43 @@ Definition body_of (Σ : global_env) (kn : kername) : option (term * term) :=
   end.
 
 (* a constant of the file is a function to translate when it calls itself or is the root *)
+(* the size of a term, to tell a large helper from a small one *)
+Fixpoint term_size (fuel : nat) (t : term) : nat :=
+  match fuel with
+  | O => 0
+  | S fuel =>
+      match t with
+      | tApp f args => 1 + term_size fuel f + fold_left (fun a x => a + term_size fuel x) args 0
+      | tLambda _ _ b => 1 + term_size fuel b
+      | tLetIn _ b _ body => 1 + term_size fuel b + term_size fuel body
+      | tCase _ _ c brs => 1 + term_size fuel c + fold_left (fun a br => a + term_size fuel (bbody br)) brs 0
+      | _ => 1
+      end
+  end.
+
+(* A definition that does not call itself is written out where it is used -- unless it is large, and its parameters and
+   result are of kinds a function can have: then it is a function of its own (as a compiler does not inline a large
+   function), proved once and called.  Writing out every helper into one body makes the proof of the caller as large
+   as the whole program. *)
+Definition inline_limit : nat := 40.
+Definition big_fun (Σ : global_env) (kn : kername) : bool :=
+  match body_of Σ kn with
+  | Some (ty, b) =>
+      match fparts b, result_mem Σ ty with
+      | Some (false, tys, _), Some _ =>
+          match opt_all (map (kind_of 20 Σ) tys) with
+          | Some _ => Nat.ltb inline_limit (term_size 100000 b)
+          | None => false
+          end
+      | _, _ => false
+      end
+  | None => false
+  end.
+
 Definition is_fun (Σ : global_env) (mp : modpath) (root kn : kername) : bool :=
   Kername.eqb kn root ||
   (eq_mp (fst kn) mp &&
-   match body_of Σ kn with Some (_, tFix _ _) => true | _ => false end).
+   (match body_of Σ kn with Some (_, tFix _ _) => true | _ => false end || big_fun Σ kn)).
 
 (* every function reachable from the root, callees first *)
 Fixpoint reach (fuel : nat) (Σ : global_env) (mp : modpath) (root : kername) (kn : kername)
@@ -1376,7 +1442,7 @@ Definition kqm_gen (p : program) (prog_name : ident) : tout :=
               let used := fold_left (fun acc fe => match body_of Σ (fi_kn (fst fe)) with
                                                    | Some (_, b) => List.app (consts 10000 b []) acc
                                                    | None => acc end) tfs [] in
-              let hs := helpers_of 10000 Σ mp fns used [] in
+              let hs := filter (fun kn => negb (Kername.eqb kn kn_kq_nat)) (helpers_of 10000 Σ mp fns used []) in
               mkOut (List.app fdefs (pdef :: sdefs))
                     ("KQM: " ^ string_of_nat (length tfs) ^ " functions: " ^
                      String.concat " " (map (fun fe => snd (fi_kn (fst fe))) tfs) ^

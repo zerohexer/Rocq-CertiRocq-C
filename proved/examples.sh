@@ -9,7 +9,7 @@ python3 tests/mkworst.py $D > /dev/null || exit 1
 ok=0; bad=0
 for b in proved/examples/*.body; do
   n=$(basename $b .body)
-  python3 proved/kitc.py $b 2>&1 | grep -v "^Warning\|overriding\|^to KQC" | grep -v "^$n built" | head -3
+  python3 proved/kitc.py $b 2>&1 | grep -v "^Warning\|^to KQC" | grep -v "^$n built" | head -3
   got=$(KQ_MEM=$D/same.mem bin/P_$n $(cat $D/same.args) 2>&1 | head -1 | awk '{print $2}')
   if [ "$got" = "$(cat proved/examples/$n.expect)" ]; then ok=$((ok + 1)); else bad=$((bad + 1)); echo "$n: got $got, expected $(cat proved/examples/$n.expect)"; fi
 done

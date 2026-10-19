@@ -1,0 +1,13 @@
+(* choices on && and || joined in a sum: each is compared with the text without a case split *)
+Definition chk (s : mem) : int :=
+  (if (rd 0 0 s <? 500) && (rd 0 1 s <? 500) then 0 else 1)
+  + (if (rd 0 2 s <? 500) && (rd 0 3 s <? 500) && (rd 0 4 s <? 500) then 0 else 3)
+  + (if (rd 0 5 s <? 500) || (rd 0 6 s <? 500) then 0 else 7)
+  + (if (rd 0 7 s <? 500) && (rd 0 8 s <? 500) && (rd 0 9 s <? 500) && (rd 0 10 s <? 500) then 0 else 15)
+  + (if negb (rd 0 11 s <? 500) then 0 else 31)
+  + (if (rd 0 12 s <? 500) && (rd 0 13 s <? 500) then 0 else 63)
+  + (if ((rd 0 14 s <? 500) && (rd 0 15 s <? 500)) || (rd 0 16 s <? 500) then 0 else 127).
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  chk (kq_input 0).

@@ -55,7 +55,7 @@ or a write moves the word as it is.
 Parameters `nat` (a counter; the one the function recurses on comes first), `int`, records and pairs of those, and at
 most one memory, last; results `int` or `mem`.  In a body: `match` on a counter, `if` on comparisons joined by `&&`,
 `||`, `negb`, `let` (numbers, booleans, memories, records), `PrimInt63` arithmetic (signed division `divs` and remainder `mods` included), `rd`, `upd`, `rd32`, `upd32`, calls
-of the file's functions, closed constants.  A helper that does not call itself is written out where it is used.  A
+of the file's functions, closed constants.  A helper that does not call itself is written out where it is used, unless it is large (more than 40 nodes of its text): then it is a function of its own, proved once.  A budget written as a number (`kq_nat 1000000`) is read as that number; the printer works it out as a unary `nat`, so keep it to 10^7 or less.  A
 memory is used only while it is the current one.
 
 A record (`Record st := mkst { acc : int; cnt : int }`) or a pair of numbers and counters is never built: the
@@ -90,8 +90,27 @@ each external function finishes with no event and leaves a Clight memory that ho
 axiom of Rocq; it is what the theorem assumes of the C bodies and of the machine, the same kind of statement as the
 loader's.  `KQSpec.real_laws` says what each operation does to the memory (a load fills its cell and no other, a store
 changes no wide cell, the trace records it); a proof about a program holds for every number a device could give back.
-`hw_addr` and the interrupt operations are not read yet.  `proved/examples/hw_mmio.body` stores to and loads from a page
-at `0x10000000` that the test driver maps to stand for a device.
+Numbers the machine gives without a memory (`hw_addr`, `hw_irq_info`, `hw_irq_entry`, `hw_cpu_code`, `hw_sym`) are one more
+instruction, `Ehwf`, over external functions with the law `hwf_law` (the C function gives the number the abstract one
+names and changes nothing); `hw_irq_take` is a memory operation like the others.  `proved/examples/hw_mmio.body` stores
+to and loads from a page at `0x10000000` that the test driver maps to stand for a device.
+
+### A kernel through this route
+
+`hw/build_proved.sh kernel` takes `hw/kernel_p.body` (the kernel of `hw/kernel.body` without its own assembly
+routines), the instructions of `hw/X86.v` and the library `hw/lib.body` as one Rocq text, translates it, has the
+kernel check that each of its 20 functions computes its Rocq definition (about three minutes), prints the C, and
+builds `hw/kernel_p.elf` with the runtime of `hw/build.sh` (`hw/kq_bare.c`, `hw/boot.S`).  `hw/run.sh kernel_p` boots
+it in QEMU: the serial line, the screen, its own page tables, the interrupt table and ten timer interrupts, the
+processor's registers, PCI, atomics and bulk bytes all give the answers of the kit route's kernel, and the answer is 0.
+What that rests on is the list below under "What is trusted" plus the machine itself: the code the kernel writes into
+memory and runs (`hw_run`) is as correct as the encodings in `hw/X86.v`.
+
+Two rules the long programs showed.  A helper larger than 40 nodes is a function of its own: written out into its
+callers, a helper that uses its memory argument several times multiplies the size of every caller.  A choice on
+`a && b`, `a || b` or `negb a` is translated as choices on the parts and the goal is rewritten the same way, so the
+kernel's checks are compared with the text without a case split per test; write such a test where it is used, not in a
+`let` that is a `bool` (the flag the translator keeps for that cannot be compared without a split).
 
 ## What is trusted
 
