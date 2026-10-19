@@ -109,11 +109,16 @@ Written badly on purpose (state in cells, phases), the same loops are 2 to 12 ti
 way, against 1.1 to 3.8 times for C written that way.  The one gap with a separate cause is the search with its
 state in cells on the proved route: 5.9 wrong guesses per query, because a choice whose arms contain reads stays a
 jump.  The kit route moves such reads in front of the choice and measures whether a jump or a conditional move is
-faster; the proved route's translator does not yet.
+faster.  The proved route now does the first half: a choice between two values whose arms read the current memory
+(up to three reads) is taken with a conditional move, since a read is total.  Measured with that change (ms, one core):
+state in cells in the mixed loop 115 to 18, in the search 1076 to 351 (kit route 296), cells and phases in the search
+1367 to 496; all 36 programs of the corpus still proved and equal to the C++ answers, and the C of 6 of 7 timed
+programs is unchanged.  Merging a chain of calls keeps to plain arithmetic: with reads in the arguments the
+phase-cycling search got twice as slow (411 to 785), because a conditional move in place of a well-predicted jump
+makes each round wait for the one before.
 
-The general passes, in order: if-conversion with early reads (a read is total, so it can be moved in front of a
-choice), proved removal of the test on an access whose index is in range, forwarding a stored or loaded value to
-a later read of the same address, hoisting loop-invariant reads.
+The general passes still to do, in order: proved removal of the test on an access whose index is in range,
+forwarding a stored or loaded value to a later read of the same address, hoisting loop-invariant reads.
 
 ## Where it stands
 
@@ -129,8 +134,8 @@ Proved and in the corpus (36 programs, all proved, answers equal to the C++ run,
    proved route, and driver and OS logic around the primitives is proved.
 3. Growing blocks, the heap library on them, and function-id dispatch tables.
 4. The general passes of the section above, each proved once and measured against C written the same way:
-   if-conversion with early reads first, then removal of the test on an access whose index is in range.  These run
-   alongside the other items and block none of them.
+   if-conversion with early reads is done; next the removal of the test on an access whose index is in range.
+   These run alongside the other items and block none of them.
 5. Floating point, system calls and declarations of C libraries, for hosted programs.
 6. Shared memory between programs for concurrency: marked shared operations whose proof allows the environment to
    change the cell, and a launcher that runs the programs.  Each program stays a sequential proof.

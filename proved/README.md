@@ -58,10 +58,12 @@ A helper that does not call itself is written out where it is used.  A memory is
 
 Two rewrites keep the C free of jumps on data, as the kit's own translator does:
 - a choice between numbers (`if c then a else b`, nested ones included) is worked out both ways and taken with a
-  conditional move (`Esel`);
+  conditional move (`Esel`); the two numbers may read the current memory (`rd`, `rd32`), up to three reads in all,
+  because a read is total and can be run whether or not its arm is taken;
 - `if c then f a1 .. an else f b1 .. bn` in tail position (a chain of tests, every end a call of the function itself,
   the arguments differing only in numbers and in the values `upd` writes) becomes one call whose arguments are such
-  choices.
+  choices.  These stay plain arithmetic: a chain of tests on a state that cycles is predicted well, and a conditional
+  move in its place makes each round wait for the one before.
 
 Anything else is refused with the reason.  Not read yet: signed division (`/` on `int` is unspecified at the smallest
 number), growing blocks (`kq_grow`), functions as values, pairs.

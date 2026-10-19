@@ -206,6 +206,67 @@ with simple_test (fuel : nat) (t : term) : bool :=
       end
   end.
 
+(* if-conversion with early reads: the same as [simple_term], and a read of the current memory is allowed too.  A read is
+   total (outside a block it gives 0), so it can be run whether or not its arm is taken; both arms are then worked out
+   and one is taken, without a jump.  [n_rd] counts the reads, to keep the work of the arm not taken small. *)
+Fixpoint spec_term (fuel : nat) (t : term) : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      match t with
+      | tRel _ | tInt _ => true
+      | tApp (tConst kn _) args =>
+          if Kername.eqb kn kn_rd || Kername.eqb kn kn_rd32 then
+            match args with
+            | [h; i; tRel _] => spec_term fuel h && spec_term fuel i
+            | _ => false
+            end
+          else
+            eq_mp (fst kn) prim_mp && (match binop_of (snd kn) with Some _ => true | None => false end)
+            && forallb (spec_term fuel) args
+      | tCase ci _ c [b0; b1] =>
+          Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_bool)
+          && spec_test fuel c
+          && spec_term fuel (bbody b0) && spec_term fuel (bbody b1)
+      | _ => false
+      end
+  end
+with spec_test (fuel : nat) (t : term) : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      match t with
+      | tRel _ => true
+      | tApp (tConst kn _) args =>
+          (eq_mp (fst kn) prim_mp && (match cmp_of (snd kn) with Some _ => true | None => false end)
+           && forallb (spec_term fuel) args)
+          || ((Kername.eqb kn kn_andb || Kername.eqb kn kn_orb || Kername.eqb kn kn_negb)
+              && forallb (spec_test fuel) args)
+      | _ => false
+      end
+  end.
+
+Fixpoint n_rd (fuel : nat) (t : term) : nat :=
+  match fuel with
+  | O => 0
+  | S fuel =>
+      match t with
+      | tApp (tConst kn _) args =>
+          (if Kername.eqb kn kn_rd || Kername.eqb kn kn_rd32 then 1 else 0)
+          + fold_left (fun a x => a + n_rd fuel x) args 0
+      | tCase _ _ c brs => n_rd fuel c + fold_left (fun a b => a + n_rd fuel (bbody b)) brs 0
+      | _ => 0
+      end
+  end.
+
+(* two numbers that are worked out both, one taken: no jump.  Plain arithmetic always; with reads, a few of them.
+   Used for a choice between two values only.  Merging a chain of calls into one call keeps to plain arithmetic: a
+   chain of tests on a state that cycles (a state machine) is predicted well, and a conditional move in place of the
+   jump makes each round wait for the one before and read on every path. *)
+Definition choice_ok (a0 a1 : term) : bool :=
+  (simple_term 100 a0 && simple_term 100 a1)
+  || (spec_term 100 a0 && spec_term 100 a1 && Nat.leb (n_rd 100 a0 + n_rd 100 a1) 3).
+
 Fixpoint opt_all_t {A} (l : list (option A)) : option (list A) :=
   match l with [] => Some [] | Some a :: l => option_map (cons a) (opt_all_t l) | None :: _ => None end.
 
@@ -420,7 +481,7 @@ Fixpoint tr_int (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struc
       end
   | tCase ci p c [b0; b1] =>
       if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_bool) then
-        if simple_term 100 (bbody b0) && simple_term 100 (bbody b1) then
+        if choice_ok (bbody b0) (bbody b1) then
           (* both numbers are worked out, one is taken: a conditional move, no jump *)
           match c with
           | tApp (tConst kn _) [ca; cb] =>
