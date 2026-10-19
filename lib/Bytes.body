@@ -1,0 +1,15 @@
+(* lib/Bytes.body -- 8- AND 16-BIT CELLS, written in Rocq on the narrow blocks (4-byte cells, little-endian: the layout the
+   machine has, so a byte block can be handed to the hardware and to hw_copy as it is).  A program that names rd8, upd8,
+   rd16 or upd16 gets this text in front of it (proved/kitc.py).  Byte i of narrow block h is byte (i mod 4) of cell
+   i / 4; a read outside the block is 0 and a write outside it does nothing, as for the other cells.  The block is
+   4 * (its cells) bytes long. *)
+Definition rd8 (h i : int) (s : mem) : int := (rd32 h (i >> 2) s >> ((i land 3) * 8)) land 255.
+Definition upd8 (h i v : int) (s : mem) : mem :=
+  let c := i >> 2 in
+  let sh := (i land 3) * 8 in
+  upd32 h c ((rd32 h c s land ((255 << sh) lxor (0 - 1))) lor ((v land 255) << sh)) s.
+Definition rd16 (h i : int) (s : mem) : int := (rd32 h (i >> 1) s >> ((i land 1) * 16)) land 65535.
+Definition upd16 (h i v : int) (s : mem) : mem :=
+  let c := i >> 1 in
+  let sh := (i land 1) * 16 in
+  upd32 h c ((rd32 h c s land ((65535 << sh) lxor (0 - 1))) lor ((v land 65535) << sh)) s.

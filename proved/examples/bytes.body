@@ -1,0 +1,28 @@
+(* 8- and 16-bit cells (lib/Bytes.body): bytes written one by one, halfwords over them, both read back *)
+Fixpoint fill8 (f : nat) (i n : int) (s : mem) : mem :=
+  match f with
+  | O => s
+  | S f => if n <=? i then s else fill8 f (i + 1) n (upd8 0 i (i * 7 + 3) s)
+  end.
+Fixpoint fill16 (f : nat) (j n : int) (s : mem) : mem :=
+  match f with
+  | O => s
+  | S f => if n <=? j then s else fill16 f (j + 1) n (upd16 0 (j + 4) (j * 257 + 11) s)
+  end.
+Fixpoint sum8 (f : nat) (i n acc : int) (s : mem) : int :=
+  match f with
+  | O => acc
+  | S f => if n <=? i then acc else sum8 f (i + 1) n (acc + rd8 0 i s * ((i land 15) + 1)) s
+  end.
+Fixpoint sum16 (f : nat) (j n acc : int) (s : mem) : int :=
+  match f with
+  | O => acc
+  | S f => if n <=? j then acc else sum16 f (j + 1) n (acc + rd16 0 j s * 3) s
+  end.
+Definition solve (n : nat) (nz : int) (s : mem) : int :=
+  let s1 := fill16 (kq_nat 1000) 0 1000 (fill8 n 0 nz s) in
+  sum16 n 0 (nz / 2) (sum8 n 0 nz 0 s1) s1 + rd8 0 (0 - 1) s1 + rd8 0 100000 s1.
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 1)) (kq_arg 1) (kq_input 0).

@@ -73,6 +73,12 @@ Two rewrites keep the C free of jumps on data, as the kit's own translator does:
   choices.  These stay plain arithmetic: a chain of tests on a state that cycles is predicted well, and a conditional
   move in its place makes each round wait for the one before.
 
+8- and 16-bit cells: `rd8 h i s`, `upd8 h i v s`, `rd16`, `upd16` (`lib/Bytes.body`, put in front of a program that names them) are ordinary
+Rocq on the narrow blocks: byte `i` is byte `i mod 4` of narrow cell `i / 4` (little-endian, the machine's layout), a
+read outside the block is 0 and a write outside it does nothing.  They cost a shift and a mask where C has a byte
+load, and a read-modify-write for a store; a native byte access with its own proof is a later general pass.
+`proved/examples/bytes.body` writes bytes and halfwords over each other and reads them back.
+
 Anything else is refused with the reason.  Not read yet: a function that gives back a record or pair (and a choice
 between two records), growing blocks (`kq_grow`), functions as values.
 

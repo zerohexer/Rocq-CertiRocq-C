@@ -18,9 +18,11 @@ if [ $stale = 1 ]; then
   for v in KQRun KQShape KQNat KQBound KQFast; do rocq c -R . KQ $v.v 2>&1 | grep -A4 "^Error" && exit 1; done
 fi
 # a program that names a slab_ function gets lib/Slab.v's text in front of it: the checker and the translator read it
-# as the program's own
+# as the program's own; the same for rd8 / upd8 / rd16 / upd16 and lib/Bytes.body
 src=bld/user/$n.full.body
-{ grep -q '\bslab_' "$f" && sed -n '/(\* SLAB-BEGIN \*)/,/(\* SLAB-END \*)/p' lib/Slab.v; cat "$f"; } > $src
+{ grep -q '\bslab_' "$f" && sed -n '/(\* SLAB-BEGIN \*)/,/(\* SLAB-END \*)/p' lib/Slab.v
+  grep -Eq '\b(rd|upd)(8|16)\b' "$f" && ! grep -q 'Definition rd8' "$f" && cat lib/Bytes.body
+  cat "$f"; } > $src
 ext=$(python3 cffi.py "$src" bld/user/${n}_ffi.h) || { echo "$ext"; exit 1; }
 { cat hand/hdr.txt; echo; cat "$src"
   sed -e "s/%s/$n/" -e "s/%m/(PUse [])/" -e "s/%o/3/" -e "s/%b/KQTests/" -e "s/kq_fits => \"kq_fits\" \]/kq_fits => \"kq_fits\"$ext ]/" hand/ftr_kq.txt
