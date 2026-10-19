@@ -1,0 +1,17 @@
+(* a function that gives back a record of two numbers, used through its fields; and one used twice in a row *)
+Record span := mkspan { lo : int; hi : int }.
+Fixpoint scan (n : nat) (i a b : int) (s : mem) : span :=
+  match n with
+  | O => mkspan a b
+  | S m => let x := rd 0 i s in scan m (i + 1) (if x <? a then x else a) (if b <? x then x else b) s
+  end.
+Fixpoint rounds (r n : nat) (acc : int) (s : mem) : int :=
+  match r with
+  | O => acc
+  | S r => let w := scan n (acc land 127) 100000 (0 - 1) s in
+           let v := scan n (acc land 63) (hi w) (lo w) s in
+           rounds r n (acc + hi w - lo w + lo v * 3 + hi v) s
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  rounds (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) 0 (kq_input 0).

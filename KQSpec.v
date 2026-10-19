@@ -77,6 +77,10 @@ Record laws : Prop := {
   upd_neg   : forall h i v s, nonneg2 h i = false -> Upd m h i v s = s;
   rd_upd_eq : forall h i v s, cell h i s = true -> Rd m h i (Upd m h i v s) = v;
   rd_upd_ne : forall h i h' i' v s, other h i h' i' = true -> Rd m h' i' (Upd m h i v s) = Rd m h' i' s;
+  (* writing a cell again replaces the first write; writing a cell the number it has changes nothing: the memory is what
+     its cells hold (a function that borrows a cell and puts it back leaves the memory it found) *)
+  upd_upd   : forall h i v w s, Upd m h i v (Upd m h i w s) = Upd m h i v s;
+  upd_rd_id : forall h i s, Upd m h i (Rd m h i s) s = s;
   rd32_out    : forall h i s, nonneg2 h i = true -> (Len32 m h <=? i) = true -> Rd32 m h i s = 0;
   upd32_out   : forall h i v s, nonneg2 h i = true -> (Len32 m h <=? i) = true -> Upd32 m h i v s = s;
   rd32_neg    : forall h i s, nonneg2 h i = false -> Rd32 m h i s = 0;

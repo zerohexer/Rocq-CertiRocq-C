@@ -1,0 +1,21 @@
+(* functions that give back two numbers: a loop (the pair at its end), and a recursion that uses the pair it gets *)
+Fixpoint minmax (n : nat) (i lo hi : int) (s : mem) : int * int :=
+  match n with
+  | O => (lo, hi)
+  | S m => let x := rd 0 i s in minmax m (i + 1) (if x <? lo then x else lo) (if hi <? x then x else hi) s
+  end.
+Fixpoint fibp (n : nat) : int * int :=
+  match n with
+  | O => (0, 1)
+  | S m => let '(a, b) := fibp m in (b, (a + b) land 1048575)
+  end.
+Fixpoint rounds (r n : nat) (acc : int) (s : mem) : int :=
+  match r with
+  | O => acc
+  | S r => let '(lo, hi) := minmax n (acc land 255) 100000 (0 - 1) s in
+           let '(fa, fb) := fibp (kq_nat 30) in
+           rounds r n (acc + hi - lo + fa + fb) s
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  rounds (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) 0 (kq_input 0).

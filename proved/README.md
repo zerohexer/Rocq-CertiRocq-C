@@ -79,6 +79,17 @@ read outside the block is 0 and a write outside it does nothing.  They cost a sh
 load, and a read-modify-write for a store; a native byte access with its own proof is a later general pass.
 `proved/examples/bytes.body` writes bytes and halfwords over each other and reads them back.
 
+Functions that give back two numbers.  A recursive function whose result is a pair or a record of two numbers
+(`Fixpoint minmax .. : int * int`, `.. : span` with two fields) is a KQL function that returns the first number and puts
+the second into cell 0 of block 63; the caller keeps the cell's old number first, reads the new one after the call and
+puts the old one back, so the memory is what it was.  The statement of such a function says exactly that:
+`runk .. M (fst (f ..)) (upd 63 0 (snd (f ..)) M)`, under the premise that block 63 has room (`1 < kq_size 63 M`),
+which the driver provides (8 cells).  The proof uses two laws of the kit's memory, `upd_upd` (a cell written twice
+holds the second number) and `upd_rd_id` (a cell written with the number it has is unchanged), both proved for the
+model in `KQModel.v`.  A tail call is a loop; a call whose result is used (`let '(a, b) := f m in ..`) is a call with the
+save and the restore.  More than two numbers: a pair of pairs is not read yet (pass the extra results through memory
+cells, as C does through pointers).  `proved/examples/pair_ret.body`, `rec_ret.body`.
+
 Mutual recursion.  `Fixpoint ping (n : nat) .. with pong (n : nat) ..` (the counter first in each, as always; every call
 to the other function passes a smaller counter) is read as one KQL function for each; a call of the other is a plain
 call (clang turns a call in tail position into a jump).  The kernel checks the group with one lemma, by induction on the
@@ -95,7 +106,7 @@ variable as an argument.  A function chosen at run time is a dispatch on an id w
 an ordinary `if id =? 0 then f0 env x else if id =? 1 then ..` (`proved/examples/dispatch.body`); clang turns such a
 chain into a jump table.
 
-Anything else is refused with the reason.  Not read yet: a function that gives back a record or pair (and a choice
+Anything else is refused with the reason.  Not read yet: a function that gives back more than two numbers (and a choice
 between two records), growing blocks (`kq_grow`), closures.
 
 ## Machine operations

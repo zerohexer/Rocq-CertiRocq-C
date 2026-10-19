@@ -89,11 +89,16 @@ def parse_main(mt):
                 raise SystemExit("main passes something this tool does not read: " + t)
     return entry, args, wrap
 
-def proof_file(name, prog, entry, fns, helpers, groups=()):
+def proof_file(name, prog, entry, fns, helpers, groups=(), pairfns=()):
     t = HDR + prog + f'\nMetaRocq Run (kqm_translate {entry} "{name}_prog").\n'
     t += f"Set Default Timeout {os.environ.get('KQ_TIMEOUT', '300')}.\n"
     if helpers:
         t += "Ltac kqm_unf ::= cbv beta zeta iota delta [" + " ".join(helpers) + "].\n"
+    if pairfns:
+        # functions that give back two numbers: the second goes through the slot block, which the proof puts back as it was
+        t += "Ltac kqm_laws ::= kqm_laws_on.\nLtac kqm_pairs ::= kqm_pairs_on.\n"
+        t += "Ltac kqm_uh h ::= first [ progress cbn [h] | unfold h ].\n"
+        t += "Ltac kqm_unf2 ::= cbn [" + " ".join(pairfns) + "].\n"
     done = set()
     for i, f in enumerate(fns):
         if f in done:
@@ -169,7 +174,7 @@ def ext_dispatch(extfile):
             "static inline value kq_hw_userf(value k, value a, value b, value c, value d) {\n"
             "  switch (KQ_N(k)) {\n" + "\n".join(pure) + "\n    default: return KQ_V(0); } }\n")
 
-def driver(name, entry_id, kinds, res, args, wrap, uses_hw=False, bare=False, prefix="", entry_name="body", secondary=False, ext=None):
+def driver(name, entry_id, kinds, res, args, wrap, uses_hw=False, bare=False, prefix="", entry_name="body", secondary=False, ext=None, slots=False):
     # the entry's parameters, in order, from what `main` passes
     vals = [a for a in args if a[0] != "M"]
     ks = [k for k in kinds if k != "M"]
@@ -187,6 +192,9 @@ def driver(name, entry_id, kinds, res, args, wrap, uses_hw=False, bare=False, pr
         else:
             cargs.append(f"argI({a[1]})")
     call = f"{prefix}f{entry_id}({', '.join(cargs)})"
+    # a program with a function that gives back two numbers: block 63 (8 cells) carries the second one back to the caller
+    slotinit = ("  static value kq_slot_cells[16]; if (!kq_b[63].p) { for (int j = 0; j < 16; j++) kq_slot_cells[j] = KQ_V(0);\n"
+                "    kq_b[63].p = kq_slot_cells; kq_b[63].len = 8; kq_b[63].lim = 16; }\n") if slots else ""
     ret = "return kq_sum(KQ_V(0));" if res == "M" else "return (value) r;"
     hwdef = ("/* ---- the machine's operations: the kit's C bodies (hw/kq_hw.h) behind the external functions of the theorem */\n"
              + ("" if bare else "#include <sys/mman.h>\nuintptr_t kq_hw_wlo, kq_hw_whi;\n") + ext_dispatch(ext) + HW_WRAPPERS) if (uses_hw and not secondary) else ""
@@ -219,7 +227,7 @@ static unsigned long long intW(unsigned long long r) {{ return (r << 1) | 1ULL; 
 static unsigned long long argI(long k) {{ return (unsigned long long) kq_arg(KQ_V(k)); }}
 {hwdef}
 value {entry_name}(struct thread_info *ti) {{
-  for (int h = 0; h < KQ_MAXB; h++) {{ f90000[h] = (unsigned long long *) kq_b[h].p; f90001[h] = kq_b[h].lim; f90002[h] = kq_n[h].p; f90003[h] = kq_n[h].lim; }}
+{slotinit}  for (int h = 0; h < KQ_MAXB; h++) {{ f90000[h] = (unsigned long long *) kq_b[h].p; f90001[h] = kq_b[h].lim; f90002[h] = kq_n[h].p; f90003[h] = kq_n[h].lim; }}
 {hwset}  unsigned long long r = {call};
   (void) r;
   {ret}
@@ -279,7 +287,9 @@ def main():
         # 2: prove, and print the C
         f1 = os.path.join(GEN, f"{name}_p.v")
         groups = [g.split() for g in re.findall(r"KQM group: ([\w' ]+)", out)]
-        t = proof_file(name, prog, entry, fns, helpers, groups)
+        mpf = re.search(r"KQM pairfns:([^\n]*)", out)
+        pairfns = mpf.group(1).split() if mpf else []
+        t = proof_file(name, prog, entry, fns, helpers, groups, pairfns)
         t += f'\nFrom Stdlib Require Import String.\nLocal Open Scope string_scope.\nRedirect "{name}_c" Eval vm_compute in (KQLPrint.pstr 77777%positive (KQMTop.tr_kit_program {name}_prog)).\n'
         # a lemma the kernel does not finish (KQ_TIMEOUT) is left unproved (Admitted): the C is still made and is
         # checked by tests only; the program is then reported as unproved
@@ -324,7 +334,7 @@ def main():
         if prefix:
             c = re.sub(r"\bf(1\d{3})\b", prefix + r"f\1", c)
         open(cfile, "w").write('#include "gc_stack.h"\n#include "kq_io.h"\n' + ('#include "kq_hw.h"\n' if uses_hw else "") + c
-                               + driver(name, eid, kinds, res, args, wrap, uses_hw, bare, prefix, entry_name, secondary, ext))
+                               + driver(name, eid, kinds, res, args, wrap, uses_hw, bare, prefix, entry_name, secondary, ext, bool(pairfns)))
         if not build:
             continue
         # 4: build, as the kit builds its programs

@@ -3,7 +3,7 @@
    impossible: if it led to a contradiction, the same proof would go through for this model, where every law is a
    theorem.  The model is as plain as it can be -- a device always gives back 0, a store only records itself -- because
    the laws promise no more than that: SOME number of the right size, no cell changed. *)
-From Stdlib Require Import ZArith List Lia Sint63 Bool.
+From Stdlib Require Import ZArith List Lia Sint63 Bool FunctionalExtensionality.
 Require Import KQ.KQRun KQ.KQSpec.
 Import ListNotations.
 Open Scope sint63_scope.
@@ -145,6 +145,16 @@ Proof.
   - intros h i v s N0. unfold mupd, okc. unfold nonneg2 in N0. rewrite N0. reflexivity.
   - intros h i v s C. rewrite mrd_upd. change (cell model h i s) with (okc h i (Z s)) in C. rewrite C, !Uint63.eqb_refl. reflexivity.
   - intros h i h' i' v s O. apply mrd_upd_other, O.
+  - intros h i v w s. destruct (okc h i (Z s)) eqn:O.
+    + unfold mupd. rewrite O. cbn [Z]. rewrite O. cbn [W N T Z]. f_equal.
+      apply functional_extensionality; intro h'. apply functional_extensionality; intro i'.
+      destruct ((h =? h') && (i =? i')); reflexivity.
+    + unfold mupd. rewrite O. cbn iota. rewrite O. reflexivity.
+  - intros h i s. destruct (okc h i (Z s)) eqn:O; [ | unfold mupd; rewrite O; reflexivity].
+    unfold mupd at 1. rewrite O. unfold mrd at 1. rewrite O. destruct s as [W0 N0 T0 Z0]. cbn [W N T Z] in *. f_equal.
+    apply functional_extensionality; intro h'. apply functional_extensionality; intro i'.
+    destruct ((h =? h') && (i =? i')) eqn:E; [ | reflexivity].
+    apply andb_prop in E as [E1 E2]. apply Uint63.eqb_spec in E1, E2. subst. reflexivity.
   - intros h i s N0 L. unfold mrd32, okn. unfold nonneg2 in N0. rewrite N0, (lt_of_le_false _ _ L). reflexivity.
   - intros h i v s N0 L. unfold mupd32, okn. unfold nonneg2 in N0. rewrite N0, (lt_of_le_false _ _ L). reflexivity.
   - intros h i s N0. unfold mrd32, okn. unfold nonneg2 in N0. rewrite N0. reflexivity.

@@ -15,6 +15,40 @@ From compcert Require Import Coqlib Maps AST.
 From KQC Require Import KQL KQLAuto KQMSem KQTArith.
 Import ListNotations.
 
+(** ** The laws of the kit's memory, as rewrite rules on its own functions *)
+
+Lemma upd_upd_r : forall h i v w s, KQ.KQRun.upd h i v (KQ.KQRun.upd h i w s) = KQ.KQRun.upd h i v s.
+Proof. intros. exact (KQ.KQSpec.upd_upd KQ.KQSpec.real KQ.KQSpec.real_laws h i v w s). Qed.
+Lemma upd_rd_id_r : forall h i s, KQ.KQRun.upd h i (KQ.KQRun.rd h i s) s = s.
+Proof. intros. exact (KQ.KQSpec.upd_rd_id KQ.KQSpec.real KQ.KQSpec.real_laws h i s). Qed.
+Lemma size_upd_r : forall h i v h' s, KQ.KQRun.kq_size h' (KQ.KQRun.upd h i v s) = KQ.KQRun.kq_size h' s.
+Proof. intros. exact (KQ.KQSpec.size_upd KQ.KQSpec.real KQ.KQSpec.real_laws h i v h' s). Qed.
+Lemma size_upd32_r : forall h i v h' s, KQ.KQRun.kq_size h' (KQ.KQRun.upd32 h i v s) = KQ.KQRun.kq_size h' s.
+Proof. intros. exact (KQ.KQSpec.size_upd32 KQ.KQSpec.real KQ.KQSpec.real_laws h i v h' s). Qed.
+(** the slot block (63): a cell just written holds what was written, when the block has room *)
+Lemma rd_slot0 : forall (v : i63) s, (1 < Sint63.to_Z (KQ.KQRun.kq_size 63%uint63 s))%Z ->
+  KQ.KQRun.rd 63%uint63 0%uint63 (KQ.KQRun.upd 63%uint63 0%uint63 v s) = v.
+Proof.
+  intros v s H. apply (KQ.KQSpec.rd_upd_eq KQ.KQSpec.real KQ.KQSpec.real_laws).
+  unfold KQ.KQSpec.cell. cbn [KQ.KQSpec.Size KQ.KQSpec.real].
+  assert (E : PrimInt63.ltsb 0%uint63 (KQ.KQRun.kq_size 63%uint63 s) = true).
+  { apply (proj2 (Sint63.ltb_spec _ _)). apply Z.compare_lt_iff. assert (Z0 : Sint63.to_Z 0%uint63 = 0%Z) by reflexivity. lia. }
+  rewrite E. reflexivity.
+Qed.
+
+(** with a function that gives back two numbers (the second goes through the slot block): the laws are used on the memory
+    the proof walks and the pairs are taken apart; switched on by the program's file when it has such a function *)
+Ltac kqm_size := repeat (rewrite size_upd_r || rewrite size_upd32_r); first [assumption | lia].
+Ltac kqm_laws := idtac.
+Ltac kqm_pairs := idtac.
+Ltac kqm_laws_on :=
+  repeat (rewrite upd_upd_r || rewrite upd_rd_id_r || rewrite rd_slot0 by kqm_size).
+Ltac kqm_pairs_on :=
+  repeat match goal with
+         | |- context [match ?p with _ => _ end] =>
+             match type of p with bool => fail 1 | nat => fail 1 | _ => destruct p end
+         end.
+
 (** ** Derived rules: a call and a loop, through [runk] *)
 
 Lemma K_call_run : forall P f rho M x g args vs w M1 k v M',
@@ -165,10 +199,10 @@ Ltac kqm_ifs :=
   repeat first [ rewrite if_andb_l | rewrite if_orb_l | rewrite if_negb_l
                | rewrite if_andb_u | rewrite if_orb_u | rewrite if_negb_u ].
 
-Ltac kqm_red0 := cbv beta iota delta [cmp_sem binop_sem hw_sem hwf_sem andb orb negb
+Ltac kqm_red0 := cbv beta iota delta [cmp_sem binop_sem hw_sem hwf_sem andb orb negb fst snd
   PrimInt63.ltsb PrimInt63.lesb PrimInt63.eqb PrimInt63.ltb PrimInt63.leb
   PrimInt63.land PrimInt63.lor PrimInt63.lxor PrimInt63.add PrimInt63.sub PrimInt63.mul].
-Ltac kqm_red := kqm_red0.
+Ltac kqm_red := kqm_red0; kqm_laws.
 
 (** a test already split on is known: every later copy of it in the goal is replaced by its outcome *)
 Ltac kqm_known :=
@@ -265,7 +299,8 @@ Local Strategy opaque [KQ.KQRun.kq_nat].
 
 (** a budget written as a number is looked up first: [lia] on a goal that holds [kq_nat 100000000] is not safe *)
 Ltac kqm_bound := first
-  [ (match goal with
+  [ (match goal with |- (1 < Sint63.to_Z (KQ.KQRun.kq_size _ _))%Z => kqm_size end)
+  | (match goal with
      | |- context [Z.of_nat (KQ.KQRun.kq_nat ?x)] =>
          rewrite (kq_nat_val x) by (vm_compute; split; [ (intros; discriminate) | reflexivity ]); vm_compute; reflexivity
      end)
@@ -334,6 +369,7 @@ Ltac kqm_hyps_known :=
 (** the value of a chosen number against the Rocq text: equal as they stand, or after a split on each test *)
 Ltac kqm_inner c := lazymatch c with context [if ?d then _ else _] => kqm_inner d | _ => c end.
 Ltac kqm_fin :=
+  kqm_red; kqm_pairs; kqm_red;
   first [ (try kqm_known; kqm_ifs; kqm_red; try kqm_known; exact eq_refl)
         | exact eq_refl
         | try kqm_known; kqm_ifs; kqm_red; try kqm_known;
@@ -347,7 +383,7 @@ Ltac kqm_fin :=
 (** split on every test left in the goal (innermost first), the way [kqm_fin] does at a return: a merged choice of
     arguments is compared with the Rocq text that chooses between two calls *)
 Ltac kqm_splitall :=
-  kqm_red;
+  kqm_red; kqm_pairs; kqm_red;
   repeat (match goal with
           | |- context [if ?c then _ else _] =>
               let d := kqm_inner c in (match type of d with bool => idtac end); destruct d; kqm_red; try kqm_known
@@ -378,21 +414,26 @@ Ltac kqm_walk :=
 
 (** the helpers a program's translation wrote out, opened in the Rocq text as well (the program's file sets this) *)
 Ltac kqm_unf := idtac.
+(** the program's file sets this to open its functions that give back two numbers (their statements say [fst] / [snd] of them) *)
+Ltac kqm_unf2 := idtac.
 
 Ltac kqm_head t := match t with ?f _ => kqm_head f | _ => t end.
 
 (** Enter a function: its KQL body on the left, its Rocq definition opened one step on the right. *)
+(** how the function of a statement is opened: unfolded, or (when pairs are taken apart in the goal, which would change a
+    copy of the function's own text) one step by [cbn], so that its recursive calls stay the function *)
+Ltac kqm_uh h := unfold h.
 Ltac kqm_enter :=
   eapply runk_intro; [reflexivity | reflexivity | simpl kbody ];
   match goal with
   | |- evalk _ _ _ _ _ ?v ?m =>
-      first [ let h := kqm_head v in progress unfold h
+      first [ let h := kqm_head v in progress kqm_uh h
             | let h := kqm_head v in progress cbn [h]
             | let h := kqm_head m in progress unfold h
             | let h := kqm_head m in progress cbn [h]
             | idtac ]
   end;
-  kqm_unf.
+  kqm_unf; kqm_unf2.
 
 (** [kqm_prove]: induction on the recursion argument (the first variable of the goal), then the walk;
     [kqm_prove0]: no recursion. *)
@@ -448,11 +489,11 @@ Ltac kqx_enter :=
   eapply runx_intro; [reflexivity | reflexivity | simpl kbody ];
   match goal with
   | |- evalx _ _ _ _ _ ?v =>
-      first [ let h := kqm_head v in progress unfold h
+      first [ let h := kqm_head v in progress kqm_uh h
             | let h := kqm_head v in progress cbn [h]
             | idtac ]
   end;
-  kqm_unf.
+  kqm_unf; kqm_unf2.
 
 Ltac kqx_prove :=
   let d := fresh "d" in
