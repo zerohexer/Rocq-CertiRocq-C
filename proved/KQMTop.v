@@ -96,10 +96,10 @@ Proof.
   apply in_or_app. right. apply in_or_app. left. exact Hin.
 Qed.
 
-Lemma hwf_funs : forall o, exists b, Genv.find_symbol ge (hwfid o) = Some b /\ Genv.find_funct_ptr ge b = Some (External (hwf_ef o) (tylist 1) tyl cc_default).
+Lemma hwf_funs : forall o, exists b, Genv.find_symbol ge (hwfid o) = Some b /\ Genv.find_funct_ptr ge b = Some (External (hwf_ef o) (tylist (hwf_arity o)) tyl cc_default).
 Proof.
   intros o. apply lookup_def.
-  assert (Hin : In (hwfid o, Gfun (External (hwf_ef o) (tylist 1) tyl cc_default)) hwf_defs).
+  assert (Hin : In (hwfid o, Gfun (External (hwf_ef o) (tylist (hwf_arity o)) tyl cc_default)) hwf_defs).
   { unfold hwf_defs. apply in_map_iff. exists o. split; [reflexivity | ]. destruct o; simpl; tauto. }
   change (prog_defs cp) with (tr_defs P ++ hw_defs ++ hwf_defs ++ [(kq_tab, Gvar kit_tab_var); (kq_lens, Gvar kit_lens_var);
                                                       (kq_tab32, Gvar kit_tab32_var); (kq_lens32, Gvar kit_lens32_var)]).
@@ -109,9 +109,9 @@ Qed.
 (** The generated function [g] of the program, called on [vs] from any Clight memory that holds the kit's
     memory [M], ends with the result and a Clight memory that holds the memory the KQL run ends with. *)
 Theorem kit_function_correct :
-  (forall o v M m, kmrel cp M m ->
-    (exists m1, external_call (hwf_ef o) ge [enc v] m E0 (enc (hwf_sem o v)) m1) /\
-    (forall t vres m1, external_call (hwf_ef o) ge [enc v] m t vres m1 -> t = E0 /\ vres = enc (hwf_sem o v) /\ kmrel cp M m1)) ->
+  (forall o vs M m, length vs = hwf_arity o -> kmrel cp M m ->
+    (exists m1, external_call (hwf_ef o) ge (map enc vs) m E0 (enc (hwf_sem o vs)) m1) /\
+    (forall t vres m1, external_call (hwf_ef o) ge (map enc vs) m t vres m1 -> t = E0 /\ vres = enc (hwf_sem o vs) /\ kmrel cp M m1)) ->
   (forall o vs M m, length vs = hw_arity o -> kmrel cp M m ->
     (exists vres m1, external_call (hw_ef o) ge (map enc vs) m E0 vres m1) /\
     (forall t vres m1, external_call (hw_ef o) ge (map enc vs) m t vres m1 -> t = E0 /\ kmrel cp (hw_sem o vs M) m1)) ->

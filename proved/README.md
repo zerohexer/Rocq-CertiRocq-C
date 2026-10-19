@@ -55,7 +55,7 @@ or a write moves the word as it is.
 Parameters `nat` (a counter; the one the function recurses on comes first), `int`, records and pairs of those, and at
 most one memory, last; results `int` or `mem`.  In a body: `match` on a counter, `if` on comparisons joined by `&&`,
 `||`, `negb`, `let` (numbers, booleans, memories, records), `PrimInt63` arithmetic (signed division `divs` and remainder `mods` included), `rd`, `upd`, `rd32`, `upd32`, calls
-of the file's functions, closed constants.  A helper that does not call itself is written out where it is used, unless it is large (more than 40 nodes of its text): then it is a function of its own, proved once.  A budget written as a number (`kq_nat 1000000`) is read as that number; the printer works it out as a unary `nat`, so keep it to 10^7 or less.  A
+of the file's functions, closed constants.  A helper that does not call itself is written out where it is used, unless it is large (more than 40 nodes of its text): then it is a function of its own, proved once.  A budget written as a number (`kq_nat 100000000`) is read as that number (`Abud` atom in KQL: the printer and the proofs never build the unary `nat`).  A
 memory is used only while it is the current one.
 
 A record (`Record st := mkst { acc : int; cnt : int }`) or a pair of numbers and counters is never built: the
@@ -97,20 +97,39 @@ to and loads from a page at `0x10000000` that the test driver maps to stand for 
 
 ### A kernel through this route
 
-`hw/build_proved.sh kernel` takes `hw/kernel_p.body` (the kernel of `hw/kernel.body` without its own assembly
-routines), the instructions of `hw/X86.v` and the library `hw/lib.body` as one Rocq text, translates it, has the
-kernel check that each of its 20 functions computes its Rocq definition (about three minutes), prints the C, and
-builds `hw/kernel_p.elf` with the runtime of `hw/build.sh` (`hw/kq_bare.c`, `hw/boot.S`).  `hw/run.sh kernel_p` boots
-it in QEMU: the serial line, the screen, its own page tables, the interrupt table and ten timer interrupts, the
-processor's registers, PCI, atomics and bulk bytes all give the answers of the kit route's kernel, and the answer is 0.
-What that rests on is the list below under "What is trusted" plus the machine itself: the code the kernel writes into
-memory and runs (`hw_run`) is as correct as the encodings in `hw/X86.v`.
+`hw/build_proved.sh NAME` takes `hw/NAME.body` (the program of the kit route's `hw/NAME.body`, or `hw/NAME_p.body`
+when the proved route reads a different text), the instructions of `hw/X86.v` and the library `hw/lib.body` as one Rocq
+text, translates it, has the kernel check that each of its functions computes its Rocq definition (two to four
+minutes), prints the C, and builds `hw/NAME_p.elf` with the runtime of `hw/build.sh` (`hw/kq_bare.c`, `hw/boot.S`).
+`hw/run.sh NAME_p` boots it in QEMU.  The five test kernels of `hw/` all go through it and give the answers of the kit
+route's: `kernel` (serial line, screen, page tables, interrupt table, ten timer interrupts, the processor's registers,
+PCI, atomics, bulk bytes, assembly routines of its own), `irqnow` (interrupts handled at once by a Rocq program),
+`fault` (a page fault handled by a Rocq program that maps the page), `smp` (a second processor running a Rocq
+program), `own` (the interrupt entry routine written in Rocq, byte by byte).  What that rests on is the list below
+under "What is trusted" plus the machine itself: the code the kernel writes into memory and runs (`hw_run`) is as
+correct as the encodings in `hw/X86.v`.
+
+**Several programs in one kernel.**  `hw/NAME_irq.body` is run at an interrupt or a fault, `hw/NAME_ap.body` by a
+second processor.  Each is its own Rocq text that is translated and proved (`kitc.py --secondary --prefix=irq_
+--entry=kq_irq_body`), with the functions named `irq_f1000 ..`; they share the tables (the memory) and the machine's
+`f91xxx` functions with the main program.  An interrupt program runs inside the interrupt, so it is compiled with
+`-mgeneral-regs-only`.
+
+**The program's own routines.**  A routine written in assembly or C (`hw/NAME.S`, `hw/NAME.c`), declared in the Rocq
+text as `Axiom NAME : int -> .. -> mem -> mem` (or `.. -> int`) and listed in `hw/NAME.ext` (`ROCQNAME CNAME`), is
+called through `hw_user` / `hw_userf` (`hw/User.v`, one number per routine, up to four arguments): operations like the
+others (`Ehw HUser`, `Ehwf FUser`), assumed by `hw_law` / `hwf_law`.  `hw/p_prep.py` turns the kit-style `Axiom` into
+those definitions and writes `NUMBER CNAME ARGUMENTS KIND`, from which `kitc.py --ext` writes the C dispatchers.  A
+routine receives numbers as marked words (2n + 1) and the memory token and gives back a marked number or the token.
 
 Two rules the long programs showed.  A helper larger than 40 nodes is a function of its own: written out into its
 callers, a helper that uses its memory argument several times multiplies the size of every caller.  A choice on
 `a && b`, `a || b` or `negb a` is translated as choices on the parts and the goal is rewritten the same way, so the
 kernel's checks are compared with the text without a case split per test; write such a test where it is used, not in a
-`let` that is a `bool` (the flag the translator keeps for that cannot be compared without a split).
+`let` that is a `bool` (the flag the translator keeps for that cannot be compared without a split).  A chain of
+`&&` / `||` whose outcome is used much later is a split of everything after it: put the chain in a function of its own
+(more than 40 nodes) or compute the number with one choice per test and add them (`(if a then 1 else 0) + (if b then
+1 else 0)` is taken with conditional moves and splits nothing).
 
 ## What is trusted
 

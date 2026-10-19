@@ -123,9 +123,33 @@ unsigned long long f91101(unsigned long long a) { return kq_hw_irq_info(a); }
 unsigned long long f91102(unsigned long long a) { return kq_hw_irq_entry(a); }
 unsigned long long f91103(unsigned long long a) { return kq_hw_cpu_code(a); }
 unsigned long long f91104(unsigned long long a) { return kq_hw_sym(a); }
+unsigned long long f91018(unsigned long long a0, unsigned long long a1, unsigned long long a2, unsigned long long a3, unsigned long long a4) { kq_hw_user(a0, a1, a2, a3, a4, KQ_V(0)); return 1ULL; }
+unsigned long long f91105(unsigned long long a0, unsigned long long a1, unsigned long long a2, unsigned long long a3, unsigned long long a4) { return kq_hw_userf(a0, a1, a2, a3, a4); }
 """
 
-def driver(name, entry_id, kinds, res, args, wrap, uses_hw=False, bare=False):
+def ext_dispatch(extfile):
+    """the program's own routines (hw/User.v): the C dispatchers kq_hw_user / kq_hw_userf over hw/NAME.ext, one line per
+    routine: NUMBER CNAME ARGUMENTS KIND (KIND: mem or pure)"""
+    mem, pure, decl = [], [], []
+    if extfile and os.path.exists(extfile):
+        for line in open(extfile):
+            line = line.split("#")[0].split()
+            if not line:
+                continue
+            k, cname, n, kind = int(line[0]), line[1], int(line[2]), line[3]
+            decl.append(f"extern value {cname}();")
+            xs = ", ".join(["a", "b", "c", "d"][:n])
+            if kind == "mem":
+                mem.append(f"    case {k}: return {cname}({xs + ', ' if xs else ''}s);")
+            else:
+                pure.append(f"    case {k}: return {cname}({xs});")
+    return ("\n".join(decl) + "\n"
+            "static inline value kq_hw_user(value k, value a, value b, value c, value d, value s) {\n"
+            "  switch (KQ_N(k)) {\n" + "\n".join(mem) + "\n    default: return s; } }\n"
+            "static inline value kq_hw_userf(value k, value a, value b, value c, value d) {\n"
+            "  switch (KQ_N(k)) {\n" + "\n".join(pure) + "\n    default: return KQ_V(0); } }\n")
+
+def driver(name, entry_id, kinds, res, args, wrap, uses_hw=False, bare=False, prefix="", entry_name="body", secondary=False, ext=None):
     # the entry's parameters, in order, from what `main` passes
     vals = [a for a in args if a[0] != "M"]
     ks = [k for k in kinds if k != "M"]
@@ -142,15 +166,24 @@ def driver(name, entry_id, kinds, res, args, wrap, uses_hw=False, bare=False):
             cargs.append(f"argN({a[1]})")
         else:
             cargs.append(f"argI({a[1]})")
-    call = f"f{entry_id}({', '.join(cargs)})"
+    call = f"{prefix}f{entry_id}({', '.join(cargs)})"
     ret = "return kq_sum(KQ_V(0));" if res == "M" else "return (value) r;"
     hwdef = ("/* ---- the machine's operations: the kit's C bodies (hw/kq_hw.h) behind the external functions of the theorem */\n"
-             + ("" if bare else "#include <sys/mman.h>\nuintptr_t kq_hw_wlo, kq_hw_whi;\n") + HW_WRAPPERS) if uses_hw else ""
-    hwset = "" if bare else ("  kq_hw_wlo = (uintptr_t) -1; kq_hw_whi = 0;\n"
+             + ("" if bare else "#include <sys/mman.h>\nuintptr_t kq_hw_wlo, kq_hw_whi;\n") + ext_dispatch(ext) + HW_WRAPPERS) if (uses_hw and not secondary) else ""
+    hwset = "" if (bare or secondary) else ("  kq_hw_wlo = (uintptr_t) -1; kq_hw_whi = 0;\n"
              "  for (int h = 0; h < KQ_MAXB; h++) if (kq_b[h].lim) { uintptr_t p = (uintptr_t) kq_b[h].p, e = p + 4 * (uintptr_t) kq_b[h].lim;\n"
              "    if (p < kq_hw_wlo) kq_hw_wlo = p; if (e > kq_hw_whi) kq_hw_whi = e; }\n"
              "  /* a hosted test: a page of memory at 0x10000000 stands for a device */\n"
              "  mmap((void *) 0x10000000, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);\n") if uses_hw else ""
+    if secondary:
+        return f"""
+/* ---- a second program of the same kernel: it shares the tables and the machine's functions of the first */
+extern value kq_arg(value);
+value {entry_name}(struct thread_info *ti) {{
+  unsigned long long r = {call};
+  return (value) r;
+}}
+"""
     return f"""
 /* ---- the driver: the loader's blocks into the tables of the theorem, the entry called, its answer returned */
 unsigned long long *f90000[64];
@@ -165,7 +198,7 @@ static unsigned long long natW(unsigned long long r) {{ long n = ((long) (r << 1
 static unsigned long long intW(unsigned long long r) {{ return (r << 1) | 1ULL; }}
 static unsigned long long argI(long k) {{ return (unsigned long long) kq_arg(KQ_V(k)); }}
 {hwdef}
-value body(struct thread_info *ti) {{
+value {entry_name}(struct thread_info *ti) {{
   for (int h = 0; h < KQ_MAXB; h++) {{ f90000[h] = (unsigned long long *) kq_b[h].p; f90001[h] = kq_b[h].lim; f90002[h] = kq_n[h].p; f90003[h] = kq_n[h].lim; }}
 {hwset}  unsigned long long r = {call};
   (void) r;
@@ -179,12 +212,24 @@ def run(cmd, **kw):
 def main():
     build = True
     bare = False
+    secondary = False
+    prefix = ""
+    entry_name = "body"
+    ext = None
     names = []
     for a in sys.argv[1:]:
         if a == "--no-build":
             build = False
         elif a == "--bare":
             build = False; bare = True
+        elif a == "--secondary":
+            secondary = True
+        elif a.startswith("--prefix="):
+            prefix = a[len("--prefix="):]
+        elif a.startswith("--entry="):
+            entry_name = a[len("--entry="):]
+        elif a.startswith("--ext="):
+            ext = a[len("--ext="):]
         else:
             names.append(a)
     for src in names:
@@ -252,8 +297,10 @@ def main():
         c = raw[raw.index('"') + 1: raw.rindex('"')].replace('""', '"')
         cfile = os.path.join(GEN, f"{name}_bare.c" if bare else f"{name}_proved.c")
         uses_hw = re.search(r"\bf91[01]\d\d\b", c) is not None
+        if prefix:
+            c = re.sub(r"\bf(1\d{3})\b", prefix + r"f\1", c)
         open(cfile, "w").write('#include "gc_stack.h"\n#include "kq_io.h"\n' + ('#include "kq_hw.h"\n' if uses_hw else "") + c
-                               + driver(name, eid, kinds, res, args, wrap, uses_hw, bare))
+                               + driver(name, eid, kinds, res, args, wrap, uses_hw, bare, prefix, entry_name, secondary, ext))
         if not build:
             continue
         # 4: build, as the kit builds its programs

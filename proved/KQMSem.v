@@ -15,7 +15,7 @@ From Stdlib Require Sint63.
 From compcert Require Import Coqlib Maps Integers AST Values Memory Events Globalenvs
   Ctypes Cop Clight ClightBigstep.
 From KQC Require Import KQL KQLSigned.
-Require KQ.KQRun KQ.KQBound KQ.KQSpec KQ.hw.Runtime.
+Require KQ.KQRun KQ.KQBound KQ.KQSpec KQ.hw.Runtime KQ.hw.User.
 Import ListNotations.
 
 Local Open Scope Z_scope.
@@ -50,16 +50,19 @@ Definition hw_sem (o : hwop) (vs : list i63) (M : kmemt) : kmemt :=
   | HRun, [a0 ; a1 ; a2 ; a3 ; a4 ; a5 ; a6 ; a7 ; a8 ; a9] => KQ.KQRun.hw_run a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 M
   | HCodeSync, [a0 ; a1] => KQ.KQRun.hw_code_sync a0 a1 M
   | HIrqTake, [a0 ; a1] => KQ.hw.Runtime.hw_irq_take a0 a1 M
+  | HUser, [a0 ; a1 ; a2 ; a3 ; a4] => KQ.hw.User.hw_user a0 a1 a2 a3 a4 M
   | _, _ => M
   end.
 
-Definition hwf_sem (o : hwfop) (v : i63) : i63 :=
-  match o with
-  | FAddr => KQ.KQRun.hw_addr v
-  | FIrqInfo => KQ.hw.Runtime.hw_irq_info v
-  | FIrqEntry => KQ.hw.Runtime.hw_irq_entry v
-  | FCpuCode => KQ.hw.Runtime.hw_cpu_code v
-  | FSym => KQ.hw.Runtime.hw_sym v
+Definition hwf_sem (o : hwfop) (vs : list i63) : i63 :=
+  match o, vs with
+  | FAddr, [v] => KQ.KQRun.hw_addr v
+  | FIrqInfo, [v] => KQ.hw.Runtime.hw_irq_info v
+  | FIrqEntry, [v] => KQ.hw.Runtime.hw_irq_entry v
+  | FCpuCode, [v] => KQ.hw.Runtime.hw_cpu_code v
+  | FSym, [v] => KQ.hw.Runtime.hw_sym v
+  | FUser, [a0 ; a1 ; a2 ; a3 ; a4] => KQ.hw.User.hw_userf a0 a1 a2 a3 a4
+  | _, _ => 0%uint63
   end.
 
 Inductive evalk (P : prog) : fn -> env -> kmemt -> exp -> i63 -> kmemt -> Prop :=
@@ -105,10 +108,10 @@ Inductive evalk (P : prog) : fn -> env -> kmemt -> exp -> i63 -> kmemt -> Prop :
     length args = hw_arity o -> avals rho args = Some vs ->
     evalk P f rho (hw_sem o vs M) k v M' ->
     evalk P f rho M (Ehw o args k) v M'
-| K_hwf : forall f rho M qo qx qa qva k v M',
-    aval rho qa = Some qva ->
-    evalk P f (PTree.set qx (hwf_sem qo qva) rho) M k v M' ->
-    evalk P f rho M (Ehwf qo qx qa k) v M'
+| K_hwf : forall f rho M qo qx qargs qvs k v M',
+    length qargs = hwf_arity qo -> avals rho qargs = Some qvs ->
+    evalk P f (PTree.set qx (hwf_sem qo qvs) rho) M k v M' ->
+    evalk P f rho M (Ehwf qo qx qargs k) v M'
 | K_loop : forall f rho M args vs rho' v M',
     avals rho args = Some vs ->
     bind (kparams f) vs (PTree.empty _) = Some rho' ->

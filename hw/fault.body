@@ -26,6 +26,9 @@ Definition main : int :=
   let s6 := hw_load 4 (GB + 1193046) 1 0 s5 in                        (* through the same address *)
   let s7 := hw_load 4 (67108864 + 1193046) 1 1 s6 in                  (* at 64 MB + 0x123456 *)
   let s8 := hw_aload 4 (hw_addr SH) 1 2 s7 in                        (* faults handled *)
-  let ok := (rd 1 0 s8 =? 3405691582) && (rd 1 1 s8 =? 3405691582) && (rd 1 2 s8 =? 1) in
-  let s9 := line 102 108 116 32 (rd 1 2 s8) (line 109 97 112 32 (if ok then 0 else 1) s8) in
-  if ok && (rd 1 2 s9 =? 1) then 0 else 1.
+  let r0 := rd 1 0 s8 in
+  let r1 := rd 1 1 s8 in
+  let r2 := rd 1 2 s8 in
+  let good := if (r0 =? 3405691582) && (r1 =? 3405691582) && (r2 =? 1) then 0 else 1 in
+  let s9 := line 102 108 116 32 r2 (line 109 97 112 32 good s8) in
+  if (good =? 0) && (rd 1 2 s9 =? 1) then 0 else 1.

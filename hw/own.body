@@ -67,6 +67,14 @@ Fixpoint best (f : nat) (br bl : int) (s : mem) : mem :=
       let l := tsc 8 s3 - tsc 6 s3 in
       best f (if r <? br then r else br) (if l <? bl then l else bl) s3
   end.
+(* 0 if the runtime's address table answers as it should *)
+Definition symv (u : int) : int :=
+  (if hw_sym 0 =? 0 - 1 then 1 else 0) + (if hw_sym 1 =? 0 - 1 then 1 else 0) + (if hw_sym 2 =? 0 - 1 then 0 else 1).
+(* the report: sym, own, then the two timings *)
+Definition report (n : int) (s4 : mem) : mem :=
+  let s5 := line 115 121 109 32 (symv 0) (line 111 119 110 32 n s4) in
+  let s8 := best (kq_nat 20) 4611686018427387903 4611686018427387903 s5 in
+  line 108 111 97 100 (rd R 3 s8 / 100) (line 114 117 110 32 (rd R 2 s8 / 100) s8).
 Definition main : int :=
   let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
   let want := kq_arg 0 in
@@ -76,8 +84,5 @@ Definition main : int :=
   let s3 := hw_vectors (hw_addr IDT) 4095 s2 in
   let s4 := hw_irq_off (ticks (kq_nat 1000000) 0 0 want (pit_init (pic_init s3))) in
   let n := rd R 0 s4 in
-  let sym := if (hw_sym 0 =? 0 - 1) || (hw_sym 1 =? 0 - 1) || negb (hw_sym 2 =? 0 - 1) then 1 else 0 in
-  let s5 := line 115 121 109 32 sym (line 111 119 110 32 n s4) in
-  let s8 := best (kq_nat 20) 4611686018427387903 4611686018427387903 s5 in
-  let s9 := line 108 111 97 100 (rd R 3 s8 / 100) (line 114 117 110 32 (rd R 2 s8 / 100) s8) in
-  if (n =? want) && (sym =? 0) && (rd R 0 s9 =? n) then 0 else 1.
+  let s9 := report n s4 in
+  if (n =? want) && (symv 0 =? 0) && (rd R 0 s9 =? n) then 0 else 1.

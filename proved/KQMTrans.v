@@ -20,7 +20,7 @@ From MetaRocq.Utils Require Import utils bytestring.
 From MetaRocq.Template Require Import All.
 From compcert Require Import Maps.
 From KQC Require Import KQL KQLAuto KQMSem KQMAuto.
-Require KQ.KQRun KQ.hw.Runtime.
+Require KQ.KQRun KQ.hw.Runtime KQ.hw.User.
 Import MonadNotation ListNotations.
 Open Scope bs.
 
@@ -65,7 +65,8 @@ Definition hw_table : list (kername * term * nat) :=
   ; (kn_of <% KQ.KQRun.hw_call %>, <% HCall %>, 4)
   ; (kn_of <% KQ.KQRun.hw_run %>, <% HRun %>, 10)
   ; (kn_of <% KQ.KQRun.hw_code_sync %>, <% HCodeSync %>, 2)
-  ; (kn_of <% KQ.hw.Runtime.hw_irq_take %>, <% HIrqTake %>, 2) ].
+  ; (kn_of <% KQ.hw.Runtime.hw_irq_take %>, <% HIrqTake %>, 2)
+  ; (kn_of <% KQ.hw.User.hw_user %>, <% HUser %>, 5) ].
 Definition hw_lookup (kn : kername) : option (term * nat) :=
   match List.find (fun e => Kername.eqb (fst (fst e)) kn) hw_table with
   | Some e => Some (snd (fst e), snd e)
@@ -74,14 +75,15 @@ Definition hw_lookup (kn : kername) : option (term * nat) :=
 Definition q_Ehw := <% Ehw %>.
 Definition q_Ehwf := <% Ehwf %>.
 (* the machine's numbers: the Rocq constant and the KQL operation *)
-Definition hwf_table : list (kername * term) :=
-  [ (kn_of <% KQ.KQRun.hw_addr %>, <% FAddr %>)
-  ; (kn_of <% KQ.hw.Runtime.hw_irq_info %>, <% FIrqInfo %>)
-  ; (kn_of <% KQ.hw.Runtime.hw_irq_entry %>, <% FIrqEntry %>)
-  ; (kn_of <% KQ.hw.Runtime.hw_cpu_code %>, <% FCpuCode %>)
-  ; (kn_of <% KQ.hw.Runtime.hw_sym %>, <% FSym %>) ].
-Definition hwf_lookup (kn : kername) : option term :=
-  match List.find (fun e => Kername.eqb (fst e) kn) hwf_table with Some e => Some (snd e) | None => None end.
+Definition hwf_table : list (kername * term * nat) :=
+  [ (kn_of <% KQ.KQRun.hw_addr %>, <% FAddr %>, 1)
+  ; (kn_of <% KQ.hw.Runtime.hw_irq_info %>, <% FIrqInfo %>, 1)
+  ; (kn_of <% KQ.hw.Runtime.hw_irq_entry %>, <% FIrqEntry %>, 1)
+  ; (kn_of <% KQ.hw.Runtime.hw_cpu_code %>, <% FCpuCode %>, 1)
+  ; (kn_of <% KQ.hw.Runtime.hw_sym %>, <% FSym %>, 1)
+  ; (kn_of <% KQ.hw.User.hw_userf %>, <% FUser %>, 5) ].
+Definition hwf_lookup (kn : kername) : option (term * nat) :=
+  match List.find (fun e => Kername.eqb (fst (fst e)) kn) hwf_table with Some e => Some (snd (fst e), snd e) | None => None end.
 
 Definition prim_mp : modpath := fst (kn_of <% PrimInt63.add %>).
 Definition uint63_mp : modpath := fst (kn_of <% Uint63.opp %>).
@@ -89,6 +91,7 @@ Definition uint63_mp : modpath := fst (kn_of <% Uint63.opp %>).
 (* KQL syntax, as terms *)
 Definition q_Avar := <% Avar %>.
 Definition q_Aint := <% Aint %>.
+Definition q_Abud := <% Abud %>.
 Definition q_Eret := <% Eret %>.
 Definition q_Eop := <% Eop %>.
 Definition q_Eif := <% Eif %>.
@@ -576,12 +579,14 @@ Fixpoint tr_int (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struc
         | _, _ => TErr ("not a supported operation: " ^ snd kn)
         end
       else if (match hwf_lookup kn with Some _ => true | None => false end) then
-        match hwf_lookup kn, args with
-        | Some op, [a] =>
-            tr_int fuel Γ a s (fun A s =>
-              let '(x, s) := fresh s in
-              wrap1 q_Ehwf [op; qpos x; A] (k (avar x) s))
-        | _, _ => TErr ("a machine number with the wrong number of arguments: " ^ snd kn)
+        match hwf_lookup kn with
+        | Some (op, n) =>
+            if Nat.eqb (length args) n then
+              tr_ints fuel Γ args s (fun As s =>
+                let '(x, s) := fresh s in
+                wrap1 q_Ehwf [op; qpos x; qlist q_atom As] (k (avar x) s))
+            else TErr ("a machine number with the wrong number of arguments: " ^ snd kn)
+        | None => TErr "machine number"
         end
       else if Kername.eqb kn kn_rd then
         match args with
@@ -703,7 +708,7 @@ with tr_nat (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struct fu
       else TErr "a constructor"
   | tApp (tConst kn _) [tInt _] =>
       (* a budget written as a number: [kq_nat 30] *)
-      if Kername.eqb kn kn_kq_nat then k (aint (tApp q_ofn [t])) s else TErr "not a counter this translator reads"
+      if Kername.eqb kn kn_kq_nat then k (tApp q_Abud [match t with tApp _ [n] => n | _ => t end]) s else TErr "not a counter this translator reads"
   | _ => if nat_lit 10000000 t then k (aint (tApp q_ofn [t])) s else TErr "not a counter this translator reads"
   end
   end

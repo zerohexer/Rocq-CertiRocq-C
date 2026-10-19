@@ -111,6 +111,7 @@ Proof.
   destruct a; simpl; intros v H.
   - apply eval_Etempvar. auto.
   - inv H. apply eval_Econst_long.
+  - inv H. apply eval_Econst_long.
 Qed.
 
 Lemma eval_atoms : forall l vs, avals rho l = Some vs ->

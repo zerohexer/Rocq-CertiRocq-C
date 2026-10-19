@@ -1,4 +1,5 @@
-(* hw/kernel_p.body (the kernel for the proved route: hw/kernel.body without its own assembly routines)
+(* hw/kernel_p.body (the kernel for the proved route: hw/kernel.body with its atomics test in two functions and the
+   combined tests written where they are used -- shorter proofs; the same checks)
    -- hw/kernel.body -- A KERNEL WRITTEN IN ROCQ: the machine's only program, no operating system under it.  Every driver
    below is Rocq; the machine itself is reached through the generic operations of KQRun.v (hw_load, hw_store, atomics ..: plain C) and the x86 instructions of hw/X86.v (machine code written in Rocq from Intel's manual, run through hw_run)
    (hw/kq_hw.h).  It checks, and prints on the serial line:
@@ -28,6 +29,10 @@ Local Notation RAM := 5.     (* a page of plain memory for the access test *)
 Local Notation VGA := 753664.         (* the text screen, 0xB8000 *)
 Local Notation GB := 1073741824.
 Local Notation MB2 := 2097152.
+
+(* the kernel's own machine routines (hw/kernel.S): declared here, linked by hw/kernel.ext *)
+Axiom asm_bswap32 : int -> int.                 (* the 4 low bytes of a number in the other order *)
+Axiom asm_store32 : int -> int -> mem -> mem.   (* asm_store32 a v: the low 32 bits of v at address a *)
 
 (* ---- THE SCREEN: cell k of the text screen at address a + 2k holds a character and its colour *)
 Fixpoint scr_wr (f : nat) (a v k n : int) (s : mem) : mem :=
@@ -154,6 +159,14 @@ Definition t_bulk (s : mem) : mem :=
   let s2 := upd R 15 (if (rd W 37 s1 =? 2880154539) && (rd W 38 s1 =? 2880154539) && (rd W 39 s1 =? 2880154539) && (rd W 40 s1 =? 2880154539) then 0 else 1) s1 in
   line 98 117 108 107 (rd R 15 s2) s2.
 
+(* ---- THE KERNEL'S OWN ROUTINES: a pure one; one that writes memory *)
+Definition t_asm (s : mem) : mem :=
+  let a := hw_addr RAM + 128 in
+  let s1 := hw_load 4 a W 41 (asm_store32 a 3735928559 s) in
+  let s2 := upd R 17 (if rd W 41 s1 =? 3735928559 then 0 else 1)
+                 (upd R 16 (if asm_bswap32 305419896 =? 2018915346 then 0 else 1) s1) in   (* 0x12345678 -> 0x78563412 *)
+  line 97 115 109 32 (rd R 16 s2 + rd R 17 s2) s2.
+
 Fixpoint fails (f : nat) (k acc : int) (s : mem) : int :=
   match f with
   | O => acc
@@ -164,7 +177,7 @@ Fixpoint fails (f : nat) (k acc : int) (s : mem) : int :=
 Definition kmain (want : int) (s : mem) : int :=
   let s0 := ser_init (x86_setup s) in
   let s1 := say4 110 101 108 10 (say4 32 107 101 114 (say4 82 111 99 113 s0)) in              (* "Rocq kernel" *)
-  let s2 := t_bulk (t_atom (t_pci (t_ram (t_cpu (t_irq want (t_pages (t_mmio s1))))))) in
+  let s2 := t_asm (t_bulk (t_atom (t_pci (t_ram (t_cpu (t_irq want (t_pages (t_mmio s1)))))))) in
   fails (kq_nat 20) 0 0 s2.
 
 Definition main : int :=

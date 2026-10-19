@@ -26,6 +26,7 @@ Definition tr_atom (a : atom) : expr :=
   match a with
   | Avar x => Etempvar (tv x) tyl
   | Aint n => Econst_long (tg n) tyl
+  | Abud n => Econst_long (tg (bud n)) tyl
   end.
 
 Definition bin (op : Cop.binary_operation) (a b : expr) : expr := Ebinop op a b tyl.
@@ -109,6 +110,7 @@ Definition hwid (o : hwop) : ident :=
   | HRun => 91015
   | HCodeSync => 91016
   | HIrqTake => 91017
+  | HUser => 91018
   end%positive.
 
 Definition hwname (o : hwop) : String.string :=
@@ -131,9 +133,10 @@ Definition hwname (o : hwop) : String.string :=
   | HRun => "kq_hw_run"
   | HCodeSync => "kq_hw_code_sync"
   | HIrqTake => "kq_hw_irq_take"
+  | HUser => "kq_hw_user"
   end%string.
 
-Definition hw_all : list hwop := [HLoad; HStore; HStore64; HAtomic; HAtomic64; HCas; HCas64; HALoad; HAStore; HAStore64; HFence; HCopy; HFill; HCmp; HCall; HRun; HCodeSync; HIrqTake].
+Definition hw_all : list hwop := [HLoad; HStore; HStore64; HAtomic; HAtomic64; HCas; HCas64; HALoad; HAStore; HAStore64; HFence; HCopy; HFill; HCmp; HCall; HRun; HCodeSync; HIrqTake; HUser].
 
 (** the operations are external functions: C bodies, written once (hw/kq_hw.h), that the theorem assumes obey KQSpec *)
 Definition hw_ef (o : hwop) : external_function :=
@@ -143,15 +146,15 @@ Definition hw_defs : list (ident * globdef fundef type) :=
   map (fun o => (hwid o, Gfun (External (hw_ef o) (tylist (hw_arity o)) tyl cc_default))) hw_all.
 
 Definition hwfid (o : hwfop) : ident :=
-  match o with FAddr => 91100 | FIrqInfo => 91101 | FIrqEntry => 91102 | FCpuCode => 91103 | FSym => 91104 end%positive.
+  match o with FAddr => 91100 | FIrqInfo => 91101 | FIrqEntry => 91102 | FCpuCode => 91103 | FSym => 91104 | FUser => 91105 end%positive.
 Definition hwfname (o : hwfop) : String.string :=
   match o with FAddr => "kq_hw_addr" | FIrqInfo => "kq_hw_irq_info" | FIrqEntry => "kq_hw_irq_entry"
-             | FCpuCode => "kq_hw_cpu_code" | FSym => "kq_hw_sym" end%string.
-Definition hwf_all : list hwfop := [FAddr; FIrqInfo; FIrqEntry; FCpuCode; FSym].
+             | FCpuCode => "kq_hw_cpu_code" | FSym => "kq_hw_sym" | FUser => "kq_hw_userf" end%string.
+Definition hwf_all : list hwfop := [FAddr; FIrqInfo; FIrqEntry; FCpuCode; FSym; FUser].
 Definition hwf_ef (o : hwfop) : external_function :=
-  EF_external (hwfname o) (mksignature [Xlong] Xlong cc_default).
+  EF_external (hwfname o) (mksignature (List.repeat Xlong (hwf_arity o)) Xlong cc_default).
 Definition hwf_defs : list (ident * globdef fundef type) :=
-  map (fun o => (hwfid o, Gfun (External (hwf_ef o) (tylist 1) tyl cc_default))) hwf_all.
+  map (fun o => (hwfid o, Gfun (External (hwf_ef o) (tylist (hwf_arity o)) tyl cc_default))) hwf_all.
 
 Fixpoint set_scratch (i : nat) (args : list atom) : statement :=
   match args with
@@ -275,8 +278,8 @@ Fixpoint tr_exp (ps : list ident) (e : exp) : statement :=
         (kit_guard32 (tr_atom h) (tr_atom i)
            (Sassign (kld_cell32 (sh1 (tr_atom h)) (tr_atom i)) (Ecast (sh1 (tr_atom a)) tint32)) Sskip)
         (tr_exp ps k)
-  | Ehwf o x a k =>
-      Ssequence (Scall (Some (tv x)) (Evar (hwfid o) (funty 1)) [tr_atom a]) (tr_exp ps k)
+  | Ehwf o x args k =>
+      Ssequence (Scall (Some (tv x)) (Evar (hwfid o) (funty (length args))) (map tr_atom args)) (tr_exp ps k)
   | Ehw o args k =>
       Ssequence (Scall None (Evar (hwid o) (funty (length args))) (map tr_atom args)) (tr_exp ps k)
   | Eloop args => Ssequence (set_scratch 0 args) (Ssequence (set_params 0 ps) Scontinue)

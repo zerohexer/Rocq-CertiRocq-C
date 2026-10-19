@@ -12,7 +12,7 @@
 
 From Stdlib Require Import ZArith List Uint63 Lia.
 From compcert Require Import Coqlib Maps AST.
-From KQC Require Import KQL KQLAuto KQMSem.
+From KQC Require Import KQL KQLAuto KQMSem KQTArith.
 Import ListNotations.
 
 (** ** Derived rules: a call and a loop, through [runk] *)
@@ -115,10 +115,10 @@ Lemma X_hw : forall rho M o args vs k v,
   evalx P f rho (hw_sem o vs M) k v -> evalx P f rho M (Ehw o args k) v.
 Proof. intros * L A (M' & E). exists M'. eapply K_hw; eauto. Qed.
 
-Lemma X_hwf : forall rho M o x a va k v,
-  aval rho a = Some va ->
-  evalx P f (PTree.set x (hwf_sem o va) rho) M k v -> evalx P f rho M (Ehwf o x a k) v.
-Proof. intros * A (M' & E). exists M'. eapply K_hwf; eauto. Qed.
+Lemma X_hwf : forall rho M o x args vs k v,
+  length args = hwf_arity o -> avals rho args = Some vs ->
+  evalx P f (PTree.set x (hwf_sem o vs) rho) M k v -> evalx P f rho M (Ehwf o x args k) v.
+Proof. intros * L A (M' & E). exists M'. eapply K_hwf; eauto. Qed.
 
 Lemma X_call_run : forall rho M x g args vs w M1 k v,
   avals rho args = Some vs -> runk P g vs M w M1 ->
@@ -237,6 +237,32 @@ Qed.
 
 Local Strategy opaque [KQ.KQRun.kq_nat].
 
+(** the budget atom is the counter [kq_nat n] (KQL.v [bud]) *)
+Local Strategy 0 [KQ.KQRun.kq_nat].
+Lemma kq_nat_go_S : forall k x, KQ.KQRun.kq_nat_go (S k) x =
+  match PrimInt63.lesb x 0%uint63 with
+  | true => O
+  | false => let h := KQ.KQRun.kq_nat_go k (PrimInt63.asr x 1%uint63) in
+             match PrimInt63.eqb (PrimInt63.land x 1%uint63) 1%uint63 with true => S (Nat.add h h) | false => Nat.add h h end
+  end.
+Proof. intros. reflexivity. Qed.
+Lemma bud_ofn : forall n : i63, bud n = ofn (KQ.KQRun.kq_nat n).
+Proof.
+  intros n. unfold bud, ofn.
+  destruct (PrimInt63.lesb n 0%uint63) eqn:E.
+  - unfold KQ.KQRun.kq_nat. change 63%nat with (S 62%nat). rewrite kq_nat_go_S. rewrite E. reflexivity.
+  - assert (E' : (0 < Sint63.to_Z n)%Z).
+    { destruct (Z_le_gt_dec (Sint63.to_Z n) 0) as [H | H]; [ | lia ].
+      exfalso. assert (PrimInt63.lesb n 0%uint63 = true) as T.
+      { apply Sint63.leb_spec. change (Sint63.to_Z 0%uint63) with 0%Z.
+        assert (Hle : (Sint63.to_Z n <= 0)%Z) by lia. exact Hle. }
+      congruence. }
+    pose proof (sZ_bound n) as SB.
+    rewrite (kq_nat_val n) by lia.
+    symmetry. exact (Sint63.of_to_Z n).
+Qed.
+Local Strategy opaque [KQ.KQRun.kq_nat].
+
 (** a budget written as a number is looked up first: [lia] on a goal that holds [kq_nat 100000000] is not safe *)
 Ltac kqm_bound := first
   [ (match goal with
@@ -273,6 +299,7 @@ Ltac kqm_norm :=
 (** The hypothesis is chosen by the callee's number [g], which both must show: a hypothesis for another function is
     never tried (trying it makes Rocq unfold the program's function table to see the two differ). *)
 Ltac kqm_call :=
+  try rewrite !bud_ofn;
   match goal with
   | |- runk _ ?g _ _ _ _ =>
       tryif is_evar g then (match goal with H : _ |- _ => eapply H; kqm_bound end)
@@ -280,22 +307,40 @@ Ltac kqm_call :=
   end.
 
 Ltac kqm_call_ex :=
+  try rewrite !bud_ofn;
   match goal with
   | |- exists M1, runk _ ?g _ _ _ M1 =>
       tryif is_evar g then (match goal with H : _ |- _ => eapply H; kqm_bound end)
       else (match goal with H : context [runk _ g _ _ _ _] |- _ => eapply H; kqm_bound end)
   end.
 
+(** a test just split on (E : test = outcome) is also put into the earlier hypotheses that mention it: one that then
+    says [false = true] closes the branch (a test repeated in the Rocq text that the walk had already chosen on) *)
+Ltac kqm_hyps_known :=
+  repeat match goal with
+         | E : ?c = _ |- _ =>
+             lazymatch type of c with bool => idtac end;
+             match goal with
+             | H : context [c] |- _ =>
+                 assert_fails (constr_eq E H);
+                 progress rewrite E in H;
+                 cbv beta iota delta [cmp_sem binop_sem hw_sem hwf_sem andb orb negb
+                   PrimInt63.ltsb PrimInt63.lesb PrimInt63.eqb PrimInt63.ltb PrimInt63.leb
+                   PrimInt63.land PrimInt63.lor PrimInt63.lxor PrimInt63.add PrimInt63.sub PrimInt63.mul] in H
+             end
+         end;
+  try (match goal with H : false = true |- _ => discriminate H end).
+
 (** the value of a chosen number against the Rocq text: equal as they stand, or after a split on each test *)
 Ltac kqm_inner c := lazymatch c with context [if ?d then _ else _] => kqm_inner d | _ => c end.
 Ltac kqm_fin :=
-  first [ (kqm_ifs; kqm_red; exact eq_refl)
+  first [ (try kqm_known; kqm_ifs; kqm_red; try kqm_known; exact eq_refl)
         | exact eq_refl
-        | kqm_ifs; kqm_red;
+        | try kqm_known; kqm_ifs; kqm_red; try kqm_known;
           repeat (first [ exact eq_refl
                         | match goal with
                           | |- context [if ?c then _ else _] =>
-                              let d := kqm_inner c in (match type of d with bool => idtac end); destruct d; kqm_red
+                              let d := kqm_inner c in (match type of d with bool => idtac end); destruct d eqn:?E; kqm_red; try kqm_known; kqm_hyps_known
                           end ]);
           first [ exact eq_refl | reflexivity ] ].
 
@@ -320,7 +365,7 @@ Ltac kqm_walk :=
     | |- evalk _ _ _ _ (Ekld32 _ _ _ _) _ _ => eapply K_ld32; [reflexivity | reflexivity | ]
     | |- evalk _ _ _ _ (Ekst32 _ _ _ _) _ _ => eapply K_st32; [reflexivity | reflexivity | reflexivity | ]
     | |- evalk _ _ _ _ (Ehw _ _ _) _ _ => eapply K_hw; [reflexivity | reflexivity | ]
-    | |- evalk _ _ _ _ (Ehwf _ _ _ _) _ _ => eapply K_hwf; [reflexivity | ]
+    | |- evalk _ _ _ _ (Ehwf _ _ _ _) _ _ => eapply K_hwf; [reflexivity | reflexivity | ]
     | |- evalk _ _ _ _ (Eif _ _ _ _ _) _ _ => eapply K_if; [reflexivity | reflexivity | kqm_test]
     | |- evalk _ _ _ _ (Esel _ _ _ _ _ _ _) _ _ => eapply K_sel; [reflexivity | reflexivity | reflexivity | reflexivity | kqm_norm]
     | |- evalk _ _ _ _ (Ecall _ _ _ _) _ _ =>
@@ -369,6 +414,7 @@ Ltac kqx_test :=
     | idtac ].
 
 Ltac kqx_call :=
+  try rewrite !bud_ofn;
   match goal with
   | |- runx _ ?g _ _ _ =>
       tryif is_evar g then (match goal with H : _ |- _ => eapply H; kqm_bound end)
@@ -387,7 +433,7 @@ Ltac kqx_walk :=
     | |- evalx _ _ _ _ (Ekld32 _ _ _ _) _ => eapply X_ld32; [reflexivity | reflexivity | ]
     | |- evalx _ _ _ _ (Ekst32 _ _ _ _) _ => eapply X_st32; [reflexivity | reflexivity | reflexivity | ]
     | |- evalx _ _ _ _ (Ehw _ _ _) _ => eapply X_hw; [reflexivity | reflexivity | ]
-    | |- evalx _ _ _ _ (Ehwf _ _ _ _) _ => eapply X_hwf; [reflexivity | ]
+    | |- evalx _ _ _ _ (Ehwf _ _ _ _) _ => eapply X_hwf; [reflexivity | reflexivity | ]
     | |- evalx _ _ _ _ (Eif _ _ _ _ _) _ => eapply X_if; [reflexivity | reflexivity | kqx_test]
     | |- evalx _ _ _ _ (Esel _ _ _ _ _ _ _) _ => eapply X_sel; [reflexivity | reflexivity | reflexivity | reflexivity | kqm_norm]
     | |- evalx _ _ _ _ (Ecall _ _ _ _) _ =>

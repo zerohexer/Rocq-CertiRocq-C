@@ -19,13 +19,17 @@ Inductive binop := Badd | Bsub | Bmul | Bland | Blor | Blxor | Bdiv | Bmod | Bls
 (* Clt, Cle: the unsigned order; Cslt, Csle: the signed order *)
 Inductive cmpop := Ceq | Clt | Cle | Cslt | Csle.
 
-Inductive atom := Avar (x : ident) | Aint (n : i63).
+(* [Abud n]: a loop budget written as a number, [kq_nat n] (KQRun.v), that is [n] if positive, else 0: held as that number, so
+   that the program is printed without building the unary [nat] *)
+Inductive atom := Avar (x : ident) | Aint (n : i63) | Abud (n : i63).
+
+Definition bud (n : i63) : i63 := if PrimInt63.lesb n 0%uint63 then 0%uint63 else n.
 
 (** The machine's operations (KQRun.v, hw/kq_hw.h): a device access, an atomic, a fence, bytes in bulk, code at an address.
     Each takes the memory and gives it back; what one reads goes into a cell of a wide block. *)
-Inductive hwop := HLoad | HStore | HStore64 | HAtomic | HAtomic64 | HCas | HCas64 | HALoad | HAStore | HAStore64 | HFence | HCopy | HFill | HCmp | HCall | HRun | HCodeSync | HIrqTake.
+Inductive hwop := HLoad | HStore | HStore64 | HAtomic | HAtomic64 | HCas | HCas64 | HALoad | HAStore | HAStore64 | HFence | HCopy | HFill | HCmp | HCall | HRun | HCodeSync | HIrqTake | HUser.
 (** the machine's numbers that need no memory: the address of a narrow block, what the runtime knows *)
-Inductive hwfop := FAddr | FIrqInfo | FIrqEntry | FCpuCode | FSym.
+Inductive hwfop := FAddr | FIrqInfo | FIrqEntry | FCpuCode | FSym | FUser.
 Definition hw_arity (o : hwop) : nat :=
   match o with
   | HLoad => 4
@@ -46,7 +50,11 @@ Definition hw_arity (o : hwop) : nat :=
   | HRun => 10
   | HCodeSync => 2
   | HIrqTake => 2
+  | HUser => 5
   end.
+
+Definition hwf_arity (o : hwfop) : nat :=
+  match o with FUser => 5 | _ => 1 end.
 
 Inductive exp :=
 | Eret (a : atom)
@@ -60,7 +68,7 @@ Inductive exp :=
 | Ekst (h i a : atom) (k : exp)                  (* cell i of block h of the kit's memory := a *)
 | Ekld32 (x : ident) (h i : atom) (k : exp)      (* x := cell i of narrow block h (4-byte cells), signed *)
 | Ekst32 (h i a : atom) (k : exp)                (* cell i of narrow block h := a, kept modulo 2^32 *)
-| Ehwf (o : hwfop) (x : ident) (a : atom) (k : exp)   (* x := a machine number of a *)
+| Ehwf (o : hwfop) (x : ident) (args : list atom) (k : exp)   (* x := a machine number of args *)
 | Ehw (o : hwop) (args : list atom) (k : exp)    (* a machine operation on the kit's memory (KQM.v) *)
 | Eloop (args : list atom).
 
@@ -97,7 +105,7 @@ Definition cmp_sem (c : cmpop) (a b : i63) : bool :=
 Definition env := PTree.t i63.
 
 Definition aval (rho : env) (a : atom) : option i63 :=
-  match a with Avar x => rho ! x | Aint n => Some n end.
+  match a with Avar x => rho ! x | Aint n => Some n | Abud n => Some (bud n) end.
 
 Fixpoint avals (rho : env) (l : list atom) : option (list i63) :=
   match l with
