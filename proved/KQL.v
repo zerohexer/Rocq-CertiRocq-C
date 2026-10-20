@@ -20,15 +20,15 @@ Inductive binop := Badd | Bsub | Bmul | Bland | Blor | Blxor | Bdiv | Bmod | Bls
 (* Clt, Cle: the unsigned order; Cslt, Csle: the signed order *)
 Inductive cmpop := Ceq | Clt | Cle | Cslt | Csle.
 
-(* [Abud n]: a loop budget written as a number, [kq_nat n] (KQRun.v), that is [n] if positive, else 0: held as that number, so
+(* [Abud n]: a loop budget written as a number, [kq_nat n] (KQRun.v), that is [n] if positive (at most 2^60), else 0: held as that number, so
    that the program is printed without building the unary [nat] *)
 Inductive atom := Avar (x : ident) | Aint (n : i63) | Abud (n : i63).
 
-Definition bud (n : i63) : i63 := if PrimInt63.lesb n 0%uint63 then 0%uint63 else n.
+Definition bud (n : i63) : i63 := if PrimInt63.lesb n 0%uint63 then 0%uint63 else if PrimInt63.lesb n 1152921504606846976%uint63 then n else 1152921504606846976%uint63.
 
 (** The machine's operations (KQRun.v, hw/kq_hw.h): a device access, an atomic, a fence, bytes in bulk, code at an address.
     Each takes the memory and gives it back; what one reads goes into a cell of a wide block. *)
-Inductive hwop := HLoad | HStore | HStore64 | HAtomic | HAtomic64 | HCas | HCas64 | HALoad | HAStore | HAStore64 | HFence | HCopy | HFill | HCmp | HCall | HRun | HCodeSync | HIrqTake | HUser.
+Inductive hwop := HLoad | HStore | HStore64 | HAtomic | HAtomic64 | HCas | HCas64 | HALoad | HAStore | HAStore64 | HFence | HCopy | HFill | HCmp | HCall | HRun | HCodeSync | HIrqTake | HUser | HGrow.
 (** the machine's numbers that need no memory: the address of a narrow block, what the runtime knows *)
 Inductive hwfop := FAddr | FIrqInfo | FIrqEntry | FCpuCode | FSym | FUser.
 Definition hw_arity (o : hwop) : nat :=
@@ -52,6 +52,7 @@ Definition hw_arity (o : hwop) : nat :=
   | HCodeSync => 2
   | HIrqTake => 2
   | HUser => 5
+  | HGrow => 2
   end.
 
 Definition hwf_arity (o : hwfop) : nat :=
@@ -72,6 +73,7 @@ Inductive exp :=
 | Ew64 (o : KQ.KQRun.w64op) (xl xh : ident) (al ah bl bh : atom) (k : exp)   (* (xl, xh) := the u64 (al, ah) o the u64 (bl, bh) (KQRun.v w64_op) *)
 | Ekld8 (x : ident) (h i : atom) (k : exp)       (* x := byte i of narrow block h (KQRun.v rd8) *)
 | Ekst8 (h i a : atom) (k : exp)                 (* byte i of narrow block h := a mod 256 (KQRun.v upd8) *)
+| Eksize (x : ident) (h : atom) (k : exp)        (* x := the size of block h of the kit's memory (KQRun.v kq_size) *)
 | Ehwf (o : hwfop) (x : ident) (args : list atom) (k : exp)   (* x := a machine number of args *)
 | Ehw (o : hwop) (args : list atom) (k : exp)    (* a machine operation on the kit's memory (KQM.v) *)
 | Eloop (args : list atom).

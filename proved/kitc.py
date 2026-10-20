@@ -158,6 +158,17 @@ unsigned long long f91018(unsigned long long a0, unsigned long long a1, unsigned
 unsigned long long f91105(unsigned long long a0, unsigned long long a1, unsigned long long a2, unsigned long long a3, unsigned long long a4) { return kq_hw_userf(a0, a1, a2, a3, a4); }
 """
 
+# growing a block (KQRun.v kq_grow): the kit's kq_grow may move the block, so the tables of the theorem are filled again
+HW_GROW = r"""
+unsigned long long f91019(unsigned long long a0, unsigned long long a1) {
+  kq_grow(a0, a1, KQ_V(0));
+  for (int h = 0; h < KQ_MAXB; h++) { f90000[h] = (unsigned long long *) kq_b[h].p; f90001[h] = kq_b[h].lim; }
+  kq_hw_wlo = (uintptr_t) -1; kq_hw_whi = 0;
+  for (int h = 0; h < KQ_MAXB; h++) if (kq_b[h].lim) { uintptr_t p = (uintptr_t) kq_b[h].p, e = p + 4 * (uintptr_t) kq_b[h].lim;
+    if (p < kq_hw_wlo) kq_hw_wlo = p; if (e > kq_hw_whi) kq_hw_whi = e; }
+  return 1ULL; }
+"""
+
 def ext_dispatch(extfile):
     """the program's own routines (hw/User.v): the C dispatchers kq_hw_user / kq_hw_userf over hw/NAME.ext, one line per
     routine: NUMBER CNAME ARGUMENTS KIND (KIND: mem or pure)"""
@@ -203,7 +214,7 @@ def driver(name, entry_id, kinds, res, args, wrap, uses_hw=False, bare=False, pr
                 "    kq_b[63].p = kq_slot_cells; kq_b[63].len = 8; kq_b[63].lim = 16; }\n") if slots else ""
     ret = "return kq_sum(KQ_V(0));" if res == "M" else "return (value) r;"
     hwdef = ("/* ---- the machine's operations: the kit's C bodies (hw/kq_hw.h) behind the external functions of the theorem */\n"
-             + ("" if bare else "#include <sys/mman.h>\nuintptr_t kq_hw_wlo, kq_hw_whi;\n") + ext_dispatch(ext) + HW_WRAPPERS) if (uses_hw and not secondary) else ""
+             + ("" if bare else "#include <sys/mman.h>\nuintptr_t kq_hw_wlo, kq_hw_whi;\n") + ext_dispatch(ext) + HW_WRAPPERS + ("" if bare else HW_GROW)) if (uses_hw and not secondary) else ""
     hwset = "" if (bare or secondary) else ("  kq_hw_wlo = (uintptr_t) -1; kq_hw_whi = 0;\n"
              "  for (int h = 0; h < KQ_MAXB; h++) if (kq_b[h].lim) { uintptr_t p = (uintptr_t) kq_b[h].p, e = p + 4 * (uintptr_t) kq_b[h].lim;\n"
              "    if (p < kq_hw_wlo) kq_hw_wlo = p; if (e > kq_hw_whi) kq_hw_whi = e; }\n"

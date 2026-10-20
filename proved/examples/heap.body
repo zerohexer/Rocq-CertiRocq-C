@@ -1,0 +1,179 @@
+(* A heap that grows: lib/Slab.v (objects with generation-checked handles, on a block that doubles when full) used by a
+   hash set, as examples/slab_set.body; the set's blocks start empty (no .mem) and are grown by kq_grow.  The result adds
+   the sum of the numbers, 1000003 times their count, the size of the table block, and the handle tests (a handle kept
+   after its object was freed is dead and stays dead when the slot is used again). *)
+Definition slab_base (f i : int) : int := 8 + i * (f + 1).
+Definition slab_slot (h : int) : int := (h >> 28) land 268435455.
+Definition slab_gen (h : int) : int := h land 268435455.
+(* b * 2^56 + i * 2^28 + g, written as arithmetic (the C compiler makes the same shifts of it): what proofs reason about *)
+Definition slab_handle (b i g : int) : int := b * 72057594037927936 + i * 268435456 + g.
+Definition slab_next_gen (g : int) : int := if g + 1 =? 268435456 then 2 else g + 1.
+
+Definition slab_init (b f cap grow : int) (s : mem) : mem :=
+  let s := kq_grow b (8 + cap * (f + 1)) s in
+  let s := upd b 0 cap s in
+  let s := upd b 1 0 s in
+  let s := upd b 2 0 s in
+  let s := upd b 3 f s in
+  upd b 4 grow s.
+
+(* is h an object of the slab in block b, not freed since it was taken *)
+Definition slab_live (b h : int) (s : mem) : bool :=
+  let i := slab_slot h in
+  let g := slab_gen h in
+  (0 <=? h) && ((h >> 56) =? b) && (i <? rd b 1 s) && ((g land 1) =? 1) && (rd b (slab_base (rd b 3 s) i) s =? g).
+
+(* the handle the next slab_take gives; 0 when a fixed pool is full *)
+Definition slab_next (b : int) (s : mem) : int :=
+  let fr := rd b 2 s in
+  if 0 <? fr then slab_handle b (fr - 1) (slab_next_gen (rd b (slab_base (rd b 3 s) (fr - 1)) s))
+  else let i := rd b 1 s in
+       if (i <? rd b 0 s) || (rd b 4 s =? 1) then slab_handle b i 1 else 0.
+
+Fixpoint slab_zero (fuel : nat) (b c k n : int) (s : mem) : mem :=
+  match fuel with
+  | O => s
+  | S fuel => if n <=? k then s else slab_zero fuel b c (k + 1) n (upd b (c + 1 + k) 0 s)
+  end.
+
+(* takes the slot slab_next named: the first free one (its fields zeroed), else a new one -- the block doubles first
+   when the slab is full and may grow *)
+Definition slab_take (b : int) (s : mem) : mem :=
+  let f := rd b 3 s in
+  let fr := rd b 2 s in
+  if 0 <? fr then
+    let c := slab_base f (fr - 1) in
+    let nx := rd b (c + 1) s in
+    let g := slab_next_gen (rd b c s) in
+    let s := upd b 2 nx s in
+    let s := upd b c g s in
+    slab_zero (kq_nat f) b c 0 f s
+  else
+    let i := rd b 1 s in
+    let cap := rd b 0 s in
+    if i <? cap then upd b (slab_base f i) 1 (upd b 1 (i + 1) s)
+    else if rd b 4 s =? 1 then
+      let ncap := 2 * cap + 1 in
+      let s := kq_grow b (8 + ncap * (f + 1)) s in
+      let s := upd b 0 ncap s in
+      upd b (slab_base f i) 1 (upd b 1 (i + 1) s)
+    else s.
+
+(* field k of object h; 0 if h is not live or k is not one of its fields *)
+Definition slab_get (b h k : int) (s : mem) : int :=
+  let f := rd b 3 s in
+  if slab_live b h s && (0 <=? k) && (k <? f) then rd b (slab_base f (slab_slot h) + 1 + k) s else 0.
+
+Definition slab_set (b h k v : int) (s : mem) : mem :=
+  let f := rd b 3 s in
+  if slab_live b h s && (0 <=? k) && (k <? f) then upd b (slab_base f (slab_slot h) + 1 + k) v s else s.
+
+(* object h is freed: its generation moves on and its slot goes to the front of the free list *)
+Definition slab_free (b h : int) (s : mem) : mem :=
+  if slab_live b h s then
+    let i := slab_slot h in
+    let c := slab_base (rd b 3 s) i in
+    let g := slab_next_gen (rd b c s) in
+    let fr := rd b 2 s in
+    let s := upd b c g s in
+    let s := upd b (c + 1) fr s in
+    upd b 2 (i + 1) s
+  else s.
+
+Local Notation HEAP := 0.
+Local Notation TABLE := 1.
+
+Definition bucket (x : int) : int := (x * 40503) land 65535.
+Definition step (x : int) : int := (x * 1103515245 + 12345) land 2147483647.
+
+(* 1 if x is in the chain from entry h, else 0 *)
+Fixpoint chain_has (f : nat) (h x : int) (s : mem) : int :=
+  match f with
+  | O => 0
+  | S f => if h =? 0 then 0 else if slab_get HEAP h 0 s =? x then 1 else chain_has f (slab_get HEAP h 1 s) x s
+  end.
+
+Definition insert (g : nat) (x : int) (s : mem) : mem :=
+  let k := bucket x in
+  let first := rd TABLE k s in
+  if 0 <? chain_has g first x s then s
+  else
+    let h := slab_next HEAP s in
+    let s := slab_take HEAP s in
+    let s := slab_set HEAP h 0 x s in
+    let s := slab_set HEAP h 1 first s in
+    upd TABLE k h s.
+
+(* x out of the chain from entry h (prev: the entry before it, 0 at the bucket), and its entry freed *)
+Fixpoint unlink (f : nat) (k prev h x : int) (s : mem) : mem :=
+  match f with
+  | O => s
+  | S f =>
+      if h =? 0 then s
+      else
+        let nx := slab_get HEAP h 1 s in
+        if slab_get HEAP h 0 s =? x then
+          let s := (if prev =? 0 then upd TABLE k nx s else slab_set HEAP prev 1 nx s) in
+          slab_free HEAP h s
+        else unlink f k h nx x s
+  end.
+
+Definition remove (g : nat) (x : int) (s : mem) : mem := let k := bucket x in unlink g k 0 (rd TABLE k s) x s.
+
+(* the n numbers of the sequence from x, each kept below 2^20 *)
+Fixpoint add_all (f g : nat) (i n x : int) (s : mem) : mem :=
+  match f with
+  | O => s
+  | S f => if n <=? i then s else add_all f g (i + 1) n (step x) (insert g (x land 1048575) s)
+  end.
+
+Fixpoint drop_thirds (f g : nat) (i n x : int) (s : mem) : mem :=
+  match f with
+  | O => s
+  | S f =>
+      if n <=? i then s
+      else let y := x land 1048575 in
+           drop_thirds f g (i + 1) n (step x) (if (y mod 3) =? 0 then remove g y s else s)
+  end.
+
+Fixpoint chain_sum (f : nat) (h a : int) (s : mem) : int :=
+  match f with O => a | S f => if h =? 0 then a else chain_sum f (slab_get HEAP h 1 s) (a + slab_get HEAP h 0 s) s end.
+Fixpoint chain_len (f : nat) (h a : int) (s : mem) : int :=
+  match f with O => a | S f => if h =? 0 then a else chain_len f (slab_get HEAP h 1 s) (a + 1) s end.
+Fixpoint table_sum (f g : nat) (k a : int) (s : mem) : int :=
+  match f with O => a | S f => if 65536 <=? k then a else table_sum f g (k + 1) (chain_sum g (rd TABLE k s) a s) s end.
+Fixpoint table_len (f g : nat) (k a : int) (s : mem) : int :=
+  match f with O => a | S f => if 65536 <=? k then a else table_len f g (k + 1) (chain_len g (rd TABLE k s) a s) s end.
+
+
+(* a handle kept after its object was freed is dead, and stays dead when the slot is used again; a second slab (block 2)
+   keeps these steps apart from the set's.  The four answers are packed into cell 0 of block 3. *)
+Definition tests (s : mem) : mem :=
+  let s := kq_grow 3 1 s in
+  let s := slab_init 2 2 16 1 s in
+  let h1 := slab_next 2 s in
+  let s := slab_take 2 s in
+  let s := slab_set 2 h1 0 42 s in
+  let t1 := (if slab_live 2 h1 s then 1 else 0) in
+  let s := slab_free 2 h1 s in
+  let t2 := (if slab_live 2 h1 s then 1 else 0) in
+  let h2 := slab_next 2 s in
+  let s := slab_take 2 s in
+  let t3 := slab_get 2 h1 0 s in
+  let t4 := (if slab_live 2 h2 s then 1 else 0) in
+  upd 3 0 (t1 + t2 * 10 + t3 * 100 + t4 * 1000) s.
+
+Definition solve (nv : int) (s : mem) : int :=
+  let g := kq_nat (2 * nv + 1) in
+  let s := tests s in
+  let s := kq_grow TABLE 65536 s in
+  let s := slab_init HEAP 2 16 1 s in
+  let s := add_all (kq_nat nv) g 0 nv 7 s in
+  let s := drop_thirds (kq_nat nv) g 0 nv 7 s in
+  let s := add_all (kq_nat (nv / 2)) g 0 (nv / 2) 99991 s in
+  let big := (if 56 <=? kq_size HEAP s then 1 else 0) in
+  table_sum (kq_nat 65536) g 0 0 s + table_len (kq_nat 65536) g 0 0 s * 1000003 + kq_size TABLE s + rd 3 0 s + big * 10000.
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_arg 0) (kq_input 0).

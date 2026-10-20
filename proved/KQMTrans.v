@@ -36,6 +36,7 @@ Definition kn_rd32 := kn_of <% KQ.KQRun.rd32 %>.
 Definition kn_upd32 := kn_of <% KQ.KQRun.upd32 %>.
 Definition kn_rd8 := kn_of <% KQ.KQRun.rd8 %>.
 Definition kn_upd8 := kn_of <% KQ.KQRun.upd8 %>.
+Definition kn_ksize := kn_of <% KQ.KQRun.kq_size %>.
 Definition kn_w64_op := kn_of <% KQ.KQRun.w64_op %>.
 Definition kn_kmem := kn_of <% KQ.KQRun.mem %>.
 Definition kn_kq_nat := kn_of <% KQ.KQRun.kq_nat %>.
@@ -69,7 +70,8 @@ Definition hw_table : list (kername * term * nat) :=
   ; (kn_of <% KQ.KQRun.hw_run %>, <% HRun %>, 10)
   ; (kn_of <% KQ.KQRun.hw_code_sync %>, <% HCodeSync %>, 2)
   ; (kn_of <% KQ.hw.Runtime.hw_irq_take %>, <% HIrqTake %>, 2)
-  ; (kn_of <% KQ.hw.User.hw_user %>, <% HUser %>, 5) ].
+  ; (kn_of <% KQ.hw.User.hw_user %>, <% HUser %>, 5)
+  ; (kn_of <% KQ.KQRun.kq_grow %>, <% HGrow %>, 2) ].
 Definition hw_lookup (kn : kername) : option (term * nat) :=
   match List.find (fun e => Kername.eqb (fst (fst e)) kn) hw_table with
   | Some e => Some (snd (fst e), snd e)
@@ -105,6 +107,7 @@ Definition q_Ekst := <% Ekst %>.
 Definition q_Ekld32 := <% Ekld32 %>.
 Definition q_Ekst32 := <% Ekst32 %>.
 Definition q_Ekld8 := <% Ekld8 %>.
+Definition q_Eksize := <% Eksize %>.
 Definition q_Ekst8 := <% Ekst8 %>.
 Definition q_Ew64 := <% Ew64 %>.
 Definition q_Eloop := <% Eloop %>.
@@ -167,6 +170,7 @@ Fixpoint qlist (ty : term) (l : list term) : term :=
 
 Definition avar (x : positive) : term := tApp q_Avar [qpos x].
 Definition aint (t : term) : term := tApp q_Aint [t].
+Definition q_cap60 : term := tInt (Uint63.of_Z 1152921504606846976%Z).
 
 (* ------------------------------------------------------------------ the result monad *)
 Inductive tres (A : Type) := TOk (a : A) | TErr (m : string).
@@ -712,6 +716,14 @@ Fixpoint tr_int (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struc
               wrap1 q_Ekld8 [qpos x; H; I] (k (avar x) s))))
         | _ => TErr "rd8"
         end
+      else if Kername.eqb kn kn_ksize then
+        match args with
+        | [h; m] =>
+            tr_int fuel Γ h s (fun H s => tr_mem fuel Γ m s (fun s =>
+              let '(x, s) := fresh s in
+              wrap1 q_Eksize [qpos x; H] (k (avar x) s)))
+        | _ => TErr "kq_size"
+        end
       else match find_fn_args Γ kn args with
       | Some f =>
           if fi_rmem f then TErr "a function giving back a memory, used as a number"
@@ -827,6 +839,15 @@ with tr_nat (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struct fu
   | tApp (tConst kn _) [tInt _] =>
       (* a budget written as a number: [kq_nat 30] *)
       if Kername.eqb kn kn_kq_nat then k (tApp q_Abud [match t with tApp _ [n] => n | _ => t end]) s else TErr "not a counter this translator reads"
+  | tApp (tConst kn _) [e] =>
+      (* a budget worked out while the program runs: [kq_nat n] for a number n: n if positive, else 0 *)
+      if Kername.eqb kn kn_kq_nat then
+        tr_int fuel Γ e s (fun A s =>
+          let '(x, s) := fresh s in
+          wrap1 q_Esel [qpos x; <% Csle %>; A; aint q_zero; aint q_zero; A]
+            (let '(y, s) := fresh s in
+             wrap1 q_Esel [qpos y; <% Cslt %>; aint q_cap60; avar x; aint q_cap60; avar x] (k (avar y) s)))
+      else TErr "not a counter this translator reads"
   | _ => if nat_lit 10000000 t then k (aint (tApp q_ofn [t])) s else TErr "not a counter this translator reads"
   end
   end
@@ -1964,6 +1985,14 @@ Ltac kqm_auto :=
   (* a function that writes the memory and gives a number is stated with [runx]; the other proofs do not apply to
      it and, tried first, can run a long time before they fail *)
   lazymatch goal with
-  | |- context [runx _ _ _ _ _] => first [ solve [ kqx_prove ] | solve [ kqx_prove0 ] ]
-  | _ => first [ solve [ kqm_prove ] | solve [ kqm_prove0 ] ]
+  | |- context [runx _ _ _ _ _] =>
+      lazymatch goal with
+      | |- forall (_ : nat), _ => first [ solve [ kqx_prove ] | solve [ kqx_prove0 ] ]
+      | _ => solve [ kqx_prove0 ]
+      end
+  | _ =>
+      lazymatch goal with
+      | |- forall (_ : nat), _ => first [ solve [ kqm_prove ] | solve [ kqm_prove0 ] ]
+      | _ => solve [ kqm_prove0 ]
+      end
   end.

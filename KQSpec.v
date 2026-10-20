@@ -153,6 +153,7 @@ Record laws : Prop := {
      cell (the new cells read 0, as they did outside the block), no narrow cell, nothing the devices saw *)
   len_size   : forall h s, (Len m h <=? Size m h s) = true;
   size_hi    : forall h s, (64 <=? h) = true -> Size m h s = 0;
+  size_neg   : forall h s, (h <? 0) = true -> Size m h s = 0;
   len32_hi   : forall h, (64 <=? h) = true -> Len32 m h = 0;
   size_grow  : forall h n s, growable h n = true -> Size m h (Grow m h n s) = (if Size m h s <? n then n else Size m h s);
   size_grow_ne : forall h n h' s, (h =? h') = false -> Size m h' (Grow m h n s) = Size m h' s;

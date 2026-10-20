@@ -51,6 +51,7 @@ Definition hw_sem (o : hwop) (vs : list i63) (M : kmemt) : kmemt :=
   | HCodeSync, [a0 ; a1] => KQ.KQRun.hw_code_sync a0 a1 M
   | HIrqTake, [a0 ; a1] => KQ.hw.Runtime.hw_irq_take a0 a1 M
   | HUser, [a0 ; a1 ; a2 ; a3 ; a4] => KQ.hw.User.hw_user a0 a1 a2 a3 a4 M
+  | HGrow, [a0 ; a1] => KQ.KQRun.kq_grow a0 a1 M
   | _, _ => M
   end.
 
@@ -119,6 +120,10 @@ Inductive evalk (P : prog) : fn -> env -> kmemt -> exp -> i63 -> kmemt -> Prop :
     evalk P f (PTree.set xh (KQ.KQRun.w_hi (KQ.KQRun.w64_op o ra rb))
                 (PTree.set xl (KQ.KQRun.w_lo (KQ.KQRun.w64_op o ra rb)) rho)) M k v M' ->
     evalk P f rho M (Ew64 o xl xh al ah bl bh k) v M'
+| K_size : forall f rho M x h vh k v M',
+    aval rho h = Some vh ->
+    evalk P f (PTree.set x (ksize vh M) rho) M k v M' ->
+    evalk P f rho M (Eksize x h k) v M'
 | K_hw : forall f rho M o args vs k v M',
     length args = hw_arity o -> avals rho args = Some vs ->
     evalk P f rho (hw_sem o vs M) k v M' ->
@@ -190,6 +195,17 @@ Proof.
         { apply (KQ.KQSpec.size_hi KQ.KQSpec.real lawsK). apply KQ.KQSpec.le_Z. change (Sint63.to_Z 64%uint63) with 64. lia. }
         rewrite Hs. change (Sint63.to_Z 0%uint63) with 0. lia.
   - apply (KQ.KQSpec.rd_neg KQ.KQSpec.real lawsK vh vi M). exact NN.
+Qed.
+
+(** a block number outside 0 .. 63 has size 0 *)
+Lemma ksize_out : forall (vh : i63) (M : kmemt), ~ (0 <= Sint63.to_Z vh < 64) -> ksize vh M = 0%uint63.
+Proof.
+  intros vh M N.
+  destruct (Z_lt_ge_dec (Sint63.to_Z vh) 0) as [Lh | Lh].
+  - apply (KQ.KQSpec.size_neg KQ.KQSpec.real lawsK). apply KQ.KQSpec.lt_Z.
+    change (Sint63.to_Z 0%uint63) with 0. lia.
+  - apply (KQ.KQSpec.size_hi KQ.KQSpec.real lawsK). apply KQ.KQSpec.le_Z.
+    change (Sint63.to_Z 64%uint63) with 64. lia.
 Qed.
 
 (** a write outside the memory changes nothing *)

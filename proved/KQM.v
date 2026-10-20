@@ -339,6 +339,49 @@ Proof.
     + intros [A1 A2]. apply (in_range vh kq_nblocks ltac:(unfold kq_nblocks; lia)) in A1. lia.
 Qed.
 
+(** the size of a block *)
+Lemma exec_ksize : forall le m rho M x h vh,
+  agree rho le -> kmrel M m -> aval rho h = Some vh ->
+  exec_stmt function_entry2 ge empty_env le m
+    (Sifthenelse (cmpe Olt (tr_atom h) (c64 128))
+       (Sset (tv x) (Ebinop Oadd (kld_len (sh1 (tr_atom h))) c1 tyl)) (Sset (tv x) c1))
+    E0 (PTree.set (tv x) (enc (ksize vh M)) le) m Out_normal.
+Proof.
+  intros le m rho M x h vh AG KM Hh.
+  assert (EH := eval_atom cp empty_env le m rho AG h vh Hh).
+  assert (EHs := eval_kidx le m rho h vh AG Hh).
+  pose proof (phi_range vh) as Rh.
+  assert (E128 : eval_expr ge empty_env le m (c64 128) (Vlong (Int64.repr 128))) by apply eval_Econst_long.
+  eapply exec_Sifthenelse; [ eapply eval_ltu; [exact EH | exact E128 | apply typeof_atom | reflexivity] | apply bool_of | ].
+  simpl. rewrite lt128_t.
+  destruct (Z_lt_ge_dec (to_Z vh) kq_nblocks) as [Lh | Lh].
+  - assert (Eh : (to_Z vh <? 64) = true) by (apply Z.ltb_lt; exact Lh). rewrite Eh.
+    destruct (kmrel_get M m KM) as (bt & bl & bk & Ft & Fl & T).
+    destruct (T (to_Z vh) ltac:(unfold kq_nblocks in Lh; lia)) as (n & Hn & Bn & Hl & Hc & Ht).
+    rewrite Uint63.of_to_Z in Hn.
+    assert (EL : eval_expr ge empty_env le m (kld_len (sh1 (tr_atom h))) (Vlong (Int64.repr (2 * n)))).
+    { eapply eval_kld_len; [exact EHs | reflexivity | unfold kq_nblocks in Lh; lia | lia | exact Fl | exact Hl]. }
+    apply exec_Sset.
+    assert (Hu : to_Z (ksize vh M) = n).
+    { pose proof (phi_range (ksize vh M)) as Rs. destruct (Z_lt_ge_dec (to_Z (ksize vh M)) (2 ^ 62)) as [L | L].
+      - rewrite <- (sZ_small _ L). exact (eq_sym Hn).
+      - rewrite (sZ_big (ksize vh M) ltac:(lia)) in Hn. lia. }
+    assert (EA : eval_expr ge empty_env le m (Ebinop Oadd (kld_len (sh1 (tr_atom h))) c1 tyl)
+                   (Vlong (Int64.add (Int64.repr (2 * n)) Int64.one))).
+    { eapply eval_binT; [exact EL | apply eval_c1 | reflexivity | reflexivity | ].
+      simpl. unfold sem_add, sem_binarith. simpl. reflexivity. }
+    assert (Eq : tg (ksize vh M) = Int64.add (Int64.repr (2 * n)) Int64.one).
+    { apply uinj. rewrite uns_tg, uadd, uns_repr, Hu. change (Int64.unsigned Int64.one) with 1.
+      rewrite (Z.mod_small (2 * n) (2 ^ 64)) by lia. symmetry. apply Z.mod_small. lia. }
+    unfold enc. rewrite Eq. exact EA.
+  - assert (Eh : (to_Z vh <? 64) = false) by (apply Z.ltb_ge; unfold kq_nblocks in Lh; lia). rewrite Eh.
+    apply exec_Sset.
+    rewrite (ksize_out vh M).
+    + unfold enc. rewrite tg_zero. apply eval_c1.
+    + intros [A1 A2]. assert (A : 0 <= Sint63.to_Z vh < kq_nblocks) by (unfold kq_nblocks; lia).
+      apply (in_range vh kq_nblocks ltac:(unfold kq_nblocks; lia)) in A. lia.
+Qed.
+
 Lemma of_Z_inj : forall a b, 0 <= a < 2 ^ 63 -> 0 <= b < 2 ^ 63 -> of_Z a = of_Z b -> a = b.
 Proof. intros a b Ha Hb E. rewrite <- (of_Z_phi a Ha), <- (of_Z_phi b Hb), E. reflexivity. Qed.
 
@@ -1344,6 +1387,10 @@ Proof.
     destruct (IHevalk le' m AG' MR) as (le1 & m1 & out & X & R).
     exists le1, m1, out. split; auto.
     change E0 with (E0 ** E0). eapply exec_Sseq_1; eauto.
+  - (* block size *)
+    destruct (IHevalk _ m (agree_set rho le x _ AG) MR) as (le1 & m1 & out & X & R).
+    exists le1, m1, out. split; auto.
+    change E0 with (E0 ** E0). eapply exec_Sseq_1; eauto. eapply exec_ksize; eauto.
   - (* machine operation *)
     destruct (hw_funs o) as (b & FS & FP).
     pose proof (avals_length _ _ _ H0) as LEN.

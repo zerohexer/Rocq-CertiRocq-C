@@ -45,7 +45,7 @@ offers, and what takes its place:
 | arrays, buffers | memory blocks read and written with `rd`, `upd` | wide and 32-bit cells proved; 8-bit cells are one byte access in the C (proved against CompCert's memory), 16-bit cells are two |
 | structs, unions, bit fields | records split into integers, or a layout in a block; bit fields are bit operations | records and pairs of numbers as parameters, `let`s, `match`es and fields are proved; a recursive function giving back a record or pair of two numbers is proved (the second goes through a slot block); more than two, and unions, missing |
 | pointers, raw addresses | an integer address into a region; for an OS, RAM is one block at its base address | missing |
-| `malloc`, `free` | an allocator written in Rocq on a growing block | in the kit route (`lib/Slab.v`); not proved |
+| `malloc`, `free` | an allocator written in Rocq on a growing block (`kq_grow`, `kq_size`) | `lib/Slab.v` goes through the proved route (`proved/examples/heap.body`); `kq_grow`'s C body is assumed, like the other machine operations |
 | function pointers, callbacks | a table of function ids, a proved dispatch on the id, the environment passed as arguments; a known function given to a helper is put in, a recursive function that takes functions gets a copy per function given | proved (`proved/examples/dispatch.body`, `hof_*.body`); closures refused |
 | hardware access, atomics, inline assembly | primitives with a stated law and a trace; hand-written `.S` once per architecture | loads, stores, atomics, fences, bulk bytes, `hw_run`, `hw_addr`, interrupt-take proved against the kit's laws, the C bodies assumed (`hw_law`, `hwf_law`); five test kernels (`hw/`: the kernel, interrupt handler, fault handler, second processor, interrupt entry written in Rocq) are proved and boot in QEMU; a program's own assembly/C routines are declared and assumed (`hw_user`) |
 | floating point | `PrimFloat` as C `double` | not started |
@@ -134,7 +134,7 @@ Proved and in the corpus (36 programs, all proved, answers equal to the C++ run,
    proved route and boot (`hw/build_proved.sh`): several programs per kernel (interrupt, fault, second processor) and
    the program's own assembly/C routines are done.  Left: a freestanding build of the generated C checked on its own,
    and the proof time of long straight-line code (the 100-store instruction table takes two minutes).
-3. Growing blocks and the heap library on them.
+3. The heap library's own lemmas (invariants of the slab that a user theorem about their program can use), and a freestanding `kq_grow`.
 4. The general passes of the section above, each proved once and measured against C written the same way:
    if-conversion with early reads is done; next the removal of the test on an access whose index is in range.
    These run alongside the other items and block none of them.

@@ -111,6 +111,7 @@ Definition hwid (o : hwop) : ident :=
   | HCodeSync => 91016
   | HIrqTake => 91017
   | HUser => 91018
+  | HGrow => 91019
   end%positive.
 
 Definition hwname (o : hwop) : String.string :=
@@ -134,9 +135,10 @@ Definition hwname (o : hwop) : String.string :=
   | HCodeSync => "kq_hw_code_sync"
   | HIrqTake => "kq_hw_irq_take"
   | HUser => "kq_hw_user"
+  | HGrow => "kq_hw_grow"
   end%string.
 
-Definition hw_all : list hwop := [HLoad; HStore; HStore64; HAtomic; HAtomic64; HCas; HCas64; HALoad; HAStore; HAStore64; HFence; HCopy; HFill; HCmp; HCall; HRun; HCodeSync; HIrqTake; HUser].
+Definition hw_all : list hwop := [HLoad; HStore; HStore64; HAtomic; HAtomic64; HCas; HCas64; HALoad; HAStore; HAStore64; HFence; HCopy; HFill; HCmp; HCall; HRun; HCodeSync; HIrqTake; HUser; HGrow].
 
 (** the operations are external functions: C bodies, written once (hw/kq_hw.h), that the theorem assumes obey KQSpec *)
 Definition hw_ef (o : hwop) : external_function :=
@@ -324,6 +326,11 @@ Fixpoint tr_exp (ps : list ident) (e : exp) : statement :=
         (kit_guard8 (tr_atom h) (tr_atom i)
            (Sassign (kld_cell8 (sh1 (tr_atom h)) (sh1 (tr_atom i))) (Ecast (sh1 (tr_atom a)) tchar)) Sskip)
         (tr_exp ps k)
+  | Eksize x h k =>
+      Ssequence
+        (Sifthenelse (cmpe Olt (tr_atom h) (c64 128))
+           (Sset (tv x) (Ebinop Oadd (kld_len (sh1 (tr_atom h))) c1 tyl)) (Sset (tv x) c1))
+        (tr_exp ps k)
   | Ehwf o x args k =>
       Ssequence (Scall (Some (tv x)) (Evar (hwfid o) (funty (length args))) (map tr_atom args)) (tr_exp ps k)
   | Ehw o args k =>
@@ -343,6 +350,7 @@ Fixpoint binders (e : exp) : list ident :=
   | Ew64 _ xl xh _ _ _ _ k => tv xl :: tv xh :: binders k
   | Ekld8 x _ _ k => tv x :: binders k
   | Ekst8 _ _ _ k => binders k
+  | Eksize x _ k => tv x :: binders k
   | Ehw _ _ k => binders k
   | Ehwf _ x _ k => tv x :: binders k
   | Eif _ _ _ t f => binders t ++ binders f

@@ -125,8 +125,25 @@ would copy `r` at every step.  A u64 helper is written out where it is used, lik
 gives back a u64 is a function with two results (the second through block 63).
 `proved/examples/w64.body` is FNV-1a over bytes, a splitmix-style mixer, a rotation and comparisons.
 
+A heap that grows.  `kq_grow h n s` makes block h hold at least n cells (the new ones read 0, nothing else changes) and
+`kq_size h s` gives a block's size now (KQRun.v, the laws are in KQSpec.v).  `kq_size` is one KQL instruction
+(`Eksize`): a load of the block's limit from the table, proved like the loads.  `kq_grow` is one more machine operation
+(`HGrow`, as the device accesses and atomics are): its law is the kit's (`size_grow`, `rd_grow`, ..., all proved for the model
+in `KQModel.v`), its C body is assumed -- on a hosted run it is the kit's `kq_grow`, which moves the block with `realloc` and
+fills the two tables of the theorem again (`HW_GROW` in `kitc.py`); on the machine itself the program's own allocator does
+the same.  If memory runs out the hosted run stops with exit code 3: the laws cannot hold then and nothing is computed
+past it.  `lib/Slab.v` (objects with generation-checked handles on one block that doubles when full) goes through the route
+as it stands: `proved/examples/heap.body` is a hash set whose entries are slab objects, 18 functions proved, with the
+answer equal to the same set written with `malloc` and `free` in C.  Three things the route needed for it:
+a budget `kq_nat n` for a number n worked out while the program runs (it is at most 2^60 now, `kq_nat_le`, so a counter
+always has room to count a few more), a bound on any such counter that the proof gets without working the number out, and
+a first parameter of type `int` no longer tried as an induction.  Not read yet: a recursive function that gives back a
+`bool` (return 0 or 1; a helper that is not recursive is fine), and a long run of calls in one function whose
+memories all feed the next (the proof term grows with the length, as for any long straight-line code -- put the steps
+in functions or loops).
+
 Anything else is refused with the reason.  Not read yet: a function that gives back more than two numbers (and a choice
-between two records), growing blocks (`kq_grow`), closures.
+between two records), closures.
 
 ## Machine operations
 

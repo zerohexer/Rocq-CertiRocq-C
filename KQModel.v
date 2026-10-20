@@ -226,6 +226,11 @@ Proof.
     destruct (h <? 64) eqn:L1; [apply lt_Z in L1; change (Sint63.to_Z 64) with 64%Z in L1; lia | ].
     destruct (h <? 4) eqn:L2; [apply lt_Z in L2; change (Sint63.to_Z 4) with 4%Z in L2; lia | ].
     rewrite !andb_false_r. reflexivity.
+  - intros h s H. unfold msize, mlen.
+    assert (E : (0 <=? h) = false).
+    { apply Bool.not_true_is_false. intro X. apply le_Z in X. apply lt_Z in H.
+      change (Sint63.to_Z 0) with 0%Z in *. lia. }
+    rewrite E. reflexivity.
   - intros h H. apply le_Z in H. unfold mlen32.
     change (Sint63.to_Z 64) with 64%Z in H.
     destruct (h <? 8) eqn:L; [apply lt_Z in L; change (Sint63.to_Z 8) with 8%Z in L; lia | ].

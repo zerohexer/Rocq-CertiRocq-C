@@ -107,7 +107,8 @@ Fixpoint kq_nat_go (k : nat) (x : int) : nat :=
             else let h := kq_nat_go k' (x >> 1) in
                  if (x land 1) =? 1 then S (h + h) else (h + h)%nat
   end.
-Definition kq_nat (x : int) : nat := kq_nat_go 63 x.
+(* a budget is at most 2^60 (more is more than any run can use): a counter always has room to count a few more *)
+Definition kq_nat (x : int) : nat := kq_nat_go 63 (if x <=? 1152921504606846976 then x else 1152921504606846976).
 (* Rocq is told NOT to open `kq_nat` when it compares two programs (KQFast.v proves `main_kq = main` by having the
    kernel compare them).  A program's budget is `kq_nat (kq_arg 0)`: a number nobody knows before the run.  Opened,
    it is 63 nested tests each naming the next one twice, and comparing two of those never ends.  Computing with it
