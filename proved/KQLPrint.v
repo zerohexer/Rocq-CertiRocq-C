@@ -38,8 +38,9 @@ Definition tystr (t : type) : string :=
   match t with
   | Tlong Signed _ => "long long"
   | Tlong Unsigned _ => "unsigned long long"
+  | Tint I8 Unsigned _ => "unsigned char"
   | Tint _ Unsigned _ => "unsigned int"
-  | Tpointer (Tint I8 _ _) _ => "char *"
+  | Tpointer (Tint I8 _ _) _ => "unsigned char *"
   | Tpointer (Tint I32 _ _) _ => "int *"
   | Tpointer (Tlong _ _) _ => "unsigned long long *"
   | _ => "int"

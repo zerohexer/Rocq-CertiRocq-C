@@ -1,0 +1,10 @@
+Fixpoint fill (f : nat) (i n : int) (s : mem) : mem :=
+  match f with O => s | S f => if n <=? i then s else fill f (i + 1) n (upd8 0 i (i * 7 + 3) s) end.
+Fixpoint sum (f : nat) (i n acc : int) (s : mem) : int :=
+  match f with O => acc | S f => if n <=? i then acc else sum f (i + 1) n (acc + rd8 0 i s * ((i land 7) + 1)) s end.
+Fixpoint outer (r : nat) (n : nat) (nz acc : int) (s : mem) : int :=
+  match r with O => acc | S r => outer r n nz (acc + sum n 0 nz 0 s) s end.
+Definition solve (r n : nat) (nz : int) (s : mem) : int := outer r n nz 0 (fill n 0 nz s).
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (kq_arg 1) (kq_input 0).

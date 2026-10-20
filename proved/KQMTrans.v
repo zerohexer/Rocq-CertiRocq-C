@@ -34,6 +34,8 @@ Definition kn_rd := kn_of <% KQ.KQRun.rd %>.
 Definition kn_upd := kn_of <% KQ.KQRun.upd %>.
 Definition kn_rd32 := kn_of <% KQ.KQRun.rd32 %>.
 Definition kn_upd32 := kn_of <% KQ.KQRun.upd32 %>.
+Definition kn_rd8 := kn_of <% KQ.KQRun.rd8 %>.
+Definition kn_upd8 := kn_of <% KQ.KQRun.upd8 %>.
 Definition kn_kmem := kn_of <% KQ.KQRun.mem %>.
 Definition kn_kq_nat := kn_of <% KQ.KQRun.kq_nat %>.
 Definition kn_int := kn_of <% PrimInt63.int %>.
@@ -101,6 +103,8 @@ Definition q_Ekld := <% Ekld %>.
 Definition q_Ekst := <% Ekst %>.
 Definition q_Ekld32 := <% Ekld32 %>.
 Definition q_Ekst32 := <% Ekst32 %>.
+Definition q_Ekld8 := <% Ekld8 %>.
+Definition q_Ekst8 := <% Ekst8 %>.
 Definition q_Eloop := <% Eloop %>.
 Definition q_mkfn := <% mkfn %>.
 Definition q_mkprog := <% mkprog %>.
@@ -683,6 +687,14 @@ Fixpoint tr_int (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struc
               wrap1 q_Ekld32 [qpos x; H; I] (k (avar x) s))))
         | _ => TErr "rd32"
         end
+      else if Kername.eqb kn kn_rd8 then
+        match args with
+        | [h; i; m] =>
+            tr_int fuel Γ h s (fun H s => tr_int fuel Γ i s (fun I s => tr_mem fuel Γ m s (fun s =>
+              let '(x, s) := fresh s in
+              wrap1 q_Ekld8 [qpos x; H; I] (k (avar x) s))))
+        | _ => TErr "rd8"
+        end
       else match find_fn_args Γ kn args with
       | Some f =>
           if fi_rmem f then TErr "a function giving back a memory, used as a number"
@@ -851,6 +863,13 @@ with tr_mem (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : K) {struct fue
             tr_int fuel Γ h s (fun H s => tr_int fuel Γ i s (fun I s => tr_int fuel Γ v s (fun V s =>
               tr_mem fuel Γ m s (fun s => wrap1 q_Ekst32 [H; I; V] (k (bump s))))))
         | _ => TErr "upd32"
+        end
+      else if Kername.eqb kn kn_upd8 then
+        match args with
+        | [h; i; v; m] =>
+            tr_int fuel Γ h s (fun H s => tr_int fuel Γ i s (fun I s => tr_int fuel Γ v s (fun V s =>
+              tr_mem fuel Γ m s (fun s => wrap1 q_Ekst8 [H; I; V] (k (bump s))))))
+        | _ => TErr "upd8"
         end
       else match hw_lookup kn with
       | Some (op, n) =>
@@ -1527,7 +1546,7 @@ Fixpoint writes (fuel : nat) (fns : list finfo) (t : term) : bool :=
   | O => true
   | S fuel =>
       match t with
-      | tConst kn _ => Kername.eqb kn kn_upd || Kername.eqb kn kn_upd32 || (match hw_lookup kn with Some _ => true | None => false end) ||
+      | tConst kn _ => Kername.eqb kn kn_upd || Kername.eqb kn kn_upd32 || Kername.eqb kn kn_upd8 || (match hw_lookup kn with Some _ => true | None => false end) ||
                        match List.find (fun f => Kername.eqb (fi_kn f) kn) fns with Some f => fi_wr f | None => false end
       | tApp f args => writes fuel fns f || existsb (writes fuel fns) args
       | tLambda _ _ b => writes fuel fns b

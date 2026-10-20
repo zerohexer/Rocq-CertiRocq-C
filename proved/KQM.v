@@ -4,7 +4,7 @@ From Stdlib Require Import ZArith List Uint63 Lia Bool.
 From Stdlib Require Sint63.
 From compcert Require Import Coqlib Maps Integers AST Values Memory Events Globalenvs
   Ctypes Cop Clight ClightBigstep.
-From KQC Require Import KQL KQLGen KQTArith KQLSigned KQLProof.
+From KQC Require Import KQL KQLGen KQTArith KQLSigned KQLProof KQBytes KQByteArith.
 From KQC Require Export KQMSem.
 Require KQ.KQRun KQ.KQSpec.
 Import ListNotations.
@@ -655,6 +655,45 @@ Proof.
   - exact Dis.
 Qed.
 
+Lemma ktab2_store_gen : forall M m bt bl bk k j (va : i63) chunk o v m',
+  ktab2 M m bt bl bk -> 0 <= k < 64 ->
+  0 <= j < Sint63.to_Z (klen32 (of_Z k)) ->
+  Mem.store chunk m (bk k) o v = Some m' -> 4 * j <= o -> o + size_chunk chunk <= 4 * j + 4 ->
+  (exists i', Mem.load Mint32 m' (bk k) (4 * j) = Some (Vint i') /\ Int.signed i' = Sint63.to_Z (KQ.KQSpec.sx32 va)) ->
+  ktab2 (kupd32 (of_Z k) (of_Z j) va M) m' bt bl bk.
+Proof.
+  intros M m bt bl bk k j va chunk o v m' (Ft & Fl & Hne & T & Dis) Rk Rj ST Ho1 Ho2 (i' & Li' & Si').
+  pose proof (T k Rk) as Tk. cbv zeta in Tk. destruct Tk as (Bk & Hlk & Hck & Hbk).
+  assert (Hpos : 0 < Sint63.to_Z (klen32 (of_Z k))) by lia.
+  destruct (Hbk Hpos) as (Htk & Nt & Nl).
+  assert (Rj62 : 0 <= j < 2 ^ 62) by (pose proof Bk; lia).
+  refine (conj Ft (conj Fl (conj Hne (conj _ _)))).
+  - intros k' Rk'. pose proof (T k' Rk') as Tk'. cbv zeta in Tk'. destruct Tk' as (Bn & Hl & Hc & Hbk').
+    cbv zeta.
+    refine (conj Bn (conj _ (conj _ _))).
+    + rewrite (Mem.load_store_other _ _ _ _ _ _ ST); [exact Hl | left; exact (not_eq_sym Nl)].
+    + intros j' Rj'. destruct (Hc j' Rj') as ((i & Ld & Hs) & VA). split.
+      * destruct (Z.eq_dec k' k) as [Ek | Ek].
+        -- subst k'. destruct (Z.eq_dec j' j) as [Ej | Ej].
+           ++ subst j'. exists i'. split; [exact Li' | ].
+              rewrite (krd32_upd32_eq (of_Z k) (of_Z j) va M).
+              ** exact Si'.
+              ** rewrite sZ_of_Z by lia. lia.
+              ** rewrite sZ_of_Z by lia. lia.
+           ++ exists i. rewrite (Mem.load_store_other _ _ _ _ _ _ ST); [ | right; change (size_chunk Mint32) with 4; destruct (Z_lt_ge_dec j' j); [left | right]; lia].
+              rewrite (krd32_upd32_ne (of_Z k) (of_Z j) va (of_Z k) (of_Z j') M); [split; [exact Ld | exact Hs] | ].
+              intros [_ E]. apply Ej. symmetry in E. apply of_Z_inj in E; lia.
+        -- exists i. rewrite (Mem.load_store_other _ _ _ _ _ _ ST).
+           ++ rewrite (krd32_upd32_ne (of_Z k) (of_Z j) va (of_Z k') (of_Z j') M); [split; [exact Ld | exact Hs] | ].
+              intros [E _]. apply Ek. apply of_Z_inj in E; lia.
+           ++ left. apply not_eq_sym. apply Dis; [exact Rk | exact Rk' | exact (fun E => Ek (eq_sym E)) | exact Hpos | lia].
+      * exact (Mem.store_valid_access_1 _ _ _ _ _ _ ST _ _ _ _ VA).
+    + intros Hp. destruct (Hbk' Hp) as (Ht' & N1 & N2).
+      refine (conj _ (conj N1 N2)).
+      rewrite (Mem.load_store_other _ _ _ _ _ _ ST); [exact Ht' | left; exact (not_eq_sym Nt)].
+  - exact Dis.
+Qed.
+
 Lemma ktab2_store_at : forall M m bt bl bk (vh vi va : i63) m',
   ktab2 M m bt bl bk -> to_Z vh < 64 -> 0 <= to_Z vi < Sint63.to_Z (klen32 vh) ->
   Mem.store Mint32 m (bk (to_Z vh)) (4 * to_Z vi) (Vint (Int.repr (to_Z va))) = Some m' ->
@@ -736,6 +775,312 @@ Proof.
       simpl. rewrite lt128_t.
       assert (Eh : (to_Z vh <? 64) = false) by (apply Z.ltb_ge; unfold kq_nblocks in Lh; lia). rewrite Eh. constructor.
     + apply Nop. intros [A1 A2]. apply (in_range vh kq_nblocks ltac:(unfold kq_nblocks; lia)) in A1. lia.
+Qed.
+
+(** ** Bytes of a narrow block: one load, one store of an [unsigned char] *)
+
+(** the limit of the bytes of narrow block [k]: 8 times its size (the index is a tagged number) *)
+Lemma eval_kld_len8 : forall le m H (k n : Z) bl,
+  eval_expr ge empty_env le m H (Vlong (Int64.repr k)) -> typeof H = tyl ->
+  0 <= k < 64 -> 0 <= n < 2 ^ 31 -> Genv.find_symbol ge kq_lens32 = Some bl ->
+  Mem.load Mint32 m bl (4 * k) = Some (Vint (Int.repr (2 * n))) ->
+  eval_expr ge empty_env le m (kld_len8 H) (Vlong (Int64.repr (8 * n))).
+Proof.
+  intros le m H k n bl EH TH Rk Rn Fl Ld. unfold kld_len8.
+  assert (E : Int64.mul (Int64.repr (2 * n)) (Int64.repr 4) = Int64.repr (8 * n)).
+  { apply uinj. rewrite umul, (uns_small (2 * n)), (uns_small 4), (uns_small (8 * n)) by lia.
+    replace (2 * n * 4) with (8 * n) by ring. apply Z.mod_small. lia. }
+  assert (EL : eval_expr ge empty_env le m (kld_len32 H) (Vlong (Int64.repr (2 * n)))).
+  { eapply eval_kld_len32; [exact EH | exact TH | exact Rk | lia | exact Fl | exact Ld]. }
+  rewrite <- E. eapply eval_bin; [exact EL | apply eval_Econst_long | reflexivity | reflexivity | reflexivity].
+Qed.
+
+Lemma eval_kld_addr8 : forall le m H I (k j : Z) bt bk,
+  eval_expr ge empty_env le m H (Vlong (Int64.repr k)) -> typeof H = tyl ->
+  eval_expr ge empty_env le m I (Vlong (Int64.repr j)) -> typeof I = tyl ->
+  0 <= k < 64 -> 0 <= j < 2 ^ 40 -> Genv.find_symbol ge kq_tab32 = Some bt ->
+  Mem.load Mint64 m bt (8 * k) = Some (Vptr bk Ptrofs.zero) ->
+  eval_expr ge empty_env le m (kld_addr8 H I) (Vptr bk (Ptrofs.repr j)).
+Proof.
+  intros le m H I k j bt bk EH TH EI TI Rk Rj Ft Lt.
+  unfold kld_addr8, kld_base32.
+  assert (EB : eval_expr ge empty_env le m
+                 (Ederef (Ebinop Oadd (Evar kq_tab32 (Tarray tptr32 kq_nblocks noattr)) H (Tpointer tptr32 noattr)) tptr32)
+                 (Vptr bk Ptrofs.zero)).
+  { eapply eval_deref_val.
+    - eapply eval_add_ptr; [ eapply eval_glob; [exact Ft | reflexivity] | exact EH | exact TH | reflexivity | reflexivity | auto | lia ].
+    - reflexivity.
+    - rewrite Ptrofs.add_zero_l, uns_off40 by (auto || lia). exact Lt. }
+  assert (EA : eval_expr ge empty_env le m (Ebinop Oadd (Ecast (Ederef (Ebinop Oadd (Evar kq_tab32 (Tarray tptr32 kq_nblocks noattr)) H (Tpointer tptr32 noattr)) tptr32) tcp) I tcp)
+                 (Vptr bk (Ptrofs.add Ptrofs.zero (Ptrofs.repr (1 * j))))).
+  { eapply eval_add_ptr with (elem := tchar); [ | exact EI | exact TI | reflexivity | reflexivity | auto | lia ].
+    eapply eval_Ecast; [exact EB | reflexivity]. }
+  replace (Ptrofs.add Ptrofs.zero (Ptrofs.repr (1 * j))) with (Ptrofs.repr j) in EA
+    by (rewrite Ptrofs.add_zero_l, Z.mul_1_l; reflexivity).
+  exact EA.
+Qed.
+
+Lemma eval_kld_cell8 : forall le m H I (k j : Z) bt bk v,
+  eval_expr ge empty_env le m H (Vlong (Int64.repr k)) -> typeof H = tyl ->
+  eval_expr ge empty_env le m I (Vlong (Int64.repr j)) -> typeof I = tyl ->
+  0 <= k < 64 -> 0 <= j < 2 ^ 40 -> Genv.find_symbol ge kq_tab32 = Some bt ->
+  Mem.load Mint64 m bt (8 * k) = Some (Vptr bk Ptrofs.zero) ->
+  Mem.load Mint8unsigned m bk j = Some v ->
+  eval_expr ge empty_env le m (kld_cell8 H I) v.
+Proof.
+  intros le m H I k j bt bk v EH TH EI TI Rk Rj Ft Lt Lc. unfold kld_cell8.
+  eapply eval_deref_val.
+  - eapply eval_kld_addr8; eassumption.
+  - reflexivity.
+  - rewrite Ptrofs.unsigned_repr by (unfold Ptrofs.max_unsigned; rewrite ptrofs_mod; lia). exact Lc.
+Qed.
+
+(** reading a byte *)
+Lemma rd8_in : forall (M : kmemt) (vh vi : i63) (iv : Int.int),
+  to_Z vi < 4 * Sint63.to_Z (klen32 vh) -> Sint63.to_Z (klen32 vh) < 2 ^ 31 ->
+  Int.signed iv = Sint63.to_Z (krd32 vh (PrimInt63.asr vi 2%uint63) M) ->
+  to_Z (KQ.KQRun.rd8 vh vi M) = (Int.unsigned iv / 2 ^ (8 * (to_Z vi mod 4))) mod 256.
+Proof.
+  intros M vh vi iv H1 H2 Hs. unfold KQ.KQRun.rd8.
+  pose proof (Int.signed_range iv) as Rs. change Int.min_signed with (- 2 ^ 31) in Rs. change Int.max_signed with (2 ^ 31 - 1) in Rs.
+  rewrite (rd8_arith (krd32 vh (PrimInt63.asr vi 2%uint63) M) vi).
+  rewrite <- Hs. replace (to_Z vi mod 4 * 8) with (8 * (to_Z vi mod 4)) by ring.
+  assert (Rb : 0 <= to_Z vi mod 4 < 4) by (apply Z.mod_pos_bound; lia).
+  rewrite (byte_signed iv (to_Z vi mod 4) Rb). reflexivity.
+Qed.
+
+(** a byte past the end of its block, or in a block that is not there, has a cell index that is not inside the block either *)
+Lemma idx_out : forall (vh vi : i63),
+  ~ (to_Z vh < 64 /\ to_Z vi < 4 * Sint63.to_Z (klen32 vh)) ->
+  ~ (0 <= Sint63.to_Z vh < 64 /\ 0 <= Sint63.to_Z (PrimInt63.asr vi 2%uint63) < Sint63.to_Z (klen32 vh)).
+Proof.
+  intros vh vi N [A1 A2]. apply N. pose proof (phi_range vi) as Rv. pose proof (klen32_range vh).
+  destruct A1 as [A1a A1b]. destruct A2 as [A2a A2b].
+  assert (S : Sint63.to_Z (PrimInt63.asr vi 2%uint63) = Sint63.to_Z vi / 4).
+  { rewrite asr_val; [reflexivity | vm_compute; reflexivity]. }
+  assert (Hs0 : 0 <= Sint63.to_Z vi).
+  { rewrite S in A2a. destruct (Z_lt_ge_dec (Sint63.to_Z vi) 0) as [Lneg | Lpos]; [ | lia].
+    exfalso. pose proof (Z.div_lt_upper_bound (Sint63.to_Z vi) 4 0 ltac:(lia) ltac:(lia)). lia. }
+  assert (Hlt : to_Z vi < 2 ^ 62) by (apply ge0_iff; exact Hs0).
+  rewrite (sZ_small vi Hlt) in S.
+  assert (Hv : to_Z vh < 64) by (apply (proj1 (in_range vh 64 ltac:(lia))); lia).
+  split; [exact Hv | ]. rewrite S in A2b.
+  destruct (Z_lt_ge_dec (to_Z vi) (4 * Sint63.to_Z (klen32 vh))) as [L | L]; [exact L | exfalso].
+  pose proof (Z.div_le_lower_bound (to_Z vi) 4 (Sint63.to_Z (klen32 vh)) ltac:(lia) ltac:(lia)). lia.
+Qed.
+
+Lemma rd8_out : forall (M : kmemt) (vh vi : i63),
+  ~ (to_Z vh < 64 /\ to_Z vi < 4 * Sint63.to_Z (klen32 vh)) -> KQ.KQRun.rd8 vh vi M = 0%uint63.
+Proof.
+  intros M vh vi N. unfold KQ.KQRun.rd8.
+  assert (Hx : krd32 vh (PrimInt63.asr vi 2%uint63) M = 0%uint63) by (apply krd32_out; apply idx_out; exact N).
+  rewrite Hx. apply Uint63.to_Z_inj.
+  rewrite Uint63.land_spec'. change (to_Z 0%uint63) with 0.
+  assert (Hsh : Sint63.to_Z (PrimInt63.mul (PrimInt63.land vi 3%uint63) 8%uint63) = (to_Z vi mod 4) * 8).
+  { pose proof (shamt vi) as E. pose proof (Z.mod_pos_bound (to_Z vi) 4 ltac:(lia)).
+    rewrite (sZ_small' _ ltac:(rewrite E; lia)). exact E. }
+  assert (A0 : Sint63.to_Z (PrimInt63.asr 0%uint63 (PrimInt63.mul (PrimInt63.land vi 3%uint63) 8%uint63)) = 0).
+  { rewrite Sint63Axioms.asr_spec. change (Sint63.to_Z 0%uint63) with 0. rewrite Hsh. apply Z.div_0_l.
+    pose proof (Z.mod_pos_bound (to_Z vi) 4 ltac:(lia)). apply Z.pow_nonzero; lia. }
+  assert (A1 : PrimInt63.asr 0%uint63 (PrimInt63.mul (PrimInt63.land vi 3%uint63) 8%uint63) = 0%uint63).
+  { rewrite <- (Sint63.of_to_Z (PrimInt63.asr 0%uint63 _)). rewrite A0. reflexivity. }
+  rewrite A1. change (to_Z 0%uint63) with 0. rewrite Z.land_0_l. reflexivity.
+Qed.
+
+Lemma cast_byte_long : forall (r : Int.int) m0, sem_cast (Vint r) tchar tls m0 = Some (Vlong (Int64.repr (Int.unsigned r))).
+Proof. reflexivity. Qed.
+
+Lemma exec_kld8 : forall le m rho M x h i vh vi,
+  agree rho le -> kmrel M m -> aval rho h = Some vh -> aval rho i = Some vi ->
+  exec_stmt function_entry2 ge empty_env le m
+    (kit_guard8 (tr_atom h) (tr_atom i)
+       (Sset (tv x) (tagup (Ecast (kld_cell8 (sh1 (tr_atom h)) (sh1 (tr_atom i))) tls))) (Sset (tv x) c1))
+    E0 (PTree.set (tv x) (enc (KQ.KQRun.rd8 vh vi M)) le) m Out_normal.
+Proof.
+  intros le m rho M x h i vh vi AG KM Hh Hi.
+  assert (EH := eval_atom cp empty_env le m rho AG h vh Hh).
+  assert (EI := eval_atom cp empty_env le m rho AG i vi Hi).
+  assert (EHs := eval_kidx le m rho h vh AG Hh).
+  assert (EIs := eval_kidx le m rho i vi AG Hi).
+  pose proof (phi_range vh) as Rh. pose proof (phi_range vi) as Ri.
+  assert (E128 : eval_expr ge empty_env le m (c64 128) (Vlong (Int64.repr 128))) by apply eval_Econst_long.
+  unfold kit_guard8.
+  eapply exec_Sifthenelse; [ eapply eval_ltu; [exact EH | exact E128 | apply typeof_atom | reflexivity] | apply bool_of | ].
+  simpl. rewrite lt128_t.
+  destruct (Z_lt_ge_dec (to_Z vh) kq_nblocks) as [Lh | Lh].
+  - assert (Eh : (to_Z vh <? 64) = true) by (apply Z.ltb_lt; exact Lh). rewrite Eh.
+    destruct (kmrel_get2 M m KM) as (bt & bl & bk & Ft & Fl & T).
+    destruct (T (to_Z vh) ltac:(unfold kq_nblocks in Lh; lia)) as (n & Hn & Bn & Hl & Hc & Ht).
+    rewrite Uint63.of_to_Z in Hn. rewrite Uint63.of_to_Z in Hc.
+    assert (EL : eval_expr ge empty_env le m (kld_len8 (sh1 (tr_atom h))) (Vlong (Int64.repr (8 * n)))).
+    { eapply eval_kld_len8; [exact EHs | reflexivity | unfold kq_nblocks in Lh; lia | lia | exact Fl | exact Hl]. }
+    eapply exec_Sifthenelse; [ eapply eval_ltu; [exact EI | exact EL | apply typeof_atom | reflexivity] | apply bool_of | ].
+    rewrite (lt8_t vi n) by lia.
+    destruct (Z_lt_ge_dec (to_Z vi) (4 * n)) as [Li | Li].
+    + assert (Ei : (to_Z vi <? 4 * n) = true) by (apply Z.ltb_lt; exact Li). rewrite Ei.
+      apply exec_Sset.
+      set (c := to_Z vi / 4). set (bb := to_Z vi mod 4).
+      assert (Rc : 0 <= c < n) by (subst c; split; [apply Z.div_pos; lia | apply Z.div_lt_upper_bound; lia]).
+      assert (Rbb : 0 <= bb < 4) by (subst bb; apply Z.mod_pos_bound; lia).
+      assert (Evi : to_Z vi = 4 * c + bb) by (subst c bb; apply (Z.div_mod (to_Z vi) 4); lia).
+      destruct (Hc c Rc) as ((iv & Ld & Hs) & _).
+      destruct (asr2_val vi ltac:(lia)) as (S1 & S2).
+      assert (Hs' : Int.signed iv = Sint63.to_Z (krd32 vh (PrimInt63.asr vi 2%uint63) M)).
+      { rewrite S2. exact Hs. }
+      pose proof (load_byte_in_cell m (bk (to_Z vh)) (4 * c) iv bb (Z.divide_factor_l 4 c) Rbb Ld) as LB.
+      rewrite <- Evi in LB.
+      assert (Ec : eval_expr ge empty_env le m (kld_cell8 (sh1 (tr_atom h)) (sh1 (tr_atom i)))
+                     (Vint (Int.repr ((Int.unsigned iv / 2 ^ (8 * bb)) mod 256)))).
+      { eapply eval_kld_cell8; [exact EHs | reflexivity | exact EIs | reflexivity | unfold kq_nblocks in Lh; lia | lia | exact Ft | exact (Ht ltac:(lia)) | exact LB]. }
+      assert (Rbyte : 0 <= (Int.unsigned iv / 2 ^ (8 * bb)) mod 256 < 256) by (apply Z.mod_pos_bound; lia).
+      assert (ECast : eval_expr ge empty_env le m (Ecast (kld_cell8 (sh1 (tr_atom h)) (sh1 (tr_atom i))) tls)
+                        (Vlong (Int64.repr ((Int.unsigned iv / 2 ^ (8 * bb)) mod 256)))).
+      { eapply eval_Ecast; [exact Ec | ]. change (typeof (kld_cell8 (sh1 (tr_atom h)) (sh1 (tr_atom i)))) with tchar. rewrite cast_byte_long. rewrite Int.unsigned_repr by (unfold Int.max_unsigned; change Int.modulus with 4294967296; lia). reflexivity. }
+      assert (Evalue : to_Z (KQ.KQRun.rd8 vh vi M) = (Int.unsigned iv / 2 ^ (8 * bb)) mod 256).
+      { subst bb. apply rd8_in; [lia | lia | exact Hs']. }
+      assert (Eq : enc (KQ.KQRun.rd8 vh vi M) = Vlong (Int64.or (Int64.shl (Int64.repr ((Int.unsigned iv / 2 ^ (8 * bb)) mod 256)) Int64.one) Int64.one)).
+      { unfold enc. rewrite (up_t ((Int.unsigned iv / 2 ^ (8 * bb)) mod 256) (KQ.KQRun.rd8 vh vi M)); [reflexivity | ].
+        rewrite Evalue. apply Z.mod_small. pose proof (phi_range vi). lia. }
+      rewrite Eq. apply eval_tagup; [exact ECast | right; reflexivity].
+    + assert (Ei : (to_Z vi <? 4 * n) = false) by (apply Z.ltb_ge; lia). rewrite Ei.
+      apply exec_Sset.
+      rewrite (rd8_out M vh vi).
+      * unfold enc. rewrite tg_zero. apply eval_c1.
+      * intros [A1 A2]. lia.
+  - assert (Eh : (to_Z vh <? 64) = false) by (apply Z.ltb_ge; unfold kq_nblocks in Lh; lia). rewrite Eh.
+    apply exec_Sset.
+    rewrite (rd8_out M vh vi).
+    + unfold enc. rewrite tg_zero. apply eval_c1.
+    + intros [A1 A2]. unfold kq_nblocks in Lh. lia.
+Qed.
+
+
+Lemma cast_long_byte : forall (z : Z) m0, sem_cast (Vlong (Int64.repr z)) tls tchar m0 =
+  Some (Vint (Int.zero_ext 8 (Int.repr (Int64.unsigned (Int64.repr z))))).
+Proof. reflexivity. Qed.
+
+Lemma byte_of_long : forall z : Z,
+  Int.unsigned (Int.zero_ext 8 (Int.repr (Int64.unsigned (Int64.repr z)))) = z mod 256.
+Proof.
+  intros z. rewrite Int.zero_ext_mod by (change Int.zwordsize with 32; lia). rewrite Int.unsigned_repr_eq, Int64.unsigned_repr_eq.
+  change Int.modulus with (2 ^ 32). change Int64.modulus with (2 ^ 64). change (two_p 8) with 256.
+  rewrite <- (Zmod_div_mod 256 (2 ^ 32) (z mod 2 ^ 64)) by (try lia; exists (2 ^ 24); reflexivity).
+  rewrite <- (Zmod_div_mod 256 (2 ^ 64) z) by (try lia; exists (2 ^ 56); reflexivity).
+  reflexivity.
+Qed.
+
+Lemma va_byte : forall m b c bb, 0 <= bb < 4 ->
+  Mem.valid_access m Mint32 b (4 * c) Writable -> Mem.valid_access m Mint8unsigned b (4 * c + bb) Writable.
+Proof.
+  intros m b c bb Rb VA. destruct VA as [RP AL]. split.
+  - intros z Hz. apply RP. change (size_chunk Mint8unsigned) with 1 in Hz. change (size_chunk Mint32) with 4. lia.
+  - change (align_chunk Mint8unsigned) with 1. apply Z.divide_1_l.
+Qed.
+
+Lemma krd_upd8 : forall (vh vi v vh' vi' : i63) (M : kmemt), krd vh' vi' (KQ.KQRun.upd8 vh vi v M) = krd vh' vi' M.
+Proof. intros. unfold KQ.KQRun.upd8. apply krd_upd32. Qed.
+Lemma ksize_upd8 : forall (vh vi v h' : i63) (M : kmemt), ksize h' (KQ.KQRun.upd8 vh vi v M) = ksize h' M.
+Proof. intros. unfold KQ.KQRun.upd8. apply ksize_upd32. Qed.
+
+Lemma exec_kst8 : forall le m rho M h i a vh vi va,
+  agree rho le -> kmrel M m -> aval rho h = Some vh -> aval rho i = Some vi -> aval rho a = Some va ->
+  exists m', exec_stmt function_entry2 ge empty_env le m
+    (kit_guard8 (tr_atom h) (tr_atom i)
+       (Sassign (kld_cell8 (sh1 (tr_atom h)) (sh1 (tr_atom i))) (Ecast (sh1 (tr_atom a)) tchar)) Sskip)
+    E0 le m' Out_normal /\ kmrel (KQ.KQRun.upd8 vh vi va M) m'.
+Proof.
+  intros le m rho M h i a vh vi va AG KM Hh Hi Ha.
+  assert (EH := eval_atom cp empty_env le m rho AG h vh Hh).
+  assert (EI := eval_atom cp empty_env le m rho AG i vi Hi).
+  assert (EHs := eval_kidx le m rho h vh AG Hh).
+  assert (EIs := eval_kidx le m rho i vi AG Hi).
+  assert (EAs := eval_kidx le m rho a va AG Ha).
+  pose proof (phi_range vh) as Rh. pose proof (phi_range vi) as Ri. pose proof (phi_range va) as Ra.
+  assert (E128 : eval_expr ge empty_env le m (c64 128) (Vlong (Int64.repr 128))) by apply eval_Econst_long.
+  assert (Nop : ~ (to_Z vh < 64 /\ to_Z vi < 4 * Sint63.to_Z (klen32 vh)) -> kmrel (KQ.KQRun.upd8 vh vi va M) m).
+  { intros N. unfold KQ.KQRun.upd8. rewrite (kupd32_out vh _ _ M (idx_out vh vi N)). exact KM. }
+  pose proof KM as KM0.
+  destruct KM as (bt1 & bl1 & bk1 & bt & bl & bk & TAB1 & TAB & SEP). pose proof TAB as TAB0.
+  destruct TAB as (Ft & Fl & Hne & T & Dis).
+  unfold kit_guard8.
+  destruct (Z_lt_ge_dec (to_Z vh) kq_nblocks) as [Lh | Lh].
+  - pose proof (T (to_Z vh) ltac:(unfold kq_nblocks in Lh; lia)) as Tk. cbv zeta in Tk.
+    destruct Tk as (Bn & Hl & Hc & Hbk).
+    rewrite Uint63.of_to_Z in Bn, Hl, Hc, Hbk.
+    set (n := Sint63.to_Z (klen32 vh)) in *.
+    assert (EL : eval_expr ge empty_env le m (kld_len8 (sh1 (tr_atom h))) (Vlong (Int64.repr (8 * n)))).
+    { eapply eval_kld_len8; [exact EHs | reflexivity | unfold kq_nblocks in Lh; lia | lia | exact Fl | exact Hl]. }
+    assert (Eh : (to_Z vh <? 64) = true) by (apply Z.ltb_lt; unfold kq_nblocks in Lh; lia).
+    destruct (Z_lt_ge_dec (to_Z vi) (4 * n)) as [Li | Li].
+    + (* a byte inside the block *)
+      set (c := to_Z vi / 4). set (bb := to_Z vi mod 4).
+      assert (Rc : 0 <= c < n) by (subst c; split; [apply Z.div_pos; lia | apply Z.div_lt_upper_bound; lia]).
+      assert (Rbb : 0 <= bb < 4) by (subst bb; apply Z.mod_pos_bound; lia).
+      assert (Evi : to_Z vi = 4 * c + bb) by (subst c bb; apply (Z.div_mod (to_Z vi) 4); lia).
+      destruct (Hc c Rc) as ((iv & Ld & Hs) & VA32).
+      destruct (asr2_val vi ltac:(lia)) as (S1 & S2).
+      assert (Hs' : Int.signed iv = Sint63.to_Z (krd32 vh (PrimInt63.asr vi 2%uint63) M)) by (rewrite S2; exact Hs).
+      set (w := Int.zero_ext 8 (Int.repr (Int64.unsigned (Int64.repr (to_Z va))))).
+      assert (VA8 : Mem.valid_access m Mint8unsigned (bk (to_Z vh)) (to_Z vi) Writable).
+      { rewrite Evi. apply va_byte; [exact Rbb | exact VA32]. }
+      destruct (Mem.valid_access_store m Mint8unsigned (bk (to_Z vh)) (to_Z vi) (Vint w) VA8) as (m' & ST).
+      exists m'. split.
+      * eapply exec_Sifthenelse; [ eapply eval_ltu; [exact EH | exact E128 | apply typeof_atom | reflexivity] | apply bool_of | ].
+        simpl. rewrite lt128_t, Eh.
+        eapply exec_Sifthenelse; [ eapply eval_ltu; [exact EI | exact EL | apply typeof_atom | reflexivity] | apply bool_of | ].
+        rewrite (lt8_t vi n) by lia.
+        assert (Ei : (to_Z vi <? 4 * n) = true) by (apply Z.ltb_lt; exact Li). rewrite Ei.
+        eapply exec_Sassign.
+        -- apply eval_Ederef. eapply eval_kld_addr8; [exact EHs | reflexivity | exact EIs | reflexivity | unfold kq_nblocks in Lh; lia | lia | exact Ft | exact (proj1 (Hbk ltac:(lia)))].
+        -- eapply eval_Ecast; [exact EAs | ]. exact (cast_long_byte (to_Z va) m).
+        -- reflexivity.
+        -- eapply assign_loc_value; [reflexivity | ]. unfold Mem.storev.
+           rewrite Ptrofs.unsigned_repr by (unfold Ptrofs.max_unsigned; rewrite ptrofs_mod; lia).
+           assert (Hw2 : cast_int_int I8 Unsigned (Int.zero_ext 8 (Int.repr (Int64.unsigned (Int64.repr (to_Z va))))) = w).
+           { subst w. unfold cast_int_int. apply Int.zero_ext_idem. lia. }
+           rewrite Hw2. exact ST.
+      * pose proof (store_byte_in_cell m (bk (to_Z vh)) (4 * c) iv bb w m' (Z.divide_factor_l 4 c) Rbb Ld) as SB.
+        rewrite <- Evi in SB. specialize (SB ST).
+        assert (Hn1 : forall x0 : i63, True) by (intros; exact I).
+        set (x := krd32 vh (PrimInt63.asr vi 2%uint63) M) in *.
+        pose proof (Int.signed_range iv) as Rs. change Int.min_signed with (- 2 ^ 31) in Rs. change Int.max_signed with (2 ^ 31 - 1) in Rs.
+        pose proof (upd8_arith x vi va ltac:(rewrite <- Hs'; lia)) as UA.
+        replace (to_Z vi mod 4 * 8) with (8 * bb) in UA by (subst bb; ring).
+        assert (Hw : Int.unsigned w mod 256 = Sint63.to_Z va mod 256).
+        { subst w. rewrite byte_of_long. rewrite Z.mod_mod by lia.
+          rewrite (phi_of_sZ va). rewrite <- (Zmod_div_mod 256 (2 ^ 63) (Sint63.to_Z va)) by (try lia; exists (2 ^ 55); reflexivity).
+          reflexivity. }
+        set (NEW := PrimInt63.add (PrimInt63.sub x (PrimInt63.lsl (PrimInt63.land (PrimInt63.asr x (PrimInt63.mul (PrimInt63.land vi 3%uint63) 8%uint63)) 255%uint63) (PrimInt63.mul (PrimInt63.land vi 3%uint63) 8%uint63)))
+                              (PrimInt63.lsl (PrimInt63.land va 255%uint63) (PrimInt63.mul (PrimInt63.land vi 3%uint63) 8%uint63))) in *.
+        pose proof (store_cell_eq iv x va NEW (Int.unsigned w) bb Rbb Hs' Hw ltac:(rewrite UA; reflexivity)) as SE.
+        assert (Hnew : exists i', Mem.load Mint32 m' (bk (to_Z vh)) (4 * c) = Some (Vint i') /\ Int.signed i' = Sint63.to_Z (KQ.KQSpec.sx32 NEW)).
+        { exists (Int.repr (Int.unsigned iv - (Int.unsigned iv / 2 ^ (8 * bb) mod 256) * 2 ^ (8 * bb) + (Int.unsigned w mod 256) * 2 ^ (8 * bb))).
+          split; [exact SB | ]. rewrite SE. rewrite (sx32_signed NEW). reflexivity. }
+        destruct SEP as (S1' & S2' & S3 & S4 & S5 & S6 & S7).
+        assert (Rk : 0 <= to_Z vh < 64) by (unfold kq_nblocks in Lh; lia).
+        assert (Hpos : 0 < Sint63.to_Z (klen32 (of_Z (to_Z vh)))) by (rewrite Uint63.of_to_Z; lia).
+        destruct (S6 (to_Z vh) Rk Hpos) as (N1 & N2).
+        exists bt1, bl1, bk1, bt, bl, bk. refine (conj _ (conj _ _)).
+        -- eapply ktab_frame; [ exact TAB1 | intros; apply krd_upd8 | intros; apply ksize_upd8 | exact ST | exact N1 | exact N2 | ].
+           intros k' Rk' Hp'. apply not_eq_sym. exact (S7 k' (to_Z vh) Rk' Rk Hp' Hpos).
+        -- unfold KQ.KQRun.upd8. fold x. rewrite S2.
+           rewrite <- (Uint63.of_to_Z vh) at 1. 
+           replace (PrimInt63.asr vi 2%uint63) with (of_Z c) by (rewrite S2; reflexivity).
+           eapply ktab2_store_gen; [ exact TAB0 | exact Rk | rewrite Uint63.of_to_Z; lia | exact ST | lia | change (size_chunk Mint8unsigned) with 1; lia | exact Hnew ].
+        -- eapply ksep_size; [ exact (conj S1' (conj S2' (conj S3 (conj S4 (conj S5 (conj S6 S7)))))) | intros; apply ksize_upd8 ].
+    + (* past the end *)
+      exists m. split.
+      * eapply exec_Sifthenelse; [ eapply eval_ltu; [exact EH | exact E128 | apply typeof_atom | reflexivity] | apply bool_of | ].
+        simpl. rewrite lt128_t, Eh.
+        eapply exec_Sifthenelse; [ eapply eval_ltu; [exact EI | exact EL | apply typeof_atom | reflexivity] | apply bool_of | ].
+        rewrite (lt8_t vi n) by lia.
+        assert (Ei : (to_Z vi <? 4 * n) = false) by (apply Z.ltb_ge; lia). rewrite Ei. constructor.
+      * apply Nop. intros [A1 A2]. lia.
+  - exists m. split.
+    + eapply exec_Sifthenelse; [ eapply eval_ltu; [exact EH | exact E128 | apply typeof_atom | reflexivity] | apply bool_of | ].
+      simpl. rewrite lt128_t.
+      assert (Eh : (to_Z vh <? 64) = false) by (apply Z.ltb_ge; unfold kq_nblocks in Lh; lia). rewrite Eh. constructor.
+    + apply Nop. intros [A1 A2]. unfold kq_nblocks in Lh. lia.
 Qed.
 
 End KMEM.
@@ -846,6 +1191,15 @@ Proof.
     change E0 with (E0 ** E0). eapply exec_Sseq_1; eauto. eapply exec_kld32; eauto.
   - (* narrow store *)
     destruct (exec_kst32 cp le m rho M h i a vh vi va AG MR H H0 H1) as (m1 & XS & MR1).
+    destruct (IHevalk le m1 AG MR1) as (le2 & m2 & out & X & R).
+    exists le2, m2, out. split; auto.
+    change E0 with (E0 ** E0). eapply exec_Sseq_1; eauto.
+  - (* byte load *)
+    destruct (IHevalk _ m (agree_set rho le x _ AG) MR) as (le1 & m1 & out & X & R).
+    exists le1, m1, out. split; auto.
+    change E0 with (E0 ** E0). eapply exec_Sseq_1; eauto. eapply exec_kld8; eauto.
+  - (* byte store *)
+    destruct (exec_kst8 cp le m rho M h i a vh vi va AG MR H H0 H1) as (m1 & XS & MR1).
     destruct (IHevalk le m1 AG MR1) as (le2 & m2 & out & X & R).
     exists le2, m2, out. split; auto.
     change E0 with (E0 ** E0). eapply exec_Sseq_1; eauto.

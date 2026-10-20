@@ -30,6 +30,22 @@ Axiom upd32 : int -> int -> int -> mem -> mem.
 Axiom kq_grow : int -> int -> mem -> mem.
 Axiom kq_size : int -> mem -> int.
 
+(* BYTES AND HALFWORDS of a narrow block, laid out as the machine does (little-endian): byte i of narrow block h is byte
+   (i mod 4) of cell i / 4.  A read outside the block gives 0 and a write outside it does nothing, as for the cells.  They
+   are written with the cells' operations; the proved route reads them as a byte access (one load, one store). *)
+Definition rd8 (h i : int) (s : mem) : int :=
+  PrimInt63.land (PrimInt63.asr (rd32 h (PrimInt63.asr i 2%uint63) s) (PrimInt63.mul (PrimInt63.land i 3%uint63) 8%uint63)) 255%uint63.
+Definition upd8 (h i v : int) (s : mem) : mem :=
+  let c := PrimInt63.asr i 2%uint63 in
+  let sh := PrimInt63.mul (PrimInt63.land i 3%uint63) 8%uint63 in
+  let old := rd32 h c s in
+  upd32 h c (PrimInt63.add (PrimInt63.sub old (PrimInt63.lsl (PrimInt63.land (PrimInt63.asr old sh) 255%uint63) sh))
+                           (PrimInt63.lsl (PrimInt63.land v 255%uint63) sh)) s.
+Definition rd16 (h i : int) (s : mem) : int :=
+  PrimInt63.lor (rd8 h (PrimInt63.mul i 2%uint63) s) (PrimInt63.lsl (rd8 h (PrimInt63.add (PrimInt63.mul i 2%uint63) 1%uint63) s) 8%uint63).
+Definition upd16 (h i v : int) (s : mem) : mem :=
+  upd8 h (PrimInt63.add (PrimInt63.mul i 2%uint63) 1%uint63) (PrimInt63.asr v 8%uint63) (upd8 h (PrimInt63.mul i 2%uint63) v s).
+
 Definition zmin (a b : int) : int := if a <=? b then a else b.
 Definition zmax (a b : int) : int := if a <=? b then b else a.
 Definition zabs (a : int) : int := if a <? 0 then - a else a.

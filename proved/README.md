@@ -73,10 +73,14 @@ Two rewrites keep the C free of jumps on data, as the kit's own translator does:
   choices.  These stay plain arithmetic: a chain of tests on a state that cycles is predicted well, and a conditional
   move in its place makes each round wait for the one before.
 
-8- and 16-bit cells: `rd8 h i s`, `upd8 h i v s`, `rd16`, `upd16` (`lib/Bytes.body`, put in front of a program that names them) are ordinary
-Rocq on the narrow blocks: byte `i` is byte `i mod 4` of narrow cell `i / 4` (little-endian, the machine's layout), a
-read outside the block is 0 and a write outside it does nothing.  They cost a shift and a mask where C has a byte
-load, and a read-modify-write for a store; a native byte access with its own proof is a later general pass.
+8- and 16-bit cells: `rd8 h i s`, `upd8 h i v s`, `rd16`, `upd16` (defined in `KQRun.v` from the 32-bit cells of a narrow
+block, little-endian, the machine's layout: byte `i` is byte `i mod 4` of cell `i / 4`; a read outside the block is 0 and a
+write outside it does nothing).  `rd8` and `upd8` are one KQL instruction each (`Ekld8`, `Ekst8`) and one `unsigned char`
+access in the C, with the guard on the index; `rd16` and `upd16` are two of them (clang merges the pair).  The meaning of
+the instruction is the Rocq definition of `rd8` / `upd8`; the proof that the C byte access does the same on a cell is
+`KQBytes.v` (CompCert's memory: four bytes of an `int`, one byte stored) and `KQByteArith.v` (the arithmetic of the
+byte).  Nothing is added to the laws of the memory.  A sum over bytes of 10^6 bytes, 100 times: 136 ms as shifts and
+masks of the 32-bit cell, 74 ms as byte loads (`tests/bytebench.body`, `tests/bytebench_c.c`).
 `proved/examples/bytes.body` writes bytes and halfwords over each other and reads them back.
 
 Functions that give back two numbers.  A recursive function whose result is a pair or a record of two numbers

@@ -68,6 +68,8 @@ Inductive exp :=
 | Ekst (h i a : atom) (k : exp)                  (* cell i of block h of the kit's memory := a *)
 | Ekld32 (x : ident) (h i : atom) (k : exp)      (* x := cell i of narrow block h (4-byte cells), signed *)
 | Ekst32 (h i a : atom) (k : exp)                (* cell i of narrow block h := a, kept modulo 2^32 *)
+| Ekld8 (x : ident) (h i : atom) (k : exp)       (* x := byte i of narrow block h (KQRun.v rd8) *)
+| Ekst8 (h i a : atom) (k : exp)                 (* byte i of narrow block h := a mod 256 (KQRun.v upd8) *)
 | Ehwf (o : hwfop) (x : ident) (args : list atom) (k : exp)   (* x := a machine number of args *)
 | Ehw (o : hwop) (args : list atom) (k : exp)    (* a machine operation on the kit's memory (KQM.v) *)
 | Eloop (args : list atom).

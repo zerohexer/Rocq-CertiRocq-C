@@ -264,9 +264,6 @@ def main():
         path = src if src.endswith(".body") else f"hand/{src}.body"
         name = re.sub(r"[^A-Za-z0-9_]", "_", os.path.basename(path)[:-5])
         body = open(path).read()
-        # a program that names rd8 / upd8 / rd16 / upd16 gets lib/Bytes.body in front of it (and a text that defines them itself is left alone)
-        if re.search(r"\b(rd|upd)(8|16)\b", body) and not re.search(r"Definition\s+rd8\b", body):
-            body = open(os.path.join(ROOT, "lib", "Bytes.body")).read() + "\n" + body
         prog, mt = split_main(body)
         try:
             entry, args, wrap = parse_main(mt)

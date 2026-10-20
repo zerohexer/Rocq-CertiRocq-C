@@ -223,6 +223,16 @@ Definition kit_guard32 (H I : expr) (inner outer : statement) : statement :=
     (Sifthenelse (cmpe Olt I (kld_len32 (sh1 H))) inner outer)
     outer.
 
+(** A byte of a narrow block: the limit is 8 times the size (the index is a tagged number), the address is the block's plus
+    the index, the cell is an [unsigned char]. *)
+Definition kld_len8 (H : expr) : expr := Ebinop Omul (kld_len32 H) (c64 4) tyl.
+Definition kld_addr8 (H I : expr) : expr := Ebinop Oadd (Ecast (kld_base32 H) tcp) I tcp.
+Definition kld_cell8 (H I : expr) : expr := Ederef (kld_addr8 H I) tchar.
+Definition kit_guard8 (H I : expr) (inner outer : statement) : statement :=
+  Sifthenelse (cmpe Olt H (c64 128))
+    (Sifthenelse (cmpe Olt I (kld_len8 (sh1 H))) inner outer)
+    outer.
+
 Section TR.
 Variable P : prog.
 
@@ -278,6 +288,16 @@ Fixpoint tr_exp (ps : list ident) (e : exp) : statement :=
         (kit_guard32 (tr_atom h) (tr_atom i)
            (Sassign (kld_cell32 (sh1 (tr_atom h)) (tr_atom i)) (Ecast (sh1 (tr_atom a)) tint32)) Sskip)
         (tr_exp ps k)
+  | Ekld8 x h i k =>
+      Ssequence
+        (kit_guard8 (tr_atom h) (tr_atom i)
+           (Sset (tv x) (tagup (Ecast (kld_cell8 (sh1 (tr_atom h)) (sh1 (tr_atom i))) tls))) (Sset (tv x) c1))
+        (tr_exp ps k)
+  | Ekst8 h i a k =>
+      Ssequence
+        (kit_guard8 (tr_atom h) (tr_atom i)
+           (Sassign (kld_cell8 (sh1 (tr_atom h)) (sh1 (tr_atom i))) (Ecast (sh1 (tr_atom a)) tchar)) Sskip)
+        (tr_exp ps k)
   | Ehwf o x args k =>
       Ssequence (Scall (Some (tv x)) (Evar (hwfid o) (funty (length args))) (map tr_atom args)) (tr_exp ps k)
   | Ehw o args k =>
@@ -294,6 +314,8 @@ Fixpoint binders (e : exp) : list ident :=
   | Ekld x _ _ k => tv x :: binders k
   | Ekld32 x _ _ k => tv x :: binders k
   | Ekst32 _ _ _ k => binders k
+  | Ekld8 x _ _ k => tv x :: binders k
+  | Ekst8 _ _ _ k => binders k
   | Ehw _ _ k => binders k
   | Ehwf _ x _ k => tv x :: binders k
   | Eif _ _ _ t f => binders t ++ binders f

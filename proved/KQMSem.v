@@ -104,6 +104,14 @@ Inductive evalk (P : prog) : fn -> env -> kmemt -> exp -> i63 -> kmemt -> Prop :
     aval rho h = Some vh -> aval rho i = Some vi -> aval rho a = Some va ->
     evalk P f rho (kupd32 vh vi va M) k v M' ->
     evalk P f rho M (Ekst32 h i a k) v M'
+| K_ld8 : forall f rho M x h i vh vi k v M',
+    aval rho h = Some vh -> aval rho i = Some vi ->
+    evalk P f (PTree.set x (KQ.KQRun.rd8 vh vi M) rho) M k v M' ->
+    evalk P f rho M (Ekld8 x h i k) v M'
+| K_st8 : forall f rho M h i a vh vi va k v M',
+    aval rho h = Some vh -> aval rho i = Some vi -> aval rho a = Some va ->
+    evalk P f rho (KQ.KQRun.upd8 vh vi va M) k v M' ->
+    evalk P f rho M (Ekst8 h i a k) v M'
 | K_hw : forall f rho M o args vs k v M',
     length args = hw_arity o -> avals rho args = Some vs ->
     evalk P f rho (hw_sem o vs M) k v M' ->

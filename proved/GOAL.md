@@ -42,7 +42,7 @@ offers, and what takes its place:
 | C | In Rocq | State |
 |---|---|---|
 | integers, bit operations, loops, calls | `PrimInt63` operations, `Fixpoint`s whose last step is the call | proved, signed division included |
-| arrays, buffers | memory blocks read and written with `rd`, `upd` | wide and 32-bit cells proved; 8- and 16-bit cells as a library over the 32-bit ones (`lib/Bytes.body`, proved, a shift and a mask per access) |
+| arrays, buffers | memory blocks read and written with `rd`, `upd` | wide and 32-bit cells proved; 8-bit cells are one byte access in the C (proved against CompCert's memory), 16-bit cells are two |
 | structs, unions, bit fields | records split into integers, or a layout in a block; bit fields are bit operations | records and pairs of numbers as parameters, `let`s, `match`es and fields are proved; a recursive function giving back a record or pair of two numbers is proved (the second goes through a slot block); more than two, and unions, missing |
 | pointers, raw addresses | an integer address into a region; for an OS, RAM is one block at its base address | missing |
 | `malloc`, `free` | an allocator written in Rocq on a growing block | in the kit route (`lib/Slab.v`); not proved |
@@ -127,8 +127,8 @@ Proved and in the corpus (36 programs, all proved, answers equal to the C++ run,
 
 ## What is left, in order
 
-1. Records of more than two numbers as results of functions, and a choice between two records; native 8- and 16-bit
-   accesses (the library is in).  (Done: records and pairs as parameters, `let`s and `match`es; results of two numbers;
+1. Records of more than two numbers as results of functions, and a choice between two records.  (Done: 8- and 16-bit
+   cells; records and pairs as parameters, `let`s and `match`es; results of two numbers;
    mutual recursion; function-id tables and known functions as arguments.)
 2. The hardware primitives are in (the C bodies assumed, `hw_law`, `hwf_law`), and the kernels of `hw/` go through the
    proved route and boot (`hw/build_proved.sh`): several programs per kernel (interrupt, fault, second processor) and

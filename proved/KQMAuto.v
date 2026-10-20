@@ -134,6 +134,14 @@ Lemma X_st : forall rho M h i a vh vi va k v,
   evalx P f rho (kupd vh vi va M) k v -> evalx P f rho M (Ekst h i a k) v.
 Proof. intros * A B C (M' & E). exists M'. eapply K_st; eauto. Qed.
 
+Lemma X_ld8 : forall rho M x h i vh vi k v,
+  aval rho h = Some vh -> aval rho i = Some vi ->
+  evalx P f (PTree.set x (KQ.KQRun.rd8 vh vi M) rho) M k v -> evalx P f rho M (Ekld8 x h i k) v.
+Proof. intros * A B (M' & E). exists M'. eapply K_ld8; eauto. Qed.
+Lemma X_st8 : forall rho M h i a vh vi va k v,
+  aval rho h = Some vh -> aval rho i = Some vi -> aval rho a = Some va ->
+  evalx P f rho (KQ.KQRun.upd8 vh vi va M) k v -> evalx P f rho M (Ekst8 h i a k) v.
+Proof. intros * A B C (M' & E). exists M'. eapply K_st8; eauto. Qed.
 Lemma X_ld32 : forall rho M x h i vh vi k v,
   aval rho h = Some vh -> aval rho i = Some vi ->
   evalx P f (PTree.set x (krd32 vh vi M) rho) M k v -> evalx P f rho M (Ekld32 x h i k) v.
@@ -199,7 +207,7 @@ Ltac kqm_ifs :=
   repeat first [ rewrite if_andb_l | rewrite if_orb_l | rewrite if_negb_l
                | rewrite if_andb_u | rewrite if_orb_u | rewrite if_negb_u ].
 
-Ltac kqm_red0 := cbv beta iota delta [cmp_sem binop_sem hw_sem hwf_sem andb orb negb fst snd
+Ltac kqm_red0 := cbv beta iota delta [cmp_sem binop_sem hw_sem hwf_sem andb orb negb fst snd KQ.KQRun.rd16 KQ.KQRun.upd16
   PrimInt63.ltsb PrimInt63.lesb PrimInt63.eqb PrimInt63.ltb PrimInt63.leb
   PrimInt63.land PrimInt63.lor PrimInt63.lxor PrimInt63.add PrimInt63.sub PrimInt63.mul].
 Ltac kqm_red := kqm_red0; kqm_laws.
@@ -400,6 +408,8 @@ Ltac kqm_walk :=
     | |- evalk _ _ _ _ (Ekst _ _ _ _) _ _ => eapply K_st; [reflexivity | reflexivity | reflexivity | ]
     | |- evalk _ _ _ _ (Ekld32 _ _ _ _) _ _ => eapply K_ld32; [reflexivity | reflexivity | ]
     | |- evalk _ _ _ _ (Ekst32 _ _ _ _) _ _ => eapply K_st32; [reflexivity | reflexivity | reflexivity | ]
+    | |- evalk _ _ _ _ (Ekld8 _ _ _ _) _ _ => eapply K_ld8; [reflexivity | reflexivity | ]
+    | |- evalk _ _ _ _ (Ekst8 _ _ _ _) _ _ => eapply K_st8; [reflexivity | reflexivity | reflexivity | ]
     | |- evalk _ _ _ _ (Ehw _ _ _) _ _ => eapply K_hw; [reflexivity | reflexivity | ]
     | |- evalk _ _ _ _ (Ehwf _ _ _ _) _ _ => eapply K_hwf; [reflexivity | reflexivity | ]
     | |- evalk _ _ _ _ (Eif _ _ _ _ _) _ _ => eapply K_if; [reflexivity | reflexivity | kqm_test]
@@ -473,6 +483,8 @@ Ltac kqx_walk :=
     | |- evalx _ _ _ _ (Ekst _ _ _ _) _ => eapply X_st; [reflexivity | reflexivity | reflexivity | ]
     | |- evalx _ _ _ _ (Ekld32 _ _ _ _) _ => eapply X_ld32; [reflexivity | reflexivity | ]
     | |- evalx _ _ _ _ (Ekst32 _ _ _ _) _ => eapply X_st32; [reflexivity | reflexivity | reflexivity | ]
+    | |- evalx _ _ _ _ (Ekld8 _ _ _ _) _ => eapply X_ld8; [reflexivity | reflexivity | ]
+    | |- evalx _ _ _ _ (Ekst8 _ _ _ _) _ => eapply X_st8; [reflexivity | reflexivity | reflexivity | ]
     | |- evalx _ _ _ _ (Ehw _ _ _) _ => eapply X_hw; [reflexivity | reflexivity | ]
     | |- evalx _ _ _ _ (Ehwf _ _ _ _) _ => eapply X_hwf; [reflexivity | reflexivity | ]
     | |- evalx _ _ _ _ (Eif _ _ _ _ _) _ => eapply X_if; [reflexivity | reflexivity | kqx_test]
