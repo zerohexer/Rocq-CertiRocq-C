@@ -11,6 +11,7 @@
 
 From Stdlib Require Import ZArith List Uint63.
 From compcert Require Import Coqlib Maps AST.
+Require KQ.KQRun.
 Import ListNotations.
 
 Notation i63 := PrimInt63.int.
@@ -68,6 +69,7 @@ Inductive exp :=
 | Ekst (h i a : atom) (k : exp)                  (* cell i of block h of the kit's memory := a *)
 | Ekld32 (x : ident) (h i : atom) (k : exp)      (* x := cell i of narrow block h (4-byte cells), signed *)
 | Ekst32 (h i a : atom) (k : exp)                (* cell i of narrow block h := a, kept modulo 2^32 *)
+| Ew64 (o : KQ.KQRun.w64op) (xl xh : ident) (al ah bl bh : atom) (k : exp)   (* (xl, xh) := the u64 (al, ah) o the u64 (bl, bh) (KQRun.v w64_op) *)
 | Ekld8 (x : ident) (h i : atom) (k : exp)       (* x := byte i of narrow block h (KQRun.v rd8) *)
 | Ekst8 (h i a : atom) (k : exp)                 (* byte i of narrow block h := a mod 256 (KQRun.v upd8) *)
 | Ehwf (o : hwfop) (x : ident) (args : list atom) (k : exp)   (* x := a machine number of args *)

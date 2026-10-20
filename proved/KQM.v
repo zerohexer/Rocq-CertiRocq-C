@@ -4,7 +4,7 @@ From Stdlib Require Import ZArith List Uint63 Lia Bool.
 From Stdlib Require Sint63.
 From compcert Require Import Coqlib Maps Integers AST Values Memory Events Globalenvs
   Ctypes Cop Clight ClightBigstep.
-From KQC Require Import KQL KQLGen KQTArith KQLSigned KQLProof KQBytes KQByteArith.
+From KQC Require Import KQL KQLGen KQTArith KQLSigned KQLProof KQBytes KQByteArith KQW64.
 From KQC Require Export KQMSem.
 Require KQ.KQRun KQ.KQSpec.
 Import ListNotations.
@@ -1083,6 +1083,142 @@ Proof.
     + apply Nop. intros [A1 A2]. unfold kq_nblocks in Lh. lia.
 Qed.
 
+
+(** ** 64-bit unsigned numbers: one machine operation on a packed word *)
+
+Lemma lt63_iword : Int64.ltu (Int64.repr 63) Int64.iwordsize = true.
+Proof. reflexivity. Qed.
+
+Lemma lt_mask63 : forall y : Int64.int, Int64.ltu (Int64.and y (Int64.repr 63)) Int64.iwordsize = true.
+Proof.
+  intros y. unfold Int64.ltu. rewrite and63. change (Int64.unsigned Int64.iwordsize) with 64.
+  destruct (zlt (Int64.unsigned y mod 64) 64); [reflexivity | ].
+  pose proof (Z.mod_pos_bound (Int64.unsigned y) 64 ltac:(lia)). lia.
+Qed.
+
+Lemma eval_pack64 : forall le m L H vl vh,
+  eval_expr ge empty_env le m L (enc vl) -> typeof L = tyl ->
+  eval_expr ge empty_env le m H (enc vh) -> typeof H = tyl ->
+  eval_expr ge empty_env le m (pack64 L H)
+    (Vlong (Int64.add (Int64.shl (Int64.repr (to_Z vh)) (Int64.repr 63)) (Int64.repr (to_Z vl)))).
+Proof.
+  intros le m L H vl vh EL TL EH TH. unfold pack64.
+  pose proof (eval_sh1 cp empty_env le m L _ EL TL) as SL. rewrite shr1_t in SL.
+  pose proof (eval_sh1 cp empty_env le m H _ EH TH) as SH. rewrite shr1_t in SH.
+  assert (SHL : eval_expr ge empty_env le m (Ebinop Oshl (sh1 H) (c64 63) tyl)
+                  (Vlong (Int64.shl (Int64.repr (to_Z vh)) (Int64.repr 63)))).
+  { eapply eval_binT; [exact SH | apply eval_Econst_long | reflexivity | reflexivity | ].
+    simpl. unfold sem_shl, sem_shift. simpl. rewrite lt63_iword. reflexivity. }
+  eapply eval_bin; [exact SHL | exact SL | reflexivity | reflexivity | ]. reflexivity.
+Qed.
+
+Lemma eval_w64expr : forall o le m A B x y,
+  eval_expr ge empty_env le m A (Vlong x) -> eval_expr ge empty_env le m B (Vlong y) ->
+  typeof A = tyl -> typeof B = tyl ->
+  eval_expr ge empty_env le m (w64_expr o A B) (Vlong (w64_int o x y)).
+Proof.
+  intros o le m A B x y EA EB TA TB.
+  assert (EM : eval_expr ge empty_env le m (Ebinop Oand B (c64 63) tyl) (Vlong (Int64.and y (Int64.repr 63)))).
+  { eapply eval_bin; [exact EB | apply eval_Econst_long | exact TB | reflexivity | ]. reflexivity. }
+  destruct o; cbn [w64_expr w64_int].
+  - eapply eval_bin; [exact EA | exact EB | exact TA | exact TB | reflexivity].
+  - eapply eval_bin; [exact EA | exact EB | exact TA | exact TB | reflexivity].
+  - eapply eval_bin; [exact EA | exact EB | exact TA | exact TB | reflexivity].
+  - eapply eval_bin; [exact EA | exact EB | exact TA | exact TB | reflexivity].
+  - eapply eval_bin; [exact EA | exact EB | exact TA | exact TB | reflexivity].
+  - eapply eval_bin; [exact EA | exact EB | exact TA | exact TB | reflexivity].
+  - eapply eval_bin; [exact EA | exact EM | exact TA | reflexivity | ].
+    simpl. unfold sem_shl, sem_shift. simpl. rewrite lt_mask63. reflexivity.
+  - eapply eval_bin; [exact EA | exact EM | exact TA | reflexivity | ].
+    simpl. unfold sem_shr, sem_shift. simpl. rewrite lt_mask63. reflexivity.
+  - econstructor; [eapply eval_ltu; [exact EA | exact EB | exact TA | exact TB] | ].
+    destruct (Int64.ltu x y); reflexivity.
+  - econstructor; [eapply eval_bin; [exact EA | exact EB | exact TA | exact TB | reflexivity] | ].
+    simpl. unfold sem_cmp, sem_binarith. simpl. destruct (Int64.ltu y x); reflexivity.
+  - econstructor; [eapply eval_bin; [exact EA | exact EB | exact TA | exact TB | reflexivity] | ].
+    simpl. unfold sem_cmp, sem_binarith. simpl. destruct (Int64.eq x y); reflexivity.
+Qed.
+
+
+Lemma tag_part_hi : forall (R : Int64.int) (z : Z),
+  Int64.unsigned R = z mod 2 ^ 64 ->
+  Int64.or (Int64.shl (Int64.shru R (Int64.repr 63)) Int64.one) Int64.one
+  = tg (KQ.KQRun.w_hi (KQ.KQRun.u64_of_Z z)).
+Proof.
+  intros R z H. pose proof (int64_range R) as Rr.
+  unfold KQ.KQRun.u64_of_Z. cbn [KQ.KQRun.w_hi].
+  assert (Hq : Int64.unsigned (Int64.shru R (Int64.repr 63)) = (z mod 2 ^ 64) / 2 ^ 63) by (rewrite unpack_hi, H; reflexivity).
+  assert (Hb : 0 <= (z mod 2 ^ 64) / 2 ^ 63 < 2).
+  { pose proof (Z.mod_pos_bound z (2 ^ 64) ltac:(lia)). split; [apply Z.div_pos; lia | ].
+    apply Z.div_lt_upper_bound; [lia | replace (2 ^ 63 * 2) with (2 ^ 64) by reflexivity; lia]. }
+  rewrite <- (Int64.repr_unsigned (Int64.shru R (Int64.repr 63))) at 1. rewrite Hq.
+  apply up_t. rewrite Uint63.of_Z_spec. rewrite wB63. rewrite !Z.mod_small by (try lia; split; lia). reflexivity.
+Qed.
+
+Lemma tag_part_lo : forall (R : Int64.int) (z : Z),
+  Int64.unsigned R = z mod 2 ^ 64 ->
+  Int64.or (Int64.shl (Int64.and R (Int64.repr (2 ^ 63 - 1))) Int64.one) Int64.one
+  = tg (KQ.KQRun.w_lo (KQ.KQRun.u64_of_Z z)).
+Proof.
+  intros R z H. pose proof (int64_range R) as Rr.
+  unfold KQ.KQRun.u64_of_Z. cbn [KQ.KQRun.w_lo].
+  assert (Hq : Int64.unsigned (Int64.and R (Int64.repr (2 ^ 63 - 1))) = z mod 2 ^ 63).
+  { rewrite unpack_lo, H. rewrite <- (Zmod_div_mod (2 ^ 63) (2 ^ 64) z) by (try lia; exists 2; reflexivity). reflexivity. }
+  rewrite <- (Int64.repr_unsigned (Int64.and R (Int64.repr (2 ^ 63 - 1)))) at 1. rewrite Hq.
+  apply up_t. rewrite Uint63.of_Z_spec. rewrite wB63. pose proof (Z.mod_pos_bound z (2 ^ 63) ltac:(lia)).
+  rewrite !Z.mod_small by (try lia; split; lia). reflexivity.
+Qed.
+
+Lemma exec_w64 : forall le m rho o xl xh al ah bl bh (ra rb : KQ.KQRun.u64),
+  agree rho le -> xl <> xh ->
+  aval rho al = Some (KQ.KQRun.w_lo ra) -> aval rho ah = Some (KQ.KQRun.w_hi ra) ->
+  aval rho bl = Some (KQ.KQRun.w_lo rb) -> aval rho bh = Some (KQ.KQRun.w_hi rb) ->
+  exists le', exec_stmt function_entry2 ge empty_env le m
+      (tr_w64 o (tv xl) (tv xh) (tr_atom al) (tr_atom ah) (tr_atom bl) (tr_atom bh)) E0 le' m Out_normal /\
+    agree (PTree.set xh (KQ.KQRun.w_hi (KQ.KQRun.w64_op o ra rb))
+            (PTree.set xl (KQ.KQRun.w_lo (KQ.KQRun.w64_op o ra rb)) rho)) le'.
+Proof.
+  intros le m rho o xl xh al ah bl bh ra rb AG Hxx Hal Hah Hbl Hbh.
+  rewrite !KQ.KQRun.w64_op_unfold.
+  assert (EAL := eval_atom cp empty_env le m rho AG al _ Hal).
+  assert (EAH := eval_atom cp empty_env le m rho AG ah _ Hah).
+  assert (EBL := eval_atom cp empty_env le m rho AG bl _ Hbl).
+  assert (EBH := eval_atom cp empty_env le m rho AG bh _ Hbh).
+  set (PA := Int64.add (Int64.shl (Int64.repr (to_Z (KQ.KQRun.w_hi ra))) (Int64.repr 63)) (Int64.repr (to_Z (KQ.KQRun.w_lo ra)))).
+  set (PB := Int64.add (Int64.shl (Int64.repr (to_Z (KQ.KQRun.w_hi rb))) (Int64.repr 63)) (Int64.repr (to_Z (KQ.KQRun.w_lo rb)))).
+  assert (EPA : eval_expr ge empty_env le m (pack64 (tr_atom al) (tr_atom ah)) (Vlong PA))
+    by (eapply eval_pack64; [exact EAL | apply typeof_atom | exact EAH | apply typeof_atom]).
+  assert (EPB : eval_expr ge empty_env le m (pack64 (tr_atom bl) (tr_atom bh)) (Vlong PB))
+    by (eapply eval_pack64; [exact EBL | apply typeof_atom | exact EBH | apply typeof_atom]).
+  assert (ER := eval_w64expr o le m _ _ PA PB EPA EPB eq_refl eq_refl).
+  set (R := w64_int o PA PB) in *.
+  set (Zres := KQ.KQRun.w64_z o (KQ.KQRun.u64_val ra) (KQ.KQRun.u64_val rb)).
+  assert (HR : Int64.unsigned R = Zres mod 2 ^ 64).
+  { subst R Zres. rewrite w64_int_val. unfold KQ.KQRun.u64_val. subst PA PB. rewrite !pack_val. reflexivity. }
+  set (le1 := PTree.set (tv xl) (Vlong R) le).
+  set (le2 := PTree.set (tv xh) (enc (KQ.KQRun.w_hi (KQ.KQRun.u64_of_Z Zres))) le1).
+  set (le3 := PTree.set (tv xl) (enc (KQ.KQRun.w_lo (KQ.KQRun.u64_of_Z Zres))) le2).
+  exists le3. split.
+  - unfold tr_w64.
+    change E0 with (E0 ** E0). eapply exec_Sseq_1 with (le1 := le1) (m1 := m).
+    + apply exec_Sset. exact ER.
+    + change E0 with (E0 ** E0). eapply exec_Sseq_1 with (le1 := le2) (m1 := m).
+      * apply exec_Sset. unfold enc. rewrite <- (tag_part_hi R Zres HR).
+        eapply eval_tagup; [ | left; reflexivity].
+        eapply eval_shr; [ | apply eval_Econst_long | reflexivity | reflexivity | exact lt63_iword].
+        apply eval_Etempvar. subst le1. apply PTree.gss.
+      * apply exec_Sset. unfold enc. rewrite <- (tag_part_lo R Zres HR).
+        eapply eval_tagup; [ | left; reflexivity].
+        eapply eval_bin; [ | apply eval_Econst_long | reflexivity | reflexivity | ]; [ | reflexivity].
+        apply eval_Etempvar. subst le2. rewrite PTree.gso; [subst le1; apply PTree.gss | intro E; apply tv_inj in E; auto].
+  - intros x v H. subst le3 le2 le1. rewrite PTree.gsspec in H. destruct (peq x xh) as [Ex | Ex].
+    + inv H. subst. rewrite PTree.gso by (intro E; apply tv_inj in E; auto). rewrite PTree.gss. reflexivity.
+    + rewrite PTree.gsspec in H. destruct (peq x xl) as [El | El].
+      * inv H. subst. rewrite PTree.gss. reflexivity.
+      * rewrite PTree.gso by (intro E; apply tv_inj in E; auto). rewrite PTree.gso by (intro E; apply tv_inj in E; auto).
+        rewrite PTree.gso by (intro E; apply tv_inj in E; auto). apply AG. exact H.
+Qed.
+
 End KMEM.
 
 
@@ -1202,6 +1338,11 @@ Proof.
     destruct (exec_kst8 cp le m rho M h i a vh vi va AG MR H H0 H1) as (m1 & XS & MR1).
     destruct (IHevalk le m1 AG MR1) as (le2 & m2 & out & X & R).
     exists le2, m2, out. split; auto.
+    change E0 with (E0 ** E0). eapply exec_Sseq_1; eauto.
+  - (* 64-bit operation *)
+    destruct (exec_w64 cp le m rho o xl xh al ah bl bh ra rb AG H H0 H1 H2 H3) as (le' & XS & AG').
+    destruct (IHevalk le' m AG' MR) as (le1 & m1 & out & X & R).
+    exists le1, m1, out. split; auto.
     change E0 with (E0 ** E0). eapply exec_Sseq_1; eauto.
   - (* machine operation *)
     destruct (hw_funs o) as (b & FS & FP).

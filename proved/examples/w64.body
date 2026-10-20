@@ -1,0 +1,32 @@
+(* 64-bit unsigned numbers (KQRun.v u64): a hash over bytes (xor, multiplication), a generator (shifts, additions), a
+   rotation, a comparison, the wrap-around of 2^64 *)
+Definition fnv_off : u64 := u64_of_halves 3421674724 2216829733.      (* 0xcbf29ce484222325 *)
+Definition fnv_prime : u64 := u64_of_halves 256 435.                   (* 0x100000001b3 *)
+Definition golden : u64 := u64_of_halves 2654435769 2135587861.        (* 0x9E3779B97F4A7C15 *)
+Definition m1 : u64 := u64_of_halves 3210233709 484763065.            (* 0xBF58476D1CE4E5B9 *)
+Definition m2 : u64 := u64_of_halves 2496678331 321982955.             (* 0x94D049BB133111EB *)
+Fixpoint fnv (f : nat) (i n : int) (h : u64) (s : mem) : u64 :=
+  match f with
+  | O => h
+  | S f => if n <=? i then h
+           else fnv f (i + 1) n (u64_mul (u64_xor h (u64_of_int (rd 0 i s land 255))) fnv_prime) s
+  end.
+Definition mix (z0 : u64) : u64 :=
+  let z1 := u64_mul (u64_xor z0 (u64_shr z0 30)) m1 in
+  let z2 := u64_mul (u64_xor z1 (u64_shr z1 27)) m2 in
+  u64_xor z2 (u64_shr z2 31).
+Definition rotl (a : u64) (k : int) : u64 := u64_or (u64_shl a k) (u64_shr a (64 - k)).
+Fixpoint stream (f : nat) (st acc : u64) (big : int) : u64 :=
+  match f with
+  | O => acc
+  | S f => let st1 := u64_add st golden in
+           let z := mix st1 in
+           stream f st1 (u64_xor (rotl acc 13) z) (if u64_ltb (u64_of_halves 2147483648 0) z then big + 1 else big)
+  end.
+Definition solve (n : nat) (nz : int) (s : mem) : int :=
+  let h := fnv n 0 nz fnv_off s in
+  let r := stream n h fnv_off 0 in
+  u64_lo32 r + u64_hi32 r * 1000003 + (if u64_eqb h r then 7 else 0) + u64_to_int (u64_shr h 40).
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 1)) (kq_arg 1) (kq_input 0).

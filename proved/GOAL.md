@@ -41,7 +41,7 @@ offers, and what takes its place:
 
 | C | In Rocq | State |
 |---|---|---|
-| integers, bit operations, loops, calls | `PrimInt63` operations, `Fixpoint`s whose last step is the call | proved, signed division included |
+| integers, bit operations, loops, calls | `PrimInt63` operations, `Fixpoint`s whose last step is the call; `u64` (two halves, one instruction per operation) for full 64-bit unsigned arithmetic | proved, signed division included; 64-bit unsigned proved (`proved/examples/w64.body`) |
 | arrays, buffers | memory blocks read and written with `rd`, `upd` | wide and 32-bit cells proved; 8-bit cells are one byte access in the C (proved against CompCert's memory), 16-bit cells are two |
 | structs, unions, bit fields | records split into integers, or a layout in a block; bit fields are bit operations | records and pairs of numbers as parameters, `let`s, `match`es and fields are proved; a recursive function giving back a record or pair of two numbers is proved (the second goes through a slot block); more than two, and unions, missing |
 | pointers, raw addresses | an integer address into a region; for an OS, RAM is one block at its base address | missing |

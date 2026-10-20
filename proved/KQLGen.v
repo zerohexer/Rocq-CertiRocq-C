@@ -233,6 +233,30 @@ Definition kit_guard8 (H I : expr) (inner outer : statement) : statement :=
     (Sifthenelse (cmpe Olt I (kld_len8 (sh1 H))) inner outer)
     outer.
 
+(** A 64-bit unsigned number is two numbers, the low 63 bits and the bit above; in C it is packed into one [unsigned long long],
+    the operation is done on that, and the result is unpacked into two words again.  The packing and unpacking cancel between two
+    operations (the C compiler sees them as shifts and masks of one register). *)
+Definition pack64 (L H : expr) : expr := Ebinop Oadd (Ebinop Oshl (sh1 H) (c64 63) tyl) (sh1 L) tyl.
+Definition m63 : Z := 2 ^ 63 - 1.
+Definition w64_expr (o : KQ.KQRun.w64op) (A B : expr) : expr :=
+  match o with
+  | KQ.KQRun.W_add => Ebinop Oadd A B tyl
+  | KQ.KQRun.W_sub => Ebinop Osub A B tyl
+  | KQ.KQRun.W_mul => Ebinop Omul A B tyl
+  | KQ.KQRun.W_and => Ebinop Oand A B tyl
+  | KQ.KQRun.W_or => Ebinop Oor A B tyl
+  | KQ.KQRun.W_xor => Ebinop Oxor A B tyl
+  | KQ.KQRun.W_shl => Ebinop Oshl A (Ebinop Oand B (c64 63) tyl) tyl
+  | KQ.KQRun.W_shr => Ebinop Oshr A (Ebinop Oand B (c64 63) tyl) tyl
+  | KQ.KQRun.W_ltu => Ecast (Ebinop Olt A B tyb) tyl
+  | KQ.KQRun.W_leu => Ecast (Ebinop Ole A B tyb) tyl
+  | KQ.KQRun.W_eq => Ecast (Ebinop Oeq A B tyb) tyl
+  end.
+Definition tr_w64 (o : KQ.KQRun.w64op) (xl xh : ident) (AL AH BL BH : expr) : statement :=
+  Ssequence (Sset xl (w64_expr o (pack64 AL AH) (pack64 BL BH)))
+    (Ssequence (Sset xh (tagup (Ebinop Oshr (Etempvar xl tyl) (c64 63) tyl)))
+               (Sset xl (tagup (Ebinop Oand (Etempvar xl tyl) (c64 m63) tyl)))).
+
 Section TR.
 Variable P : prog.
 
@@ -288,6 +312,8 @@ Fixpoint tr_exp (ps : list ident) (e : exp) : statement :=
         (kit_guard32 (tr_atom h) (tr_atom i)
            (Sassign (kld_cell32 (sh1 (tr_atom h)) (tr_atom i)) (Ecast (sh1 (tr_atom a)) tint32)) Sskip)
         (tr_exp ps k)
+  | Ew64 o xl xh al ah bl bh k =>
+      Ssequence (tr_w64 o (tv xl) (tv xh) (tr_atom al) (tr_atom ah) (tr_atom bl) (tr_atom bh)) (tr_exp ps k)
   | Ekld8 x h i k =>
       Ssequence
         (kit_guard8 (tr_atom h) (tr_atom i)
@@ -314,6 +340,7 @@ Fixpoint binders (e : exp) : list ident :=
   | Ekld x _ _ k => tv x :: binders k
   | Ekld32 x _ _ k => tv x :: binders k
   | Ekst32 _ _ _ k => binders k
+  | Ew64 _ xl xh _ _ _ _ k => tv xl :: tv xh :: binders k
   | Ekld8 x _ _ k => tv x :: binders k
   | Ekst8 _ _ _ k => binders k
   | Ehw _ _ k => binders k

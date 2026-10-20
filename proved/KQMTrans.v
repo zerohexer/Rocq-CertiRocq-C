@@ -36,6 +36,7 @@ Definition kn_rd32 := kn_of <% KQ.KQRun.rd32 %>.
 Definition kn_upd32 := kn_of <% KQ.KQRun.upd32 %>.
 Definition kn_rd8 := kn_of <% KQ.KQRun.rd8 %>.
 Definition kn_upd8 := kn_of <% KQ.KQRun.upd8 %>.
+Definition kn_w64_op := kn_of <% KQ.KQRun.w64_op %>.
 Definition kn_kmem := kn_of <% KQ.KQRun.mem %>.
 Definition kn_kq_nat := kn_of <% KQ.KQRun.kq_nat %>.
 Definition kn_int := kn_of <% PrimInt63.int %>.
@@ -105,6 +106,7 @@ Definition q_Ekld32 := <% Ekld32 %>.
 Definition q_Ekst32 := <% Ekst32 %>.
 Definition q_Ekld8 := <% Ekld8 %>.
 Definition q_Ekst8 := <% Ekst8 %>.
+Definition q_Ew64 := <% Ew64 %>.
 Definition q_Eloop := <% Eloop %>.
 Definition q_mkfn := <% mkfn %>.
 Definition q_mkprog := <% mkprog %>.
@@ -611,7 +613,8 @@ Definition find_fn_args (Γ : list ent) (kn : kername) (args : list term) : opti
 
 (* a helper: a definition of the file or of KQRun.v that does not call itself, written out where it is used *)
 Definition helper_body (kn : kername) : option term :=
-  if eq_mp (fst kn) mp || eq_mp (fst kn) kit_mp || eq_mp (fst kn) uint63_mp then
+  if Kername.eqb kn kn_w64_op then None   (* a 64-bit operation is one instruction: its definition is its meaning, not a helper *)
+  else if eq_mp (fst kn) mp || eq_mp (fst kn) kit_mp || eq_mp (fst kn) uint63_mp then
     match find_fn kn with
     | Some _ => None
     | None => match lookup_env Σ kn with
@@ -1087,6 +1090,23 @@ with tr_recv (fuel : nat) (Γ : list ent) (mk : term) (ks : list kind) (t : term
         | [ta; tb; c] => tr_field fuel Γ (tApp (tInd ind_prod []) [ta; tb]) (if Kername.eqb kn kn_fst then 0 else 1) c s kk
         | _ => TErr "fst or snd"
         end
+      else if Kername.eqb kn kn_w64_op then
+        (* a 64-bit operation on two u64 (KQRun.v): one machine operation on the two words *)
+        match args with
+        | [o; a; b] =>
+            tr_recv fuel Γ mk ks a s (fun ea s => tr_recv fuel Γ mk ks b s (fun eb s =>
+              match atoms_of 20 ea, atoms_of 20 eb with
+              | [al; ah], [bl; bh] =>
+                  let '(xl, s) := fresh s in
+                  let '(xh, s) := fresh s in
+                  match kk (ERec [EInt (avar xl); EInt (avar xh)]) s with
+                  | TOk (rest, s') => TOk (tApp q_Ew64 [o; qpos xl; qpos xh; al; ah; bl; bh; rest], s')
+                  | TErr m => TErr m
+                  end
+              | _, _ => TErr "a 64-bit operation on what is not a pair of numbers"
+              end))
+        | _ => TErr "w64_op"
+        end
       else match find_fn_args Γ kn args with
       | Some f =>
           match fi_rrec f with
@@ -1411,10 +1431,11 @@ Definition inline_limit : nat := 40.
 Definition big_fun (Σ : global_env) (kn : kername) : bool :=
   match body_of Σ kn with
   | Some (ty, b) =>
-      match fparts b, result_mem Σ ty with
-      | Some (false, tys, _), Some _ =>
+      match fparts b, result_kind Σ ty with
+      | Some (false, tys, _), Some (_, rr) =>
           match opt_all (map (kind_of 20 Σ) tys) with
-          | Some _ => Nat.ltb inline_limit (term_size 100000 b)
+          | Some _ => (* a function that gives back a record (a u64) does more work per node *)
+                      Nat.ltb (match rr with Some _ => Nat.div inline_limit 2 | None => inline_limit end) (term_size 100000 b)
           | None => false
           end
       | _, _ => false
@@ -1593,7 +1614,7 @@ Definition mk_info (Σ : global_env) (fns : list finfo) (i : nat) (key : fkey) :
                         then fi_bi p else i
                     | _, _ => i
                     end in
-          option_map (fun ks => mkFI kn (Pos.of_nat (1000 + i)) ks rm isrec wr (if isrec then rr else None) bi
+          option_map (fun ks => mkFI kn (Pos.of_nat (1000 + i)) ks rm isrec wr rr bi
                                      (match fixed with [] => snd kn | _ => snd kn ^ "_" ^ string_of_nat i end) fixed)
                      (opt_all (map (kind_of 20 Σ) tys))
       | _, _ => None

@@ -110,6 +110,21 @@ variable as an argument.  A function chosen at run time is a dispatch on an id w
 an ordinary `if id =? 0 then f0 env x else if id =? 1 then ..` (`proved/examples/dispatch.body`); clang turns such a
 chain into a jump table.
 
+64-bit unsigned numbers.  A number of the kit is 63 bits wide, so `u64` (`KQRun.v`) is a record of two of them: `w_lo`, the
+low 63 bits, and `w_hi`, the bit above.  Its meaning is `u64_val`, a number of Z in 0 .. 2^64 - 1, and every operation is
+defined through it with C's wrap-around of `unsigned long long`: `u64_add`, `u64_sub`, `u64_mul`, `u64_and`, `u64_or`,
+`u64_xor`, `u64_shl`, `u64_shr` (the amount modulo 64), the comparisons `u64_ltb`, `u64_leb`, `u64_eqb`, and the
+conversions `u64_of_int`, `u64_to_int`, `u64_of_halves hi32 lo32`, `u64_lo32`, `u64_hi32`.  They all come down to
+one operation, `w64_op o a b`, and that is one KQL instruction (`Ew64`): the C packs the two halves of each operand into
+one `unsigned long long`, does the operation, and splits the result back into two variables.  The proof of the
+instruction is `exec_w64` in `KQM.v`, from the packing lemmas of `KQW64.v`.  Two choices keep the per-program proofs
+fast.  `w64_op` is sealed (its definition is behind a `Qed`; the equation `w64_op_unfold` is its meaning), so no
+conversion, the kernel's included, works an operation out (the kernel does not evaluate chains of them).  And the rule for the instruction (`K_w64`) takes its operands as records with premises on their
+two halves, and `u64` has primitive projections, so a term is never written as `mk_u64 (w_lo r) (w_hi r)`, which
+would copy `r` at every step.  A u64 helper is written out where it is used, like any helper; a recursive function that
+gives back a u64 is a function with two results (the second through block 63).
+`proved/examples/w64.body` is FNV-1a over bytes, a splitmix-style mixer, a rotation and comparisons.
+
 Anything else is refused with the reason.  Not read yet: a function that gives back more than two numbers (and a choice
 between two records), growing blocks (`kq_grow`), closures.
 

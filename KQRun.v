@@ -182,3 +182,64 @@ Axiom hw_code_sync : int -> int -> mem -> mem.                  (* hw_code_sync 
 Axiom hw_addr : int -> int.     (* the address of the first cell of narrow block h, on a page boundary: for what the
                                    processor or a device reads by itself -- page tables, an interrupt table, a ring of
                                    descriptors -- built in narrow blocks, whose cells are plain 32-bit numbers *)
+
+(* 64-BIT UNSIGNED NUMBERS.  A number is 63 bits wide, so an unsigned 64-bit number is two of them: `w_lo` the low 63 bits
+   and `w_hi` the bit above (read modulo 2).  The meaning is `u64_val`, a number of Z in 0 .. 2^64 - 1; every operation
+   is defined by it, with the wrap-around of C's `unsigned long long`: u64_add a b is (a + b) mod 2^64.  The shifts
+   take the amount modulo 64.  The comparisons give 0 or 1 in `w_lo` (u64_ltb, u64_leb, u64_eqb give booleans).  The
+   proved route holds a u64 as two variables and does each operation as one 64-bit machine operation. *)
+Require Import ZArith.
+Set Primitive Projections.
+Record u64 := mk_u64 { w_lo : int; w_hi : int }.
+Unset Primitive Projections.
+Definition u64_val (a : u64) : Z := Z.add (Uint63.to_Z (w_lo a)) (Z.mul (Z.pow 2%Z 63%Z) (Z.modulo (Uint63.to_Z (w_hi a)) 2%Z)).
+Definition u64_of_Z (z : Z) : u64 :=
+  mk_u64 (Uint63.of_Z (Z.modulo z (Z.pow 2%Z 63%Z))) (Uint63.of_Z (Z.div (Z.modulo z (Z.pow 2%Z 64%Z)) (Z.pow 2%Z 63%Z))).
+Inductive w64op := W_add | W_sub | W_mul | W_and | W_or | W_xor | W_shl | W_shr | W_ltu | W_leu | W_eq.
+Definition w64_z (o : w64op) (x y : Z) : Z :=
+  match o with
+  | W_add => Z.add x y
+  | W_sub => Z.sub x y
+  | W_mul => Z.mul x y
+  | W_and => Z.land x y
+  | W_or => Z.lor x y
+  | W_xor => Z.lxor x y
+  | W_shl => Z.shiftl x (Z.modulo y 64%Z)
+  | W_shr => Z.shiftr x (Z.modulo y 64%Z)
+  | W_ltu => if Z.ltb x y then 1%Z else 0%Z
+  | W_leu => if Z.leb x y then 1%Z else 0%Z
+  | W_eq => if Z.eqb x y then 1%Z else 0%Z
+  end.
+(* sealed: the definition sits behind a Qed, so no conversion (the kernel's included) ever works an operation out; the
+   meaning is the equation w64_op_unfold *)
+Lemma w64_op_ex : { f : w64op -> u64 -> u64 -> u64 | forall o a b, f o a b = u64_of_Z (w64_z o (u64_val a) (u64_val b)) }.
+Proof. exists (fun o a b => u64_of_Z (w64_z o (u64_val a) (u64_val b))). intros. reflexivity. Qed.
+Definition w64_op : w64op -> u64 -> u64 -> u64 := proj1_sig w64_op_ex.
+Lemma w64_op_unfold : forall o a b, w64_op o a b = u64_of_Z (w64_z o (u64_val a) (u64_val b)).
+Proof. exact (proj2_sig w64_op_ex). Qed.
+Lemma u64_eta : forall r : u64, mk_u64 (w_lo r) (w_hi r) = r.
+Proof. intros r. destruct r. reflexivity. Qed.
+(* the proofs compare programs that use these operations: two uses are the same when written the same, never by working them out *)
+Strategy opaque [w64_op].
+Definition u64_add (a b : u64) : u64 := w64_op W_add a b.
+Definition u64_sub (a b : u64) : u64 := w64_op W_sub a b.
+Definition u64_mul (a b : u64) : u64 := w64_op W_mul a b.
+Definition u64_and (a b : u64) : u64 := w64_op W_and a b.
+Definition u64_or (a b : u64) : u64 := w64_op W_or a b.
+Definition u64_xor (a b : u64) : u64 := w64_op W_xor a b.
+(* shift by n bits, n taken modulo 64 *)
+Definition u64_shl (a : u64) (n : int) : u64 := w64_op W_shl a (mk_u64 n 0%uint63).
+Definition u64_shr (a : u64) (n : int) : u64 := w64_op W_shr a (mk_u64 n 0%uint63).
+Definition u64_ltb (a b : u64) : bool := PrimInt63.eqb (w_lo (w64_op W_ltu a b)) 1%uint63.
+Definition u64_leb (a b : u64) : bool := PrimInt63.eqb (w_lo (w64_op W_leu a b)) 1%uint63.
+Definition u64_eqb (a b : u64) : bool := PrimInt63.eqb (w_lo (w64_op W_eq a b)) 1%uint63.
+(* a number of this system (63 bits, signed) as a u64 (modulo 2^64), and the low 63 bits of a u64 back as a number *)
+Definition u64_of_int (n : int) : u64 := mk_u64 n (if n <? 0 then 1 else 0).
+Definition u64_to_int (a : u64) : int := w_lo a.
+(* a u64 from its two 32-bit halves, and the halves back *)
+Definition u64_of_halves (hi lo : int) : u64 :=
+  mk_u64 (PrimInt63.lor (PrimInt63.lsl (PrimInt63.land hi 2147483647%uint63) 32%uint63) (PrimInt63.land lo 4294967295%uint63))
+         (PrimInt63.lsr (PrimInt63.land hi 4294967295%uint63) 31%uint63).
+Definition u64_lo32 (a : u64) : int := PrimInt63.land (w_lo a) 4294967295%uint63.
+Definition u64_hi32 (a : u64) : int :=
+  PrimInt63.lor (PrimInt63.lsr (w_lo a) 32%uint63) (PrimInt63.lsl (PrimInt63.land (w_hi a) 1%uint63) 31%uint63).

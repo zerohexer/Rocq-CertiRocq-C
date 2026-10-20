@@ -134,6 +134,13 @@ Lemma X_st : forall rho M h i a vh vi va k v,
   evalx P f rho (kupd vh vi va M) k v -> evalx P f rho M (Ekst h i a k) v.
 Proof. intros * A B C (M' & E). exists M'. eapply K_st; eauto. Qed.
 
+Lemma X_w64 : forall rho M o xl xh al ah bl bh (ra rb : KQ.KQRun.u64) k v,
+  xl <> xh -> aval rho al = Some (KQ.KQRun.w_lo ra) -> aval rho ah = Some (KQ.KQRun.w_hi ra) ->
+  aval rho bl = Some (KQ.KQRun.w_lo rb) -> aval rho bh = Some (KQ.KQRun.w_hi rb) ->
+  evalx P f (PTree.set xh (KQ.KQRun.w_hi (KQ.KQRun.w64_op o ra rb))
+              (PTree.set xl (KQ.KQRun.w_lo (KQ.KQRun.w64_op o ra rb)) rho)) M k v ->
+  evalx P f rho M (Ew64 o xl xh al ah bl bh k) v.
+Proof. intros * N A B C D (M' & E). exists M'. eapply K_w64; eauto. Qed.
 Lemma X_ld8 : forall rho M x h i vh vi k v,
   aval rho h = Some vh -> aval rho i = Some vi ->
   evalx P f (PTree.set x (KQ.KQRun.rd8 vh vi M) rho) M k v -> evalx P f rho M (Ekld8 x h i k) v.
@@ -208,6 +215,9 @@ Ltac kqm_ifs :=
                | rewrite if_andb_u | rewrite if_orb_u | rewrite if_negb_u ].
 
 Ltac kqm_red0 := cbv beta iota delta [cmp_sem binop_sem hw_sem hwf_sem andb orb negb fst snd KQ.KQRun.rd16 KQ.KQRun.upd16
+  KQ.KQRun.u64_add KQ.KQRun.u64_sub KQ.KQRun.u64_mul KQ.KQRun.u64_and KQ.KQRun.u64_or KQ.KQRun.u64_xor KQ.KQRun.u64_shl
+  KQ.KQRun.u64_shr KQ.KQRun.u64_ltb KQ.KQRun.u64_leb KQ.KQRun.u64_eqb KQ.KQRun.u64_of_int KQ.KQRun.u64_to_int KQ.KQRun.u64_of_halves
+  KQ.KQRun.u64_lo32 KQ.KQRun.u64_hi32 KQ.KQRun.w_lo KQ.KQRun.w_hi
   PrimInt63.ltsb PrimInt63.lesb PrimInt63.eqb PrimInt63.ltb PrimInt63.leb
   PrimInt63.land PrimInt63.lor PrimInt63.lxor PrimInt63.add PrimInt63.sub PrimInt63.mul].
 Ltac kqm_red := kqm_red0; kqm_laws.
@@ -375,6 +385,16 @@ Ltac kqm_hyps_known :=
   try (match goal with H : false = true |- _ => discriminate H end).
 
 (** the value of a chosen number against the Rocq text: equal as they stand, or after a split on each test *)
+(** a test already split on is known also where it is written differently but is the same by computation (a u64 built from
+    its two numbers against the u64 itself) *)
+Ltac kqm_known_conv :=
+  repeat match goal with
+         | E : ?c = ?b |- context [if ?c' then _ else _] =>
+             lazymatch type of c with bool => idtac end;
+             tryif constr_eq c c' then fail else
+             (let Ec := fresh "Ec" in assert (Ec : c' = b) by (exact E); rewrite Ec; clear Ec)
+         end.
+
 Ltac kqm_inner c := lazymatch c with context [if ?d then _ else _] => kqm_inner d | _ => c end.
 Ltac kqm_fin :=
   kqm_red; kqm_pairs; kqm_red;
@@ -384,7 +404,7 @@ Ltac kqm_fin :=
           repeat (first [ exact eq_refl
                         | match goal with
                           | |- context [if ?c then _ else _] =>
-                              let d := kqm_inner c in (match type of d with bool => idtac end); destruct d eqn:?E; kqm_red; try kqm_known; kqm_hyps_known
+                              let d := kqm_inner c in (match type of d with bool => idtac end); destruct d eqn:?E; kqm_red; try kqm_known; try kqm_known_conv; kqm_hyps_known
                           end ]);
           first [ exact eq_refl | reflexivity ] ].
 
@@ -397,8 +417,25 @@ Ltac kqm_splitall :=
               let d := kqm_inner c in (match type of d with bool => idtac end); destruct d; kqm_red; try kqm_known
           end).
 
-Ltac kqm_walk :=
-  repeat
+(** the arguments of a loop are the numbers the callee's statement names: equal as they stand, or one by one (the numbers of a
+    u64 are long terms, which are compared one at a time) *)
+Ltac kqm_unf := idtac.
+Ltac kqm_avals := first [ reflexivity | (cbn [KQL.avals KQL.aval]; apply f_equal; repeat (apply f_equal2); first [reflexivity | (kqm_unf; kqm_fin) | kqm_fin]) ].
+
+(** a 64-bit operation: each operand is the record both of whose numbers are fields of it (a result of an earlier operation, a
+    parameter), or two numbers written as they are (a constant, a number computed apart) *)
+Ltac kqm_w64k :=
+  first [ eapply K_w64; [discriminate | reflexivity | reflexivity | reflexivity | reflexivity | ]
+        | eapply K_w64 with (ra := KQ.KQRun.mk_u64 _ _); [discriminate | reflexivity | reflexivity | reflexivity | reflexivity | ]
+        | eapply K_w64 with (rb := KQ.KQRun.mk_u64 _ _); [discriminate | reflexivity | reflexivity | reflexivity | reflexivity | ]
+        | eapply K_w64 with (ra := KQ.KQRun.mk_u64 _ _) (rb := KQ.KQRun.mk_u64 _ _); [discriminate | reflexivity | reflexivity | reflexivity | reflexivity | ] ].
+Ltac kqm_w64x :=
+  first [ eapply X_w64; [discriminate | reflexivity | reflexivity | reflexivity | reflexivity | ]
+        | eapply X_w64 with (ra := KQ.KQRun.mk_u64 _ _); [discriminate | reflexivity | reflexivity | reflexivity | reflexivity | ]
+        | eapply X_w64 with (rb := KQ.KQRun.mk_u64 _ _); [discriminate | reflexivity | reflexivity | reflexivity | reflexivity | ]
+        | eapply X_w64 with (ra := KQ.KQRun.mk_u64 _ _) (rb := KQ.KQRun.mk_u64 _ _); [discriminate | reflexivity | reflexivity | reflexivity | reflexivity | ] ].
+
+Ltac kqm_step :=
     match goal with
     | H : false = true |- _ => discriminate H
     | H : true = false |- _ => discriminate H
@@ -408,6 +445,7 @@ Ltac kqm_walk :=
     | |- evalk _ _ _ _ (Ekst _ _ _ _) _ _ => eapply K_st; [reflexivity | reflexivity | reflexivity | ]
     | |- evalk _ _ _ _ (Ekld32 _ _ _ _) _ _ => eapply K_ld32; [reflexivity | reflexivity | ]
     | |- evalk _ _ _ _ (Ekst32 _ _ _ _) _ _ => eapply K_st32; [reflexivity | reflexivity | reflexivity | ]
+    | |- evalk _ _ _ _ (Ew64 _ _ _ _ _ _ _ _) _ _ => kqm_w64k
     | |- evalk _ _ _ _ (Ekld8 _ _ _ _) _ _ => eapply K_ld8; [reflexivity | reflexivity | ]
     | |- evalk _ _ _ _ (Ekst8 _ _ _ _) _ _ => eapply K_st8; [reflexivity | reflexivity | reflexivity | ]
     | |- evalk _ _ _ _ (Ehw _ _ _) _ _ => eapply K_hw; [reflexivity | reflexivity | ]
@@ -418,12 +456,13 @@ Ltac kqm_walk :=
         first [ eapply K_call_run; [reflexivity | kqm_call | ]
               | eapply K_call_ex; [reflexivity | kqm_call_ex | intros ?M1 ?R] ]
     | |- evalk _ _ _ _ (Eloop _) _ _ =>
-        first [ eapply K_loop_run; [kqm_call | reflexivity | reflexivity]
-              | kqm_splitall; (eapply K_loop_run; [kqm_call | reflexivity | reflexivity]) ]
+        first [ eapply K_loop_run; [kqm_call | reflexivity | kqm_avals]
+              | kqm_splitall; (eapply K_loop_run; [kqm_call | reflexivity | kqm_avals]) ]
     end.
 
+Ltac kqm_walk := repeat kqm_step.
+
 (** the helpers a program's translation wrote out, opened in the Rocq text as well (the program's file sets this) *)
-Ltac kqm_unf := idtac.
 (** the program's file sets this to open its functions that give back two numbers (their statements say [fst] / [snd] of them) *)
 Ltac kqm_unf2 := idtac.
 
@@ -483,6 +522,7 @@ Ltac kqx_walk :=
     | |- evalx _ _ _ _ (Ekst _ _ _ _) _ => eapply X_st; [reflexivity | reflexivity | reflexivity | ]
     | |- evalx _ _ _ _ (Ekld32 _ _ _ _) _ => eapply X_ld32; [reflexivity | reflexivity | ]
     | |- evalx _ _ _ _ (Ekst32 _ _ _ _) _ => eapply X_st32; [reflexivity | reflexivity | reflexivity | ]
+    | |- evalx _ _ _ _ (Ew64 _ _ _ _ _ _ _ _) _ => kqm_w64x
     | |- evalx _ _ _ _ (Ekld8 _ _ _ _) _ => eapply X_ld8; [reflexivity | reflexivity | ]
     | |- evalx _ _ _ _ (Ekst8 _ _ _ _) _ => eapply X_st8; [reflexivity | reflexivity | reflexivity | ]
     | |- evalx _ _ _ _ (Ehw _ _ _) _ => eapply X_hw; [reflexivity | reflexivity | ]
@@ -493,8 +533,8 @@ Ltac kqx_walk :=
         first [ eapply X_call_run; [reflexivity | kqm_call | ]
               | eapply X_call_ex; [reflexivity | kqx_call | intros ?M1 ?R] ]
     | |- evalx _ _ _ _ (Eloop _) _ =>
-        first [ eapply X_loop_run; [kqx_call | reflexivity | reflexivity]
-              | kqm_splitall; (eapply X_loop_run; [kqx_call | reflexivity | reflexivity]) ]
+        first [ eapply X_loop_run; [kqx_call | reflexivity | kqm_avals]
+              | kqm_splitall; (eapply X_loop_run; [kqx_call | reflexivity | kqm_avals]) ]
     end.
 
 Ltac kqx_enter :=
