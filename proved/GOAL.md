@@ -50,7 +50,7 @@ offers, and what takes its place:
 | hardware access, atomics, inline assembly | primitives with a stated law and a trace; hand-written `.S` once per architecture | loads, stores, atomics, fences, bulk bytes, `hw_run`, `hw_addr`, interrupt-take proved against the kit's laws, the C bodies assumed (`hw_law`, `hwf_law`); five test kernels (`hw/`: the kernel, interrupt handler, fault handler, second processor, interrupt entry written in Rocq) are proved and boot in QEMU; a program's own assembly/C routines are declared and assumed (`hw_user`) |
 | floating point | `PrimFloat` as C `double` | not started |
 | files, sockets, system calls | primitives with a trace, as for hardware | not started |
-| threads, SMP | one program per thread, marked shared cells, a launcher | designed, not built |
+| threads, SMP | one program per thread; shared memory reached only through marked atomics (`kq_shared` makes the translator refuse plain access); the launcher is written in Rocq (INIT/STARTUP through the local interrupt controller); a spinlock library | built (`hw/lock.body` on two processors); the model is the atomics' laws, no interleaving semantics |
 | calling existing C libraries | declared as assumed primitives with stated laws | not started |
 | strings, `printf` | byte blocks and a formatting library written in Rocq | missing |
 
@@ -139,8 +139,8 @@ Proved and in the corpus (36 programs, all proved, answers equal to the C++ run,
    if-conversion with early reads is done; next the removal of the test on an access whose index is in range.
    These run alongside the other items and block none of them.
 5. Floating point, system calls and declarations of C libraries, for hosted programs.
-6. Shared memory between programs for concurrency: marked shared operations whose proof allows the environment to
-   change the cell, and a launcher that runs the programs.  Each program stays a sequential proof.
+6. Concurrency beyond the marked atomics: an interleaving semantics of two programs, to state and prove protocol
+   properties (mutual exclusion of a lock, a queue) once for all programs; a lock with fairness (ticket lock).
 7. Checks of the trusted tools: the printed C against `ccomp`, UBSan.
 
 ## Not goals

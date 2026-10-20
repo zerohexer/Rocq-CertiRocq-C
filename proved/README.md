@@ -168,6 +168,27 @@ kernel's checks are compared with the text without a case split per test; write 
 (more than 40 nodes) or compute the number with one choice per test and add them (`(if a then 1 else 0) + (if b then
 1 else 0)` is taken with conditional moves and splits nothing).
 
+### Several processors
+
+A second processor runs a program of its own (`hw/NAME_ap.body`), proved like the first as a sequential function of the
+memory.  The programs share the tables of the kit's blocks but, by the rule below, not the cells.  What they share is
+memory reached by address: a narrow block's address (`hw_addr h`) is given to the other program, and every access to it
+is a marked operation: `hw_aload` (acquire), `hw_astore` (release), `hw_atomic`, `hw_cas`, `hw_fence`, which are external
+calls with sequentially consistent or acquire/release C11 atomics, so the C compiler neither merges nor moves a plain
+access across them.  The proof of each program holds for every number such an operation can give back (the laws say
+"some number of the right size", and only the cell it fills changes).
+
+A program that shares narrow blocks lists them: `Definition kq_shared : list int := [6].`  The translator then refuses
+`rd32`, `upd32`, `rd8`, `upd8` on a listed block, and on any block whose number is not written in the program where it
+is used: a plain access would read the cell the proof believes it holds while the other processor changes it.
+
+`hw/lib.body` has a spinlock (`lock_take`, `lock_free`: a compare-and-swap from 0 to 1 with a pause between tries, and a
+release store).  `hw/lock.body` and `hw/lock_ap.body` run on two processors (QEMU `-smp 2`) and each add 1 to a counter
+100 000 times with a plain read and a plain write under the lock: the counter ends at 200 000 (the same loop without
+the lock, `hw/smp.body`, loses updates).  That the lock admits one holder at a time is a property of the hardware's
+atomics; a theorem about a program that uses it (the counter, a queue) is written in Rocq about its text, as for any
+other property of the operating system.
+
 ## What is trusted
 
 `Print Assumptions kit_function_correct` (`ASSUME=1 proved/make.sh`): Rocq's 63-bit integer axioms; one fact about

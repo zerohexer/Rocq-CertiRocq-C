@@ -89,8 +89,14 @@ def parse_main(mt):
                 raise SystemExit("main passes something this tool does not read: " + t)
     return entry, args, wrap
 
+def translate_cmd(prog, entry, name):
+    # a program that shares narrow blocks with another processor lists them: Definition kq_shared : list int := [6].
+    if re.search(r"Definition\s+kq_shared\b", prog):
+        return f'kqm_translate_s {entry} "{name}_prog" kq_shared'
+    return f'kqm_translate {entry} "{name}_prog"'
+
 def proof_file(name, prog, entry, fns, helpers, groups=(), pairfns=()):
-    t = HDR + prog + f'\nMetaRocq Run (kqm_translate {entry} "{name}_prog").\n'
+    t = HDR + prog + f'\nMetaRocq Run ({translate_cmd(prog, entry, name)}).\n'
     t += f"Set Default Timeout {os.environ.get('KQ_TIMEOUT', '300')}.\n"
     if helpers:
         t += "Ltac kqm_unf ::= cbv beta zeta iota delta [" + " ".join(helpers) + "].\n"
@@ -271,7 +277,7 @@ def main():
             print(name, "NOT READ:", ex); continue
         # 1: translate
         f0 = os.path.join(GEN, f"{name}_t.v")
-        open(f0, "w").write(HDR + prog + f'\nMetaRocq Run (kqm_translate {entry} "{name}_prog").\n')
+        open(f0, "w").write(HDR + prog + f'\nMetaRocq Run ({translate_cmd(prog, entry, name)}).\n')
         rc, out = coqc(f0)
         m = re.search(r"KQM: \d+ functions: ([\w' ]+)", out)
         if not m:

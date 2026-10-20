@@ -53,3 +53,16 @@ Definition pic_init (s : mem) : mem :=
     (hw_port_out 1 161 40 (hw_port_out 1 33 32 (hw_port_out 1 160 17 (hw_port_out 1 32 17 s))))))))).
 (* the timer: 1193182 / 11932 = 100 interrupts a second *)
 Definition pit_init (s : mem) : mem := hw_port_out 1 64 46 (hw_port_out 1 64 156 (hw_port_out 1 67 54 s)).
+
+(* ---- LOCKS.  A spinlock is a 32-bit word at an address the processors share (0: free, 1: taken).  `lock_take f a b c`
+   tries up to f times to take it, with an atomic compare-and-swap from 0 to 1 and a pause between tries; the word the
+   swap found goes into cell c of wide block b: 0 when the lock was taken, not 0 when it gave up.  `lock_free a` gives
+   it back with a release store.  What the lock guarantees (one holder at a time) is a property of the hardware's
+   atomics, stated by the program that uses it. *)
+Fixpoint lock_take (f : nat) (a b c : int) (s : mem) : mem :=
+  match f with
+  | O => upd b c 1 s
+  | S f => let s1 := hw_cas 4 a 0 1 b c s in
+           if rd b c s1 =? 0 then s1 else lock_take f a b c (hw_pause s1)
+  end.
+Definition lock_free (a : int) (s : mem) : mem := hw_astore 4 a 0 s.

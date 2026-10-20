@@ -1,0 +1,25 @@
+(* hw/lock_ap.body -- the program the SECOND processor runs for hw/lock.body: says it has started, waits for "go", adds to the
+   shared counter 100 000 times holding the lock, says it has finished.  Its own cells: wide block 3. *)
+Definition kq_shared : list int := [6].
+Fixpoint wait_go (f : nat) (a : int) (s : mem) : mem :=
+  match f with
+  | O => s
+  | S f => let s1 := hw_aload 4 a 3 2 s in if rd 3 2 s1 =? 1 then s1 else wait_go f a (hw_pause s1)
+  end.
+Fixpoint locked_inc (f : nat) (a : int) (s : mem) : mem :=
+  match f with
+  | O => s
+  | S f =>
+      let s1 := lock_take (kq_nat 100000000) a 3 3 s in
+      if rd 3 3 s1 =? 0 then
+        let s2 := hw_load 4 (a + 4) 3 4 s1 in
+        locked_inc f a (lock_free a (hw_store 4 (a + 4) (rd 3 4 s2 + 1) s2))
+      else locked_inc f a s1
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  let a := hw_addr 6 in
+  let s1 := hw_astore 4 (a + 12) 1 (kq_input 0) in
+  let s2 := locked_inc (kq_nat 100000) a (wait_go (kq_nat 2000000000) (a + 16) s1) in
+  let s3 := hw_astore 4 (a + 8) 1 s2 in
+  if rd 3 0 s3 <? 0 then 1 else 0.

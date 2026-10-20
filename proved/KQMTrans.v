@@ -578,6 +578,18 @@ Variable Σ : global_env.
 Variable mp : modpath.                   (* the file of the program *)
 Variable fns : list finfo.
 Variable self : finfo.
+Variable shared : list PrimInt63.int.              (* the narrow blocks that another processor may change: only atomics reach them *)
+
+(* a block number written in the program, and whether a plain access may use it *)
+Definition plain_block_ok (h : term) : bool :=
+  match shared with
+  | [] => true
+  | _ => match h with
+         | tInt n => negb (existsb (fun b => Z.eqb (Uint63.to_Z b) (Uint63.to_Z n)) shared)
+         | _ => false
+         end
+  end.
+Definition shared_msg : string := "a block that another processor can change is read and written only through atomics (hw_aload, hw_astore, hw_atomic, hw_cas on its address), and its number must be written in the program where it is used".
 
 Definition find_fn (kn : kername) : option finfo :=
   List.find (fun f => Kername.eqb (fi_kn f) kn) fns.
@@ -682,6 +694,7 @@ Fixpoint tr_int (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struc
       else if Kername.eqb kn kn_rd32 then
         match args with
         | [h; i; m] =>
+            if negb (plain_block_ok h) then TErr shared_msg else
             tr_int fuel Γ h s (fun H s => tr_int fuel Γ i s (fun I s => tr_mem fuel Γ m s (fun s =>
               let '(x, s) := fresh s in
               wrap1 q_Ekld32 [qpos x; H; I] (k (avar x) s))))
@@ -690,6 +703,7 @@ Fixpoint tr_int (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struc
       else if Kername.eqb kn kn_rd8 then
         match args with
         | [h; i; m] =>
+            if negb (plain_block_ok h) then TErr shared_msg else
             tr_int fuel Γ h s (fun H s => tr_int fuel Γ i s (fun I s => tr_mem fuel Γ m s (fun s =>
               let '(x, s) := fresh s in
               wrap1 q_Ekld8 [qpos x; H; I] (k (avar x) s))))
@@ -860,6 +874,7 @@ with tr_mem (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : K) {struct fue
       else if Kername.eqb kn kn_upd32 then
         match args with
         | [h; i; v; m] =>
+            if negb (plain_block_ok h) then TErr shared_msg else
             tr_int fuel Γ h s (fun H s => tr_int fuel Γ i s (fun I s => tr_int fuel Γ v s (fun V s =>
               tr_mem fuel Γ m s (fun s => wrap1 q_Ekst32 [H; I; V] (k (bump s))))))
         | _ => TErr "upd32"
@@ -867,6 +882,7 @@ with tr_mem (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : K) {struct fue
       else if Kername.eqb kn kn_upd8 then
         match args with
         | [h; i; v; m] =>
+            if negb (plain_block_ok h) then TErr shared_msg else
             tr_int fuel Γ h s (fun H s => tr_int fuel Γ i s (fun I s => tr_int fuel Γ v s (fun V s =>
               tr_mem fuel Γ m s (fun s => wrap1 q_Ekst8 [H; I; V] (k (bump s))))))
         | _ => TErr "upd8"
@@ -1596,7 +1612,7 @@ Fixpoint build_infos (Σ : global_env) (kns : list fkey) (i : nat) (acc : list f
   end.
 
 (* translate one function; its parameters are KQL variables 1 .. n *)
-Definition tr_fun (Σ : global_env) (mp : modpath) (fns : list finfo) (f : finfo) : tres term :=
+Definition tr_fun (Σ : global_env) (mp : modpath) (fns : list finfo) (shared : list PrimInt63.int) (f : finfo) : tres term :=
   match body_of Σ (fi_kn f) with
   | Some (_, b) =>
       match fparts b with
@@ -1653,7 +1669,7 @@ Definition tr_fun (Σ : global_env) (mp : modpath) (fns : list finfo) (f : finfo
             end in
           let Γ := List.app (rev ents) fixents in
           let kpids := firstn (length (flat_map (leaves 20) ks)) pids in
-          match tr_tail Σ mp fns f 2000 Γ body (mkSt (Pos.of_nat (S n)) 0) with
+          match tr_tail Σ mp fns f shared 2000 Γ body (mkSt (Pos.of_nat (S n)) 0) with
           | TOk (e, _) => TOk (tApp q_mkfn [qlist q_ident (map qpos kpids); e])
           | TErr m => TErr (snd (fi_kn f) ^ ": " ^ m)
           end
@@ -1838,7 +1854,7 @@ Definition extend_siblings (Σ : global_env) : global_env :=
                 end) (declarations Σ) in
   {| universes := universes Σ; declarations := List.app news (declarations Σ); retroknowledge := retroknowledge Σ |}.
 
-Definition kqm_gen (p : program) (prog_name : ident) : tout :=
+Definition kqm_gen (shared : list PrimInt63.int) (p : program) (prog_name : ident) : tout :=
   let '(Σ0, t) := p in
   let Σ := extend_siblings Σ0 in
   match t with
@@ -1850,7 +1866,7 @@ Definition kqm_gen (p : program) (prog_name : ident) : tout :=
           let fix go (fs : list finfo) (acc : list (finfo * term)) :=
             match fs with
             | [] => TOk (rev acc)
-            | f :: fs => match tr_fun Σ mp fns f with
+            | f :: fs => match tr_fun Σ mp fns shared f with
                          | TOk e => go fs ((f, e) :: acc)
                          | TErr m => TErr m
                          end
@@ -1914,7 +1930,11 @@ Definition kqm_define (o : tout) : TemplateMonad unit :=
   end.
 
 Notation kqm_translate x name :=
-  (kqm_define ltac:(run_template_program (tmQuoteRec x) (fun q => let t := eval vm_compute in (kqm_gen q name) in exact t)))
+  (kqm_define ltac:(run_template_program (tmQuoteRec x) (fun q => let t := eval vm_compute in (kqm_gen nil q name) in exact t)))
+  (only parsing).
+(* the same for a program that shares narrow blocks with another processor: [sh] lists them (a Rocq list of numbers, written in the program) *)
+Notation kqm_translate_s x name sh :=
+  (kqm_define ltac:(run_template_program (tmQuoteRec x) (fun q => let t := eval vm_compute in (kqm_gen sh q name) in exact t)))
   (only parsing).
 
 (* ------------------------------------------------------------------ the proof of a statement *)
