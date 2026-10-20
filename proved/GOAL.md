@@ -133,7 +133,7 @@ Proved and in the corpus (36 programs, all proved, answers equal to the C++ run,
 2. The hardware primitives are in (the C bodies assumed, `hw_law`, `hwf_law`), and the kernels of `hw/` go through the
    proved route and boot (`hw/build_proved.sh`): several programs per kernel (interrupt, fault, second processor) and
    the program's own assembly/C routines are done.  Left: a freestanding build of the generated C checked on its own,
-   and the proof time of long straight-line code (the 100-store instruction table takes two minutes).
+   and the proof time of read-modify-write runs (the 100-store instruction table now takes 16 s; a run in which each step reads the memory it writes doubles per step).
 3. The heap library's own lemmas (invariants of the slab that a user theorem about their program can use), and a freestanding `kq_grow`.
 4. The general passes of the section above, each proved once and measured against C written the same way:
    if-conversion with early reads is done; next the removal of the test on an access whose index is in range.

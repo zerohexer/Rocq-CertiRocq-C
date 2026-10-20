@@ -138,9 +138,18 @@ answer equal to the same set written with `malloc` and `free` in C.  Three thing
 a budget `kq_nat n` for a number n worked out while the program runs (it is at most 2^60 now, `kq_nat_le`, so a counter
 always has room to count a few more), a bound on any such counter that the proof gets without working the number out, and
 a first parameter of type `int` no longer tried as an induction.  Not read yet: a recursive function that gives back a
-`bool` (return 0 or 1; a helper that is not recursive is fine), and a long run of calls in one function whose
-memories all feed the next (the proof term grows with the length, as for any long straight-line code -- put the steps
-in functions or loops).
+`bool` (return 0 or 1; a helper that is not recursive is fine).
+
+Proof time of long straight-line code.  The proof of a function walks its KQL body one instruction at a time.  Two
+costs grew with the length and are gone: the bindings of the variables are a chain of `PTree.set` that is looked up by
+working all of it out each time (the walk now turns the chain into a tree every 24 bindings), and a rewrite for counters
+that scanned the whole goal at every addition (now tried only where a counter is added to).  The 100-store table of the
+interrupt kernel went from 119 s to 16 s, and the five test kernels now prove in 39 s to 1 m 33 s each (2 m 29 s to 4 m 18 s before).  What is left: a run in which each step reads the memory it writes
+(`upd b i (rd b j s + 1) s`, ten, twenty times in a row) mentions the previous memory twice per step, so the memory term
+doubles per step -- ten steps take 5 s, sixteen over five minutes (`proved/examples/helper_write.body` is the ten).  A
+call of a function does not have the problem: the memory after it is `f args M`, not its text.  So put the steps in
+functions or loops.  Also fixed: a helper that writes the memory is now seen as writing, so the function that uses it is
+stated and proved with the memory it leaves.
 
 Anything else is refused with the reason.  Not read yet: a function that gives back more than two numbers (and a choice
 between two records), closures.

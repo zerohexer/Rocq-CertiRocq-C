@@ -448,9 +448,12 @@ Ltac kqm_test :=
       end
     | idtac ].
 
+(** the counter rewrites are tried only where a counter is added to or taken from: asking Rocq to rewrite scans (and
+    unifies against) every addition of the goal, which is most of the time of a long run of arithmetic *)
 Ltac kqm_norm :=
   kqm_red; try kqm_known;
-  repeat first [ rewrite ofn_pred by kqm_bound | rewrite ofn_succ by kqm_bound ].
+  repeat first [ (lazymatch goal with |- context [PrimInt63.sub (KQLAuto.ofn (S _)) _] => rewrite ofn_pred by kqm_bound end)
+               | (lazymatch goal with |- context [PrimInt63.add (KQLAuto.ofn _) _] => rewrite ofn_succ by kqm_bound end) ].
 
 (** a call or a loop: some hypothesis in the context proves it -- a callee's statement (put there with
     [pose proof]) or the induction hypothesis *)
@@ -566,7 +569,27 @@ Ltac kqm_step :=
               | kqm_splitall; (eapply K_loop_run; [kqm_call | reflexivity | kqm_avals]) ]
     end.
 
-Ltac kqm_walk := repeat kqm_step.
+(** A run of bindings [PTree.set x v (PTree.set y w ..)] is looked up by working all of it out, every time: the longer a
+    function, the longer each step.  So the chain is worked out into a tree once in a while (the values stay as they are),
+    and a lookup walks a tree and at most a few bindings above it. *)
+Ltac kqm_rho_depth r :=
+  lazymatch r with
+  | Maps.PTree.set _ _ ?r' => let d := kqm_rho_depth r' in constr:(S d)
+  | _ => constr:(0%nat)
+  end.
+Ltac kqm_compact_rho r :=
+  let d := kqm_rho_depth r in
+  let big := eval vm_compute in (Nat.leb 24%nat d) in
+  lazymatch big with
+  | true => let r' := eval cbv beta iota delta [Maps.PTree.set Maps.PTree.set' Maps.PTree.set0 Maps.PTree.empty] in r in change r with r'
+  | false => idtac
+  end.
+Ltac kqm_compact :=
+  try (lazymatch goal with
+       | |- evalk _ _ ?r _ _ _ _ => kqm_compact_rho r
+       | |- evalx _ _ ?r _ _ _ => kqm_compact_rho r
+       end).
+Ltac kqm_walk := repeat (kqm_compact; kqm_step).
 
 (** the helpers a program's translation wrote out, opened in the Rocq text as well (the program's file sets this) *)
 (** the program's file sets this to open its functions that give back two numbers (their statements say [fst] / [snd] of them) *)
@@ -642,7 +665,7 @@ Ltac kqx_step :=
         first [ eapply X_loop_run; [kqx_call | reflexivity | kqm_avals]
               | kqm_splitall; (eapply X_loop_run; [kqx_call | reflexivity | kqm_avals]) ]
     end.
-Ltac kqx_walk := repeat kqx_step.
+Ltac kqx_walk := repeat (kqm_compact; kqx_step).
 
 Ltac kqx_enter :=
   eapply runx_intro; [reflexivity | reflexivity | simpl kbody ];

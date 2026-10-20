@@ -1599,23 +1599,26 @@ Fixpoint reach (fuel : nat) (Σ : global_env) (mp : modpath) (root : kername) (k
   end.
 
 (* does the body write the memory, directly or through a function that does *)
-Fixpoint writes (fuel : nat) (fns : list finfo) (t : term) : bool :=
+Fixpoint writes (fuel : nat) (fns : list finfo) (look : kername -> option term) (t : term) : bool :=
   match fuel with
   | O => true
   | S fuel =>
       match t with
       | tConst kn _ => Kername.eqb kn kn_upd || Kername.eqb kn kn_upd32 || Kername.eqb kn kn_upd8 || (match hw_lookup kn with Some _ => true | None => false end) ||
-                       match List.find (fun f => Kername.eqb (fi_kn f) kn) fns with Some f => fi_wr f | None => false end
-      | tApp f args => writes fuel fns f || existsb (writes fuel fns) args
-      | tLambda _ _ b => writes fuel fns b
-      | tLetIn _ b _ body => writes fuel fns b || writes fuel fns body
-      | tCase _ _ c brs => writes fuel fns c || existsb (fun br => writes fuel fns (bbody br)) brs
-      | tFix mfix _ => existsb (fun d => writes fuel fns (dbody d)) mfix
+                       match List.find (fun f => Kername.eqb (fi_kn f) kn) fns with
+                       | Some f => fi_wr f
+                       | None => match look kn with Some b => writes fuel fns look b | None => false end
+                       end
+      | tApp f args => writes fuel fns look f || existsb (writes fuel fns look) args
+      | tLambda _ _ b => writes fuel fns look b
+      | tLetIn _ b _ body => writes fuel fns look b || writes fuel fns look body
+      | tCase _ _ c brs => writes fuel fns look c || existsb (fun br => writes fuel fns look (bbody br)) brs
+      | tFix mfix _ => existsb (fun d => writes fuel fns look (dbody d)) mfix
       | _ => false
       end
   end.
 
-Definition mk_info (Σ : global_env) (fns : list finfo) (i : nat) (key : fkey) : option finfo :=
+Definition mk_info (Σ : global_env) (mp : modpath) (fns : list finfo) (i : nat) (key : fkey) : option finfo :=
   let kn := fst key in
   let fixed := snd key in
   match body_of Σ kn with
@@ -1624,9 +1627,17 @@ Definition mk_info (Σ : global_env) (fns : list finfo) (i : nat) (key : fkey) :
       | Some (isrec, tys, body), Some (rm, rr) =>
           let tys := map snd (filter (fun jt => negb (existsb (fun f => Nat.eqb (fst f) (fst jt)) fixed)) (combine (seq 0 (length tys)) tys)) in
           let grp := match b with tFix mfix _ => if Nat.ltb 1 (length mfix) then Some mfix else None | _ => None end in
+          (* a helper of the file written out where it is used writes the memory if its body does *)
+          let look := fun k => if eq_mp (fst k) mp then
+                                 match lookup_env Σ k with
+                                 | Some (ConstantDecl cb) =>
+                                     match cst_body cb with Some b0 => if has_fix 1000 b0 then None else Some b0 | None => None end
+                                 | _ => None
+                                 end
+                               else None in
           let wr := match grp with
-                    | Some mfix => existsb (fun d => writes 10000 fns (dbody d)) mfix
-                    | None => writes 10000 fns body
+                    | Some mfix => existsb (fun d => writes 10000 fns look (dbody d)) mfix
+                    | None => writes 10000 fns look body
                     end in
           (* a function of the same fixpoint just before this one: its bound index *)
           let bi := match grp, rev fns with
@@ -1643,12 +1654,12 @@ Definition mk_info (Σ : global_env) (fns : list finfo) (i : nat) (key : fkey) :
   | None => None
   end.
 
-Fixpoint build_infos (Σ : global_env) (kns : list fkey) (i : nat) (acc : list finfo) : option (list finfo) :=
+Fixpoint build_infos (Σ : global_env) (mp : modpath) (kns : list fkey) (i : nat) (acc : list finfo) : option (list finfo) :=
   match kns with
   | [] => Some acc
   | kn :: kns =>
-      match mk_info Σ acc i kn with
-      | Some f => build_infos Σ kns (S i) (List.app acc [f])
+      match mk_info Σ mp acc i kn with
+      | Some f => build_infos Σ mp kns (S i) (List.app acc [f])
       | None => None
       end
   end.
@@ -1903,7 +1914,7 @@ Definition kqm_gen (shared : list PrimInt63.int) (p : program) (prog_name : iden
   | tConst root _ =>
       let mp := fst root in
       let kns := reach 1000 Σ mp root (root, []) [] in
-      match build_infos Σ kns 0 [] with
+      match build_infos Σ mp kns 0 [] with
       | Some fns =>
           let fix go (fs : list finfo) (acc : list (finfo * term)) :=
             match fs with
