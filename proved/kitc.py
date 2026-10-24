@@ -100,6 +100,7 @@ def proof_file(name, prog, entry, fns, helpers, groups=(), pairfns=()):
     t += f"Set Default Timeout {os.environ.get('KQ_TIMEOUT', '300')}.\n"
     if helpers:
         t += "Ltac kqm_unf ::= cbv beta zeta iota delta [" + " ".join(helpers) + "].\n"
+        t += "Ltac kqm_unf_nz ::= cbv beta iota delta [" + " ".join(helpers) + "].\n"
     if pairfns:
         # functions that give back two numbers: the second goes through the slot block, which the proof puts back as it was
         t += "Ltac kqm_laws ::= kqm_laws_on.\nLtac kqm_pairs ::= kqm_pairs_on.\n"

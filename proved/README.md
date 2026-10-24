@@ -144,11 +144,16 @@ Proof time of long straight-line code.  The proof of a function walks its KQL bo
 costs grew with the length and are gone: the bindings of the variables are a chain of `PTree.set` that is looked up by
 working all of it out each time (the walk now turns the chain into a tree every 24 bindings), and a rewrite for counters
 that scanned the whole goal at every addition (now tried only where a counter is added to).  The 100-store table of the
-interrupt kernel went from 119 s to 16 s, and the five test kernels now prove in 39 s to 1 m 33 s each (2 m 29 s to 4 m 18 s before).  What is left: a run in which each step reads the memory it writes
-(`upd b i (rd b j s + 1) s`, ten, twenty times in a row) mentions the previous memory twice per step, so the memory term
-doubles per step -- ten steps take 5 s, sixteen over five minutes (`proved/examples/helper_write.body` is the ten).  A
-call of a function does not have the problem: the memory after it is `f args M`, not its text.  So put the steps in
-functions or loops.  Also fixed: a helper that writes the memory is now seen as writing, so the function that uses it is
+interrupt kernel went from 119 s to 16 s, and the five test kernels now prove in 39 s to 1 m 36 s each (2 m 29 s to 4 m 18 s before).
+A run in which each step reads the memory it writes (`upd b i (rd b j s + 1) s`, ten, twenty times in a row) mentions
+the previous memory twice per step, so written out the memory term doubles per step (sixteen steps took over five
+minutes).  A function that does not recurse is therefore proved twice over if the plain walk takes long: first the
+plain one (up to 150 s), then one that gives each memory of the function's `let`s a name in the goal (`KQMNames.v`,
+peeling one `let` at a time) and gives the walk's own memory the same name when it is the same, so both sides say
+"memory 7".  Fourteen such steps prove in 23 s with the plain walk (`proved/examples/rmw_chain.body`); twenty-four need
+the named walk, 45 s after the plain one has run out its 150 s.  What remains is the kernel comparing the chain of
+`let`s with itself, which still grows steeply, so beyond a few dozen steps put the steps in functions or loops.  A call of a function does not have the problem: the memory after it is `f args M`.
+Also fixed: a helper that writes the memory is now seen as writing, so the function that uses it is
 stated and proved with the memory it leaves.
 
 Anything else is refused with the reason.  Not read yet: a function that gives back more than two numbers (and a choice

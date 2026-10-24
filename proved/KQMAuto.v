@@ -12,7 +12,7 @@
 
 From Stdlib Require Import ZArith List Uint63 Lia.
 From compcert Require Import Coqlib Maps AST.
-From KQC Require Import KQL KQLAuto KQMSem KQTArith.
+From KQC Require Import KQL KQLAuto KQMSem KQTArith KQMNames.
 Import ListNotations.
 
 (** ** The laws of the kit's memory, as rewrite rules on its own functions *)
@@ -528,6 +528,7 @@ Ltac kqm_splitall :=
 (** the arguments of a loop are the numbers the callee's statement names: equal as they stand, or one by one (the numbers of a
     u64 are long terms, which are compared one at a time) *)
 Ltac kqm_unf := idtac.
+Ltac kqm_unf_nz := idtac.
 Ltac kqm_avals := first [ reflexivity | (cbn [KQL.avals KQL.aval]; apply f_equal; repeat (apply f_equal2); first [reflexivity | (kqm_unf; kqm_fin) | kqm_fin]) ].
 
 (** a 64-bit operation: each operand is the record both of whose numbers are fields of it (a result of an earlier operation, a
@@ -589,7 +590,18 @@ Ltac kqm_compact :=
        | |- evalk _ _ ?r _ _ _ _ => kqm_compact_rho r
        | |- evalx _ _ ?r _ _ _ => kqm_compact_rho r
        end).
-Ltac kqm_walk := repeat (kqm_compact; kqm_step).
+(** the walk's own memory, when it is the memory of a named [let] of the text (KQMNames.v), takes its name *)
+Ltac kqm_share_mem M :=
+  tryif is_var M then idtac else
+  match goal with
+  | s := _ : KQ.KQRun.mem |- _ => change M with s
+  end.
+Ltac kqm_share :=
+  try (lazymatch goal with
+       | |- evalk _ _ _ ?M _ _ _ => kqm_share_mem M
+       | |- evalx _ _ _ ?M _ _ => kqm_share_mem M
+       end).
+Ltac kqm_walk := repeat (kqm_compact; kqm_share; kqm_step).
 
 (** the helpers a program's translation wrote out, opened in the Rocq text as well (the program's file sets this) *)
 (** the program's file sets this to open its functions that give back two numbers (their statements say [fst] / [snd] of them) *)
@@ -613,13 +625,29 @@ Ltac kqm_enter :=
   end;
   kqm_unf; kqm_unf2.
 
+(** a function that does not recurse: its text is opened without working its [let]s out, and the memories of its [let]s
+    are named (KQMNames.v) before the rest is written out *)
+Ltac kqm_enter0 :=
+  eapply runk_intro; [reflexivity | reflexivity | simpl kbody ];
+  match goal with
+  | |- evalk _ _ _ _ _ ?v ?m =>
+      first [ let h := kqm_head v in progress cbv beta iota delta [h]
+            | let h := kqm_head m in progress cbv beta iota delta [h]
+            | idtac ]
+  end;
+  kqm_unf_nz; kqm_name_lets; kqm_unf; kqm_unf2.
+
 (** [kqm_prove]: induction on the recursion argument (the first variable of the goal), then the walk;
     [kqm_prove0]: no recursion. *)
 Ltac kqm_prove :=
   let d := fresh "d" in
   intros d; induction d; intros; kqm_enter; kqm_walk.
 
-Ltac kqm_prove0 := intros; kqm_enter; kqm_walk.
+(** the plain walk first; if it takes long (a run of steps each of which reads the memory it writes makes the text double
+    per step), the walk with the memories of the text named *)
+Ltac kqm_prove0 :=
+  first [ timeout 150 (solve [ intros; kqm_enter; kqm_walk ])
+        | solve [ intros; kqm_enter0; kqm_walk ] ].
 
 (** the same walk for a function that writes the memory and gives a number: the end memory is hidden *)
 Ltac kqx_test :=
@@ -665,7 +693,7 @@ Ltac kqx_step :=
         first [ eapply X_loop_run; [kqx_call | reflexivity | kqm_avals]
               | kqm_splitall; (eapply X_loop_run; [kqx_call | reflexivity | kqm_avals]) ]
     end.
-Ltac kqx_walk := repeat (kqm_compact; kqx_step).
+Ltac kqx_walk := repeat (kqm_compact; kqm_share; kqx_step).
 
 Ltac kqx_enter :=
   eapply runx_intro; [reflexivity | reflexivity | simpl kbody ];
@@ -677,8 +705,19 @@ Ltac kqx_enter :=
   end;
   kqm_unf; kqm_unf2.
 
+Ltac kqx_enter0 :=
+  eapply runx_intro; [reflexivity | reflexivity | simpl kbody ];
+  match goal with
+  | |- evalx _ _ _ _ _ ?v =>
+      first [ let h := kqm_head v in progress cbv beta iota delta [h]
+            | idtac ]
+  end;
+  kqm_unf_nz; kqm_name_lets; kqm_unf; kqm_unf2.
+
 Ltac kqx_prove :=
   let d := fresh "d" in
   intros d; induction d; intros; kqx_enter; kqx_walk.
 
-Ltac kqx_prove0 := intros; kqx_enter; kqx_walk.
+Ltac kqx_prove0 :=
+  first [ timeout 150 (solve [ intros; kqx_enter; kqx_walk ])
+        | solve [ intros; kqx_enter0; kqx_walk ] ].
