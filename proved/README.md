@@ -87,8 +87,9 @@ Functions that give back two numbers.  A recursive function whose result is a pa
 (`Fixpoint minmax .. : int * int`, `.. : span` with two fields) is a KQL function that returns the first number and puts
 the second into cell 0 of block 63; the caller keeps the cell's old number first, reads the new one after the call and
 puts the old one back, so the memory is what it was.  The statement of such a function says exactly that:
-`runk .. M (fst (f ..)) (upd 63 0 (snd (f ..)) M)`, under the premise that block 63 has room (`1 < kq_size 63 M`),
-which the driver provides (8 cells).  The proof uses two laws of the kit's memory, `upd_upd` (a cell written twice
+`runk .. M (fst (f ..)) (upd 63 0 (snd (f ..)) M)`, under the premise that block 63 has room when the program starts
+(`1 < kq_len 63`; a block is never smaller than that, so it holds for every memory the proof meets), which the driver
+provides (8 cells).  The proof uses two laws of the kit's memory, `upd_upd` (a cell written twice
 holds the second number) and `upd_rd_id` (a cell written with the number it has is unchanged), both proved for the
 model in `KQModel.v`.  A tail call is a loop; a call whose result is used (`let '(a, b) := f m in ..`) is a call with the
 save and the restore.  More than two numbers: a pair of pairs is not read yet (pass the extra results through memory
@@ -139,6 +140,13 @@ a budget `kq_nat n` for a number n worked out while the program runs (it is at m
 always has room to count a few more), a bound on any such counter that the proof gets without working the number out, and
 a first parameter of type `int` no longer tried as an induction.  Not read yet: a recursive function that gives back a
 `bool` (return 0 or 1; a helper that is not recursive is fine).
+
+Views on one memory (`lib/View.v`).  A narrow block is raw memory laid out as the machine does (little-endian), seen as
+bytes (`rd8`, `upd8`), halfwords (`rd16`, `upd16`) and 32-bit words (`rd32`, `upd32`); `view_rd64` / `view_upd64` add the
+view of 64-bit cells as a `u64` (cell 2 i the low half), and `view_rdn` / `view_updn` keep a number of the system in
+8 bytes (a handle or an address inside a record of raw memory).  A program that names a `view_` or `slab_` function gets the
+library's text in front of it (`kitc.py`).  `proved/examples/views.body` writes 64-bit cells, reads them back as bytes and as
+64-bit cells, and stores a number in 8 bytes.
 
 Proof time of long straight-line code.  The proof of a function walks its KQL body one instruction at a time.  Two
 costs grew with the length and are gone: the bindings of the variables are a chain of `PTree.set` that is looked up by

@@ -135,6 +135,7 @@ Definition q_wB := <% wB %>.
 Definition q_cb := <% cb %>.
 Definition q_cbk := <% cbk %>.
 Definition q_ksize := <% KQ.KQRun.kq_size %>.
+Definition q_klen := <% KQ.KQBound.kq_len %>.
 Definition q_stoz := <% Sint63.to_Z %>.
 Definition q_upd := <% KQ.KQRun.upd %>.
 Definition q_Ekst_ := <% Ekst %>.
@@ -1825,7 +1826,8 @@ Definition stmt (Σ : global_env) (prog : term) (f : finfo) (kat : bool) (slots 
                    end) 0 (length (fargs d) + length (fi_fixed f)) (fargs d) in
   let fapp d := mkApps (tConst (fi_kn f) []) (List.app (full d) (if hasM then [mvar d] else [])) in
   (* the block of the slot has room for the second number *)
-  let szp d := tApp q_Zlt [<% 1%Z %>; tApp q_stoz [tApp q_ksize [qint slot_blk; mvar d]]] in
+  (* the slot block has room when the program starts; its size never falls below that (KQSpec.v len_size) *)
+  let szp d := tApp q_Zlt [<% 1%Z %>; tApp q_stoz [tApp q_klen [qint slot_blk]]] in
   let body d :=
     match fi_rrec f with
     | Some (mk, _) =>

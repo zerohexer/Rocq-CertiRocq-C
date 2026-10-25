@@ -1,0 +1,30 @@
+(* One memory seen three ways: a narrow block written as 64-bit cells (lib/View.v), read back as bytes (rd8), and as 64-bit
+   cells again; and a number of the system stored in 8 bytes.  The answer is worked out apart from Rocq. *)
+Definition golden : u64 := u64_of_halves 2654435769 2135587861.      (* 0x9E3779B97F4A7C15 *)
+Fixpoint fill (f : nat) (i n : int) (s : mem) : mem :=
+  match f with
+  | O => s
+  | S f => if n <=? i then s
+           else fill f (i + 1) n (view_upd64 0 i (u64_mul (u64_of_int (i + 1)) golden) s)
+  end.
+Fixpoint sum_bytes (f : nat) (j m acc : int) (s : mem) : int :=
+  match f with
+  | O => acc
+  | S f => if m <=? j then acc else sum_bytes f (j + 1) m (acc + rd8 0 j s * (j mod 7 + 1)) s
+  end.
+Fixpoint fold_words (f : nat) (i n : int) (a : u64) (s : mem) : u64 :=
+  match f with
+  | O => a
+  | S f => if n <=? i then a
+           else fold_words f (i + 1) n (u64_xor (u64_add a (view_rd64 0 i s)) (u64_shl a 1)) s
+  end.
+Definition solve (n : nat) (nz : int) (s : mem) : int :=
+  let s1 := fill n 0 nz s in
+  let a := sum_bytes (kq_nat (8 * nz)) 0 (8 * nz) 0 s1 in
+  let r := fold_words n 0 nz (u64_of_int 1) s1 in
+  let s2 := view_updn 0 (nz + 1) (0 - 123456789) s1 in
+  a + u64_lo32 r + u64_hi32 r * 1000003 + view_rdn 0 (nz + 1) s2.
+
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 1)) (kq_arg 1) (kq_input 0).

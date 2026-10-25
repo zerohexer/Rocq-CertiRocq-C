@@ -38,7 +38,16 @@ Qed.
 
 (** with a function that gives back two numbers (the second goes through the slot block): the laws are used on the memory
     the proof walks and the pairs are taken apart; switched on by the program's file when it has such a function *)
-Ltac kqm_size := repeat (rewrite size_upd_r || rewrite size_upd32_r); first [assumption | lia].
+(** a block is never smaller than it was when the program started (KQSpec.v len_size) *)
+Lemma size_ge_len : forall (h : i63) s, (Sint63.to_Z (KQ.KQBound.kq_len h) <= Sint63.to_Z (KQ.KQRun.kq_size h s))%Z.
+Proof.
+  intros h s. pose proof (KQ.KQSpec.len_size KQ.KQSpec.real KQ.KQSpec.real_laws h s) as H.
+  apply KQ.KQSpec.le_Z in H. exact H.
+Qed.
+Ltac kqm_size :=
+  first [ assumption
+        | (match goal with |- (1 < Sint63.to_Z (KQ.KQRun.kq_size ?h ?s))%Z => pose proof (size_ge_len h s); Stdlib.micromega.Lia.lia end)
+        | (repeat (rewrite size_upd_r || rewrite size_upd32_r); first [assumption | lia]) ].
 Ltac kqm_laws := idtac.
 Ltac kqm_pairs := idtac.
 Ltac kqm_laws_on :=
@@ -413,7 +422,8 @@ Local Strategy opaque [KQ.KQRun.kq_nat].
 
 (** a budget written as a number is looked up first: [lia] on a goal that holds [kq_nat 100000000] is not safe *)
 Ltac kqm_bound := first
-  [ (match goal with |- _ /\ _ => split; kqm_bound end)
+  [ (match goal with |- (1 < Sint63.to_Z (KQ.KQBound.kq_len _))%Z => assumption end)
+  | (match goal with |- _ /\ _ => split; kqm_bound end)
   | (match goal with |- (1 < Sint63.to_Z (KQ.KQRun.kq_size _ _))%Z => kqm_size end)
   | (match goal with |- (Z.of_nat (KQ.KQRun.kq_nat ?x) < cbk ?i)%Z => apply (kq_nat_cbk x i); reflexivity end)
   | (match goal with |- context [Z.of_nat (KQ.KQRun.kq_nat ?x)] => pose proof (kq_nat_le x); pose proof wB_num; try unfold cbk in *; unfold cb in *; lia end)
@@ -534,11 +544,13 @@ Ltac kqm_avals := first [ reflexivity | (cbn [KQL.avals KQL.aval]; apply f_equal
 (** a 64-bit operation: each operand is the record both of whose numbers are fields of it (a result of an earlier operation, a
     parameter), or two numbers written as they are (a constant, a number computed apart) *)
 Ltac kqm_w64k :=
+  kqm_red;
   first [ eapply K_w64; [discriminate | reflexivity | reflexivity | reflexivity | reflexivity | ]
         | eapply K_w64 with (ra := KQ.KQRun.mk_u64 _ _); [discriminate | reflexivity | reflexivity | reflexivity | reflexivity | ]
         | eapply K_w64 with (rb := KQ.KQRun.mk_u64 _ _); [discriminate | reflexivity | reflexivity | reflexivity | reflexivity | ]
         | eapply K_w64 with (ra := KQ.KQRun.mk_u64 _ _) (rb := KQ.KQRun.mk_u64 _ _); [discriminate | reflexivity | reflexivity | reflexivity | reflexivity | ] ].
 Ltac kqm_w64x :=
+  kqm_red;
   first [ eapply X_w64; [discriminate | reflexivity | reflexivity | reflexivity | reflexivity | ]
         | eapply X_w64 with (ra := KQ.KQRun.mk_u64 _ _); [discriminate | reflexivity | reflexivity | reflexivity | reflexivity | ]
         | eapply X_w64 with (rb := KQ.KQRun.mk_u64 _ _); [discriminate | reflexivity | reflexivity | reflexivity | reflexivity | ]

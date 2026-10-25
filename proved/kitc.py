@@ -282,6 +282,11 @@ def main():
         path = src if src.endswith(".body") else f"hand/{src}.body"
         name = re.sub(r"[^A-Za-z0-9_]", "_", os.path.basename(path)[:-5])
         body = open(path).read()
+        # a program that names a function of a library of lib/ gets the library's text in front of it, as compile.sh does
+        for pre, lib, mark in (("slab_", "Slab", "SLAB"), ("view_", "View", "VIEW")):
+            if re.search(r"\b" + pre, body) and f"(* {mark}-BEGIN *)" not in body:
+                lt = open(os.path.join(ROOT, "lib", lib + ".v")).read()
+                body = lt[lt.index(f"(* {mark}-BEGIN *)") + len(f"(* {mark}-BEGIN *)"):lt.index(f"(* {mark}-END *)")] + "\n" + body
         prog, mt = split_main(body)
         try:
             entry, args, wrap = parse_main(mt)
