@@ -315,6 +315,12 @@ bash proved/corpus.sh [times]     # all of hand.tsv; "times" also times each nex
 
 `KQ_TIMEOUT` (seconds, default 300) bounds each proof.
 
+Each function's proof is checked alone, in its own file, against the statements of the functions before it, and the
+files run in parallel (`KQ_JOBS`, default 3).  A proof that passed is remembered (`proved/gen/cache/`), keyed by the
+tactic libraries and by what Rocq prints for the function, its statement and every function it mentions; a rerun of an
+unchanged program only translates and prints the C.  `KQ_MONO=1` checks the whole program in one file instead.
+`KQ_TIMES=1` prints each function's proof time.
+
 ## Why not CertiRocq's front end
 
 CertiRocq's proof of its translation to λANF (`convert_top_anf_correct`) assumes the program has no primitive

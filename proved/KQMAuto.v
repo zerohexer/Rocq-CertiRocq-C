@@ -240,7 +240,7 @@ Ltac kqm_known :=
   repeat match goal with
          | H : ?c = _ |- _ =>
              lazymatch type of c with
-             | bool => progress rewrite H
+             | bool => lazymatch goal with |- context [c] => progress rewrite H end
              end
          end;
   kqm_red.
@@ -425,7 +425,7 @@ Ltac kqm_bound := first
   [ (match goal with |- (1 < Sint63.to_Z (KQ.KQBound.kq_len _))%Z => assumption end)
   | (match goal with |- _ /\ _ => split; kqm_bound end)
   | (match goal with |- (1 < Sint63.to_Z (KQ.KQRun.kq_size _ _))%Z => kqm_size end)
-  | (match goal with |- (Z.of_nat (KQ.KQRun.kq_nat ?x) < cbk ?i)%Z => apply (kq_nat_cbk x i); reflexivity end)
+  | (match goal with |- (Z.of_nat (KQ.KQRun.kq_nat ?x) < cbk ?i)%Z => apply (kq_nat_cbk x i); vm_compute; reflexivity end)
   | (match goal with |- context [Z.of_nat (KQ.KQRun.kq_nat ?x)] => pose proof (kq_nat_le x); pose proof wB_num; try unfold cbk in *; unfold cb in *; lia end)
   | (match goal with
      | |- context [Z.of_nat (KQ.KQRun.kq_nat ?x)] =>

@@ -10,7 +10,7 @@ A kit program (hand/NAME.body, or a path to a .body file) through the proved rou
   4. clang builds it with the kit's support code: bin/P_NAME, a program that reads the same memory file and the
      same command line as the kit's own.
 The Rocq files are written to proved/gen/, the C to proved/gen/NAME_proved.c."""
-import re, subprocess, sys, os, glob
+import re, subprocess, sys, os, glob, hashlib, time, concurrent.futures
 
 ROOT = os.getcwd()
 GEN = os.path.join(ROOT, "proved", "gen")
@@ -25,7 +25,7 @@ Open Scope bool_scope.
 """
 
 def coqc(path, extra=()):
-    r = subprocess.run(["coqc", "-w", "-all", "-R", ROOT, "KQ", "-Q", os.path.join(ROOT, "proved"), "KQC", *extra, path],
+    r = subprocess.run(["coqc", "-w", "-all", "-R", ROOT, "KQ", "-Q", os.path.join(ROOT, "proved"), "KQC", "-Q", GEN, "KQG", *extra, path],
                        capture_output=True, text=True, cwd=GEN)
     return r.returncode, r.stdout + r.stderr
 
@@ -95,9 +95,8 @@ def translate_cmd(prog, entry, name):
         return f'kqm_translate_s {entry} "{name}_prog" kq_shared'
     return f'kqm_translate {entry} "{name}_prog"'
 
-def proof_file(name, prog, entry, fns, helpers, groups=(), pairfns=()):
-    t = HDR + prog + f'\nMetaRocq Run ({translate_cmd(prog, entry, name)}).\n'
-    t += f"Set Default Timeout {os.environ.get('KQ_TIMEOUT', '300')}.\n"
+def tactic_setup(helpers, pairfns):
+    t = f"Set Default Timeout {os.environ.get('KQ_TIMEOUT', '300')}.\n"
     if helpers:
         t += "Ltac kqm_unf ::= cbv beta zeta iota delta [" + " ".join(helpers) + "].\n"
         t += "Ltac kqm_unf_nz ::= cbv beta iota delta [" + " ".join(helpers) + "].\n"
@@ -106,30 +105,124 @@ def proof_file(name, prog, entry, fns, helpers, groups=(), pairfns=()):
         t += "Ltac kqm_laws ::= kqm_laws_on.\nLtac kqm_pairs ::= kqm_pairs_on.\n"
         t += "Ltac kqm_uh h ::= first [ progress cbn [h] | unfold h ].\n"
         t += "Ltac kqm_unf2 ::= cbn [" + " ".join(pairfns) + "].\n"
-    done = set()
+    return t
+
+def units(fns, groups):
+    """-> [(f, i, grp)]: one unit per function, or per group of functions that call each other"""
+    out, done = [], set()
     for i, f in enumerate(fns):
         if f in done:
             continue
-        pre = "".join(f"pose proof {g}_ok as H{j}; hnf in H{j}. " for j, g in enumerate(fns[:i]))
         grp = next((g for g in groups if g[0] == f), None)
-        if grp:
-            # functions that call each other: one lemma for all, by induction on the counter they share
-            n = len(grp)
-            conj = lambda ms: ms[0] + "_kat d" if len(ms) == 1 else ms[0] + "_kat d /\\ (" + conj(ms[1:]) + ")"
-            pat = lambda k: f"IH{k}" if k == n else f"[IH{k} " + pat(k + 1) + "]"
-            hn = "; ".join(f"hnf in IH{k}" for k in range(1, n + 1))
-            t += f"Lemma {f}_grp : forall d : nat, {conj(grp)}.\nProof. {pre}induction d as [|d {pat(1)}]; [ | {hn} ]; repeat split; kqm_auto. Qed.\n"
-            for k, m in enumerate(grp):
-                proj = "(G d)" if False else f"({f}_grp d)"
-                for _ in range(k):
-                    proj = f"(proj2 {proj})"
-                if k < n - 1:
-                    proj = f"(proj1 {proj})"
-                t += f"Lemma {m}_ok : {m}_kstmt. Proof. exact (fun d => {proj}). Qed.\n"
-                done.add(m)
-            continue
-        t += f"Lemma {f}_ok : {f}_kstmt. Proof. {pre}kqm_auto. Qed.\n"
+        out.append((f, i, grp))
+        done.update(grp if grp else [f])
+    return out
+
+def unit_text(fns, f, i, grp):
+    pre = "".join(f"pose proof {g}_ok as H{j}; hnf in H{j}. " for j, g in enumerate(fns[:i]))
+    if grp:
+        # functions that call each other: one lemma for all, by induction on the counter they share
+        n = len(grp)
+        conj = lambda ms: ms[0] + "_kat d" if len(ms) == 1 else ms[0] + "_kat d /\\ (" + conj(ms[1:]) + ")"
+        pat = lambda k: f"IH{k}" if k == n else f"[IH{k} " + pat(k + 1) + "]"
+        hn = "; ".join(f"hnf in IH{k}" for k in range(1, n + 1))
+        t = f"Lemma {f}_grp : forall d : nat, {conj(grp)}.\nProof. {pre}induction d as [|d {pat(1)}]; [ | {hn} ]; repeat split; kqm_auto. Qed.\n"
+        for k, m in enumerate(grp):
+            proj = f"({f}_grp d)"
+            for _ in range(k):
+                proj = f"(proj2 {proj})"
+            if k < n - 1:
+                proj = f"(proj1 {proj})"
+            t += f"Lemma {m}_ok : {m}_kstmt. Proof. exact (fun d => {proj}). Qed.\n"
+        return t
+    return f"Lemma {f}_ok : {f}_kstmt. Proof. {pre}kqm_auto. Qed.\n"
+
+def stub_text(fns, f, i, grp):
+    return "".join(f"Lemma {m}_ok : {m}_kstmt. Proof. Admitted.\n" for m in (grp if grp else [f]))
+
+def proof_file(name, prog, entry, fns, helpers, groups=(), pairfns=()):
+    """the whole proof in one file (KQ_MONO=1): every lemma is checked in one run, in order"""
+    t = HDR + prog + f'\nMetaRocq Run ({translate_cmd(prog, entry, name)}).\n' + tactic_setup(helpers, pairfns)
+    for f, i, grp in units(fns, groups):
+        t += unit_text(fns, f, i, grp)
     return t
+
+def lib_hash():
+    h = hashlib.sha256()
+    for p in sorted(glob.glob(os.path.join(ROOT, "proved", "*.v")) + [os.path.join(ROOT, "KQRun.v")]):
+        h.update(open(p, "rb").read())
+    h.update(HDR.encode())
+    return h.hexdigest()
+
+def unit_keys(name, fns, helpers, groups, pairfns, setup):
+    """a key for each unit: the libraries, the tactic setup, and what Rocq prints for the unit's functions, their statements
+    and everything of the program they mention (the functions are named in each other's printed text)"""
+    info = os.path.join(GEN, f"{name}_i.v")
+    names = list(fns) + [h for h in helpers if h not in fns]
+    t = HDR + f"From KQG Require Import {name}_t.\nSet Printing All.\n"
+    for n in names:
+        t += f'Redirect "{name}_pr_{n}" Print {n}.\n'
+    for n in fns:
+        t += f'Redirect "{name}_ps_{n}" Print {n}_kstmt.\n'
+    open(info, "w").write(t)
+    rc, out = coqc(info)
+    if rc != 0:
+        return None
+    rd = lambda path: open(path).read() if os.path.exists(path) else ""
+    pr = {n: rd(os.path.join(GEN, f"{name}_pr_{n}.out")) for n in names}
+    ps = {n: rd(os.path.join(GEN, f"{name}_ps_{n}.out")) for n in fns}
+    base = lib_hash() + setup
+    keys = {}
+    for f, i, grp in units(fns, groups):
+        seen, todo = set(), list(grp if grp else [f])
+        while todo:
+            n = todo.pop()
+            if n in seen:
+                continue
+            seen.add(n)
+            for m in names:
+                if m not in seen and re.search(r"(?<![A-Za-z0-9_'])" + re.escape(m) + r"(?![A-Za-z0-9_'])", pr[n] + ps.get(n, "")):
+                    todo.append(m)
+        h = hashlib.sha256(base.encode())
+        for n in sorted(seen):
+            h.update(n.encode() + b"\0" + pr[n].encode() + b"\0" + ps.get(n, "").encode() + b"\0")
+        keys[f] = h.hexdigest()
+    return keys
+
+def prove_units(name, fns, helpers, groups, pairfns, jobs, strict):
+    """each unit is checked alone, in its own file, against the statements of the functions before it (taken as given
+    there); the units that are not already in the cache run in parallel. -> the functions left unproved"""
+    setup = tactic_setup(helpers, pairfns)
+    us = units(fns, groups)
+    keys = unit_keys(name, fns, helpers, groups, pairfns, setup)
+    cdir = os.path.join(GEN, "cache")
+    os.makedirs(cdir, exist_ok=True)
+    def run(u):
+        f, i, grp = u
+        k = keys[f] if keys else None
+        if k and os.path.exists(os.path.join(cdir, k)):
+            return u, 0, "cached"
+        t = HDR + f"From KQG Require Import {name}_t.\n" + setup
+        t += "".join(stub_text(fns, g, j, gg) for g, j, gg in us[:us.index(u)])
+        t += unit_text(fns, f, i, grp)
+        path = os.path.join(GEN, f"{name}_u_{f}.v")
+        open(path, "w").write(t)
+        t0 = time.time()
+        rc, out = coqc(path)
+        if os.environ.get("KQ_TIMES"):
+            print(f"  [{name} {f}: {time.time() - t0:.1f}s]", flush=True)
+        if rc == 0 and k:
+            open(os.path.join(cdir, k), "w").write(name + " " + f + "\n")
+        return u, rc, out
+    unproved = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as ex:
+        for u, rc, out in ex.map(run, us):
+            if rc != 0:
+                if strict:
+                    print(name, "PROOF FAILED:", u[0], out[-400:].replace("\n", " "))
+                    return None
+                unproved.extend(u[2] if u[2] else [u[0]])
+    return unproved
 
 HW_WRAPPERS = r"""
 unsigned long long f91000(unsigned long long a0, unsigned long long a1, unsigned long long a2, unsigned long long a3) { kq_hw_load(a0, a1, a2, a3, KQ_V(0)); return 1ULL; }
@@ -309,16 +402,25 @@ def main():
         groups = [g.split() for g in re.findall(r"KQM group: ([\w' ]+)", out)]
         mpf = re.search(r"KQM pairfns:([^\n]*)", out)
         pairfns = mpf.group(1).split() if mpf else []
-        t = proof_file(name, prog, entry, fns, helpers, groups, pairfns)
+        unproved = []
+        if os.environ.get("KQ_MONO"):
+            t = proof_file(name, prog, entry, fns, helpers, groups, pairfns)
+        else:
+            up = prove_units(name, fns, helpers, groups, pairfns, int(os.environ.get("KQ_JOBS", "3")), bool(os.environ.get("KQ_STRICT")))
+            if up is None:
+                continue
+            unproved = up
+            t = HDR + f"From KQG Require Import {name}_t.\n"
         t += f'\nFrom Stdlib Require Import String.\nLocal Open Scope string_scope.\nRedirect "{name}_c" Eval vm_compute in (KQLPrint.pstr 77777%positive (KQMTop.tr_kit_program {name}_prog)).\n'
         # a lemma the kernel does not finish (KQ_TIMEOUT) is left unproved (Admitted): the C is still made and is
         # checked by tests only; the program is then reported as unproved
-        unproved = []
         while True:
             open(f1, "w").write(t)
             rc, out = coqc(f1)
             if rc == 0:
                 break
+            if not os.environ.get("KQ_MONO"):
+                print(name, "PROOF FAILED:", out[-400:].replace("\n", " ")); break
             ml = re.search(r'File "[^"]*", line (\d+)', out)
             lines = t.split("\n")
             ln = int(ml.group(1)) - 1 if ml else -1
@@ -338,8 +440,6 @@ def main():
             unproved.append(mm.group(1))
             lines[ln] = f"Lemma {mm.group(1)}_ok : {mm.group(2)}. Proof. Admitted."
             t = "\n".join(lines)
-        else:
-            pass
         if rc != 0:
             continue
         if unproved:
