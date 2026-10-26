@@ -237,12 +237,12 @@ Ltac kqm_red := kqm_red0; kqm_laws.
 
 (** a test already split on is known: every later copy of it in the goal is replaced by its outcome *)
 Ltac kqm_known :=
-  repeat match goal with
+  progress (repeat match goal with
          | H : ?c = _ |- _ =>
              lazymatch type of c with
              | bool => lazymatch goal with |- context [c] => progress rewrite H end
              end
-         end;
+         end);
   kqm_red.
 
 (** the bound on every counter of a statement *)
@@ -454,7 +454,7 @@ Ltac kqm_test :=
     [ rewrite ofn_0, eqb00; kqm_red
     | rewrite ofn_S_ne0 by kqm_bound; kqm_red
     | match goal with
-      | |- evalk _ _ _ _ (if ?b then _ else _) _ _ => destruct b eqn:?; kqm_red; kqm_known
+      | |- evalk _ _ _ _ (if ?b then _ else _) _ _ => destruct b eqn:?; kqm_red; try kqm_known
       end
     | idtac ].
 
@@ -462,8 +462,10 @@ Ltac kqm_test :=
     unifies against) every addition of the goal, which is most of the time of a long run of arithmetic *)
 Ltac kqm_norm :=
   kqm_red; try kqm_known;
+  tryif (match goal with _ : nat |- _ => idtac end) then
   repeat first [ (lazymatch goal with |- context [PrimInt63.sub (KQLAuto.ofn (S _)) _] => rewrite ofn_pred by kqm_bound end)
-               | (lazymatch goal with |- context [PrimInt63.add (KQLAuto.ofn _) _] => rewrite ofn_succ by kqm_bound end) ].
+               | (lazymatch goal with |- context [PrimInt63.add (KQLAuto.ofn _) _] => rewrite ofn_succ by kqm_bound end) ]
+  else idtac.
 
 (** a call or a loop: some hypothesis in the context proves it -- a callee's statement (put there with
     [pose proof]) or the induction hypothesis *)
@@ -668,7 +670,7 @@ Ltac kqx_test :=
     [ rewrite ofn_0, eqb00; kqm_red
     | rewrite ofn_S_ne0 by kqm_bound; kqm_red
     | match goal with
-      | |- evalx _ _ _ _ (if ?b then _ else _) _ => destruct b eqn:?; kqm_red; kqm_known
+      | |- evalx _ _ _ _ (if ?b then _ else _) _ => destruct b eqn:?; kqm_red; try kqm_known
       end
     | idtac ].
 
