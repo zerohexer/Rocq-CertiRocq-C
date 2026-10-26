@@ -145,5 +145,11 @@ Proved and in the corpus (36 programs, all proved, answers equal to the C++ run,
 
 ## Not goals
 
+The target is what a freestanding, portable C compiler offers: the language and the primitives, nothing above them.
+Not included, because C does not include them either: a scheduler, process and thread tables, a memory manager, a
+driver set, a filesystem.  These are programs a user writes in Rocq on the primitives (`hw/kernel.body` is a small one),
+with the hardware layouts taken from the manual.  The only per-architecture parts are the hand-written stubs and the
+bodies of the primitives.
+
 A model of the CPU or the instruction set.  Proving data-structure invariants away (bounds guards cost little and
 stay).  A garbage collector or any run-time system.  Floating point and I/O until a program needs them.
