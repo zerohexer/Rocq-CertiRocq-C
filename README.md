@@ -187,6 +187,7 @@ copy of a freed handle is dead, also once its slot holds a new object, and a han
 | `slab_free_kills` | after `slab_free b h`, h is not live |
 | `slab_reuse_keeps_dead` | after `slab_free b h` and a `slab_take` that reuses h's slot, h is still not live |
 | `slab_get_set` | through a live handle, a field reads what was last written to it |
+| `slab_init_inv`, `slab_set_inv`, `slab_free_inv`, `slab_take_inv` | the slab's invariant (`slab_inv`: the header and the generations well formed, and the free list a list of distinct free slots, each holding the next) holds after `slab_init`, and again after each of `slab_set`, `slab_free`, `slab_take`, so a proof about a program that calls them one after the other can use it at every step.  `slab_take_inv` needs room for a doubled capacity (below 2^27 slots, and the block under 2^31 cells), as `slab_take_live` does |
 
 `examples/slab_set.body` is a hash set on a slab, both of its blocks starting empty; `examples/slab_set_malloc.c` is the
 same set in C with `malloc` and `free`.  Both give the same set; the Rocq version takes 5-7x the C's time, most of it the

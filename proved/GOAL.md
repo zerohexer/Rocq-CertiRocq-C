@@ -134,7 +134,7 @@ Proved and in the corpus (36 programs, all proved, answers equal to the C++ run,
    proved route and boot (`hw/build_proved.sh`): several programs per kernel (interrupt, fault, second processor) and
    the program's own assembly/C routines are done.  Left: a freestanding build of the generated C checked on its own,
    and the proof time of very long straight-line code (the 100-store instruction table takes 16 s; 14 read-modify-write steps 23 s, 24 of them about 3 minutes).
-3. The heap library's own lemmas (invariants of the slab that a user theorem about their program can use), and a freestanding `kq_grow`.
+3. A freestanding `kq_grow`.  (Done: the heap library's own lemmas, `lib/SlabSpec.v`: the slab's invariant is kept by init, set, free and take.)
 4. The general passes of the section above, each proved once and measured against C written the same way:
    if-conversion with early reads is done; next the removal of the test on an access whose index is in range.
    These run alongside the other items and block none of them.
