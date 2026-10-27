@@ -211,6 +211,11 @@ Record st := mkSt { s_next : positive; s_ver : nat }.
 Definition K := st -> tres (term * st).
 Definition KA := term -> st -> tres (term * st).
 
+(* a local function (let g := fun x => .. in ..) is a macro: the body of the let has the function put in at each use, as a
+   helper written out where it is used.  Its variables are those of the text around it, so a function that names a
+   variable of the caller needs nothing more. *)
+Definition is_fun_ty (ty : term) : bool := match ty with tProd _ _ _ => true | _ => false end.
+
 Fixpoint has_fix (fuel : nat) (t : term) : bool :=
   match fuel with
   | O => true
@@ -664,7 +669,7 @@ Fixpoint tr_int (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struc
               | _ => TErr "a variable used as a number is not one"
               end
   | tInt _ => k (aint t) s
-  | tLetIn na b ty body => tr_let fuel Γ b ty s (fun Γ' s => tr_int fuel Γ' body s k)
+  | tLetIn na b ty body => if is_fun_ty ty then tr_int fuel Γ (subst [b] 0 body) s k else tr_let fuel Γ b ty s (fun Γ' s => tr_int fuel Γ' body s k)
   | tApp (tConst kn u) args =>
       if Kername.eqb kn kn_fst || Kername.eqb kn kn_snd then
         match args with
@@ -811,6 +816,28 @@ Fixpoint tr_int (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struc
           end
         else
           tr_cond fuel Γ c s (fun s => tr_int fuel Γ (bbody b0) s k) (fun s => tr_int fuel Γ (bbody b1) s k)
+      else if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_nat) then
+        (* a match on a counter anywhere in the text: a test of it against 0, the second branch with the counter less one *)
+        match c with
+        | tRel n =>
+            match nth_error Γ n with
+            | Some (ENat a) =>
+                let v0 := s_ver s in
+                match tr_int fuel Γ (bbody b0) s k with
+                | TOk (e0, s1) =>
+                    let '(x, s1) := fresh (with_ver v0 s1) in
+                    match tr_int fuel (ENat (avar x) :: Γ) (bbody b1) s1 (fun A s => k A s) with
+                    | TOk (e1, s2) =>
+                        TOk (tApp q_Eif [<% Ceq %>; a; aint q_zero; e0;
+                                         tApp q_Eop [qpos x; <% Bsub %>; a; aint q_one; e1]], s2)
+                    | TErr m => TErr m
+                    end
+                | TErr m => TErr m
+                end
+            | _ => TErr "a match on what is not a counter parameter"
+            end
+        | _ => TErr "a match on what is not a counter parameter"
+        end
       else TErr "a match used as a number that this translator does not read"
   | tCase ci p c [b] => tr_rec_case fuel Γ ci p c s (fun Γ' s => tr_int fuel Γ' (bbody b) s k)
   | tProj pr c =>
@@ -882,10 +909,31 @@ with tr_mem (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : K) {struct fue
               | Some (EMem v) => if Nat.eqb v (s_ver s) then k s else TErr "a memory used after it was handed on"
               | _ => TErr "not a memory"
               end
-  | tLetIn na b ty body => tr_let fuel Γ b ty s (fun Γ' s => tr_mem fuel Γ' body s k)
+  | tLetIn na b ty body => if is_fun_ty ty then tr_mem fuel Γ (subst [b] 0 body) s k else tr_let fuel Γ b ty s (fun Γ' s => tr_mem fuel Γ' body s k)
   | tCase ci p c [b0; b1] =>
       if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_bool) then
         tr_cond fuel Γ c s (fun s => tr_mem fuel Γ (bbody b0) s k) (fun s => tr_mem fuel Γ (bbody b1) s k)
+      else if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_nat) then
+        match c with
+        | tRel n =>
+            match nth_error Γ n with
+            | Some (ENat a) =>
+                let v0 := s_ver s in
+                match tr_mem fuel Γ (bbody b0) s k with
+                | TOk (e0, s1) =>
+                    let '(x, s1) := fresh (with_ver v0 s1) in
+                    match tr_mem fuel (ENat (avar x) :: Γ) (bbody b1) s1 k with
+                    | TOk (e1, s2) =>
+                        TOk (tApp q_Eif [<% Ceq %>; a; aint q_zero; e0;
+                                         tApp q_Eop [qpos x; <% Bsub %>; a; aint q_one; e1]], s2)
+                    | TErr m => TErr m
+                    end
+                | TErr m => TErr m
+                end
+            | _ => TErr "a match on what is not a counter parameter"
+            end
+        | _ => TErr "a match on what is not a counter parameter"
+        end
       else TErr "a match used as a memory that this translator does not read"
   | tCase ci p c [b] => tr_rec_case fuel Γ ci p c s (fun Γ' s => tr_mem fuel Γ' (bbody b) s k)
   | tApp (tConst kn _) args =>
@@ -1005,7 +1053,7 @@ with tr_cond (fuel : nat) (Γ : list ent) (t : term) (s : st) (kT kF : K) {struc
       | Some b => tr_cond fuel Γ b s kT kF
       | None => TErr ("not a test: " ^ snd kn)
       end
-  | tLetIn na b ty body => tr_let fuel Γ b ty s (fun Γ' s => tr_cond fuel Γ' body s kT kF)
+  | tLetIn na b ty body => if is_fun_ty ty then tr_cond fuel Γ (subst [b] 0 body) s kT kF else tr_let fuel Γ b ty s (fun Γ' s => tr_cond fuel Γ' body s kT kF)
   | tCase ci p c [b] => tr_rec_case fuel Γ ci p c s (fun Γ' s => tr_cond fuel Γ' (bbody b) s kT kF)
   | tRel n =>
       match nth_error Γ n with
@@ -1098,7 +1146,7 @@ with tr_recv (fuel : nat) (Γ : list ent) (mk : term) (ks : list kind) (t : term
               | Some (ERec es) => kk (ERec es) s
               | _ => TErr "a variable used as a record is not one"
               end
-  | tLetIn na b ty body => tr_let fuel Γ b ty s (fun Γ' s => tr_recv fuel Γ' mk ks body s kk)
+  | tLetIn na b ty body => if is_fun_ty ty then tr_recv fuel Γ mk ks (subst [b] 0 body) s kk else tr_let fuel Γ b ty s (fun Γ' s => tr_recv fuel Γ' mk ks body s kk)
   | tConstruct _ 0 _ => if Nat.eqb (length ks) 0 then kk (ERec []) s else TErr "a record constructor without its fields"
   | tApp (tConstruct _ 0 _) args =>
       let fields := skipn (mk_npar mk) args in
@@ -1304,7 +1352,7 @@ with tr_boolval (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struc
       | Some b => tr_boolval fuel Γ b s k
       | None => TErr ("not a boolean: " ^ snd kn)
       end
-  | tLetIn na b ty body => tr_let fuel Γ b ty s (fun Γ' s => tr_boolval fuel Γ' body s k)
+  | tLetIn na b ty body => if is_fun_ty ty then tr_boolval fuel Γ (subst [b] 0 body) s k else tr_let fuel Γ b ty s (fun Γ' s => tr_boolval fuel Γ' body s k)
   | tCase ci p c [b] => tr_rec_case fuel Γ ci p c s (fun Γ' s => tr_boolval fuel Γ' (bbody b) s k)
   | _ => TErr "not a boolean this translator reads"
   end
@@ -1345,7 +1393,7 @@ Fixpoint tr_tail (fuel : nat) (Γ : list ent) (t : term) (s : st) {struct fuel} 
         | None => plain
         end
       else TErr "a match this translator does not read"
-  | tLetIn na b ty body => tr_let fuel Γ b ty s (fun Γ' s => tr_tail fuel Γ' body s)
+  | tLetIn na b ty body => if is_fun_ty ty then tr_tail fuel Γ (subst [b] 0 body) s else tr_let fuel Γ b ty s (fun Γ' s => tr_tail fuel Γ' body s)
   | tCase ci p c [b] => tr_rec_case fuel Γ ci p c s (fun Γ' s => tr_tail fuel Γ' (bbody b) s)
   | tApp (tRel n) args =>
       match nth_error Γ n with
