@@ -33,6 +33,53 @@ Widening means reading more of ordinary Rocq that still compiles without a runti
 integers, closures with a known function inlined or specialized, polymorphism erased.  What would need a runtime
 (a value of run-time size that outlives a call) is refused with the reason, not compiled slowly.
 
+## Writing it is as easy as writing ordinary Rocq
+
+The aim: a C programmer's program, written as ordinary Rocq, becomes C with no style rules to learn, the way
+`lean --c` takes any Lean program.  The target is the freestanding, portable C of the section above: anything C does
+without a runtime, written naturally, is accepted; the checker refuses only what needs a runtime, and says so.
+
+**What "natural" means.**  You write `Definition`, `Fixpoint`, `match`, `let`, tuples, records, helpers, local
+functions, recursion that is not a last step, functions as arguments and results.  You do not arrange the text for the
+translator.  Numbers are the fixed-width `int` and `u64` of C, not `nat` and `Z` (those are unbounded and need a
+bignum, which is a runtime; `nat` stays the loop counter).  Memory is laid out by the user: blocks, the slab, views.
+
+**What is refused, and only this.**  A value that would be allocated behind the programmer's back and outlives the call
+(a list or tree built by `cons`/`Some`/`inl`, a closure that escapes), an unbounded number, a use of a memory after it
+was handed on.  Each refusal names the reason and the library to use instead.  Every other refusal is a gap in the
+translator, not a rule of the language.
+
+**How it is found: by construct, not by example.**  Patching what sample programs get refused only finds what someone
+happened to write.  The set of Rocq's term formers is small and closed (variable, lambda, let, application, constant,
+constructor, match, projection, fixpoint, literals), the places a former can stand are few (tail or not, scrutinee,
+branch, let-bound, function, argument, result), and the runtime-free types are a small grammar (`int`, `bool`, `unit`,
+products and records of these, a known function, a function chosen at run time, a memory).  The audit is the table of
+all of these: for every construct, in every place, at every type, the cell is one of
+  - translated, with its rule;
+  - refused by design, with the named reason (it needs a runtime);
+  - a gap: runtime-free, not yet translated.
+`proved/matrix/gen.py` writes one program per cell (a producer of each result kind meeting its consumer; each kind of
+parameter; every nesting, three deep, of a core of constructs, so a construct is met inside every other in every
+order) and `kitc.py` classifies each by running the real translator and prover.  The work is to close the gaps; the
+claim "the checker does not over-reject" is that no cell is a gap.  This is the method of the cost-shape work, whose
+audit goes by term former because a walk with a catch-all cannot be shown complete.
+
+**What Lean's compiler shows us** (`src/Lean/Compiler/LCNF`, read 2026-10): it gets its freedom from a runtime (every
+value a heap object, reference counted, `Nat` a small scalar that falls back to a bignum), which we do not have.  The
+front end of it needs no runtime and is the model: inline and simplify; join points (a local function used only in tail
+positions is a jump); lambda lifting (a local function becomes a top-level one, its free variables extra parameters);
+specialization (a higher-order function whose function parameter is passed on unchanged is copied for each call that
+gives it a function, cached by function and arguments, the lambda's free variables becoming extra parameters of the
+copy); drop unused parameters; move a `let` into the branch that uses it; a self tail call is the parallel assignment of
+the parameters and a jump.  We already have the tail call and the specialization of a recursive function for known
+closed functions (`template_places`, `site_key`, `inst_body` in `KQMTrans.v`).  The step beyond: free variables of the
+function given, as extra parameters.
+
+**How it is built.**  The table first (the generator and the classification), then the gaps in the order of how many
+cells each closes, each with its translator rule and its per-program statement proved the same way as the rest.
+Compiling is one step from an ordinary `.v` file: the entry takes ordinary arguments, the C is printed at once (the
+generator is proved once), and the per-function statements are checked cached and in parallel behind it.
+
 ## What C can do, and its counterpart in Rocq
 
 The aim is that anything a C program does can be written in Rocq: operating systems and general programs.  C has no
