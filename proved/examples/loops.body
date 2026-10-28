@@ -1,0 +1,13 @@
+(* the loops of lib/Loop.v: a sum over a range with a variable of the text (b) in the loop's function, the first index whose
+   cell exceeds a limit, and a loop that fills a second block from the first.  Block 0 holds 3 1 4 1 5 9 2 6 5 3 12 8 7 9 11 2;
+   over 2 .. 11: the sum of the cells times 3 is 165, the first cell above 10 is at 10, and cell 4 of block 1 is twice cell 4 of
+   block 0, 10: 165 + 10 + 10 = 185. *)
+Definition solve (lo hi : int) (s : mem) : int :=
+  let b := 3 in
+  let total := loop_up lo hi 0 (fun i acc => acc + rd 0 i s * b) in
+  let first := loop_find lo hi (fun i => 10 <? rd 0 i s) in
+  let s2 := loop_up_m lo hi s (fun i t => upd 1 i (rd 0 i t * 2) t) in
+  total + first + rd 1 (lo + 2) s2.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_arg 0) (kq_arg 1) (kq_input 0).

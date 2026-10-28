@@ -89,6 +89,13 @@ add("int_hof_passed", "int", fdef("int", "let g := fun z => z + 1 in twice g a")
 add("int_fold_const", "int", fdef("int", "fold n 0 a (fun i acc => acc + i)"))
 add("int_fold_capture", "int", fdef("int", "fold n 0 a (fun i acc => acc + i * b)"))
 add("int_fold_mem", "int", fdef("int", "fold n 0 a (fun i acc => acc + rd 0 i s)"))
+add("int_fold_capt2", "int", fdef("int", "fold n 0 a (fun i acc => acc + i * b + rd 0 i s)"))
+add("int_fold_capt_let", "int", fdef("int", "let k := a + b in fold n 0 a (fun i acc => acc + i + k)"))
+add("int_fold_capt_twice", "int", fdef("int", "fold n 0 (fold n 0 a (fun i acc => acc + b)) (fun i acc => acc * 2 + a)"))
+add("int_outer_capt", "int", fdef("int", "outer n a (fun i acc => acc + i * b)"),
+    "Fixpoint outer (r : nat) (acc : int) (f : int -> int -> int) : int :=\n  match r with O => acc | S r' => outer r' (fold 3 0 acc f) f end.\n")
+add("mem_fill_capt", "mem", fdef("mem", "fill n 0 (fun i => i + b) s"),
+    "Fixpoint fill (n : nat) (i : int) (f : int -> int) (s : mem) : mem :=\n  match n with O => s | S m => fill m (i + 1) f (upd 0 i (f i) s) end.\n")
 add("int_rd", "int", fdef("int", "rd 0 a s"))
 add("int_rd_arith", "int", fdef("int", "rd 0 a s + rd 0 b s"))
 add("int_rd_if", "int", fdef("int", "if rd 0 a s <? rd 0 b s then 1 else 2"))
