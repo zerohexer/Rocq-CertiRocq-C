@@ -44,6 +44,14 @@ functions, recursion that is not a last step, functions as arguments and results
 translator.  Numbers are the fixed-width `int` and `u64` of C, not `nat` and `Z` (those are unbounded and need a
 bignum, which is a runtime; `nat` stays the loop counter).  Memory is laid out by the user: blocks, the slab, views.
 
+**Loops.**  A counted loop is `loop_up lo hi acc (fun i acc => ..)` (no budget to choose).  A loop that ends because a number
+falls is written as ordinary recursion with a measure (`wfix2 meas (fun rec a b => .. rec a' b' ..) a b`): the budget is the
+measure itself, and the theorems are the equation of the recursive function and induction on the measure (`proved/KQLoopSpec.v`),
+so the termination argument is the one Rocq's own `Fix_eq` takes, stated and used instead of a hidden fuel.  What is left of the
+fuel: a loop that ends on something with no measure to give it (Collatz) still needs a budget or a proof; reading Rocq's own
+`Program Fixpoint {measure ..}` (the `Acc` form) is not done: the translator reads the `wfix` form, in which the same measure is
+the budget.
+
 **What is refused, and only this.**  A value that would be allocated behind the programmer's back and outlives the call
 (a list or tree built by `cons`/`Some`/`inl`, a closure that escapes), an unbounded number, a use of a memory after it
 was handed on.  Each refusal names the reason and the library to use instead.  Every other refusal is a gap in the

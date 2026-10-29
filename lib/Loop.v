@@ -41,4 +41,47 @@ Fixpoint loop_two_go (k : nat) (a b : int) (c : int -> int -> bool) (fa fb : int
   end.
 Definition loop_two (meas : int -> int -> int) (c : int -> int -> bool) (fa fb : int -> int -> int) (a b : int) : int :=
   loop_two_go (kq_nat (meas a b)) a b c fa fb.
+
+(* RECURSION WITH A MEASURE: write the function as its body with a `rec` for the recursive call, and a measure that falls at
+   every call of rec:   wfix2 meas (fun rec a b => .. rec a' b' ..) a b.
+   The budget is the measure plus one, never a guess.  The body may call rec in any position (a tail call is a loop, another is
+   a call), and may use any variable of the text around it.  lib/LoopSpec.v proves, for every one of these, the equation
+   `wfix2 meas F a b = F (wfix2 meas F) a b` when F calls rec only at a smaller measure (the proof of that is the termination
+   argument, and it is the user's: a tactic does the usual ones).
+       wfixN       N numbers -> a number            wfixNm      N numbers and a memory (read) -> a number
+       wfixmN      N numbers and a memory -> the memory it ends with (the loop's state is the memory) *)
+Fixpoint wfix1_go (k : nat) (F : (int -> int) -> int -> int) (a : int) : int :=
+  match k with O => 0 | S k' => F (wfix1_go k' F) a end.
+Definition wfix1 (meas : int -> int) (F : (int -> int) -> int -> int) (a : int) : int :=
+  wfix1_go (kq_nat (meas a + 1)) F a.
+Fixpoint wfix2_go (k : nat) (F : (int -> int -> int) -> int -> int -> int) (a b : int) : int :=
+  match k with O => 0 | S k' => F (wfix2_go k' F) a b end.
+Definition wfix2 (meas : int -> int -> int) (F : (int -> int -> int) -> int -> int -> int) (a b : int) : int :=
+  wfix2_go (kq_nat (meas a b + 1)) F a b.
+Fixpoint wfix3_go (k : nat) (F : (int -> int -> int -> int) -> int -> int -> int -> int) (a b c : int) : int :=
+  match k with O => 0 | S k' => F (wfix3_go k' F) a b c end.
+Definition wfix3 (meas : int -> int -> int -> int) (F : (int -> int -> int -> int) -> int -> int -> int -> int) (a b c : int) : int :=
+  wfix3_go (kq_nat (meas a b c + 1)) F a b c.
+
+Fixpoint wfix1m_go (k : nat) (F : (int -> mem -> int) -> int -> mem -> int) (a : int) (s : mem) : int :=
+  match k with O => 0 | S k' => F (wfix1m_go k' F) a s end.
+Definition wfix1m (meas : int -> int) (F : (int -> mem -> int) -> int -> mem -> int) (a : int) (s : mem) : int :=
+  wfix1m_go (kq_nat (meas a + 1)) F a s.
+Fixpoint wfix2m_go (k : nat) (F : (int -> int -> mem -> int) -> int -> int -> mem -> int) (a b : int) (s : mem) : int :=
+  match k with O => 0 | S k' => F (wfix2m_go k' F) a b s end.
+Definition wfix2m (meas : int -> int -> int) (F : (int -> int -> mem -> int) -> int -> int -> mem -> int) (a b : int) (s : mem) : int :=
+  wfix2m_go (kq_nat (meas a b + 1)) F a b s.
+Fixpoint wfix3m_go (k : nat) (F : (int -> int -> int -> mem -> int) -> int -> int -> int -> mem -> int) (a b c : int) (s : mem) : int :=
+  match k with O => 0 | S k' => F (wfix3m_go k' F) a b c s end.
+Definition wfix3m (meas : int -> int -> int -> int) (F : (int -> int -> int -> mem -> int) -> int -> int -> int -> mem -> int) (a b c : int) (s : mem) : int :=
+  wfix3m_go (kq_nat (meas a b c + 1)) F a b c s.
+
+Fixpoint wfixm1_go (k : nat) (F : (int -> mem -> mem) -> int -> mem -> mem) (a : int) (s : mem) : mem :=
+  match k with O => s | S k' => F (wfixm1_go k' F) a s end.
+Definition wfixm1 (meas : int -> int) (F : (int -> mem -> mem) -> int -> mem -> mem) (a : int) (s : mem) : mem :=
+  wfixm1_go (kq_nat (meas a + 1)) F a s.
+Fixpoint wfixm2_go (k : nat) (F : (int -> int -> mem -> mem) -> int -> int -> mem -> mem) (a b : int) (s : mem) : mem :=
+  match k with O => s | S k' => F (wfixm2_go k' F) a b s end.
+Definition wfixm2 (meas : int -> int -> int) (F : (int -> int -> mem -> mem) -> int -> int -> mem -> mem) (a b : int) (s : mem) : mem :=
+  wfixm2_go (kq_nat (meas a b + 1)) F a b s.
 (* LOOP-END *)

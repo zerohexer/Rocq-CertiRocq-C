@@ -119,6 +119,34 @@ its budget is the measure, so it is never a guess, and `lib/LoopSpec.v` proves t
 least 0) the loop ends with the test false (`loop_two_ends`, `loop_two_go_ends`).  A loop that ends on something with no
 measure to give (Collatz) still needs a budget.  Examples: `proved/examples/loops.body`, `loop_while.body`.
 
+Recursion with a measure (`wfix1` .. `wfix3`, `wfix1m` .. `wfix3m`, `wfixm1`, `wfixm2` of `lib/Loop.v`): write the function as
+its body with a `rec` for the recursive call, and the measure that falls at every call of it:
+
+    Definition gcd (a b : int) : int :=
+      wfix2 (fun x y => y) (fun rec x y => if 0 <? y then rec y (x mod y) else x) a b.
+    Definition tri (n : int) : int :=
+      wfix1 (fun x => x) (fun rec x => if 0 <? x then x + rec (x - 1) else 0) n.
+
+A call of `rec` in any position is allowed (a tail call is a loop, the `x + rec (x - 1)` above is a call), the body may use any
+variable of the text around it, and the budget is the measure plus one, so it is never a guess (`wfixN`: numbers to a number;
+`wfixNm`: numbers and a memory that is read; `wfixmN`: numbers and a memory to the memory it ends with).  The translation is the
+one of any function that takes a function: a copy made for the body (`proved/examples/wfix.body`, `wfix_mem.body`).
+
+What is proved about such a function (`proved/KQLoopSpec.v`, from the generic theory of `lib/LoopSpec.v`), under the
+termination argument `<form>_dec` (the body calls `rec` only at an argument in the domain `P` whose measure is smaller and not
+below 0, which is what the measure is for), with the measure and the budget below `2^60`:
+  - `<form>_eq`: the equation of the recursive function, `wfix2 meas F x y = F (wfix2 meas F) x y` (the equation `Fix_eq` gives
+    `Program Fixpoint`);
+  - `<form>_ind`: a property is proved by induction on the measure, without unfolding.
+`<form>_dec_tac wf_side` proves the termination argument for the usual bodies (a test, then `rec` at arguments the test makes
+smaller; `wf_side` knows `x - 1`, `x mod y`, `x / 2`).  `proved/KQLoopExamples.v` has the three steps for the two functions
+above: the termination argument in one line, the equation, and what they compute (`tri_closed`, `gcd_correct`: the result is
+`Z.gcd`).  `tools/mkloopspec.py` writes `KQLoopSpec.v`.
+
+A function given to a function (a body given to a loop, a comparison given to a sort) may contain a test, a `let`, a projection or
+a local `fix`: two such functions are compared as terms, and a budget made only of numbers written in the program is a budget
+written as a number.
+
 64-bit unsigned numbers.  A number of the kit is 63 bits wide, so `u64` (`KQRun.v`) is a record of two of them: `w_lo`, the
 low 63 bits, and `w_hi`, the bit above.  Its meaning is `u64_val`, a number of Z in 0 .. 2^64 - 1, and every operation is
 defined through it with C's wrap-around of `unsigned long long`: `u64_add`, `u64_sub`, `u64_mul`, `u64_and`, `u64_or`,

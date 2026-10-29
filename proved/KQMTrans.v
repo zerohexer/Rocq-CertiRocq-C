@@ -357,6 +357,27 @@ Fixpoint app_norm_go (fuel : nat) (Γ : list ent) (t : term) : term :=
   end.
 Definition app_norm (Γ : list ent) (t : term) : term := app_norm_go 100 Γ t.
 
+(* the same through the arguments of applications (not under binders): a number written with the functions given put in,
+   [(fun k lo hi => hi - lo) key 0 12 + 1], is worked down to [12 - 0 + 1] *)
+Definition ind_atom := ind_of <% atom %>.
+Fixpoint deep_norm (fuel : nat) (Γ : list ent) (t : term) : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      match app_norm Γ t with
+      | tRel n =>
+          (* a variable that stands for a number written in the program *)
+          match nth_error Γ n with
+          | Some (EInt (tApp (tConstruct i 1 _) [v])) =>
+              if Kername.eqb (inductive_mind i) (inductive_mind ind_atom) then v else tRel n
+          | _ => tRel n
+          end
+      | tLetIn _ b _ body => deep_norm fuel Γ (subst [b] 0 body)
+      | tApp f args => tApp (deep_norm fuel Γ f) (map (deep_norm fuel Γ) args)
+      | t' => t'
+      end
+  end.
+
 (* arithmetic on variables and numbers only: worked out whether or not it is wanted, without a jump *)
 Fixpoint simple_term (fuel : nat) (t : term) : bool :=
   match fuel with
@@ -561,6 +582,24 @@ Fixpoint term_same (fuel : nat) (a b : term) : bool :=
       | tApp f xs, tApp g ys =>
           term_same fuel f g && Nat.eqb (length xs) (length ys)
           && forallb (fun p => term_same fuel (fst p) (snd p)) (combine xs ys)
+      | tLetIn _ b ty body, tLetIn _ b' ty' body' =>
+          term_same fuel b b' && term_same fuel ty ty' && term_same fuel body body'
+      | tCase ci p c brs, tCase ci' p' c' brs' =>
+          Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind (ci_ind ci')) && Nat.eqb (inductive_ind (ci_ind ci)) (inductive_ind (ci_ind ci'))
+          && Nat.eqb (length (pparams p)) (length (pparams p'))
+          && forallb (fun q => term_same fuel (fst q) (snd q)) (combine (pparams p) (pparams p'))
+          && Nat.eqb (length (pcontext p)) (length (pcontext p'))
+          && term_same fuel (preturn p) (preturn p') && term_same fuel c c'
+          && Nat.eqb (length brs) (length brs')
+          && forallb (fun q => Nat.eqb (length (bcontext (fst q))) (length (bcontext (snd q)))
+                               && term_same fuel (bbody (fst q)) (bbody (snd q))) (combine brs brs')
+      | tProj pr c, tProj pr' c' =>
+          Kername.eqb (inductive_mind (proj_ind pr)) (inductive_mind (proj_ind pr')) && Nat.eqb (proj_arg pr) (proj_arg pr')
+          && term_same fuel c c'
+      | tFix m k, tFix m' k' =>
+          Nat.eqb k k' && Nat.eqb (length m) (length m')
+          && forallb (fun q => term_same fuel (dtype (fst q)) (dtype (snd q)) && term_same fuel (dbody (fst q)) (dbody (snd q))
+                               && Nat.eqb (rarg (fst q)) (rarg (snd q))) (combine m m')
       | _, _ => false
       end
   end.
@@ -974,7 +1013,11 @@ with tr_nat (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struct fu
       (* a budget written as a number: [kq_nat 30] *)
       if Kername.eqb kn kn_kq_nat then k (tApp q_Abud [match t with tApp _ [n] => n | _ => t end]) s else TErr "not a counter this translator reads"
   | tApp (tConst kn _) [e] =>
-      (* a budget worked out while the program runs: [kq_nat n] for a number n: n if positive, else 0 *)
+      (* a budget worked out while the program runs: [kq_nat n] for a number n: n if positive, else 0.  A budget made of numbers
+         written in the program only (a measure applied to its arguments) is a budget written as a number *)
+      if andb (Kername.eqb kn kn_kq_nat) (closedn 0 (deep_norm 100 Γ e)) then
+        k (tApp q_Abud [deep_norm 100 Γ e]) s
+      else
       if Kername.eqb kn kn_kq_nat then
         tr_int fuel Γ e s (fun A s =>
           let '(x, s) := fresh s in

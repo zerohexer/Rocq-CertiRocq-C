@@ -1,0 +1,14 @@
+(* recursion with a measure: gcd written as ordinary recursion (rec b (a mod b)), and a sum 1 + 2 + .. + n written with a
+   call that is not the last step; the measure of each is the number that falls *)
+Definition gcd (a b : int) : int :=
+  wfix2 (fun x y => y) (fun rec x y => if 0 <? y then rec y (x mod y) else x) a b.
+Definition tri (n : int) : int :=
+  wfix1 (fun x => x) (fun rec x => if 0 <? x then x + rec (x - 1) else 0) n.
+Fixpoint total (n : nat) (i acc : int) (s : mem) : int :=
+  match n with
+  | O => acc
+  | S m => total m (i + 1) (acc + gcd (rd 0 (2 * i) s) (rd 0 (2 * i + 1) s) + tri i) s
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  total (kq_nat (kq_arg 0)) 0 0 (kq_input 0).
