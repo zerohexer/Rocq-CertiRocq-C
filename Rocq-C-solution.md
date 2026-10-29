@@ -28,47 +28,59 @@ examples     22 programs (records, pairs, mutual recursion, functions as values,
              views, a growing heap, machine operations): all proved, built, answers equal to hand-computed values
 kernels      5 test kernels (interrupts, a page fault handled in Rocq, a second processor, an interrupt entry written in Rocq
              byte by byte, a kernel with page tables/IDT/PCI/atomics) proved and booting in QEMU (TCG and KVM)
-naturalness  construct table: 775 cells, 733 translated and proved, 5 refused by design, 36 gaps (first full run: 533 / 231)
+naturalness  construct table: 775 cells, 733 translated and proved, 41 gaps, none by design yet (first full run: 533 / 231;
+             the five cells once counted by design build and take apart their value in place, so they are gaps: §3.5)
 proof time   cold 35-54 s per test kernel (was 2m29-4m18); a rerun of an unchanged program ~15 s (per-function proof cache);
              corpus: 243 function proofs, 1.9 s on average
 theorems     the slab heap keeps its invariant through init/set/free/take; views of one memory are consistent; loops whose budget
              is a measure end with their test false; measure recursion satisfies its equation and an induction principle
 ```
 
-**Where the work is (§12 has the full ordered list):**
-1. The 36 gaps of the construct table, in order of cells closed (§3.5): recursive functions returning a bool / a record of
+**Where the work is, in the order to take it (§12 has each item with its acceptance):**
+1. The 41 gaps of the construct table, in order of cells closed (§3.5): recursive functions returning a bool / a record of
    three / a number with a memory (9), `int * mem` (7), proof search of pair-valued choices (6), polymorphic and class-based
-   helpers (5), arithmetic on counters (4), booleans made by `if`/`match` (3), a local `fix` naming the caller's variables (1),
-   a choice between records (1).
-2. Compiling from an ordinary `.v` file with one command (`Kq Compile`), entry arguments read from the signature, C printed at
-   once and the proofs checked behind it (§12.B).
-3. Freestanding: the generated C built and checked on its own; a freestanding `kq_grow` (§9.5).
-4. The general passes, each proved once: removal of the bounds test on an access whose index is in range, forwarding a stored
-   value to a later read, hoisting loop-invariant reads (§6.4).
-5. An interleaving semantics for two programs (protocol properties proved once), a fair lock; checks of the trusted tools
-   (`ccomp`, UBSan); hosted features (floating point, system calls, C libraries) when a program needs them.
-6. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
+   helpers (5), a value built and taken apart in place — `option`, a sum, a list cell, a function in a pair (4) — arithmetic
+   on counters (4), booleans made by `if`/`match` (3), a local `fix` naming the caller's variables (1), a dead memory `let`
+   (1), a choice between records (1).  Then the by-design boundaries pinned by cells that show their cause, each with a
+   control (§3.5, §3.6).
+2. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
-7. **Naturalness as a theorem** (§3.8): a grammar of the accepted fragment, defined without reference to the translator, and a
+3. **Rocq's own measure recursion** (`Program Fixpoint {measure ..}`, `Function`, `Equations`): what the owner asked for as
+   loops "level 2".  `wfix` is the step built so far; the owner's form is owed (§4.5, §12.P).
+4. **The operations of freestanding C not yet in KQL** (§2.1): `uint64_t` division and remainder, signed 64-bit arithmetic, the
+   high half of a product, 8/16/32-bit arithmetic with C's wrap-around.
+5. Compiling from an ordinary `.v` file with one command (`Kq Compile`), entry arguments read from the signature, C printed at
+   once and the proofs checked behind it (§12.B).
+6. Freestanding: the generated C built and checked on its own; a freestanding `kq_grow` (§9.5).
+7. The general passes, each proved once: removal of the bounds test on an access whose index is in range, forwarding a stored
+   value to a later read, hoisting loop-invariant reads (§6.4).
+8. An interleaving semantics for two programs (protocol properties proved once), a fair lock; checks of the trusted tools
+   (`ccomp`, UBSan); hosted features (floating point, system calls, C libraries) when a program needs them.
+9. **Naturalness as a theorem** (§3.8): a grammar of the accepted fragment, defined without reference to the translator, and a
    proof that the translator and the proof succeed on every term of it — the table is the measurement, the theorem is the claim.
+
+§0.10 says when the goal is reached.
 
 **Do not (§10 has the reasons):** add a runtime or a collector; translate `nat`/`Z` arithmetic as if it were fixed-width; add
 an optimization keyed to one benchmark; fix a refusal by looking at one sample program instead of the construct table; port a
 processor family in C or assembly; put a scheduler, a memory manager, drivers or a filesystem into the toolchain; trust the
-translator; use the proof cache as release evidence (use `KQ_MONO=1`); run two heavy jobs on one machine at once.
+translator; use the proof cache as release evidence (use `KQ_MONO=1`); run two heavy jobs on one machine at once; call a
+refusal "by design" because of a value's type; build an easier substitute for what the owner asked and record it as the
+decision (§13.8).
 
 ---
 
 ## CONTENTS
 
 - §0  THE GOAL — the owner's words, the line between proved and assumed, what natural means, what is refused, the yardstick
-      — and §0.9 HOW TO DECIDE when this file does not say (read it before any change)
+      — §0.9 HOW TO DECIDE when this file does not say (read it before any change) — §0.10 WHEN THE GOAL IS REACHED
 - §1  THE ARCHITECTURE AS BUILT — pipeline, KQL, numbers, memory, translator, statements, generator, printer, hardware, libraries
 - §2  WHAT C CAN DO, AND ITS COUNTERPART IN ROCQ — the capability table with today's state
-- §3  NATURALNESS — THE CONSTRUCT TABLE: method, generator, classification, numbers, the 36 gaps, how to close one, the
+- §3  NATURALNESS — THE CONSTRUCT TABLE: method, generator, classification, numbers, the 41 gaps, how to close one, the
       translator's own side conditions, naturalness as a theorem
-- §4  LOOPS AND RECURSION — fuel, counted loops, measure loops, measure recursion (`wfix`) and its theory
+- §4  LOOPS AND RECURSION — fuel, counted loops, measure loops, measure recursion (`wfix`) and its theory, Rocq's own forms
+      (owed: the owner's "level 2")
 - §5  FUNCTIONS AS VALUES, CLOSURES, LOCAL FUNCTIONS — templates, captures, comparison of terms, budgets of constants
 - §6  SPEED OF THE GENERATED C — measurements, where the overhead is, passes done, passes left, how a pass is chosen
 - §7  PROOF SPEED — why proofs cost, what was done, numbers, profiles, what is deliberately not done
@@ -109,7 +121,8 @@ These are the requirements the design answers to.  They are paraphrased closely;
   "patching": "this is patching whole, which isn't good; there should be a better direct way to identify all sorts of correct
   patterns, combinations whatsoever" (the A×B×C orderings).  Hence the construct table (§3), "similar to cost shape".
 - **Loops must not be a workaround.**  The fuel parameter was called a workaround; the owner asked for the native way and
-  then: "make it level 2, stable, perfect and good" (§4).
+  then: "make it level 2, stable, perfect and good" — level 2 being, as it was offered, Rocq's own `Program Fixpoint
+  {measure ..}` / `Function` (§4.5).
 - **The toolchain is freestanding C, nothing above it.**  A scheduler, process tables, a memory manager, drivers and a
   filesystem are not part of it: "not part of freestanding but above primitives; we should do freestanding / portable C;
   put it as not included".  Interrupt handling and the scheduler are written by the user on the primitives, per architecture,
@@ -160,12 +173,21 @@ inlining, join points, lambda lifting, specialization, tail calls as jumps — i
 
 ### 0.5 What is refused, and only this
 
-1. **A value that would be allocated behind the programmer's back and outlive the call**: a list or tree built by `cons`,
-   `Some`, `inl`; a closure that escapes (returned, stored in a pair).  In C such data is laid out by the programmer; here it is
+1. **A value that would be allocated behind the programmer's back and outlive the call**: a list or tree whose size comes from
+   the data (built by recursion); a function value that is not known from the text where it is called (returned by a
+   recursive function, built anew at each round of a recursion).  In C such data is laid out by the programmer; here it is
    laid out in blocks with an allocator (`lib/Slab.v`), the same way.
 2. **An unbounded number** used as a value (`Z`, `nat` arithmetic beyond counting down).  C has none; a bignum is a runtime.
-3. **A memory used after it was handed on** (`let t := upd .. s in .. s ..`): the memory is linear, which is what lets a pure
-   function be compiled to in-place updates.
+3. **Two versions of the memory both used** (`let t := upd .. s in .. t .. s ..`): the memory is linear, which is what lets a
+   pure function be compiled to in-place updates; keeping both would be a copy made behind the programmer's back.
+
+**Whether a value needs a runtime is decided by its size and its lifetime, never by its type.**  A value of a non-recursive
+inductive type of numbers (`option int`, `int + int`, an enumeration whose constructors carry numbers) has a fixed size: it is
+its tag and its fields, the way a record is its fields (D15), and C writes it as a tagged struct passed by value — wherever it
+goes, a call's result and a loop's state included.  A constructor or a function built and taken apart in the same text (`match
+k a with Some x => ..` where `k` is put in, `cons x nil` matched at once, `(snd p) (fst p)` on a pair holding a function, a
+function returned by a helper that is put in) needs nothing at run time at all.  A memory made by a `let` and never used is not
+a second version.  None of these is refused; each is a gap until it is translated (§3.5).
 
 Each refusal names the reason and the library to use instead.  **Every other refusal is a gap in the translator, not a rule of
 the language** — and the construct table (§3) is the list of them.
@@ -231,6 +253,27 @@ a quick one even when the quick one passes the gate.
 
 **When the right move is unclear:** measure before deciding (a cell of the table, a timing on one pinned core, a profile of the
 proof); record the measurement here (§11); then decide by the order above.  A guess becomes a rule only after it is tested.
+
+### 0.10 When the goal is reached
+
+All of these, on one tree, each by its own check — not before, and never by a description:
+
+| # | Condition | Check |
+|---|---|---|
+| 1 | **No over-rejection by construct**: every cell of the construct table translated and proved, or pinned by design with a control — the family that varies the translator's own conventions included (§3.7) | `MD=1 bash proved/matrix/run.sh`: 0 gaps |
+| 2 | **Rocq's own spelling**: measure recursion read in Rocq's forms (§4.5); type and instance arguments specialized | the `wfix` examples written as `Program Fixpoint` compile, prove, give the same answers |
+| 3 | **The operations of freestanding C** (§2.1) | every row of §2.1 proved, each with an example |
+| 4 | **Written and compiled like `lean --c`**: one command in an ordinary `.v` file, the C at once, the proofs behind it, refusals that read like type errors (§12.B, D23) | every example and corpus program compiled that way, with the same C as before |
+| 5 | **Freestanding** (§9.5) | the generated C of the examples builds with no hosted headers and runs |
+| 6 | **C speed**: no cost the translation adds to every operation is left once the general passes are in (§6.4) | the same-shape benchmarks (`tests/mkworst.py`) against C written the same way; `proved/corpus.sh times` |
+| 7 | **Trust unchanged** | `ASSUME=1 bash proved/make.sh` lists what §1.10 lists and nothing more |
+| 8 | **Proof time small**: cold test kernels under a minute, an unchanged rerun at the cache's floor | `KQ_TIMES=1`; the kernels' times |
+| 9 | **Hardware by the user**: the test kernels prove and boot; an architecture is added from its manual over the generic primitives with no change to the core (§9.1) | `bash hw/check.sh` |
+
+Then the end state: **naturalness as a theorem** (§3.8, §12.M), which turns condition 1 from a measurement into a claim — the
+order the cost-shape work followed by the owner's decision there (close every decidable over-rejection row, then prove the
+completeness theorem).  Concurrency semantics (§12.G) and one text carrying its cost and its C (§12.N) go beyond the goal: they
+make it stronger and are taken when their condition arises.
 
 ---
 
@@ -457,7 +500,7 @@ either; a C program lays out its data and manages its memory, and so does a Rocq
 | calls, mutual recursion | `Fixpoint .. with ..` | proved (`mutual.body`) |
 | arrays, buffers | memory blocks with `rd`, `upd`; narrow blocks with `rd32`, `upd32`, bytes, halfwords | proved; a byte is one C byte access |
 | structs, bit fields | records split into integers, or a layout in a block; bit fields are bit operations | records and pairs as parameters, `let`s, `match`es, fields; a recursive function giving back two numbers (slot block); **more than two numbers as a result, a choice between records, a number paired with a memory: gaps (§3.5)** |
-| unions | a layout in a narrow block with views | views proved; no union syntax (none needed) |
+| unions, tagged unions | a non-recursive inductive (`option`, a sum, an enumeration whose constructors carry numbers) held as its tag and fields; a raw layout in a narrow block with views | views proved; **inductive values held as tag and fields: gap (§3.5)** |
 | pointers, raw addresses | an integer address into a region; RAM as one block at its base; views of one block | views proved; **an address type with proved arithmetic, pointers that outlive a call: not yet (§12.C)** |
 | `malloc`, `free` | an allocator written in Rocq on a growing block (`kq_grow`, `kq_size`) | `lib/Slab.v` proved through the route (`heap.body`), invariants proved (`SlabSpec.v`); `kq_grow`'s C body assumed |
 | function pointers, callbacks | a known function is put in; a recursive function that takes functions gets a copy per function given; a function chosen at run time is a dispatch on an id with the environment as an argument | proved (`dispatch.body`, `hof_*.body`) |
@@ -508,8 +551,9 @@ finite checklist against what freestanding C offers, not an open question:
 place: every decidability problem there was a single phenomenon — **a callee not syntactically determined**.  C has no closures;
 its function pointers are determined at run time from a table, which is exactly the id dispatch above.  So the route translates
 every function that is known where it is used (put in, or a copy per function given, captures included) and every function
-chosen at run time from an explicit table; a function value stored or returned implicitly (a closure that escapes) is refused by
-design, because in C it would be a struct the programmer builds.  Full higher-order — function values flowing anywhere — is the
+chosen at run time from an explicit table; a function value that is not known from the text where it is called (returned by
+a recursive function, built anew at each round) is refused by design, because in C it would be a struct the programmer builds.
+A function returned by a helper that is put in is known where it is called, and is accepted (`A_par_fun_result`).  Full higher-order — function values flowing anywhere — is the
 cost-shape record's "#10, the big one", and it is not on this route's path.
 
 ---
@@ -557,11 +601,15 @@ New cells are added to `gen.py` when a feature is built (the capture cells, for 
 
 ### 3.3 The classification (`proved/matrix/classify.py`)
 
-`kitc.py --no-build` runs the real translator and the real prover on each cell (`KQ_STRICT=1`, `KQ_TIMEOUT=120`);
-`classify.py RESULTS... [--md FILE]` reads one line of output per cell and gives each a verdict: `ok`, `design` (the list
-`DESIGN_CELLS`: `option`, `list`, sum, a function in a pair, a function returned, a memory used after it was handed on),
-`invalid` (the generated program is not Rocq: no verdict), or `gap` with its category (regular expressions on the refusal
-reason).  The summary is written to `proved/matrix/MATRIX.md`.
+`bash proved/matrix/run.sh [OUT]` runs the table (in the image, in the repository, after `proved/make.sh`): it writes the cells
+(`gen.py`), runs `kitc.py --no-build` on each — the real translator and the real prover, `KQ_STRICT=1`, `KQ_TIMEOUT=120`, `PJ`
+cells at a time — keeps one line of output per cell in `OUT/results.txt` (default `proved/matrix/out`) and classifies them.
+`PATT=a+b` runs only the cells whose names contain `a` or `b`; `MD=1` writes `proved/matrix/MATRIX.md` (for a full run).
+`classify.py RESULTS... [--md FILE]` gives each cell a verdict: `ok`, `design` (the list `DESIGN_CELLS` — empty since 2026-10-30:
+a cell goes there only when its program shows the cause, next to its control, §3.6), `invalid` (the generated program is not
+Rocq: no verdict), or `gap` with its category (regular expressions on the refusal reason; `BY_NAME` where two categories share
+one message).  The full table is a long run: the cells of one category while working, the full table once per landing that
+changed the translator or the walk.
 
 ### 3.4 The numbers
 
@@ -569,6 +617,7 @@ reason).  The summary is written to `proved/matrix/MATRIX.md`.
 |---|---|---|---|---|---|
 | first full run (2026-10-27) | 770 | 533 | 5 | 231 | 1 |
 | after counter matches anywhere, local functions, captures, comparison of terms with tests, budgets of constants (2026-10-30) | 775 | **733** | 5 | **36** | 1 |
+| the same results classified again: the five "by design" cells build and take apart their value in place (2026-10-30, F35) | 775 | **733** | **0** | **41** | 1 |
 
 What closed the 195 cells: a `match` on a counter read anywhere, not only at the top of a recursion (≈190 cells of family N and
 P — the single largest gap, found only because the nestings put a `match` inside every other construct); a `let`-bound local
@@ -576,7 +625,7 @@ function put in at each use (5); a function given to a template that names varia
 functions compared as terms when they contain a test, a `let`, a projection or a local `fix`; a budget made only of numbers
 written in the program read as a written budget.
 
-### 3.5 The 36 gaps (the live list, from `MATRIX.md`)
+### 3.5 The 41 gaps (the live list, from `MATRIX.md`)
 
 | Cells | Category | Cells by name | What it takes |
 |---|---|---|---|
@@ -584,14 +633,21 @@ written in the program read as a written budget.
 | 7 | a **pair of a number and a memory** (`int * mem`) as a value | `A_par_mem_pair`, `P_intmem_lit`, `P_intmem_wr`, `P_intmem_let`, `P_intmem_if`, `P_intmem_call`, `P_intmem_alloc_like` | `kind_of` refuses a record that contains a memory.  Split it: the number part as a `KRec` field, the memory part as the (single, linear) memory of the function; the destructuring `let '(x, s2) := ..` binds both |
 | 6 | the translation is accepted, **the proof is not found** | `P_pair_if`, `P_pair_if_inside`, `P_pair_call_arith`, `P_pair_proj_pair`, `P_pair_nontail_if`, `P_int_match_nat2` | proof search only: a pair built by an `if` (each field a conditional move) needs the walk to take the record apart on the Rocq side the same way; `match n with O | S O | S (S _)` needs the nested counter test in `kqm_test` |
 | 5 | **polymorphic / class-based helpers**, a memory inside a record | `A_par_poly_id`, `A_par_poly_pair`, `A_par_poly_hof`, `A_par_typeclass`, `A_par_mem_record` | specialization at the use (Lean's `fixedInst`): a type argument and an instance argument are put in like a known function; types are erased in KQL already |
+| 4 | a **value built and taken apart in place**: `option`, a sum, a list cell, a function in a pair | `A_par_option`, `A_par_sum`, `A_par_list`, `A_par_fun_in_pair` | once the helper is put in, the `match` (or the projection) meets the constructor and the value is never built — case of a known constructor, a general simplification (Lean's `simp` does it).  Where an `option` or a sum crosses a call or is a loop's state, it is its tag and its fields, a kind like `KRec` with a tag; add cells for that (a recursive function giving back an `option`, an `option` as a loop's state, an enumeration with fields) |
 | 4 | **arithmetic and comparisons on counters** | `A_par_nat_eqb`, `A_par_nat_ltb`, `A_par_nat_mul`, `A_par_nat_pred` | a counter is one machine number (`ofn`); `Nat.eqb`/`Nat.ltb` are comparisons of those, `pred` is `Esel`, `n + n` is an addition with the bound kept under `cbk` |
 | 3 | a **boolean made by an `if` or a `match`** | `P_bool_if`, `P_bool_if_call`, `P_bool_match_nat` | `tr_cond` / `tr_boolval` accept `if c then true else false`-shaped terms only through comparisons; read a boolean-valued `if` as a choice between 0/1 |
 | 1 | a local `fix` that names a variable of the caller | `P_int_local_fix` | a local `fix` is a template whose copy takes its free variables as parameters (lambda lifting, as captures do) |
+| 1 | a **memory made by a `let` and never used**, the old memory used after it | `P_mem_dup` | drop the dead `let` before the linearity check: the rule is about two versions both used (§0.5) |
 | 1 | a **choice between records** | `P_rec3_if` | each field a conditional move (as for pairs, §1.5) |
 
-**By design (5):** `A_par_option`, `A_par_list`, `A_par_sum` (a value built by a constructor that would be allocated),
-`A_par_fun_in_pair` (a function stored in data), `P_mem_dup` (a memory used after it was handed on).  `A_par_fun_result` (a
-function returned) is classified the same way when it is refused.  **Not Rocq (1):** `A_par_nat_arith` (`k (m + 0)` is not a
+**By design: none yet.**  The five cells once counted by design (`A_par_option`, `A_par_list`, `A_par_sum`,
+`A_par_fun_in_pair`, `P_mem_dup`) were refused by generic messages ("a match this translator does not read"), and their programs
+show no cause: each value is built and taken apart in place, or the second memory is never used (§11, F35).  `A_par_fun_result`
+(a function returned by a helper), listed with them, is accepted and proved; it is the control for "a function value that
+escapes".  The boundaries of §0.5 still need their pins, each next to its control: a list built by recursion with its length from
+the data (control: `A_par_list`); a function returned by a recursive function and called later (control: `A_par_fun_result`);
+both versions of the memory used (control: `P_mem_dup`, once the dead `let` is dropped); a `Z` result (control: the same
+program on `int`).  **Not Rocq (1):** `A_par_nat_arith` (`k (m + 0)` is not a
 structurally smaller argument; the generated program itself is rejected by Rocq, so there is no verdict).
 
 ### 3.6 How a gap is closed
@@ -614,7 +670,10 @@ to use instead.
 - **A boundary is closed only with a machine-checked pin and a control.**  A by-design refusal is a cell of the table that is
   refused (the pin) next to the nearest cell that is accepted and differs only in the cause (the control) — for instance a
   closure that escapes (refused) next to the same closure used in place (accepted).  A measurement written in prose is not
-  closed.
+  closed.  **The pin must show the cause in its own text** — a size that comes from the data, a value that must outlive the place
+  where it can be put in, two versions of the memory both used.  A refusal message is not a cause, and neither is a type: five
+  cells were counted by design because they mention `option`, a list or a function, while their programs needed no runtime
+  (F35).
 - **Never add a check to the translator without a theorem that needs it** (the cost-shape record's rule 2'): a condition with no
   theorem behind it is either an over-rejection or load-bearing but unjustified, and which one cannot be told by reasoning.  Every
   side condition is audited for the theorem that requires it (§3.7).
@@ -630,7 +689,7 @@ is a rule a user must learn today, and each is an over-rejection unless a theore
 |---|---|---|---|
 | the counter a function recurses on is its **first** parameter | `fparts`: `rarg d = 0` | no: the statement's induction can be on any `nat` parameter | read `rarg d = k` for any `k`; induct on parameter `k` |
 | the memory is the **last** parameter | `tr_call` (`[KMem], [m]` last), `mk_info` | no: the memory is one KQL argument wherever it stands | accept the memory at any position |
-| at most **one memory** per function | `mk_info` (`restmem && capmem` refused), the walk | partly: one memory is the linearity that makes in-place update correct; two *different* memory parameters both live would alias the one global memory | refuse only two memories used at once (by design, with pin and control); accept two parameters of which one is dead or one is the other |
+| at most **one memory** per function | `mk_info` (`restmem && capmem` refused), the walk | partly: one memory is the linearity that makes in-place update correct; two *different* memory parameters both live would alias the one global memory | refuse only two memories used at once (by design, with pin and control); accept two parameters of which one is dead or one is the other (`A_par_mem_two`, two memory parameters of which one is unused, is already accepted) |
 | a function to translate is in the **program's own file** (or the kit) | `is_fun`, `reach`: `eq_mp (fst kn) mp` | no: a function of another file is quoted the same way | translate functions of any file the program imports (a multi-file program, a user library) — the cost-shape work measured the same need (a course library in a separate file) |
 | a captured variable is a number, a counter or a memory | `cap_ok` | no: a captured boolean, pair or record is a parameter like any other | accept every kind `kind_of` accepts |
 | a helper larger than 40 nodes becomes a function of its own | `big_fun` | none (a proof-size choice, not a refusal) | keep; it is not visible to the user |
@@ -690,7 +749,7 @@ around it (§5.2).  `proved/examples/loops.body`.
 `lib/LoopSpec.v`: `loop_two_ends` — if the measure falls at every round that runs and stays at least 0, the loop ends with
 its test false (and `loop_two_go_ends` for the budgeted function itself).  `proved/examples/loop_while.body` (Euclid's gcd).
 
-### 4.4 Recursion with a measure: the `wfix` family ("Level 2")
+### 4.4 Recursion with a measure: the `wfix` family (built on the way to "level 2", §4.5)
 
 Write the function as its body, with `rec` for the recursive call, and a measure that falls at every call:
 
@@ -753,15 +812,37 @@ Theorem gcd_correct : forall x y, gcd_P x y -> Z_ (wfix2 gcd_meas gcd_F x y) = Z
 
 **Limits, stated.**  The measure and the budget are below `2^60` (the cap of `kq_nat`); `gcd`'s domain therefore says the
 second number is below `2^60`.  The user supplies the measure and the domain.  A loop with no measure (Collatz) still needs a
-budget.  **Rocq's own `Program Fixpoint {measure ..}` (the `Acc`/`Fix_F` form) is not read** — see §4.5.
+budget (Rocq itself asks for a measure or fuel there, so that is Rocq's rule, not ours).  **Rocq's own `Program Fixpoint
+{measure ..}` (the `Acc`/`Fix_F` form) is not read yet — it is owed (§4.5).**
 
-### 4.5 Reading Rocq's own `Program Fixpoint` (not done; why)
+### 4.5 Reading Rocq's own measure recursion — owed (the owner's "level 2")
 
-The `wfix` form gives the same equation (`Fix_eq`'s) and an induction principle, with the measure as an exact budget.  Reading
-`Program Fixpoint {measure ..}` itself means: the translator reads `Fix_F_sub` / `Fix_sub` applied to opaque well-foundedness
-proofs, erases the proof arguments of every recursive call, and the proof walker replaces "induction on the first counter" by
-induction on the measure, rewriting with the unfolding lemma Rocq generates.  That is a separate project of several days with
-regression risk across every proof, and it buys only the spelling.  It stays on the list (§12.C) as optional.
+**What the owner asked for.**  Asked for loops "natively, without workaround", two levels were offered (2026-10-29): level 1, a
+loop whose budget is a measure; level 2, Rocq's own `Program Fixpoint {measure ..}` / `Function`.  The owner answered "make it
+level 2, stable, perfect and good".  What was built is `wfix` (§4.4): the same equation as Rocq's `Fix_eq` and an induction
+principle, with no budget to guess — but a library form the user must learn, not Rocq's own spelling, and it was then recorded
+as if the owner's form were optional (F36).  Under D22 the spelling is the point: a Rocq user writes `Program Fixpoint`,
+`Function` or `Equations`, and that text must compile.  `wfix` stays (it is ordinary Rocq, it is proved, and it is the engine
+below); reading Rocq's own forms is open work (§12.P), not an option.
+
+**How (a plan, not yet tested).**  `Program Fixpoint f (x : A) {measure (m x)} : B := body` is elaborated to `Fix_sub` over the
+relation `MR lt m`; each recursive call receives a `sig` value `exist _ y proof` (the argument and a proof that the measure
+falls).  The route:
+- **translator:** recognize the elaborated `Fix_sub` / `Fix_F_sub` head in the quoted term (MetaRocq reads it as it reads
+  everything else); a recursive call is `wfix`'s `rec` applied to `y` — the `sig`'s value — and the proof is dropped (it is in
+  `Prop`); the budget is the measure plus one, as for `wfix`, so the KQL is that of the `wfix` form of the same function;
+- **statement and proof:** the walk unfolds the definition one step with `Corelib.Program.Wf.fix_sub_eq`, whose
+  extensionality premise is a hypothesis — the same condition as `wfix`'s `dec`, discharged by the same tactic — and inducts on
+  the measure (`wf_ind`'s shape).  **Never `fix_sub_eq_ext` from `Stdlib.Program.WfExtensionality`**: it rests on functional
+  extensionality, an axiom (§0.9, question 1).  Both lemmas were read in the image's standard library (2026-10-30);
+- **the measure** Rocq's form takes is a `nat` (or a well-founded relation); a measure on `int` is written through a
+  conversion (`Z.to_nat (to_Z ..)`), which the translator reads as `kq_nat`, with the 2^60 cap in the domain as for `wfix`;
+- **the other spellings:** `Function` (`Recdef`: it generates `f_equation` and a functional induction principle) and
+  `Equations` (installed in the image: it generates its own equations and elimination principle), each read the same way once
+  the first works.
+
+Accepted when the `wfix` examples written as `Program Fixpoint` compile, prove with no new assumption, and give the same answers,
+and the construct table has cells for each spelling.
 
 ---
 
@@ -1114,7 +1195,7 @@ Each with its reason.  Re-opening one needs a new fact, not a new preference.
 | D9 | **Rocq, not Lean, for this project** | MetaRocq gives Rocq's evaluation and erasure as formal objects, which the cost-shape work and this route's statements rely on; Lean's kernel formalization (Lean4Lean) is in progress and covers the kernel, not evaluation and erasure (§5.7) |
 | D10 | **Proof speed: per-function files, a content cache, parallel runs and general tactic changes; segmenting long functions and reflection only when proof time becomes the bottleneck** | the cheap general wins are taken; the rest is a project with risk for a few functions (2026-10-26) |
 | D11 | **The cache is not release evidence: `KQ_MONO=1` is** | a missing key ingredient could skip a check; the single-file run cannot |
-| D12 | **Loops: counted loops and measure recursion with the measure as the exact budget; the equation and the induction principle are proved; reading Rocq's own `Program Fixpoint` is optional** | removes the guessed fuel and its silent wrong answers with the same equation `Fix_eq` gives; the `Acc` form costs days for spelling only (2026-10-29) |
+| D12 | **Loops: the measure is the exact budget, never a guessed fuel; the equation and the induction principle are proved.**  `wfix` is the library form (built); Rocq's own `Program Fixpoint` / `Function` / `Equations` are read as well (owed: §4.5, §12.P) | a guessed fuel gives silent wrong answers; the owner asked for Rocq's own form ("level 2", 2026-10-29), and D22 makes its spelling the point.  Corrected 2026-10-30: this row first called reading `Program Fixpoint` optional, which recorded the substitute as the decision (F36) |
 | D13 | **The only acceptance rules are §0.5.  The flat style of `WRITING-FAST-ROCQ.md` is performance advice, like keeping a C loop variable in a register** | a rule nobody can discover is an over-rejection; costs are the user's to choose |
 | D14 | **One memory per function, linear** | lets a pure function be compiled to in-place updates and is what C programs do anyway |
 | D15 | **Records and pairs are never built; they are their fields** | no allocation, and the C is what a programmer writes for a struct passed by value |
@@ -1170,6 +1251,8 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F32 | The 2^60 budget cap makes a large measure fall outside the theorems | the domain of a measure function includes "below 2^60" |
 | F33 | Proof time is dominated by the longest function; parallel files cannot split one function | §7.5 |
 | F34 | Lean's freedom comes from its runtime; its front-end passes are the model | §5.7 |
+| F35 | The five cells counted "by design" (`option`, a sum, a list cell, a function in a pair, a dead memory `let`) were classified by type; their programs build and take apart the value in place or never use the second memory, and `A_par_fun_result`, in the same list, was accepted all along | reclassified as gaps (41); §0.5 now says the cause is size and lifetime, never type; a design cell needs a pin that shows the cause, and a control (2026-10-30) |
+| F36 | The owner asked for loops "level 2" — Rocq's own `Program Fixpoint`, as offered; `wfix` was built instead and recorded as the decision, the owner's form "optional" | the owner's request is the target again (D12, §4.5, §12.P); §13.8 has a row for this drift (2026-10-30) |
 
 ---
 
@@ -1177,10 +1260,18 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 
 Each item: what, why, and how it is accepted.  The order is by how much of the goal it closes per unit of risk.
 
-**A. The construct-table gaps (36 cells, §3.5).**  In order: (1) recursive functions giving back a boolean, a record of three,
-a number with a memory — 9; (2) `int * mem` values — 7; (3) proof search for pair-valued choices and nested counter tests — 6;
-(4) polymorphic and class-based helpers by specialization — 5; (5) arithmetic and comparisons on counters — 4; (6) booleans made
-by `if`/`match` — 3; (7) a local `fix` with captures — 1; (8) a choice between records — 1.  Accepted when: the category's cells
+**The order to take them in** (the letters are names, not the order): **A, L, P** (the user's ordinary text refused: the
+heart of "no over-rejection") → **O** (operations C has) → **B** (compiling like `lean --c`) → **C** → **D** → **E** → **H** →
+**G** → **M** → **J**; **F**, **I** and **N** when their condition arises; **K** when the owner says.
+
+**A. The construct-table gaps (41 cells, §3.5), then the by-design pins.**  In order: (1) recursive functions giving back a
+boolean, a record of three, a number with a memory — 9; (2) `int * mem` values — 7; (3) proof search for pair-valued choices and
+nested counter tests — 6; (4) polymorphic and class-based helpers by specialization — 5; (5) values built and taken apart in
+place (`option`, a sum, a list cell, a function in a pair: case of a known constructor once the helper is put in), then
+non-recursive inductive values held as tag and fields where they cross a call or are a loop's state, with new cells for that —
+4; (6) arithmetic and comparisons on counters — 4; (7) booleans made by `if`/`match` — 3; (8) a local `fix` with captures — 1;
+(9) a dead memory `let` — 1; (10) a choice between records — 1.  Then the pins of §0.5's boundaries, each with its control
+(§3.5): cells added to `gen.py` and to `DESIGN_CELLS` together.  Accepted when: the category's cells
 are `ok`, the full table is re-run and `MATRIX.md` updated, and the gate (examples, corpus, kernels if the walk changed) passes.
 
 **B. Compiling from an ordinary `.v` file, as simply as `lean --c`.**
@@ -1194,8 +1285,7 @@ Accepted when: every example and corpus program compiles from a `.v` file with t
 
 **C. Language beyond the table.**  Records of k numbers as results (the slot block with k-1 cells); strings and a formatting
 library on byte blocks (`printf`-like, written in Rocq); an address type with proved arithmetic, and pointers beyond views;
-specialization of type and instance arguments; optional: reading `Program Fixpoint {measure ..}` (§4.5); optional: `Z` where a
-proof gives the range (D3).  A tactic that proposes the measure itself for the common loop shapes (counting up to a bound, counting
+specialization of type and instance arguments; optional: `Z` where a proof gives the range (D3).  A tactic that proposes the measure itself for the common loop shapes (counting up to a bound, counting
 down, halving), so `wfixN` needs no measure written for them; loops whose end depends on the data still take one.
 
 **D. Freestanding.**  The generated C built and checked on its own (no hosted headers, the support code only); a freestanding
@@ -1239,6 +1329,11 @@ nothing in the C, which is a translator rule plus a theorem.
 a library for 8/16/32-bit signed and unsigned arithmetic with C's wrap-around; optionally `popcount`, `clz`, `ctz`, `bswap`,
 rotate as single instructions.  Each is a constructor, a case of the generator's proof, its C, and an example.
 
+**P. Rocq's own measure recursion (§4.5) — the owner's "level 2".**  Read `Program Fixpoint {measure ..}` (then `Function`,
+`Equations`) as `wfix` is read: the same KQL, the walk unfolding with `Corelib.Program.Wf.fix_sub_eq` and inducting on the
+measure, no new assumption.  Accepted when the `wfix` examples written as `Program Fixpoint` compile, prove and give the same
+answers, and the construct table has cells for each spelling.
+
 ---
 
 ## §13. HOW TO WORK ON IT
@@ -1256,11 +1351,15 @@ bash proved/corpus.sh [times]           # every program of hand.tsv; "times" als
 bash hw/spec.sh                         # the laws, the model, the demos, the library theorems rest on the laws alone
 bash hw/check.sh                        # the kernels under QEMU's processor and under KVM, with their controls
 bash hw/build_proved.sh NAME            # one kernel through the proved route; hw/run.sh NAME_p boots it
-python3 proved/matrix/gen.py OUT        # the construct table's programs (then kitc.py --no-build on each)
-python3 proved/matrix/classify.py RESULTS --md proved/matrix/MATRIX.md
+bash proved/matrix/run.sh [OUT]         # the construct table (PATT=a+b: some cells; PJ: cells at a time; MD=1: write MATRIX.md)
+python3 proved/matrix/gen.py OUT        # only the table's programs (run.sh calls it)
+python3 proved/matrix/classify.py RESULTS --md proved/matrix/MATRIX.md   # classify saved results again (run.sh calls it)
 python3 tools/mkloopspec.py > proved/KQLoopSpec.v
 bash all.sh                             # everything from an empty directory (the kit route's gates too)
 ```
+
+Which machine the heavy runs go to, its container names and its free-disk guard are kept in the session's local notes, never in
+this public file; the rules of §13.3 hold wherever the runs go.
 
 ### 13.2 What landing a change requires
 
@@ -1311,7 +1410,7 @@ needs its own memory or arguments.
 1. Read "READ THIS FIRST", §0 (all of it, §0.9 included), §10 and §12.  Do not re-derive anything in §10 or §11.
 2. Check the tree: `git status`, `git log` against §14 (what is pushed, what is local), and that the image builds `proved/make.sh`
    to `core-ok`.
-3. Pick the first open item of §12 unless the owner names another; for a gap, start from its cells in `MATRIX.md`.
+3. Pick the first open item in §12's order unless the owner names another; for a gap, start from its cells in `MATRIX.md`.
 4. Before changing the translator or the walk, run the cells you expect to change, so the before/after is measured.
 
 ### 13.7 Definition of done (for any item)
@@ -1341,6 +1440,9 @@ needs its own memory or arguments.
 | run two heavy jobs on one machine, or a container without a memory cap | clashes, out-of-memory dumps that fill a disk | one heavy job, capped, `core=0` (§13.3) |
 | lower a safety threshold (disk guard, timeout) quietly | the owner relies on it | say so, with the reason, in the report |
 | put host names, addresses, user names or local paths in the repository | it is public | keep them in local notes only |
+| call a refusal "by design" because of the value's type (`option`, a list, a function) | type is not the cause; size and lifetime are (§0.5, F35) | by design only with a pin that shows the cause and a control (§3.6) |
+| build an easier substitute for what the owner asked, and record the substitute as the decision | the owner's request silently leaves the plan (F36) | build the substitute if it is a real step, say plainly that it is not what was asked, and keep the request open in §12 |
+| take a settled decision of §10 as covering a case its reason does not cover | the reason is the decision; the wording is only its record | apply the reason; if the wording and the reason disagree, fix the wording and say so in the report |
 
 ### 13.9 When to stop and ask the owner
 
@@ -1358,10 +1460,12 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `76e777a`.  Local, not pushed (2026-10-30): `3184a86` … `7e41ee8`.
+Pushed to the public repository up to `76e777a`; `git log --oneline origin/main..HEAD` lists what is local (2026-10-30:
+`3184a86` … `7e41ee8` and the documentation commits after them).
 
 | Commit | What |
 |---|---|
+| `485465e` … | this file, its additions and corrections; `proved/matrix/run.sh`; the five design cells reclassified as gaps (41) |
 | `7e41ee8` | the construct table re-run: 775 cells, 733 proved, 5 by design, 36 gaps |
 | `b014f1d` | measure recursion (`wfix*`): the budget is the measure; equation and induction proved; termination tactic; `tri_closed`, `gcd_correct`; functions with tests compared as terms; budgets of constants |
 | `39b81ee` | `loop_two` and `loop_two_ends` |

@@ -7,8 +7,20 @@ is not Rocq: no verdict) or `gap` (runtime-free, not yet translated or proved), 
 Prints the summary and, with --md FILE, writes the table."""
 import re, sys, collections
 
-# cells whose refusal is by design: a value that needs allocation, a memory used after it was handed on
-DESIGN_CELLS = {"A_par_option", "A_par_list", "A_par_sum", "P_mem_dup", "A_par_fun_in_pair", "A_par_fun_result"}
+# cells whose refusal is by design.  A cell belongs here only if its program shows the cause: a value whose size comes from
+# the data (a list built by recursion), a value that must outlive the call where it cannot be put in (a closure returned by a
+# recursive function), two versions of the memory both used later.  Each needs a control: the nearest accepted cell that
+# differs only in the cause.  The cells once listed here (option, sum, a list cell, a function in a pair, a function returned,
+# a dead memory let) build and take apart their value in place, so they are gaps.
+DESIGN_CELLS = set()
+# gaps whose refusal message is shared with another category: classified by name
+BY_NAME = {
+  "A_par_option": "a value built and taken apart in place (option, sum, a list cell, a function in a pair)",
+  "A_par_sum": "a value built and taken apart in place (option, sum, a list cell, a function in a pair)",
+  "A_par_list": "a value built and taken apart in place (option, sum, a list cell, a function in a pair)",
+  "A_par_fun_in_pair": "a value built and taken apart in place (option, sum, a list cell, a function in a pair)",
+  "P_mem_dup": "a memory made by a let that is never used, the old one used after it",
+}
 INVALID = re.compile(r"Cannot guess decreasing|Unable to unify|not found in the current environment|The reference .* was not found|Syntax error")
 
 # (regex on the refusal, category), tried in order
@@ -40,6 +52,8 @@ def classify(name, line):
         return "design", ""
     if INVALID.search(line):
         return "invalid", ""
+    if name in BY_NAME:
+        return "gap", BY_NAME[name]
     for rx, cat in GAP:
         if re.search(rx, line):
             return "gap", cat

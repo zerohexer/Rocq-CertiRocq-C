@@ -51,13 +51,15 @@ bignum, which is a runtime; `nat` stays the loop counter).  Memory is laid out b
 falls is written as ordinary recursion with a measure (`wfix2 meas (fun rec a b => .. rec a' b' ..) a b`): the budget is the
 measure itself, and the theorems are the equation of the recursive function and induction on the measure (`proved/KQLoopSpec.v`),
 so the termination argument is the one Rocq's own `Fix_eq` takes, stated and used instead of a hidden fuel.  What is left of the
-fuel: a loop that ends on something with no measure to give it (Collatz) still needs a budget or a proof; reading Rocq's own
-`Program Fixpoint {measure ..}` (the `Acc` form) is not done: the translator reads the `wfix` form, in which the same measure is
-the budget.
+fuel: a loop that ends on something with no measure to give it (Collatz) still needs a budget or a proof, as Rocq itself asks.
+Rocq's own `Program Fixpoint {measure ..}` / `Function` / `Equations` — what was asked for — are not read yet: the translator
+reads the `wfix` form, in which the same measure is the budget; reading Rocq's forms is open work (`../Rocq-C-solution.md` §4.5).
 
 **What is refused, and only this.**  A value that would be allocated behind the programmer's back and outlives the call
-(a list or tree built by `cons`/`Some`/`inl`, a closure that escapes), an unbounded number, a use of a memory after it
-was handed on.  Each refusal names the reason and the library to use instead.  Every other refusal is a gap in the
+(a list or tree whose size comes from the data, a function value not known from the text where it is called), an unbounded
+number, two versions of the memory both used.  Whether a value needs a runtime is decided by its size and lifetime, never by
+its type: an `option` or a sum of numbers is its tag and fields, like a record, and a value built and taken apart in place
+needs nothing at run time.  Each refusal names the reason and the library to use instead.  Every other refusal is a gap in the
 translator, not a rule of the language.
 
 **How it is found: by construct, not by example.**  Patching what sample programs get refused only finds what someone

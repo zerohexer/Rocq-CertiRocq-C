@@ -31,3 +31,4 @@
 /proved/bench/run_*
 /proved/bench/*_gen.c
 /proved/gen/
+/proved/matrix/out/
