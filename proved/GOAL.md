@@ -3,6 +3,9 @@
 Programs are written in Rocq and run as C at C speed.  Everything that is logic is proved.  Only the hardware is
 assumed.
 
+The complete record — the goal in full, the architecture, every settled decision, the measurements, the traps, the construct
+table and the ordered work left — is `../Rocq-C-solution.md`.  This file is the short statement.
+
 ## The line between proved and assumed
 
 **Proved (software level): logic over integers and memory.**  Arithmetic, bit fields, indices, loops, calls, state

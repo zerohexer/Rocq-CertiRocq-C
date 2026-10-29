@@ -199,7 +199,7 @@ A second route from Rocq to C, with proofs: a program of `hand/` is translated t
 with a kernel-checked statement per function that the KQL computes the Rocq function; KQL goes to CompCert's Clight
 by a generator proved once, over the kit's memory (`KQRun.v`, with its laws).  The C printed from that Clight runs as
 fast as the kit's own build.  `proved/README.md` has the steps, what is proved and what is not, the corpus and the
-speed.
+speed.  `Rocq-C-solution.md` is the complete record of the goal, the decisions, the measurements and the work left.
 
 ## Checked
 
