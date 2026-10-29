@@ -1,13 +1,7 @@
 # The construct table
 
 ```
-770 cells: 533 translated and proved, 5 refused by design, 231 gaps, 1 not Rocq (no verdict)
-
-gap (189): a match on a counter that is not a recursion
-  A_par_nat_to_int N_nest_arith_arith_match N_nest_arith_call_match N_nest_arith_fun_match N_nest_arith_if_match N_nest_arith_let_match N_nest_arith_match N_nest_arith_match_arith N_nest_arith_match_call N_nest_arith_match_fun N_nest_arith_match_if N_nest_arith_match_let N_nest_arith_match_match N_nest_arith_match_pair N_nest_arith_match_rd N_nest_arith_pair_match N_nest_arith_rd_match N_nest_call_arith_match N_nest_call_call_match N_nest_call_fun_match N_nest_call_if_match N_nest_call_let_match N_nest_call_match N_nest_call_match_arith N_nest_call_match_call N_nest_call_match_fun N_nest_call_match_if N_nest_call_match_let N_nest_call_match_match N_nest_call_match_pair N_nest_call_match_rd N_nest_call_pair_match N_nest_call_rd_match N_nest_fun_arith_match N_nest_fun_call_match N_nest_fun_fun_match N_nest_fun_if_match N_nest_fun_let_match N_nest_fun_match N_nest_fun_match_arith N_nest_fun_match_call N_nest_fun_match_fun N_nest_fun_match_if N_nest_fun_match_let N_nest_fun_match_match N_nest_fun_match_pair N_nest_fun_match_rd N_nest_fun_pair_match N_nest_fun_rd_match N_nest_if_arith_match N_nest_if_call_match N_nest_if_fun_match N_nest_if_if_match N_nest_if_let_match N_nest_if_match N_nest_if_match_arith N_nest_if_match_call N_nest_if_match_fun N_nest_if_match_if N_nest_if_match_let N_nest_if_match_match N_nest_if_match_pair N_nest_if_match_rd N_nest_if_pair_match N_nest_if_rd_match N_nest_let_arith_match N_nest_let_call_match N_nest_let_fun_match N_nest_let_if_match N_nest_let_let_match N_nest_let_match N_nest_let_match_arith N_nest_let_match_call N_nest_let_match_fun N_nest_let_match_if N_nest_let_match_let N_nest_let_match_match N_nest_let_match_pair N_nest_let_match_rd N_nest_let_pair_match N_nest_let_rd_match N_nest_match N_nest_match_arith N_nest_match_arith_arith N_nest_match_arith_call N_nest_match_arith_fun N_nest_match_arith_if N_nest_match_arith_let N_nest_match_arith_match N_nest_match_arith_pair N_nest_match_arith_rd N_nest_match_call N_nest_match_call_arith N_nest_match_call_call N_nest_match_call_fun N_nest_match_call_if N_nest_match_call_let N_nest_match_call_match N_nest_match_call_pair N_nest_match_call_rd N_nest_match_fun N_nest_match_fun_arith N_nest_match_fun_call N_nest_match_fun_fun N_nest_match_fun_if N_nest_match_fun_let N_nest_match_fun_match N_nest_match_fun_pair N_nest_match_fun_rd N_nest_match_if N_nest_match_if_arith N_nest_match_if_call N_nest_match_if_fun N_nest_match_if_if N_nest_match_if_let N_nest_match_if_match N_nest_match_if_pair N_nest_match_if_rd N_nest_match_let N_nest_match_let_arith N_nest_match_let_call N_nest_match_let_fun N_nest_match_let_if N_nest_match_let_let N_nest_match_let_match N_nest_match_let_pair N_nest_match_let_rd N_nest_match_match N_nest_match_match_arith N_nest_match_match_call N_nest_match_match_fun N_nest_match_match_if N_nest_match_match_let N_nest_match_match_match N_nest_match_match_pair N_nest_match_match_rd N_nest_match_pair N_nest_match_pair_arith N_nest_match_pair_call N_nest_match_pair_fun N_nest_match_pair_if N_nest_match_pair_let N_nest_match_pair_match N_nest_match_pair_pair N_nest_match_pair_rd N_nest_match_rd N_nest_match_rd_arith N_nest_match_rd_call N_nest_match_rd_fun N_nest_match_rd_if N_nest_match_rd_let N_nest_match_rd_match N_nest_match_rd_pair N_nest_match_rd_rd N_nest_pair_arith_match N_nest_pair_call_match N_nest_pair_fun_match N_nest_pair_if_match N_nest_pair_let_match N_nest_pair_match N_nest_pair_match_arith N_nest_pair_match_call N_nest_pair_match_fun N_nest_pair_match_if N_nest_pair_match_let N_nest_pair_match_match N_nest_pair_match_pair N_nest_pair_match_rd N_nest_pair_pair_match N_nest_pair_rd_match N_nest_rd_arith_match N_nest_rd_call_match N_nest_rd_fun_match N_nest_rd_if_match N_nest_rd_let_match N_nest_rd_match N_nest_rd_match_arith N_nest_rd_match_call N_nest_rd_match_fun N_nest_rd_match_if N_nest_rd_match_let N_nest_rd_match_match N_nest_rd_match_pair N_nest_rd_match_rd N_nest_rd_pair_match N_nest_rd_rd_match P_int_match_nat P_int_match_nat2 P_mem_match_nat
-
-gap (10): a local function, a polymorphic or class-based helper, a memory inside a record
-  A_par_mem_record A_par_poly_hof A_par_poly_id A_par_poly_pair A_par_typeclass P_int_hof_passed P_int_lam_let P_int_lam_let_noncapt P_int_lam_let_twice P_int_local_fun_multi
+775 cells: 733 translated and proved, 5 refused by design, 36 gaps, 1 not Rocq (no verdict)
 
 gap (9): a function giving back a boolean, a record of three, or a number with a memory, by recursion
   P_bool_nontail_and P_bool_nontail_or P_bool_rec_search P_bool_tail_rec P_intmem_nontail P_intmem_tail_rec P_pairp_rec P_rec3_nontail P_rec3_tail_rec
@@ -15,8 +9,11 @@ gap (9): a function giving back a boolean, a record of three, or a number with a
 gap (7): a pair of a number and a memory
   A_par_mem_pair P_intmem_alloc_like P_intmem_call P_intmem_if P_intmem_let P_intmem_lit P_intmem_wr
 
-gap (5): a proof the tactics do not find (the translation was accepted)
-  P_pair_call_arith P_pair_if P_pair_if_inside P_pair_nontail_if P_pair_proj_pair
+gap (6): a proof the tactics do not find (the translation was accepted)
+  P_int_match_nat2 P_pair_call_arith P_pair_if P_pair_if_inside P_pair_nontail_if P_pair_proj_pair
+
+gap (5): a local function, a polymorphic or class-based helper, a memory inside a record
+  A_par_mem_record A_par_poly_hof A_par_poly_id A_par_poly_pair A_par_typeclass
 
 gap (4): arithmetic or a comparison on counters
   A_par_nat_eqb A_par_nat_ltb A_par_nat_mul A_par_nat_pred
@@ -24,8 +21,8 @@ gap (4): arithmetic or a comparison on counters
 gap (3): a boolean made by an if or a match
   P_bool_if P_bool_if_call P_bool_match_nat
 
-gap (3): a function given that names a variable of the caller (a closure)
-  P_int_fold_capture P_int_fold_mem P_int_local_fix
+gap (1): a function given that names a variable of the caller (a closure)
+  P_int_local_fix
 
 gap (1): a choice between records
   P_rec3_if
