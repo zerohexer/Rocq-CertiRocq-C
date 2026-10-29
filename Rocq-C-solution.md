@@ -638,6 +638,19 @@ Rocq and trusts the quote; this one has one theorem over `S` and checks the reif
 too slow, it can be skipped — then `reify` is trusted, exactly as the rejected route trusts the quote — so this route is never
 worse on time and, by default, adds no trust.
 
+**If the MetaRocq route is ever reopened.**  It has two problems, and only the first is about integers.  (1) Primitive
+operations cannot be evaluated in MetaRocq's semantics (F38).  The ways to fix that, none done here: (A) extend MetaRocq itself —
+a rule "a primitive operation applied to literals evaluates to its result" in its typing, reduction, evaluation and erasure proofs
+(the erasure proof alone was measured at ~1,200 lines by the cost-shape work) — months, in another project, best as a
+contribution upstream; (B) replace each primitive operation in the quoted program by an ordinary Rocq definition (over `Z` or
+bits) that MetaRocq can evaluate, with a proof that it equals the primitive — messy, literals must be converted too, and each
+program then needs a proof that the replacement keeps its meaning, which brings per-program proofs back; (C) let MetaRocq's
+evaluation take an interpretation for constants without a body — the same scale as (A), the erasure proof changes too.
+(2) The theorem is about the quoted program: concluding anything about the user's function means trusting MetaRocq's quote
+(an OCaml plugin) and its typing/erasure assumptions — that stays after any of (A)-(C).  For the user the two routes are the
+same (ordinary Rocq in, C out; what is accepted is decided by the same front end); the difference is internal.  So: reflection
+now; if MetaRocq gains primitive operations upstream, the all-of-Rocq route becomes possible, with its added trust.
+
 **What changes, what stays.**
 - **Moves into the proved `compile`:** everything the translator does today beyond reading syntax — putting helpers in,
   copies of templates for the functions given (with captures), records as their fields, the slot block for a second result,
