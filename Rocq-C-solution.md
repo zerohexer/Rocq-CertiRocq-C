@@ -43,21 +43,24 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    on counters (4), booleans made by `if`/`match` (3), a local `fix` naming the caller's variables (1), a dead memory `let`
    (1), a choice between records (1).  Then the by-design boundaries pinned by cells that show their cause, each with a
    control (§3.5, §3.6).
-2. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
+2. **Proofs built by construction, the CakeML way** (§1.11, D25, §12.Q): the translator emits each piece of KQL with the
+   lemma that justifies it, so no proof is searched for — no proof-search failures, much less proof time, and each new construct
+   costs one rule plus one lemma.  A spike measures it first.
+3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
-3. **Rocq's own measure recursion** (`Program Fixpoint {measure ..}`, `Function`, `Equations`): what the owner asked for as
+4. **Rocq's own measure recursion** (`Program Fixpoint {measure ..}`, `Function`, `Equations`): what the owner asked for as
    loops "level 2".  `wfix` is the step built so far; the owner's form is owed (§4.5, §12.P).
-4. **The operations of freestanding C not yet in KQL** (§2.1): `uint64_t` division and remainder, signed 64-bit arithmetic, the
+5. **The operations of freestanding C not yet in KQL** (§2.1): `uint64_t` division and remainder, signed 64-bit arithmetic, the
    high half of a product, 8/16/32-bit arithmetic with C's wrap-around.
-5. Compiling from an ordinary `.v` file with one command (`Kq Compile`), entry arguments read from the signature, C printed at
+6. Compiling from an ordinary `.v` file with one command (`Kq Compile`), entry arguments read from the signature, C printed at
    once and the proofs checked behind it (§12.B).
-6. Freestanding: the generated C built and checked on its own; a freestanding `kq_grow` (§9.5).
-7. The general passes, each proved once: removal of the bounds test on an access whose index is in range, forwarding a stored
+7. Freestanding: the generated C built and checked on its own; a freestanding `kq_grow` (§9.5).
+8. The general passes, each proved once: removal of the bounds test on an access whose index is in range, forwarding a stored
    value to a later read, hoisting loop-invariant reads (§6.4).
-8. An interleaving semantics for two programs (protocol properties proved once), a fair lock; checks of the trusted tools
+9. An interleaving semantics for two programs (protocol properties proved once), a fair lock; checks of the trusted tools
    (`ccomp`, UBSan); hosted features (floating point, system calls, C libraries) when a program needs them.
-9. **Naturalness as a theorem** (§3.8): a grammar of the accepted fragment, defined without reference to the translator, and a
+10. **Naturalness as a theorem** (§3.8): a grammar of the accepted fragment, defined without reference to the translator, and a
    proof that the translator and the proof succeed on every term of it — the table is the measurement, the theorem is the claim.
 
 §0.10 says when the goal is reached.
@@ -76,6 +79,7 @@ decision (§13.8).
 - §0  THE GOAL — the owner's words, the line between proved and assumed, what natural means, what is refused, the yardstick
       — §0.9 HOW TO DECIDE when this file does not say (read it before any change) — §0.10 WHEN THE GOAL IS REACHED
 - §1  THE ARCHITECTURE AS BUILT — pipeline, KQL, numbers, memory, translator, statements, generator, printer, hardware, libraries
+      — §1.11 WHERE IT GOES: proofs built by construction, the CakeML way (decided 2026-10-30)
 - §2  WHAT C CAN DO, AND ITS COUNTERPART IN ROCQ — the capability table with today's state
 - §3  NATURALNESS — THE CONSTRUCT TABLE: method, generator, classification, numbers, the 41 gaps, how to close one, the
       translator's own side conditions, naturalness as a theorem
@@ -268,6 +272,7 @@ All of these, on one tree, each by its own check — not before, and never by a 
 | 6 | **C speed**: no cost the translation adds to every operation is left once the general passes are in (§6.4) | the same-shape benchmarks (`tests/mkworst.py`) against C written the same way; `proved/corpus.sh times` |
 | 7 | **Trust unchanged** | `ASSUME=1 bash proved/make.sh` lists what §1.10 lists and nothing more |
 | 8 | **Proof time small**: cold test kernels under a minute, an unchanged rerun at the cache's floor | `KQ_TIMES=1`; the kernels' times |
+| 8b | **Proof completeness**: every program the translator accepts gets its proof, built by construction, with no searching tactic (§1.11) | the gate with the walk switched off |
 | 9 | **Hardware by the user**: the test kernels prove and boot; an architecture is added from its manual over the generic primitives with no change to the core (§9.1) | `bash hw/check.sh` |
 
 Then the end state: **naturalness as a theorem** (§3.8, §12.M), which turns condition 1 from a measurement into a claim — the
@@ -484,6 +489,91 @@ memory primitives `KQRun.rd` / `upd` / `kq_size` / `mem` and `KQSpec.real_laws`;
 Outside the proofs: the loader that fills the tables, the driver in `kitc.py`, the printer, clang, and the C bodies of the
 machine operations with the laws the theorem assumes of them.  The per-program statements add nothing: the translator's output
 is checked by the kernel every time.
+
+### 1.11 Where the architecture goes: proofs built by construction, the CakeML way (decided by the owner, 2026-10-30)
+
+**What kind of compiler this is.**  Three ways to get from a program to machine code exist, and the words for them are easy
+to confuse:
+
+| Style | What is proved | Example |
+|---|---|---|
+| **unverified compiler** | nothing; the compiler is trusted code | Lean's `lean --c` (LCNF → IR → `EmitC`) |
+| **verified compiler** | one theorem about the compiler: for every program, its output is correct | CompCert; CertiRocq's passes; the CakeML compiler; **our generator** (KQL → Clight, `kit_function_correct`) |
+| **proof-producing (certifying) translation** | nothing about the translator; each run produces a theorem about that program, checked by the prover's kernel | CakeML's HOL → CakeML translator; Pancake's decompiler; **our translator** (Rocq → KQL, `f_kstmt` per function) |
+
+Our route is the third on top of the second: every compiled program has an end-to-end, kernel-checked theorem (the C computes
+the Rocq function), and the top half adds nothing to what is trusted.  Say "proved end to end for every compiled program", not
+"a verified compiler": a verified compiler has one theorem quantified over all programs, and our top half does not.
+
+**The precedent: CakeML and Pancake** (github.com/CakeML/cakeml, its `README.md`, `translator/README.md`,
+`pancake/README.md`, read 2026-10-30).  `translator/` is *"a proof-producing translator from HOL functions to CakeML"*
+(`ml_translatorLib.sml`; its relation `Eval` is defined in `ml_translatorScript.sml`); the CakeML compiler below it is verified
+down to machine code and compiled by itself inside the logic.  Pancake is *"a C-like compiler built from the lower parts of the
+CakeML compiler"*, and its programs are verified through *"the proof-producing Pancake decompiler"*.  So the strongest project
+of this kind uses exactly our split: per-program proofs at the top (where the source is functions in the logic), one proved
+compiler at the bottom.  The source being functions in the logic is what makes theorems about the program carry over to the
+machine code — the same as here, where the program is the Rocq function.
+
+**The one difference that matters.**  CakeML's translator *builds* the theorem as it translates: one lemma per construct of the
+source, of the form "if the parts compute their values, the whole computes its value" (for example: if `c`, `a`, `b` compute
+`cv`, `av`, `bv`, then `If c a b` computes `if cv then av else bv`), stacked along the function's text.  A function it accepts
+always gets its theorem; nothing is searched.  Ours translates first and then a tactic (`kqm_auto`, the walk of §1.6)
+*searches* for the proof.  That search is where the "proof the tactics do not find" gaps (§3.5) and most of the proof time
+(§7) come from.
+
+**The decision.**  The top half moves to proofs built by construction: the translator emits, with each piece of KQL, the lemma
+that justifies it, applied to the Rocq subterm it came from.
+
+| Property | Today | After |
+|---|---|---|
+| sound (the C equals the Rocq) | yes, every program, kernel-checked | the same — this adds no strength |
+| proof completeness: every program the translator accepts gets its proof | no — the walk can fail to find one | yes, by construction |
+| language completeness: nothing natural refused | measured by the construct table | still a separate job (which constructs the translator reads); provable as a theorem about the translator, which is a Rocq function (§3.8, §12.M) |
+| one theorem "for every program, correct" | no | still no: that needs the translator itself proved against MetaRocq's semantics of Rocq (months; CertiRocq's front-end theorem leaves out primitive integers, which every program here uses). CakeML lives with the same limit at its top |
+| proof time | 35–54 s per test kernel, mostly search | expected much lower (an estimate until the spike measures it) |
+| cost of a new construct | a translator rule plus tactic tuning, then hope the walk finds it | a translator rule plus one lemma |
+
+**Why not a verified translator instead.**  It would give the single theorem, but every construct must then be proved inside
+the translator's theorem, over MetaRocq's formal evaluation extended with primitive integers — the cost-shape kind of work, for
+months.  Completeness does not get cheaper that way: the same constructs must be handled.  The proof-producing route gives every
+property except the single theorem, at a fraction of the cost.
+
+**What does not change.**  The trusted base (§1.10); the generator and its theorem; the per-function statement `f_kstmt` (so
+the meaning of the theorem and the C are unchanged); the proof cache; the construct table and the gate.
+
+**What it replaces.**  The searching parts of `KQMAuto.v`: `kqm_test` (splitting on a test in the goal), the splitting loop of
+`kqm_fin`, `kqm_known` / `kqm_hyps_known` / `kqm_known_conv` (re-finding tests already split on), `kqm_splitall`, the choice of
+rewrites in `kqm_norm`, and the named-memory fallback of `KQMNames.v` (the lemmas build the memory terms themselves).  `kqm_call`
+picks the callee's statement by its id and stays.
+
+**The design, in outline.**  The relation is the existing `evalk` / `runk`; the lemmas are stated over the Rocq constructs the
+translator reads, so the Rocq side never needs searching.  For a test, instead of `K_if` followed by a destruct:
+
+```
+evalk P f rho M et v1 M1 -> evalk P f rho M ef v2 M2 -> aval rho a = Some va -> aval rho b = Some vb ->
+evalk P f rho M (Eif c a b et ef) (if cmp_sem c va vb then v1 else v2) (if cmp_sem c va vb then M1 else M2)
+```
+
+— the Rocq `if` is the conclusion, so the translator, which knows the Rocq `if` it is translating, applies it directly.  The same
+for a conditional move, a counter match (with `ofn`), a `let`, a read and a write (with the memory laws), a call (with the
+callee's statement), a loop (with the induction hypothesis), a boolean held as 0/1 (`kq_b2i`), a record taken apart.  Side
+conditions — a counter below `cbk`, a budget under 2^60, room in the slot block — are designed to follow from the statement's
+own hypotheses and are closed by a decision procedure (`lia`, `vm_compute`), never by search.  Where the Rocq side and the
+lemma's conclusion are equal only by computation (unfolding the function one step, `kq_b2i`, `fst`/`snd` of a pair), the kernel
+checks that by conversion, which is a check, not a search.
+
+**The plan** (§12.Q):
+1. Land the current batch of construct-table work (its gate and full table).
+2. **A spike**: lemmas for `Eop`, `Eif`, `Esel`, `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator for
+   `proved/examples/wfix.body`, one corpus program and the longest kernel function (`x86_setup`, ~2,400 steps).  Measure proof
+   time and acceptance against today's walk on the same programs.  Measure first (§0.9): the plan continues only if the spike is
+   at least as reliable and faster.
+3. Convert construct by construct.  The walk stays as the fallback until every construct has its lemma; the table and the gate
+   stay green at every step.
+4. Then the completeness theorem over the grammar of the accepted fragment (§3.8, §12.M).
+
+**The bottom half.**  Release builds go through CompCert's `ccomp` (§12.H), so that the bottom is verified down to assembly as
+CakeML's is, rather than ending at our printer and clang.
 
 ---
 
@@ -1208,6 +1298,7 @@ Each with its reason.  Re-opening one needs a new fact, not a new preference.
 | D22 | **Natural and native over conventions of our own.**  A convention stays only if Rocq itself imposes it (structural recursion, linear use of a value in a pure function's in-place translation) or a theorem needs it; anything Lean or Rocq would accept as ordinary code is accepted (a counter at any position, the memory at any position, functions from other files, any captured kind) | owner, 2026-10-30: "own convention is nice, but I prefer natural native" |
 | D23 | **A refusal reads like a type error, not a syntax error**: it names the construct, the place in the user's text, the reason (one of §0.5, or "not yet translated" for a gap), and what to write instead | the user writes ordinary Rocq; a refusal is about meaning (it needs a runtime), never about spelling |
 | D24 | **The operation set is finite and is completed against freestanding C's operations (§2.1); full higher-order function values are not needed** | the generator's theorem is one case per operation; C has no closures, and its function pointers are an explicit table |
+| D25 | **The top half moves to proofs built by construction, the CakeML way: the translator emits each piece of KQL with the lemma that justifies it (one lemma per construct), so no proof is searched for.  The hybrid stays (per-program proofs on top, one proved generator below); the translator itself is not proved (no single "for every program" theorem).  Spike first, then convert construct by construct, then the completeness theorem; release builds through `ccomp`** | CakeML, the strongest project of this kind, uses this split with a proof-producing translator on top (§1.11); it removes proof-search failures and most proof time and makes each new construct one rule plus one lemma, at a fraction of the cost of a verified translator, which would mean proving the translator against MetaRocq's semantics with primitive integers for months (owner, 2026-10-30: "go ahead, record this decision with every context") |
 
 ---
 
@@ -1253,6 +1344,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F34 | Lean's freedom comes from its runtime; its front-end passes are the model | §5.7 |
 | F35 | The five cells counted "by design" (`option`, a sum, a list cell, a function in a pair, a dead memory `let`) were classified by type; their programs build and take apart the value in place or never use the second memory, and `A_par_fun_result`, in the same list, was accepted all along | reclassified as gaps (41); §0.5 now says the cause is size and lifetime, never type; a design cell needs a pin that shows the cause, and a control (2026-10-30) |
 | F36 | The owner asked for loops "level 2" — Rocq's own `Program Fixpoint`, as offered; `wfix` was built instead and recorded as the decision, the owner's form "optional" | the owner's request is the target again (D12, §4.5, §12.P); §13.8 has a row for this drift (2026-10-30) |
+| F37 | CakeML's architecture is ours: a proof-producing translator from the logic's functions on top, one verified compiler below; Pancake is verified through a proof-producing decompiler.  The difference is that CakeML builds each proof by construction while ours searches | D25, §1.11 (read in the CakeML repository, 2026-10-30) |
 
 ---
 
@@ -1260,9 +1352,11 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 
 Each item: what, why, and how it is accepted.  The order is by how much of the goal it closes per unit of risk.
 
-**The order to take them in** (the letters are names, not the order): **A, L, P** (the user's ordinary text refused: the
-heart of "no over-rejection") → **O** (operations C has) → **B** (compiling like `lean --c`) → **C** → **D** → **E** → **H** →
-**G** → **M** → **J**; **F**, **I** and **N** when their condition arises; **K** when the owner says.
+**The order to take them in** (the letters are names, not the order): the batch of **A** in progress lands → **Q** (proofs
+built by construction: spike, then conversion; D25) → the rest of **A**, **L**, **P** (the user's ordinary text refused: the
+heart of "no over-rejection"; on the new basis each construct is one rule plus one lemma) → **O** (operations C has) → **B**
+(compiling like `lean --c`) → **C** → **D** → **E** → **H** (with release builds through `ccomp`) → **G** → **M** → **J**;
+**F**, **I** and **N** when their condition arises; **K** when the owner says.
 
 **A. The construct-table gaps (41 cells, §3.5), then the by-design pins.**  In order: (1) recursive functions giving back a
 boolean, a record of three, a number with a memory — 9; (2) `int * mem` values — 7; (3) proof search for pair-valued choices and
@@ -1333,6 +1427,13 @@ rotate as single instructions.  Each is a constructor, a case of the generator's
 `Equations`) as `wfix` is read: the same KQL, the walk unfolding with `Corelib.Program.Wf.fix_sub_eq` and inducting on the
 measure, no new assumption.  Accepted when the `wfix` examples written as `Program Fixpoint` compile, prove and give the same
 answers, and the construct table has cells for each spelling.
+
+**Q. Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
+`Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
+proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
+construct by construct, the walk as fallback until the last construct has its lemma.  Accepted when every example, corpus program
+and kernel proves with emitted proofs and no searching tactic on the main path, proof time is measured and not worse, and the
+construct table is unchanged or better.
 
 ---
 
@@ -1442,6 +1543,7 @@ needs its own memory or arguments.
 | put host names, addresses, user names or local paths in the repository | it is public | keep them in local notes only |
 | call a refusal "by design" because of the value's type (`option`, a list, a function) | type is not the cause; size and lifetime are (§0.5, F35) | by design only with a pin that shows the cause and a control (§3.6) |
 | build an easier substitute for what the owner asked, and record the substitute as the decision | the owner's request silently leaves the plan (F36) | build the substitute if it is a real step, say plainly that it is not what was asked, and keep the request open in §12 |
+| call the route "a verified compiler", or promise a single theorem "for every program" | the top half is proof-producing: each program gets its theorem; no theorem is quantified over all programs (§1.11) | "proved end to end for every compiled program"; the single theorem would need the translator proved (not planned) |
 | take a settled decision of §10 as covering a case its reason does not cover | the reason is the decision; the wording is only its record | apply the reason; if the wording and the reason disagree, fix the wording and say so in the report |
 
 ### 13.9 When to stop and ask the owner
@@ -1517,6 +1619,9 @@ Pushed to the public repository up to `76e777a`; `git log --oneline origin/main.
 | `wfix` | recursion with a measure, the measure plus one as the budget (§4.4) |
 | `hw_law`, `hwf_law` | the hypotheses of the top theorem about the C bodies of the machine operations |
 | `real_laws` | the one axiom: the record of the memory's laws, proved for a model |
+| verified compiler | a compiler with one theorem: for every program, the output is correct (our generator) |
+| proof-producing (certifying) translation | a translator that is not proved; each run produces a theorem about that program, checked by the kernel (our translator; CakeML's) |
+| proof built by construction | a proof assembled from one lemma per construct along the program's text, as CakeML's translator does — nothing searched (§1.11) |
 
 ---
 
@@ -1529,6 +1634,8 @@ Pushed to the public repository up to `76e777a`; `git log --oneline origin/main.
   limits.
 - `WRITING-FAST-ROCQ.md` — the costs of each way of writing (to be split, §12.J).
 - `proved/matrix/MATRIX.md` — the latest construct-table summary.
+- CakeML (github.com/CakeML/cakeml): `translator/README.md` (the proof-producing translator, `Eval`), `pancake/README.md` (the
+  C-like language compiled by CakeML's lower passes, its proof-producing decompiler) — the precedent for §1.11.
 - In the KernelQ project: `docs/rocq-cost-shape-solution.md` (the cost-shape record: the word-RAM cost model, settled; the
   method of auditing by term former that §3 follows) and `docs/kernelq-pedagogy-goal.md` (why Rocq is the learning track; LS.30
   on Rocq computing, LS.31 on the roles of Coq, Clight, VST, RefinedC and CompCert).
