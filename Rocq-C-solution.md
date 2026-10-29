@@ -43,9 +43,10 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    on counters (4), booleans made by `if`/`match` (3), a local `fix` naming the caller's variables (1), a dead memory `let`
    (1), a choice between records (1).  Then the by-design boundaries pinned by cells that show their cause, each with a
    control (§3.5, §3.6).
-2. **Proofs built by construction, the CakeML way** (§1.11, D25, §12.Q): the translator emits each piece of KQL with the
-   lemma that justifies it, so no proof is searched for — no proof-search failures, much less proof time, and each new construct
-   costs one rule plus one lemma.  A spike measures it first.
+2. **A verified compiler by reflection** (§1.12, D26, §12.V): a syntax `S` of the fragment, its meaning `denote`, a compiler
+   `compile : S -> KQL` proved once; the user's function is reified into `S` (untrusted) and per program only `denote s = f` is
+   checked by conversion — zero proof search, nothing added to the trust, for other people's programs.  Emit-then-prove is the
+   interim; a spike measures the check first.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -79,7 +80,7 @@ decision (§13.8).
 - §0  THE GOAL — the owner's words, the line between proved and assumed, what natural means, what is refused, the yardstick
       — §0.9 HOW TO DECIDE when this file does not say (read it before any change) — §0.10 WHEN THE GOAL IS REACHED
 - §1  THE ARCHITECTURE AS BUILT — pipeline, KQL, numbers, memory, translator, statements, generator, printer, hardware, libraries
-      — §1.11 WHERE IT GOES: proofs built by construction, the CakeML way (decided 2026-10-30)
+      — §1.11 the CakeML comparison — §1.12 THE DECISION IN FORCE: a verified compiler by reflection (zero proof search)
 - §2  WHAT C CAN DO, AND ITS COUNTERPART IN ROCQ — the capability table with today's state
 - §3  NATURALNESS — THE CONSTRUCT TABLE: method, generator, classification, numbers, the 41 gaps, how to close one, the
       translator's own side conditions, naturalness as a theorem
@@ -272,7 +273,7 @@ All of these, on one tree, each by its own check — not before, and never by a 
 | 6 | **C speed**: no cost the translation adds to every operation is left once the general passes are in (§6.4) | the same-shape benchmarks (`tests/mkworst.py`) against C written the same way; `proved/corpus.sh times` |
 | 7 | **Trust unchanged** | `ASSUME=1 bash proved/make.sh` lists what §1.10 lists and nothing more |
 | 8 | **Proof time small**: cold test kernels under a minute, an unchanged rerun at the cache's floor | `KQ_TIMES=1`; the kernels' times |
-| 8b | **Proof completeness**: every program the translator accepts gets its proof, built by construction, with no searching tactic (§1.11) | the gate with the walk switched off |
+| 8b | **No proof search per program**: every program is compiled through the verified `compile`, with only the conversion check `denote s = f` (§1.12) | the gate with the walk switched off |
 | 9 | **Hardware by the user**: the test kernels prove and boot; an architecture is added from its manual over the generic primitives with no change to the core (§9.1) | `bash hw/check.sh` |
 
 Then the end state: **naturalness as a theorem** (§3.8, §12.M), which turns condition 1 from a measurement into a claim — the
@@ -490,7 +491,10 @@ Outside the proofs: the loader that fills the tables, the driver in `kitc.py`, t
 machine operations with the laws the theorem assumes of them.  The per-program statements add nothing: the translator's output
 is checked by the kernel every time.
 
-### 1.11 Where the architecture goes: proofs built by construction, the CakeML way (decided by the owner, 2026-10-30)
+### 1.11 Where the architecture goes: proofs built by construction, the CakeML way (decided by the owner, 2026-10-30; its plan superseded the same day by §1.12)
+
+*The analysis in this section stands; its plan (converting the walk to proofs built by construction) was superseded the same
+day by the owner's requirement of zero proof time for other people's programs — the decision in force is §1.12 (D26).*
 
 **What kind of compiler this is.**  Three ways to get from a program to machine code exist, and the words for them are easy
 to confuse:
@@ -585,6 +589,75 @@ checks that by conversion, which is a check, not a search.
 
 **The bottom half.**  Release builds go through CompCert's `ccomp` (§12.H), so that the bottom is verified down to assembly as
 CakeML's is, rather than ending at our printer and clang.
+
+---
+
+### 1.12 THE DECISION IN FORCE: a verified compiler by reflection — zero proof search per program, nothing added to the trust (owner, 2026-10-30)
+
+**The requirement (owner):** compile other people's programs with no proof time: "need to compile others' programs with zero
+proof time, I need this, it takes too long".  The owner chose "a verified translator now", accepting added trust if needed.  It
+turned out that no trust has to be added (below).
+
+**The four routes, and the verdict on each:**
+
+| Route | Proof work per program | Added to the trust | Verdict |
+|---|---|---|---|
+| emit then prove (§12.B) | the C in seconds; the walk's proof runs behind and arrives later | nothing | **the interim**, until the compiler below covers a program |
+| proofs built by construction (§1.11, D25) | much less than the walk, not zero | nothing | **skipped** (owner): the walk is not converted |
+| verified translator against MetaRocq's semantics of Rocq | none | MetaRocq's quote of the program, MetaRocq's typing and erasure assumptions, well-formedness of the environment (the cost-shape ledger) | **rejected**: MetaRocq's formal evaluation cannot run our programs (next paragraph); fixing that is an upstream extension of MetaRocq for months, and it adds trust |
+| **verified compiler by reflection** | one conversion check (`denote s = f`), no search | **nothing** | **chosen** |
+
+**Why MetaRocq's semantics cannot be the source (measured 2026-10-30, in the image's MetaRocq sources).**  The erased
+evaluation `EWcbvEval.eval` has 21 rules (`eval_box`, `eval_beta`, `eval_zeta`, `eval_iota`.., `eval_delta`, `eval_construct`..,
+`eval_prim`, `eval_atom`); `eval_prim` / `eval_primitive` only says a primitive *value* (`prim_int i`) evaluates to itself, and
+PCUIC's `PCUICWcbvEval` is the same.  There is no rule for a primitive *operation*: `PrimInt63.add` is a constant without a body,
+so `eval_delta` cannot fire, and every program here — all arithmetic is `PrimInt63` — is stuck in that semantics.  This is the
+same gap as CertiRocq's front end (`convert_top_anf_correct` assumes `no_prims`, §1.1, F1).  The cost-shape work did not meet
+it because its programs compute on `Z`, an inductive type.
+
+**The chosen design: proof by reflection.**  The standard Rocq technique for compiling functions of the logic with a compiler
+proved once, used for example by Fiat Cryptography (functions reified to a syntax, compiler passes proved once, the per-program
+check being the syntax's meaning by conversion):
+
+1. **`S`, a syntax of the accepted fragment, defined by us** (a deep embedding): numbers, booleans, counters, records and pairs,
+   `let`, tests and choices, calls, recursion on a counter and with a measure, functions given to functions, memory reads and
+   writes, growing blocks, views, machine operations.
+2. **`denote : S -> (the Rocq function it stands for)`**, a Rocq function.  It uses `PrimInt63`'s operations and `KQRun`'s
+   memory operations directly, so primitives are no problem: the meaning of `add` in `S` *is* `PrimInt63.add`.
+3. **`compile : S -> option KQL`, proved once**: `compile s = Some k -> k computes denote s` (the per-function statement's
+   shape, for every `s`), composed with the generator's `kit_function_correct` down to Clight.  This is a verified compiler
+   in the full sense — one theorem for every program of `S`.
+4. **`reify`: the user's ordinary Rocq function to an `s : S`** — the current MetaRocq translator's front end, rewritten to
+   produce `S` instead of KQL.  It is **not** trusted and needs no proof: its output is checked.
+5. **The per-program check: `denote s = f`, by conversion** — the kernel unfolds the denotation (and only it) and compares the
+   result with the user's function.  No tactic, no search; its cost is to be measured by the spike (the risk: a conversion that
+   unfolds large terms; the denotation is unfolded, `kq_nat` and the user's helpers stay folded where the syntax names them).
+
+**What changes, what stays.**
+- **Moves into the proved `compile`:** everything the translator does today beyond reading syntax — putting helpers in,
+  copies of templates for the functions given (with captures), records as their fields, the slot block for a second result,
+  if-conversion (`choice_ok`), merging a chain of tail calls, values built and taken apart in place (`knorm`), the memory's
+  linearity (a check inside `compile`, proved sound), budgets (`kq_nat`, `Abud`), booleans as 0/1, number-and-memory results.
+- **Stays as it is:** KQL, the generator and its theorem, the printer, the trusted base (§1.10) — the per-program equation is
+  checked by the kernel, so the reifier adds nothing; the construct table (it now measures `reify` and `compile`); the gate.
+- **Stays as the fallback:** the current translator with the walk, for programs `S` does not yet cover — the gate keeps both
+  paths green — until the table's cells all go through `compile`; then the walk is retired.
+- **The claim becomes:** `compile` is a verified compiler for `S` ("for every program of `S`, the KQL computes its meaning");
+  each user program is compiled by reifying it into `S` and checking `denote s = f` once.
+
+**Completeness, after the change.**  "Nothing natural is refused" splits in two: `compile` succeeds on every `s` of a grammar —
+a theorem about a Rocq function (§3.8, §12.M); `reify` produces `s` for every Rocq text of that grammar — a property of the
+untrusted reifier, measured by the construct table (as the cost-shape work measured that Rocq's elaborator lands in its grammar).
+
+**The plan** (§12.V):
+1. Land the current batch of construct-table work (gate, full table, commit).
+2. Emit then prove (the part of §12.B that prints the C before the proof): the interim for other people's programs.
+3. **The spike**: `S` with numbers, tests, `let`, calls and recursion on a counter; `denote`; `compile` to KQL proved for that
+   subset; `reify` for it; on the counted loops of `proved/examples/` and a few corpus programs, measure the per-program check
+   (`denote s = f`) against the walk's time.  Continue only if the check is fast and reliable (measure first, §0.9).
+4. Grow `S` construct by construct, driven by the construct table: each construct is an `S` node, a `denote` case, a `compile`
+   case and its proof case; the walk's fallback shrinks as `S` grows.
+5. The completeness theorem for `compile` over the grammar.
 
 ---
 
@@ -1309,7 +1382,8 @@ Each with its reason.  Re-opening one needs a new fact, not a new preference.
 | D22 | **Natural and native over conventions of our own.**  A convention stays only if Rocq itself imposes it (structural recursion, linear use of a value in a pure function's in-place translation) or a theorem needs it; anything Lean or Rocq would accept as ordinary code is accepted (a counter at any position, the memory at any position, functions from other files, any captured kind) | owner, 2026-10-30: "own convention is nice, but I prefer natural native" |
 | D23 | **A refusal reads like a type error, not a syntax error**: it names the construct, the place in the user's text, the reason (one of §0.5, or "not yet translated" for a gap), and what to write instead | the user writes ordinary Rocq; a refusal is about meaning (it needs a runtime), never about spelling |
 | D24 | **The operation set is finite and is completed against freestanding C's operations (§2.1); full higher-order function values are not needed** | the generator's theorem is one case per operation; C has no closures, and its function pointers are an explicit table |
-| D25 | **The top half moves to proofs built by construction, the CakeML way: the translator emits each piece of KQL with the lemma that justifies it (one lemma per construct), so no proof is searched for.  The hybrid stays (per-program proofs on top, one proved generator below); the translator itself is not proved (no single "for every program" theorem).  Spike first, then convert construct by construct, then the completeness theorem; release builds through `ccomp`** | CakeML, the strongest project of this kind, uses this split with a proof-producing translator on top (§1.11); it removes proof-search failures and most proof time and makes each new construct one rule plus one lemma, at a fraction of the cost of a verified translator, which would mean proving the translator against MetaRocq's semantics with primitive integers for months (owner, 2026-10-30: "go ahead, record this decision with every context") |
+| D25 | **The top half moves to proofs built by construction, the CakeML way: the translator emits each piece of KQL with the lemma that justifies it (one lemma per construct), so no proof is searched for.  The hybrid stays (per-program proofs on top, one proved generator below); the translator itself is not proved (no single "for every program" theorem).  Spike first, then convert construct by construct, then the completeness theorem; release builds through `ccomp`**  *(Its plan — converting the walk — was superseded the same day by D26.)* | CakeML, the strongest project of this kind, uses this split with a proof-producing translator on top (§1.11); it removes proof-search failures and most proof time and makes each new construct one rule plus one lemma, at a fraction of the cost of a verified translator, which would mean proving the translator against MetaRocq's semantics with primitive integers for months (owner, 2026-10-30: "go ahead, record this decision with every context") |
+| D26 | **A verified compiler by reflection: a syntax `S` of the accepted fragment, its meaning `denote`, a compiler `compile : S -> KQL` proved once, the user's function reified into `S` by an untrusted reifier, and per program only the conversion check `denote s = f`.  The current translator with the walk stays as the fallback until `S` covers the table; emit-then-prove is the interim.  The walk is not converted to proofs built by construction (D25's plan dropped)** | the owner needs other people's programs compiled with zero proof time (2026-10-30); MetaRocq's formal evaluation has no rule for primitive operations, so a translator verified against it cannot even state our programs' runs and would add MetaRocq's quote and typing/erasure assumptions to the trust; reflection gives one theorem for every program of `S`, no search per program and nothing added to the trust (§1.12) |
 
 ---
 
@@ -1355,6 +1429,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F34 | Lean's freedom comes from its runtime; its front-end passes are the model | §5.7 |
 | F35 | The five cells counted "by design" (`option`, a sum, a list cell, a function in a pair, a dead memory `let`) were classified by type; their programs build and take apart the value in place or never use the second memory, and `A_par_fun_result`, in the same list, was accepted all along | reclassified as gaps (41); §0.5 now says the cause is size and lifetime, never type; a design cell needs a pin that shows the cause, and a control (2026-10-30) |
 | F36 | The owner asked for loops "level 2" — Rocq's own `Program Fixpoint`, as offered; `wfix` was built instead and recorded as the decision, the owner's form "optional" | the owner's request is the target again (D12, §4.5, §12.P); §13.8 has a row for this drift (2026-10-30) |
+| F38 | MetaRocq's formal evaluation (`EWcbvEval.eval`, `PCUICWcbvEval`) has rules for primitive values only, none for primitive operations: `PrimInt63.add` has no body, `eval_delta` cannot fire, every program here is stuck in it | the verified compiler is built by reflection over our own syntax instead (D26, §1.12) (read in the image's MetaRocq sources, 2026-10-30) |
 | F37 | CakeML's architecture is ours: a proof-producing translator from the logic's functions on top, one verified compiler below; Pancake is verified through a proof-producing decompiler.  The difference is that CakeML builds each proof by construction while ours searches | D25, §1.11 (read in the CakeML repository, 2026-10-30) |
 
 ---
@@ -1363,11 +1438,12 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 
 Each item: what, why, and how it is accepted.  The order is by how much of the goal it closes per unit of risk.
 
-**The order to take them in** (the letters are names, not the order): the batch of **A** in progress lands → **Q** (proofs
-built by construction: spike, then conversion; D25) → the rest of **A**, **L**, **P** (the user's ordinary text refused: the
-heart of "no over-rejection"; on the new basis each construct is one rule plus one lemma) → **O** (operations C has) → **B**
-(compiling like `lean --c`) → **C** → **D** → **E** → **H** (with release builds through `ccomp`) → **G** → **M** → **J**;
-**F**, **I** and **N** when their condition arises; **K** when the owner says.
+**The order to take them in** (the letters are names, not the order): the batch of **A** in progress lands → **B**'s
+emit-then-prove part (the C at once: the interim for other people's programs) → **V** (the verified compiler by reflection:
+spike, then growth; D26) → the rest of **A**, **L**, **P** (the user's ordinary text refused), done as constructs of `S` →
+**O** (operations C has) → the rest of **B** (compiling like `lean --c`) → **C** → **D** → **E** → **H** (with release builds
+through `ccomp`) → **G** → **M** → **J**; **F**, **I** and **N** when their condition arises; **K** when the owner says.
+**Q** is dropped (D26).
 
 **A. The construct-table gaps (41 cells, §3.5), then the by-design pins.**  In order: (1) recursive functions giving back a
 boolean, a record of three, a number with a memory — 9; (2) `int * mem` values — 7; (3) proof search for pair-valued choices and
@@ -1439,12 +1515,20 @@ rotate as single instructions.  Each is a constructor, a case of the generator's
 measure, no new assumption.  Accepted when the `wfix` examples written as `Program Fixpoint` compile, prove and give the same
 answers, and the construct table has cells for each spelling.
 
-**Q. Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
+**Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
 construct by construct, the walk as fallback until the last construct has its lemma.  Accepted when every example, corpus program
 and kernel proves with emitted proofs and no searching tactic on the main path, proof time is measured and not worse, and the
 construct table is unchanged or better.
+
+**V. The verified compiler by reflection (§1.12, D26).**  (1) The spike: `S` for numbers, tests, `let`, calls, recursion on a
+counter; `denote`; `compile` proved for it (`compile s = Some k -> k computes denote s`); `reify` for it; the per-program check
+`denote s = f` measured against the walk on the counted loops of the examples and a few corpus programs.  Continue only if the
+check is fast and reliable.  (2) Growth, construct by construct from the construct table: `S` node, `denote` case, `compile` case,
+proof case; programs outside `S` keep the fallback (translator + walk).  Accepted when every example, corpus program and kernel
+compiles through `compile` with only the conversion check, the trusted base is unchanged (`Print Assumptions`), the check's time
+is measured, and the construct table is unchanged or better; then the walk is retired.
 
 ---
 
@@ -1554,7 +1638,8 @@ needs its own memory or arguments.
 | put host names, addresses, user names or local paths in the repository | it is public | keep them in local notes only |
 | call a refusal "by design" because of the value's type (`option`, a list, a function) | type is not the cause; size and lifetime are (§0.5, F35) | by design only with a pin that shows the cause and a control (§3.6) |
 | build an easier substitute for what the owner asked, and record the substitute as the decision | the owner's request silently leaves the plan (F36) | build the substitute if it is a real step, say plainly that it is not what was asked, and keep the request open in §12 |
-| call the route "a verified compiler", or promise a single theorem "for every program" | the top half is proof-producing: each program gets its theorem; no theorem is quantified over all programs (§1.11) | "proved end to end for every compiled program"; the single theorem would need the translator proved (not planned) |
+| call the route "a verified compiler" before §12.V is done, or say the reifier is verified | until `compile` covers a program, that program's theorem comes from the walk; the reifier is never verified, its output is checked (`denote s = f`) | "proved end to end for every compiled program"; after §12.V: "`compile` is a verified compiler for `S`; a program is reified and checked by conversion" |
+| verify the translator against MetaRocq's semantics of Rocq | that semantics has no rule for primitive operations (F38) and adds trust | reflection over our own syntax (§1.12) |
 | take a settled decision of §10 as covering a case its reason does not cover | the reason is the decision; the wording is only its record | apply the reason; if the wording and the reason disagree, fix the wording and say so in the report |
 
 ### 13.9 When to stop and ask the owner
@@ -1632,6 +1717,8 @@ Pushed to the public repository up to `76e777a`; `git log --oneline origin/main.
 | `real_laws` | the one axiom: the record of the memory's laws, proved for a model |
 | verified compiler | a compiler with one theorem: for every program, the output is correct (our generator) |
 | proof-producing (certifying) translation | a translator that is not proved; each run produces a theorem about that program, checked by the kernel (our translator; CakeML's) |
+| proof by reflection | a Rocq function (here `compile`) proved once, run on a syntax (`S`) the program is turned into; per program only the syntax's meaning is checked against the program by conversion (§1.12) |
+| `S`, `denote`, `reify` | the syntax of the accepted fragment; its meaning as a Rocq function; the untrusted step from the user's Rocq function to `S` (§1.12) |
 | proof built by construction | a proof assembled from one lemma per construct along the program's text, as CakeML's translator does — nothing searched (§1.11) |
 
 ---
