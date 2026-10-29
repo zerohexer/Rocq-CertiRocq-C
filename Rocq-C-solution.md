@@ -444,6 +444,42 @@ template does) and costs nothing.  A function chosen at run time is a function-p
 `qsort` takes a comparison and a context pointer.  A closure that captures variables and outlives the call is what a C
 programmer builds by hand as a struct; written implicitly it allocates behind the programmer's back, and it is refused.
 
+### 2.1 The operation set is finite, closed and extensible — and it is checked against C's
+
+The generator's theorem (`kit_function_correct`) is proved once, by induction over KQL, **one case per constructor of a finite
+operation set** — the shape of the "mother theorem" of the KernelQ records (pedagogy doc LS.19.9: *for all programs, by induction,
+one case per constructor of the finite op set*).  Adding an operation is adding a constructor, its meaning, one case of the
+proof, its C, and (for a machine operation) its law with the law proved for the model.  So "the primitives are complete" is a
+finite checklist against what freestanding C offers, not an open question:
+
+| C | KQL | State |
+|---|---|---|
+| `+ - *` on signed integers | `Badd`, `Bsub`, `Bmul` on 63-bit numbers | proved |
+| `/ %` signed, unsigned | `Bdivs`, `Bmods`; `Bdiv`, `Bmod` (division by zero, the smallest by -1 defined, no UB) | proved |
+| `& | ^ ~ << >>` (logical, arithmetic) | `Bland`, `Blor`, `Blxor` (`~x` is `x ^ -1`), `Blsl`, `Blsr`, `Basr` (amounts ≥ 63 defined) | proved |
+| `== < <=` signed and unsigned | `Ceq`, `Cslt`, `Csle`, `Clt`, `Cle` | proved |
+| `?:` | `Esel` (conditional move) | proved |
+| `if`, `while`, `for`, `goto` within a function | `Eif`, self tail calls (`Eloop`), calls | proved |
+| function call, return, recursion | `Ecall`, `Eret` | proved |
+| function pointers | a dispatch on an id (clang makes a jump table) | proved |
+| `uint64_t` `+ - * & | ^ << >> < <= ==` | `Ew64` (`W_add` .. `W_eq`) | proved |
+| **`uint64_t` `/ %`**, signed 64-bit (`int64_t`) arithmetic beyond 63 bits, the high half of a 64×64 product | — | **missing** (add `W_divu`, `W_modu`, signed variants, `W_mulhi` to `w64op`) |
+| `int8/16/32_t`, `uint8/16/32_t` arithmetic with C's wrap-around | a library over `int` with masks and sign extension (`sx32` exists) | **library to write** |
+| loads and stores of 8, 16, 32, 64 bits | `Ekld8`/`Ekst8`, `rd16`/`upd16` (two bytes), `Ekld32`/`Ekst32`, `Ekld`/`Ekst`, views | proved |
+| `volatile`, atomics, fences, `memcpy`, `memset`, `memcmp` | `Ehw` machine operations | laws, C bodies assumed |
+| `__builtin_popcount`, `clz`, `ctz`, `bswap`, rotate | expressible as loops or bit tricks today | **optional single instructions** (speed) |
+| `malloc`, `free` | a library on growing blocks | proved library |
+| `float`, `double` | — | hosted, not started |
+| `setjmp`/`longjmp`, variadic functions, `alloca` | — | not planned (not needed by freestanding programs written this way) |
+
+**Higher-order functions beyond this are not needed for parity with C**, and the cost-shape work found why they are the one hard
+place: every decidability problem there was a single phenomenon — **a callee not syntactically determined**.  C has no closures;
+its function pointers are determined at run time from a table, which is exactly the id dispatch above.  So the route translates
+every function that is known where it is used (put in, or a copy per function given, captures included) and every function
+chosen at run time from an explicit table; a function value stored or returned implicitly (a closure that escapes) is refused by
+design, because in C it would be a struct the programmer builds.  Full higher-order — function values flowing anywhere — is the
+cost-shape record's "#10, the big one", and it is not on this route's path.
+
 ---
 
 ## §3. NATURALNESS — THE CONSTRUCT TABLE
@@ -1056,6 +1092,9 @@ Each with its reason.  Re-opening one needs a new fact, not a new preference.
 | D19 | **Commits: authored by the owner only, no co-author trailer, no narration; push only when the owner says; no host details, addresses, user names or local paths in the repository** | owner's standing rules; the repository is public |
 | D20 | **Proper over fast**: the straightforward, correct construction is preferred to a quick one; decisions are judged by this file's criteria | owner's standing preference (also in the cost-shape work) |
 | D21 | **A gap is closed by a construction, never by stating its limit; a boundary needs a pin and a control; no translator check without a theorem that needs it** | §3.6; learned in the cost-shape work, where each was the cause of a re-opened item |
+| D22 | **Natural and native over conventions of our own.**  A convention stays only if Rocq itself imposes it (structural recursion, linear use of a value in a pure function's in-place translation) or a theorem needs it; anything Lean or Rocq would accept as ordinary code is accepted (a counter at any position, the memory at any position, functions from other files, any captured kind) | owner, 2026-10-30: "own convention is nice, but I prefer natural native" |
+| D23 | **A refusal reads like a type error, not a syntax error**: it names the construct, the place in the user's text, the reason (one of §0.5, or "not yet translated" for a gap), and what to write instead | the user writes ordinary Rocq; a refusal is about meaning (it needs a runtime), never about spelling |
+| D24 | **The operation set is finite and is completed against freestanding C's operations (§2.1); full higher-order function values are not needed** | the generator's theorem is one case per operation; C has no closures, and its function pointers are an explicit table |
 
 ---
 
@@ -1162,6 +1201,10 @@ Rocq text carries both: its complexity bound proved and its C proved.  Spikes on
 cache as an ordinary layer over the same RAM with a locality bound; space read off the memory with an allocator as ordinary
 functions; a C loop matched step for step to the Rocq loop).  Not started here; it needs the cost monad's charges to erase to
 nothing in the C, which is a translator rule plus a theorem.
+
+**O. The operation checklist (§2.1):** `uint64_t` division and remainder, signed 64-bit arithmetic, the high half of a product;
+a library for 8/16/32-bit signed and unsigned arithmetic with C's wrap-around; optionally `popcount`, `clz`, `ctz`, `bswap`,
+rotate as single instructions.  Each is a constructor, a case of the generator's proof, its C, and an example.
 
 ---
 
