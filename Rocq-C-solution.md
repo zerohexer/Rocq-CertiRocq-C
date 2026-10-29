@@ -677,6 +677,76 @@ untrusted reifier, measured by the construct table (as the cost-shape work measu
    case and its proof case; the walk's fallback shrinks as `S` grows.
 5. The completeness theorem for `compile` over the grammar.
 
+**THE WEIGHING, IN FULL (the owner's questions of 2026-10-30 and the answers, so none of it is re-derived).**
+
+*How the decision was reached.*  The owner first asked whether a verified compiler would be better than translation, citing
+CakeML and Pancake; the repository was read (§1.11) and the CakeML way (proofs built by construction) was decided.  The owner then
+asked for "zero proof time for other people's programs" and, offered the choice, picked "a verified translator now", accepting
+added trust.  That offer had a wrong premise — that zero proof time needs added trust — and MetaRocq's semantics turned out not to
+run primitive operations at all (F38).  Reflection was then proposed, compared from every side below, and the owner decided:
+**"we are going with reflection"**.
+
+*"MetaRocq is verified, so it can be trusted" — what that covers.*  MetaRocq proves its checker and its erasure correct against
+**its own model** of Rocq.  Connecting the user's actual function to that model still rests on (1) the quote — the unverified
+OCaml plugin that turns the function into MetaRocq syntax — and (2) assumptions inside its proofs (the cost-shape ledger shows
+`guard_checking`, and on the erasure path `fake_normalization` and `fake_guard_impl_properties`).  Reflection adds none of these:
+the kernel checks `denote s = f`, and the reifier is checked, not trusted.
+
+*"But reflection still needs proof computation."*  Per program it needs one computation by the kernel: unfold `denote`, compare
+with the user's function.  No tactic, no search, nothing that can fail to be found.  Expected milliseconds to a few seconds per
+program (an estimate; the spike measures it, including on `x86_setup`, ~2,400 steps), against 35–54 s of search per test kernel
+today.  Literal zero is possible by skipping the check, at the price of trusting the reifier — the same kind of trust the MetaRocq
+route puts in its quote.  So reflection is never worse on time and, by default, adds no trust.
+
+*Would the MetaRocq extension be the bigger win?*  What it would win: a theorem about Rocq itself rather than about `S`; a
+contribution others use (CertiRocq, the MetaRocq community); and **the cost-shape work could then compute on `Int63`**, with honest
+machine-word costs instead of `Z`.  What it costs: months on MetaRocq's metatheory (a new reduction rule touches confluence,
+subject reduction and erasure correctness — work MetaRocq's own team has not done), then months for the verified translator on
+top, then keeping a fork of MetaRocq working across releases unless it is accepted upstream.
+
+| | reflection (chosen) | MetaRocq extension + verified translator |
+|---|---|---|
+| one theorem for every program | yes, over `S` | yes, over (quoted) Rocq |
+| proof work per program | one kernel computation (or none, trusting the reifier) | none |
+| added to the trust | nothing | the quote; `guard_checking`; the normalization assumptions of erasure |
+| native for the user | the same | the same |
+| maintenance | stock Rocq; MetaRocq only reads the text | a fork of MetaRocq's metatheory, broken by every release |
+| risk | known technique, done before | an open research problem; can stall |
+| time to working | weeks to a couple of months, our own code | many months, mostly in MetaRocq |
+
+*The harsh version: a PhD, professors as users, production.*  **Reflection, and it is not close.**  (1) Production rules out a
+private fork of someone else's metatheory.  (2) The reviewer's first question — "what connects the C to *my* function?" — has
+the strongest possible answer: the kernel checks `denote s = f` for every program.  The MetaRocq route answers "an unverified
+quote plus assumptions".  (3) Reflection has worked before (Fiat Cryptography; and, as recalled — check before citing — Œuf, a
+verified compiler for a Gallina subset that reifies programs into a syntax and compiles through CompCert); the MetaRocq extension
+is an open problem.  (4) The contribution of this project is not the front end: it is Rocq to **freestanding C with no runtime
+and no collector**, memory with linearity and in-place updates, hardware primitives, operating-system kernels that prove and
+boot, at C speed.  The questions a reviewer will ask, and the answers: *why not CertiRocq?* — its front-end theorem assumes no
+primitive operations and its output needs a collector; *why not Œuf or Fiat?* — no memory, no runtime-free systems code, no
+kernels.  Reflection gets to a complete, verified, fast system that makes that case; the MetaRocq extension would use up the
+time before the systems story exists.
+
+*Where reflection is honestly weak (and what answers it).*  It covers a fragment `S` — so the construct table and the
+completeness theorem must be strong (§3, §3.8).  The per-program check grows with the program — measured by the spike on the
+longest kernel function.  `S` must be designed well up front — from the construct table, so it is not redone.
+
+*"A fragment `S` versus all of Rocq" — is that patching, or less native?*  Neither; it is a technical detail.  Both routes
+cover a fragment: "over Rocq" in the MetaRocq route only means the theorem's statement mentions all Rocq terms — its translator
+still refuses most of them (values that need a runtime, everything not yet built), so its real domain is "where the translator
+succeeds".  `S` is the explicit name of that same set.  It is defined by construct (term formers × places × types, the construct
+table), designed once and grown construct by construct, as every compiler's internal language is (Lean's LCNF, CompCert's
+Clight, CertiRocq's λANF) — patching would be special cases for particular programs, which `S` is not.  The user never sees
+`S`: they write ordinary Rocq, `reify` maps it, and an uncovered construct is a refusal with its reason, as today.  The only
+internal differences: a new construct is an `S` node, a `denote` case, a `compile` case and a reifier case (in the MetaRocq route:
+a translator case and its proof case — the same effort); and completeness is a theorem for `compile` plus a measurement for
+`reify` (in the MetaRocq route one theorem over quoted terms) — minor, since the table measures the reifier anyway.  **What
+decides "native" is coverage** — the table at 0 gaps, the translator's own conventions removed (§3.7), Rocq's own
+`Program Fixpoint` read (§4.5) — the same work in either route.
+
+*When the MetaRocq extension makes sense.*  As a separate, thesis-sized contribution: machine integers in MetaRocq itself, which
+would also give the cost-shape work `Int63`.  Valuable; not on the critical path of Rocq to C.  Reflection now; the extension
+later, if that need comes — the two do not exclude each other.
+
 ---
 
 ## §2. WHAT C CAN DO, AND ITS COUNTERPART IN ROCQ
@@ -1401,7 +1471,7 @@ Each with its reason.  Re-opening one needs a new fact, not a new preference.
 | D23 | **A refusal reads like a type error, not a syntax error**: it names the construct, the place in the user's text, the reason (one of §0.5, or "not yet translated" for a gap), and what to write instead | the user writes ordinary Rocq; a refusal is about meaning (it needs a runtime), never about spelling |
 | D24 | **The operation set is finite and is completed against freestanding C's operations (§2.1); full higher-order function values are not needed** | the generator's theorem is one case per operation; C has no closures, and its function pointers are an explicit table |
 | D25 | **The top half moves to proofs built by construction, the CakeML way: the translator emits each piece of KQL with the lemma that justifies it (one lemma per construct), so no proof is searched for.  The hybrid stays (per-program proofs on top, one proved generator below); the translator itself is not proved (no single "for every program" theorem).  Spike first, then convert construct by construct, then the completeness theorem; release builds through `ccomp`**  *(Its plan — converting the walk — was superseded the same day by D26.)* | CakeML, the strongest project of this kind, uses this split with a proof-producing translator on top (§1.11); it removes proof-search failures and most proof time and makes each new construct one rule plus one lemma, at a fraction of the cost of a verified translator, which would mean proving the translator against MetaRocq's semantics with primitive integers for months (owner, 2026-10-30: "go ahead, record this decision with every context") |
-| D26 | **A verified compiler by reflection: a syntax `S` of the accepted fragment, its meaning `denote`, a compiler `compile : S -> KQL` proved once, the user's function reified into `S` by an untrusted reifier, and per program only the conversion check `denote s = f`.  The current translator with the walk stays as the fallback until `S` covers the table; emit-then-prove is the interim.  The walk is not converted to proofs built by construction (D25's plan dropped)** | the owner needs other people's programs compiled with zero proof time (2026-10-30); MetaRocq's formal evaluation has no rule for primitive operations, so a translator verified against it cannot even state our programs' runs and would add MetaRocq's quote and typing/erasure assumptions to the trust; reflection gives one theorem for every program of `S`, no search per program and nothing added to the trust (§1.12) |
+| D26 | **A verified compiler by reflection: a syntax `S` of the accepted fragment, its meaning `denote`, a compiler `compile : S -> KQL` proved once, the user's function reified into `S` by an untrusted reifier, and per program only the conversion check `denote s = f`.  The current translator with the walk stays as the fallback until `S` covers the table; emit-then-prove is the interim.  The walk is not converted to proofs built by construction (D25's plan dropped)** | the owner needs other people's programs compiled with zero proof time (2026-10-30); MetaRocq's formal evaluation has no rule for primitive operations, so a translator verified against it cannot even state our programs' runs and would add MetaRocq's quote and typing/erasure assumptions to the trust; reflection gives one theorem for every program of `S`, no search per program and nothing added to the trust (§1.12).  The owner, after the full comparison (§1.12, "the weighing"): "we are going with reflection" |
 
 ---
 
