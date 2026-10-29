@@ -29,4 +29,16 @@ Definition loop_up_m (lo hi : int) (s : mem) (body : int -> mem -> mem) : mem :=
 Fixpoint loop_find_go (k : nat) (i hi : int) (p : int -> bool) : int :=
   match k with O => hi | S k' => if p i then i else loop_find_go k' (i + 1) hi p end.
 Definition loop_find (lo hi : int) (p : int -> bool) : int := loop_find_go (kq_nat (hi - lo)) lo hi p.
+
+(* a loop on two numbers that ends when its test fails: the number of rounds is bounded by a MEASURE, a number that falls at
+   every round (gcd: the second number).  The budget is the measure itself, so it is never a guess; lib/LoopSpec.v proves that
+   when the measure falls the loop ends with the test false (loop_two_ends).
+       loop_two meas c fa fb a b      while (c a b) { (a, b) = (fa a b, fb a b) }      gives a *)
+Fixpoint loop_two_go (k : nat) (a b : int) (c : int -> int -> bool) (fa fb : int -> int -> int) : int :=
+  match k with
+  | O => a
+  | S k' => if c a b then loop_two_go k' (fa a b) (fb a b) c fa fb else a
+  end.
+Definition loop_two (meas : int -> int -> int) (c : int -> int -> bool) (fa fb : int -> int -> int) (a b : int) : int :=
+  loop_two_go (kq_nat (meas a b)) a b c fa fb.
 (* LOOP-END *)

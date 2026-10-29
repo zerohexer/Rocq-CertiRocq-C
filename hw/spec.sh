@@ -3,7 +3,7 @@
 # machine, one axiom), KQModel.v (every law proved for a model: they cannot contradict each other), KQSpecDemo.v (proofs
 # about kernel code against the laws), lib/SlabSpec.v (what the heap of lib/Slab.v guarantees).  The model's proof must rest on nothing of ours; the others on the one axiom.
 cd /w; eval $(opam env)
-for v in KQRun KQBound KQSpec KQModel KQSpecDemo lib/Slab lib/SlabSpec; do
+for v in KQRun KQBound KQSpec KQModel KQSpecDemo lib/Slab lib/SlabSpec lib/Loop lib/LoopSpec; do
   rocq c -R . KQ $v.v > dbg_spec_${v//\//_}.txt 2>&1 || { echo "GATE: $v.v DOES NOT COMPILE"; grep -A8 Error dbg_spec_${v//\//_}.txt | head -10; exit 1; }
 done
 ours() { printf 'Require Import KQ.KQSpecDemo KQ.KQModel KQ.lib.SlabSpec.\nPrint Assumptions %s.\n' $1 > /tmp/pa.v

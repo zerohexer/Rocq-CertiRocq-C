@@ -1,0 +1,11 @@
+(* a loop that ends when a test fails, with a measure that bounds its rounds: Euclid's gcd (the second number falls), summed over
+   the pairs of block 0 (cells 2i, 2i+1) for i below 6: gcds 12 5 1 7 7 9, sum 41 *)
+Definition gcd (a b : int) : int := loop_two (fun x y => y) (fun x y => 0 <? y) (fun x y => y) (fun x y => x mod y) a b.
+Fixpoint total (n : nat) (i acc : int) (s : mem) : int :=
+  match n with
+  | O => acc
+  | S m => total m (i + 1) (acc + gcd (rd 0 (2 * i) s) (rd 0 (2 * i + 1) s)) s
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  total (kq_nat (kq_arg 0)) 0 0 (kq_input 0).

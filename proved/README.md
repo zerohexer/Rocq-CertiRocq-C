@@ -111,6 +111,14 @@ variable as an argument.  A function chosen at run time is a dispatch on an id w
 an ordinary `if id =? 0 then f0 env x else if id =? 1 then ..` (`proved/examples/dispatch.body`); clang turns such a
 chain into a jump table.
 
+Loops without a budget to choose (`lib/Loop.v`, put in front of a program that names a `loop_` function).  `loop_up lo hi acc (fun i acc => ..)`
+and `loop_up_m lo hi s (fun i s => ..)` run `hi - lo` rounds and `loop_find lo hi (fun i => test)` stops at the first index
+that passes the test; the function given may name variables of the text around it.  `loop_two meas c fa fb a b` is
+`while (c a b) { (a, b) = (fa a b, fb a b) }` for a loop that ends because a MEASURE falls (Euclid's gcd: the second number):
+its budget is the measure, so it is never a guess, and `lib/LoopSpec.v` proves that when the measure falls (and stays at
+least 0) the loop ends with the test false (`loop_two_ends`, `loop_two_go_ends`).  A loop that ends on something with no
+measure to give (Collatz) still needs a budget.  Examples: `proved/examples/loops.body`, `loop_while.body`.
+
 64-bit unsigned numbers.  A number of the kit is 63 bits wide, so `u64` (`KQRun.v`) is a record of two of them: `w_lo`, the
 low 63 bits, and `w_hi`, the bit above.  Its meaning is `u64_val`, a number of Z in 0 .. 2^64 - 1, and every operation is
 defined through it with C's wrap-around of `unsigned long long`: `u64_add`, `u64_sub`, `u64_mul`, `u64_and`, `u64_or`,
