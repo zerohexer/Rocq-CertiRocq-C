@@ -538,6 +538,17 @@ the translator's theorem, over MetaRocq's formal evaluation extended with primit
 months.  Completeness does not get cheaper that way: the same constructs must be handled.  The proof-producing route gives every
 property except the single theorem, at a fraction of the cost.
 
+**The cost-shape work did build a theorem of exactly that kind**, which is the main reason it took one to two months while this
+route moves fast.  Its theorems are quantified over every program the checker accepts and proved against MetaRocq's formal
+evaluation of Rocq: `graded_run_bounded` (from the one boolean the grader computes, every run of an accepted program keeps the
+bound), `graded_sim` (the simulation across all 13 rules of MetaRocq's `eval`), `erased_ops_bounded_by_checker` (the same
+carried across MetaRocq's erasure) — with a ledger of what they still assume (the typing layer's axioms, the well-formedness of
+the global environment).  KernelQ's `docs/rocq-cost-shape-solution.md` and its research files hold them.  A verified Rocq → KQL
+translator would be the same kind of proof — harder in that it is full equality of results and memory with KQL as the target,
+easier in that there is no cost measure and no adversary — and the cost-shape machinery (run lemmas over MetaRocq's `eval`, the
+induction over its rules, the bridge through erasure) is what it would reuse.  So the single theorem is not ruled out forever;
+it is not on the plan, and if it is ever wanted it does not start from zero.
+
 **What does not change.**  The trusted base (§1.10); the generator and its theorem; the per-function statement `f_kstmt` (so
 the meaning of the theorem and the C are unchanged); the proof cache; the construct table and the gate.
 
