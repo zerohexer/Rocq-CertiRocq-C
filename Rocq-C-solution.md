@@ -47,6 +47,11 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    value to a later read, hoisting loop-invariant reads (§6.4).
 5. An interleaving semantics for two programs (protocol properties proved once), a fair lock; checks of the trusted tools
    (`ccomp`, UBSan); hosted features (floating point, system calls, C libraries) when a program needs them.
+6. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
+   memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
+   vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
+7. **Naturalness as a theorem** (§3.8): a grammar of the accepted fragment, defined without reference to the translator, and a
+   proof that the translator and the proof succeed on every term of it — the table is the measurement, the theorem is the claim.
 
 **Do not (§10 has the reasons):** add a runtime or a collector; translate `nat`/`Z` arithmetic as if it were fixed-width; add
 an optimization keyed to one benchmark; fix a refusal by looking at one sample program instead of the construct table; port a
@@ -60,7 +65,8 @@ translator; use the proof cache as release evidence (use `KQ_MONO=1`); run two h
 - §0  THE GOAL — the owner's words, the line between proved and assumed, what natural means, what is refused, the yardstick
 - §1  THE ARCHITECTURE AS BUILT — pipeline, KQL, numbers, memory, translator, statements, generator, printer, hardware, libraries
 - §2  WHAT C CAN DO, AND ITS COUNTERPART IN ROCQ — the capability table with today's state
-- §3  NATURALNESS — THE CONSTRUCT TABLE: method, generator, classification, numbers, the 36 gaps, how to close one
+- §3  NATURALNESS — THE CONSTRUCT TABLE: method, generator, classification, numbers, the 36 gaps, how to close one, the
+      translator's own side conditions, naturalness as a theorem
 - §4  LOOPS AND RECURSION — fuel, counted loops, measure loops, measure recursion (`wfix`) and its theory
 - §5  FUNCTIONS AS VALUES, CLOSURES, LOCAL FUNCTIONS — templates, captures, comparison of terms, budgets of constants
 - §6  SPEED OF THE GENERATED C — measurements, where the overhead is, passes done, passes left, how a pass is chosen
@@ -534,6 +540,50 @@ structurally smaller argument; the generated program itself is rejected by Rocq,
 A refusal that is genuinely by design gets added to `DESIGN_CELLS` with its reason, and the refusal message names the library
 to use instead.
 
+**Rules for closing, carried over from the cost-shape work** (they were learned there at a cost and hold here unchanged):
+- **A gap is not closed by writing down its limit.**  Either the construct is translated and proved, or the cell stays a gap.  A
+  sentence in a README saying "X is not read" is a record of a gap, never its closure.
+- **A boundary is closed only with a machine-checked pin and a control.**  A by-design refusal is a cell of the table that is
+  refused (the pin) next to the nearest cell that is accepted and differs only in the cause (the control) — for instance a
+  closure that escapes (refused) next to the same closure used in place (accepted).  A measurement written in prose is not
+  closed.
+- **Never add a check to the translator without a theorem that needs it** (the cost-shape record's rule 2'): a condition with no
+  theorem behind it is either an over-rejection or load-bearing but unjustified, and which one cannot be told by reasoning.  Every
+  side condition is audited for the theorem that requires it (§3.7).
+- **The method, not the patches, is the result.**  When a family of refusals closes, the record says which rule closed it and
+  why the rule covers the whole family.
+
+### 3.7 What the table does not yet cover: the translator's own side conditions
+
+The generator writes programs in the shape the translator expects, so the table does not see the translator's conventions.  Each
+is a rule a user must learn today, and each is an over-rejection unless a theorem needs it:
+
+| Condition | Where | Theorem that needs it? | What to do |
+|---|---|---|---|
+| the counter a function recurses on is its **first** parameter | `fparts`: `rarg d = 0` | no: the statement's induction can be on any `nat` parameter | read `rarg d = k` for any `k`; induct on parameter `k` |
+| the memory is the **last** parameter | `tr_call` (`[KMem], [m]` last), `mk_info` | no: the memory is one KQL argument wherever it stands | accept the memory at any position |
+| at most **one memory** per function | `mk_info` (`restmem && capmem` refused), the walk | partly: one memory is the linearity that makes in-place update correct; two *different* memory parameters both live would alias the one global memory | refuse only two memories used at once (by design, with pin and control); accept two parameters of which one is dead or one is the other |
+| a function to translate is in the **program's own file** (or the kit) | `is_fun`, `reach`: `eq_mp (fst kn) mp` | no: a function of another file is quoted the same way | translate functions of any file the program imports (a multi-file program, a user library) — the cost-shape work measured the same need (a course library in a separate file) |
+| a captured variable is a number, a counter or a memory | `cap_ok` | no: a captured boolean, pair or record is a parameter like any other | accept every kind `kind_of` accepts |
+| a helper larger than 40 nodes becomes a function of its own | `big_fun` | none (a proof-size choice, not a refusal) | keep; it is not visible to the user |
+| a choice between values reads at most three times to be a conditional move | `choice_ok` | none (a speed choice, measured) | keep; above three it is a branch, not a refusal |
+| budgets below 2^60 | `kq_nat` | yes: the bound of every counter (`cbk`) | keep; state it in the measure's domain |
+
+**Action:** add a family to `gen.py` that varies these — the counter in each position, the memory in each position, two memory
+parameters (one dead, one an alias, both live), a function from another file, a captured boolean / pair / record — and close each
+cell or pin it as by design with its control.
+
+### 3.8 The end state: naturalness as a theorem
+
+The table is a measurement: it says that 733 programs are accepted, not that every program of a described kind is.  The cost-shape
+work closed the same question by theorem: a grammar `G` of the accepted fragment defined **without any reference to the checker**,
+a decision procedure for it, and a proof that inside `G` the checker accepts everything (there: `G_is_pterm`).  Here that means:
+a grammar of runtime-free Rocq terms (the constructs × places × types of §3.1, minus the by-design cells), and a theorem that on
+every term of it the translator succeeds and the statement it produces is provable by the walk — or, more practically, that the
+walk is complete for every KQL term the translator produces.  The second part is the hard one (the walk is a tactic); a
+reflective checker (§7.5) would make it a theorem about a Rocq function.  Until then, the claim is the table, with every side
+condition audited (§3.7).
+
 ---
 
 ## §4. LOOPS AND RECURSION
@@ -1004,6 +1054,8 @@ Each with its reason.  Re-opening one needs a new fact, not a new preference.
 | D17 | **If-conversion at value choices (reads allowed); call-chain merges with plain arithmetic only** | measured both ways (§6.3) |
 | D18 | **Budgets are capped at 2^60** | a counter always has room to count a few more, and no proof works a budget out; consequence: a measure must be below 2^60 |
 | D19 | **Commits: authored by the owner only, no co-author trailer, no narration; push only when the owner says; no host details, addresses, user names or local paths in the repository** | owner's standing rules; the repository is public |
+| D20 | **Proper over fast**: the straightforward, correct construction is preferred to a quick one; decisions are judged by this file's criteria | owner's standing preference (also in the cost-shape work) |
+| D21 | **A gap is closed by a construction, never by stating its limit; a boundary needs a pin and a control; no translator check without a theorem that needs it** | §3.6; learned in the cost-shape work, where each was the cause of a re-opened item |
 
 ---
 
@@ -1096,6 +1148,20 @@ update its cost table (on the proved route pairs and records do not allocate; fu
 once the table's gaps are closed, so it is written once.
 
 **K. Push** the local commits when the owner says (§14).
+
+**L. The translator's side conditions (§3.7):** the generator family that varies parameter order, memory count, file, and capture
+kinds; then counter at any position, memory at any position, functions from other files (multi-file programs and user
+libraries), captures of every kind.  Accepted when those cells are `ok` or pinned by design with a control.
+
+**M. Naturalness as a theorem (§3.8):** the grammar of the fragment, its decision procedure, and the completeness of the
+translator on it; the walk's completeness through a reflective checker if that is built (§7.5).
+
+**N. One text, its cost and its C (optional, later).**  The cost-shape work proves a word-RAM bound for programs written in a
+cost monad (KernelQ, `docs/rocq-cost-shape-solution.md`); this route compiles plain programs to C.  Joining them means the same
+Rocq text carries both: its complexity bound proved and its C proved.  Spikes on the cost-shape side measured pieces of it (a
+cache as an ordinary layer over the same RAM with a locality bound; space read off the memory with an allocator as ordinary
+functions; a C loop matched step for step to the Rocq loop).  Not started here; it needs the cost monad's charges to erase to
+nothing in the C, which is a translator rule plus a theorem.
 
 ---
 
