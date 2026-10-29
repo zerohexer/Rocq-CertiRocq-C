@@ -63,6 +63,7 @@ translator; use the proof cache as release evidence (use `KQ_MONO=1`); run two h
 ## CONTENTS
 
 - §0  THE GOAL — the owner's words, the line between proved and assumed, what natural means, what is refused, the yardstick
+      — and §0.9 HOW TO DECIDE when this file does not say (read it before any change)
 - §1  THE ARCHITECTURE AS BUILT — pipeline, KQL, numbers, memory, translator, statements, generator, printer, hardware, libraries
 - §2  WHAT C CAN DO, AND ITS COUNTERPART IN ROCQ — the capability table with today's state
 - §3  NATURALNESS — THE CONSTRUCT TABLE: method, generator, classification, numbers, the 36 gaps, how to close one, the
@@ -199,6 +200,37 @@ Proof time is development time.  The C is a function of the program alone (the g
 at once; the per-function statements are checked behind it, each in its own file, in parallel, and remembered by content
 (§7).  An unchanged program rebuilds in about 15 s; a cold test kernel proves in under a minute.  Improvements to proof time
 are general (tactics, the walk, the cache), never per program.
+
+### 0.9 HOW TO DECIDE — when this file does not say
+
+This section exists because the goal is easy to drift from: each local step can look reasonable and still lead away from it (a
+convention that makes the translator simpler, a check that makes a proof go through, an optimization that wins one benchmark, a
+limit written down instead of removed).  Before any change, answer these in order; a change that fails one is not made, however
+convenient.
+
+1. **Does the trusted base stay the same?**  Nothing new is trusted: the translator stays unchecked-but-verified-per-program, the
+   generator's theorem covers the change (a new operation is a new case of it), and a machine operation comes with a law proved
+   for the model.  If the change needs a new assumption, it is a decision for the owner, not a step.
+2. **Is it natural and native?**  Would ordinary Rocq or Lean code look like this?  Then it must be accepted.  Does the change
+   make the user write something they would not otherwise write (an order of parameters, a wrapper, a special name, a budget to
+   guess)?  Then it is the wrong change, unless Rocq itself imposes it or a theorem needs it (D22).  The only refusals are the three
+   of §0.5.
+3. **Is it general?**  It applies to every program with that construct, not to the program in front of you.  It is found and
+   tested by construct (§3), never by fixing the sample that failed.  An optimization removes a cost the translation adds to every
+   operation or is a standard C pass, proved once (§0.7).
+4. **Does it keep the C of existing programs?**  Byte-identical C for programs that do not use the change, or a measured reason
+   why not, with the corpus timed.
+5. **Is it closed by a construction?**  A gap is closed when the cell is translated and proved; a boundary when it has a pinned
+   cell and a control (§3.6).  Writing the limit into a README closes nothing.
+6. **Is the proof time still small?**  General tactic changes only; no per-program proof scripts; the cold kernels stay under a
+   minute and a rerun stays at the cache's floor.
+
+**When two of these conflict:** soundness (1) over everything; then natural acceptance (2); then generality (3); then speed of the
+C; then proof time; then the size of the change.  "Proper over fast" (D20): the straightforward, correct construction wins over
+a quick one even when the quick one passes the gate.
+
+**When the right move is unclear:** measure before deciding (a cell of the table, a timing on one pinned core, a profile of the
+proof); record the measurement here (§11); then decide by the order above.  A guess becomes a rule only after it is tested.
 
 ---
 
@@ -1163,7 +1195,8 @@ Accepted when: every example and corpus program compiles from a `.v` file with t
 **C. Language beyond the table.**  Records of k numbers as results (the slot block with k-1 cells); strings and a formatting
 library on byte blocks (`printf`-like, written in Rocq); an address type with proved arithmetic, and pointers beyond views;
 specialization of type and instance arguments; optional: reading `Program Fixpoint {measure ..}` (§4.5); optional: `Z` where a
-proof gives the range (D3).
+proof gives the range (D3).  A tactic that proposes the measure itself for the common loop shapes (counting up to a bound, counting
+down, halving), so `wfixN` needs no measure written for them; loops whose end depends on the data still take one.
 
 **D. Freestanding.**  The generated C built and checked on its own (no hosted headers, the support code only); a freestanding
 `kq_grow`.
@@ -1272,6 +1305,54 @@ needs its own memory or arguments.
   time; `Time` on single steps with `Set Default Timeout N`; `/usr/bin/time -f "%es %MKB"` for the memory of a `coqc` run.
 - **What a theorem rests on:** `Print Assumptions NAME` (compile the file first; filter for names outside Rocq's integers).
 - **A section theorem's arguments:** `About NAME` after the section is closed.
+
+### 13.6 Starting a session
+
+1. Read "READ THIS FIRST", §0 (all of it, §0.9 included), §10 and §12.  Do not re-derive anything in §10 or §11.
+2. Check the tree: `git status`, `git log` against §14 (what is pushed, what is local), and that the image builds `proved/make.sh`
+   to `core-ok`.
+3. Pick the first open item of §12 unless the owner names another; for a gap, start from its cells in `MATRIX.md`.
+4. Before changing the translator or the walk, run the cells you expect to change, so the before/after is measured.
+
+### 13.7 Definition of done (for any item)
+
+- The construction exists (translator rule, proof, library, operation) — not a description of it.
+- Its cells of the table are `ok`, or pinned by design with a control; the full table is re-run when the translator changed.
+- The gate of §13.2 passed on the final tree, and its numbers are the ones reported.
+- This file is updated: §3.4/§3.5 numbers, the item in §12, any finding in §11, any decision in §10, the commit in §14.
+- Committed with the owner as author (D19).  Pushed only when the owner says.
+
+### 13.8 What a fresh session gets wrong (and the correct move)
+
+| Tempting move | Why it is wrong | Correct move |
+|---|---|---|
+| fix the one program that was refused | finds only what was written; leaves the rest of the family | find the construct, fix it for every place and type, re-run the table (§3) |
+| add a condition to the translator so a proof goes through | an unjustified check is an over-rejection (rule 2') | prove the general case, or leave the cell a gap |
+| write "X is not supported" in a README and call the item done | a limit written down is not closed | build it, or keep it open in §12 |
+| ask the user to write the code differently (parameter order, a wrapper, a budget) | the goal is ordinary Rocq | make the translator accept the natural form (D22) |
+| guess a fuel or a timeout to make a loop or proof pass | a guessed budget gives silent wrong answers | the measure as the budget (§4); a timeout only as a limit on proof search |
+| an optimization that helps one benchmark | unstable, hides costs | a general pass, proved once, measured against C written the same way (§6.4) |
+| port a processor family in C or assembly | hardcoding in another file | generic primitives; the architecture in Rocq (§9.1) |
+| add a scheduler, allocator policy or driver to the toolchain | not part of freestanding C (D6) | write it as a user program or a library on the primitives |
+| treat `Z` or `nat` arithmetic as `int` | changes the meaning | fixed-width numbers; `Z` only with a proved range, if ever (D3) |
+| report "verified" from a cached run, or from part of the gate | the cache can skip; part of a gate is not the gate | the full gate on the final tree; `KQ_MONO=1` for a release |
+| edit `proved/KQLoopSpec.v` by hand | it is generated | change `tools/mkloopspec.py` and regenerate |
+| change a tactic library and test a file that imports it without recompiling | the old library runs | recompile in dependency order first (§11, F22) |
+| run two heavy jobs on one machine, or a container without a memory cap | clashes, out-of-memory dumps that fill a disk | one heavy job, capped, `core=0` (§13.3) |
+| lower a safety threshold (disk guard, timeout) quietly | the owner relies on it | say so, with the reason, in the report |
+| put host names, addresses, user names or local paths in the repository | it is public | keep them in local notes only |
+
+### 13.9 When to stop and ask the owner
+
+Pushing; deleting anything that is not this work's own output; changing a settled decision of §10; adding an assumption to the
+trusted base; anything touching the owner's other work or machines beyond this work's own containers and files; and any choice
+between two designs that §0.9 does not order.  Everything else — design within §0.9, building, measuring, recording — goes ahead.
+
+### 13.10 Reporting
+
+State what ran and what it gave (the gate lines with their numbers), what did not run and why, and what is unverified.  A
+number that was estimated is called an estimate.  A failure is reported with its output.  A change that turned out wrong is
+recorded in §11 rather than silently reverted.
 
 ---
 
