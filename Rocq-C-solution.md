@@ -590,8 +590,6 @@ checks that by conversion, which is a check, not a search.
 **The bottom half.**  Release builds go through CompCert's `ccomp` (§12.H), so that the bottom is verified down to assembly as
 CakeML's is, rather than ending at our printer and clang.
 
----
-
 ### 1.12 THE DECISION IN FORCE: a verified compiler by reflection — zero proof search per program, nothing added to the trust (owner, 2026-10-30)
 
 **The requirement (owner):** compile other people's programs with no proof time: "need to compile others' programs with zero
@@ -632,6 +630,13 @@ check being the syntax's meaning by conversion):
 5. **The per-program check: `denote s = f`, by conversion** — the kernel unfolds the denotation (and only it) and compares the
    result with the user's function.  No tactic, no search; its cost is to be measured by the spike (the risk: a conversion that
    unfolds large terms; the denotation is unfolded, `kq_nat` and the user's helpers stay folded where the syntax names them).
+
+**MetaRocq's role, after the change.**  MetaRocq only *reads* the user's function (its quote is how `reify` sees the text);
+its semantics of Rocq is not used at all, for primitive operations or for anything else, and nothing about it is trusted —
+`denote s = f` is checked by the kernel.  The two routes compared: the rejected one has one theorem over MetaRocq's model of all of
+Rocq and trusts the quote; this one has one theorem over `S` and checks the reification.  If one day even the conversion check is
+too slow, it can be skipped — then `reify` is trusted, exactly as the rejected route trusts the quote — so this route is never
+worse on time and, by default, adds no trust.
 
 **What changes, what stays.**
 - **Moves into the proved `compile`:** everything the translator does today beyond reading syntax — putting helpers in,
