@@ -1669,8 +1669,13 @@ it today) and **`compile_fun_ok`: for every well-formed tree, every counter belo
 computes `denote_fun`** — proved once by induction on the counter, over a mutual continuation lemma (`cexp_all`) and the tail
 lemma (`ctail_ok`); its assumptions are Rocq's primitive integers and the kit memory's declared operations only (no memory law is
 needed for reads; no admit).  End to end, a user's function gets its KQL statement with no tactic search: `sum_ok` (the counted
-loop) by `change` + `exact (compile_fun_ok ..)` in 0.001 s, `long_ok` (300 lets and reads) in 0.003 s.  Next: `reify` (the
-user's text to `sexp`, from the MetaRocq front end) so this runs on the examples and the corpus, then the constructs of the table
+loop) by `change` + `exact (compile_fun_ok ..)` in 0.001 s, `long_ok` (300 lets and reads) in 0.003 s.  **`reify` is built (2026-10-30, `proved/KQRReify.v`):** it reads the
+user's quoted `Fixpoint f (n : nat) (x1 .. xk : int) (s : mem) : int := match n with O => .. | S m => .. end` and gives
+`(k, e0, e1)`, or `None` outside the subset; it is independent of the old translator.  End to end from the text: the trees it
+gives for `sum` and the 300-step loop are the hand-written ones (checked by `eq_refl`), and the per-program theorems
+(`sum_ok_r`, `long_ok_r`: `compile_fun_ok` at the reified tree, the kernel checking that the tree means the function) take
+0.003 s; assumptions the same base.  Next: the C printed from `compile_fun`'s KQL through the existing generator, a `kitc.py`
+path for programs in the subset, then the constructs of the table
 (writes of the memory, records, calls of other functions, booleans, captures, ...), each an `sexp` node, a `denote` case, a
 `compile` case and its proof case.  (1) The spike: `S` for numbers, tests, `let`, calls, recursion on a
 counter; `denote`; `compile` proved for it (`compile s = Some k -> k computes denote s`); `reify` for it; the per-program check
@@ -1814,7 +1819,8 @@ Pushed to the public repository up to `0beefec` (2026-10-30); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | `proved/KQR.v`: the verified compiler by reflection for the first subset — `compile_fun_ok` proved once; per-program statements by computation in milliseconds |
+| (this commit) | `proved/KQRReify.v`: the reifier (the user's text to the syntax); the per-program theorem from the text in 0.003 s |
+| `9cdbf38` | `proved/KQR.v`: the verified compiler by reflection for the first subset — `compile_fun_ok` proved once; per-program statements by computation in milliseconds |
 | `0beefec` | `proved/KQR.v`: the per-program check measured (meaning = function in about a millisecond) |
 | `741373f` | `kitc.py --emit-first`, `--no-proof` |
 | `b8ad7c9` | D27, the commuting memory law approved |

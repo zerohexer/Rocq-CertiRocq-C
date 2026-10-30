@@ -439,7 +439,7 @@ Qed.
 
 
 (* ================================================================ the measurement: the per-program check *)
-Open Scope uint63_scope.
+Local Open Scope uint63_scope.
 
 (* a counted loop, as a user writes it *)
 Fixpoint sum (n : nat) (i acc : i63) (s : mem) : i63 :=
