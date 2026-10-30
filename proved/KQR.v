@@ -1,12 +1,15 @@
 (** KQR.v -- the verified compiler by reflection (Rocq-C-solution.md §1.12, §12.V): the spike.
 
     [sexp] is a syntax of a fragment (numbers, operations, tests, lets, reads of the memory, a recursive call on the counter's
-    predecessor); [denote_fun] gives the Rocq function a syntax tree stands for.  The point measured first: that the kernel
-    accepts [denote_fun .. = f] for the user's own [Fixpoint f] by computation alone, and how long it takes -- the per-program
-    check of the design.  [compile] and its theorem come after, if this holds. *)
+    predecessor); [denote_fun] gives the Rocq function a syntax tree stands for, reduced to exactly the shape of the user's
+    [Fixpoint], so that the per-program check [f = denote_fun ..] is the kernel's computation alone (measured at the end).
+    [compile_fun] makes the KQL function, and [compile_fun_ok] -- proved once, for every syntax tree -- says the KQL computes
+    the meaning. *)
 
-From Stdlib Require Import List Uint63.
-From KQC Require Import KQL.
+From Stdlib Require Import List Uint63 ZArith Lia.
+From Stdlib Require FinFun.
+From compcert Require Import Coqlib Maps AST.
+From KQC Require Import KQL KQLAuto KQMSem.
 Require KQ.KQRun.
 Import ListNotations.
 
@@ -19,7 +22,13 @@ Inductive sexp : Type :=
 | SIf (c : cmpop) (a b : sexp) (t e : sexp)
 | SLet (e1 e2 : sexp)                (* let x := e1 in e2; x is SVar 0 in e2 *)
 | SRd (h i : sexp)                   (* rd h i s, s the function's memory *)
-| SRec (args : list sexp).           (* the function itself on the counter's predecessor, these numbers, the memory *)
+| SRec (args : sexps)                (* the function itself on the counter's predecessor, these numbers, the memory *)
+with sexps : Type :=
+| SNil
+| SCons (e : sexp) (r : sexps).
+
+Scheme sexp_mut := Induction for sexp Sort Prop
+with sexps_mut := Induction for sexps Sort Prop.
 
 (** a function of [k] numbers and a memory *)
 Fixpoint nfun (k : nat) : Type := match k with O => mem -> i63 | S k => i63 -> nfun k end.
@@ -46,7 +55,12 @@ Fixpoint denote_e (rec : list i63 -> i63) (env : list i63) (s : mem) (e : sexp) 
   | SIf c a b t f => if cmp_sem c (denote_e rec env s a) (denote_e rec env s b) then denote_e rec env s t else denote_e rec env s f
   | SLet e1 e2 => let x := denote_e rec env s e1 in denote_e rec (x :: env) s e2
   | SRd h i => KQ.KQRun.rd (denote_e rec env s h) (denote_e rec env s i) s
-  | SRec args => rec (map (denote_e rec env s) args)
+  | SRec args => rec (denote_es rec env s args)
+  end
+with denote_es (rec : list i63 -> i63) (env : list i63) (s : mem) (es : sexps) {struct es} : list i63 :=
+  match es with
+  | SNil => []
+  | SCons e r => denote_e rec env s e :: denote_es rec env s r
   end.
 
 (** a function recursive on a counter: [k] numbers, a memory; [e0] when the counter is 0, [e1] otherwise *)
@@ -57,7 +71,374 @@ Definition denote_fun (k : nat) (e0 e1 : sexp) : nat -> nfun k :=
                         | S m => denote_e (fun args => app k (go m) args s) env s e1
                         end).
 
-(* ---------------------------------------------------------------- the measurement: the per-program check *)
+(* ================================================================ compile *)
+Section C.
+Variable g : ident.     (* the function's own name in the program *)
+Variable mv : ident.    (* the variable holding the counter's predecessor *)
+
+(** a number, worked out in A-normal form; [K] gets the atom holding it and the next free variable *)
+Fixpoint cexp (e : sexp) (env : list atom) (nxt : ident) (K : atom -> ident -> exp) {struct e} : exp :=
+  match e with
+  | SVar i => K (nth i env (Aint 0%uint63)) nxt
+  | SInt n => K (Aint n) nxt
+  | SOp o a b => cexp a env nxt (fun A n1 => cexp b env n1 (fun B n2 => Eop n2 o A B (K (Avar n2) (Pos.succ n2))))
+  | SIf c a b t f => cexp a env nxt (fun A n1 => cexp b env n1 (fun B n2 => Eif c A B (cexp t env n2 K) (cexp f env n2 K)))
+  | SLet e1 e2 => cexp e1 env nxt (fun A n1 => cexp e2 (A :: env) n1 K)
+  | SRd h i => cexp h env nxt (fun H n1 => cexp i env n1 (fun I n2 => Ekld n2 H I (K (Avar n2) (Pos.succ n2))))
+  | SRec args => cexps args env nxt (fun As n => Ecall n g (Avar mv :: As) (K (Avar n) (Pos.succ n)))
+  end
+with cexps (es : sexps) (env : list atom) (nxt : ident) (K : list atom -> ident -> exp) {struct es} : exp :=
+  match es with
+  | SNil => K [] nxt
+  | SCons e r => cexp e env nxt (fun A n1 => cexps r env n1 (fun As n2 => K (A :: As) n2))
+  end.
+
+(** the body in tail position: a test is a branch, the recursive call a loop *)
+Fixpoint ctail (e : sexp) (env : list atom) (nxt : ident) {struct e} : exp :=
+  match e with
+  | SIf c a b t f => cexp a env nxt (fun A n1 => cexp b env n1 (fun B n2 => Eif c A B (ctail t env n2) (ctail f env n2)))
+  | SLet e1 e2 => cexp e1 env nxt (fun A n1 => ctail e2 (A :: env) n1)
+  | SRec args => cexps args env nxt (fun As _ => Eloop (Avar mv :: As))
+  | _ => cexp e env nxt (fun A _ => Eret A)
+  end.
+End C.
+
+Fixpoint len_s (es : sexps) : nat := match es with SNil => O | SCons _ es => S (len_s es) end.
+
+(** well formed: a recursive call has [k] numbers, and is allowed only where [r] says (not when the counter is 0) *)
+Fixpoint wf (r : bool) (k : nat) (e : sexp) {struct e} : bool :=
+  match e with
+  | SVar _ | SInt _ => true
+  | SOp _ a b | SLet a b | SRd a b => wf r k a && wf r k b
+  | SIf _ a b t f => wf r k a && wf r k b && wf r k t && wf r k f
+  | SRec args => r && Nat.eqb (len_s args) k && wfs r k args
+  end
+with wfs (r : bool) (k : nat) (es : sexps) {struct es} : bool :=
+  match es with SNil => true | SCons e es => wf r k e && wfs r k es end.
+
+(** the function: parameters 1 (the counter) and 2 .. k+1 (the numbers); k+2 holds the counter's predecessor *)
+Definition params (k : nat) : list ident := map Pos.of_succ_nat (seq 0 (S k)).
+Definition env0 (k : nat) : list atom := map (fun i => Avar (Pos.of_succ_nat i)) (rev (seq 1 k)).
+Definition compile_fun (g : ident) (k : nat) (e0 e1 : sexp) : fn :=
+  let mv := Pos.of_succ_nat (S k) in
+  mkfn (params k)
+       (Eif Ceq (Avar 1%positive) (Aint 0%uint63)
+            (ctail g mv e0 (env0 k) (Pos.succ mv))
+            (Eop mv Bsub (Avar 1%positive) (Aint 1%uint63) (ctail g mv e1 (env0 k) (Pos.succ mv)))).
+
+(* ================================================================ the theorem, proved once for every syntax tree *)
+
+(** a KQL atom whose variable, if any, is below [n] *)
+Definition atom_lt (a : atom) (n : ident) : Prop := match a with Avar x => Pos.lt x n | _ => True end.
+(** [rho'] has what [rho] has below [n] *)
+Definition agree (rho rho' : env) (n : ident) : Prop := forall x, Pos.lt x n -> rho' ! x = rho ! x.
+(** the atoms of [envA] hold the numbers of [denv] (both read with 0 past their end) *)
+Definition env_ok (rho : env) (envA : list atom) (denv : list i63) : Prop :=
+  forall i, aval rho (nth i envA (Aint 0%uint63)) = Some (nth i denv 0%uint63).
+Definition lt_all (envA : list atom) (n : ident) : Prop := forall i, atom_lt (nth i envA (Aint 0%uint63)) n.
+
+Lemma aval_agree : forall rho rho' n a, agree rho rho' n -> atom_lt a n -> aval rho' a = aval rho a.
+Proof. intros rho rho' n [x|i|i] A L; simpl in *; auto. Qed.
+
+Lemma atom_lt_mono : forall a n n', atom_lt a n -> Pos.le n n' -> atom_lt a n'.
+Proof. intros [x|i|i] n n' L Le; simpl in *; auto. lia. Qed.
+
+Lemma lt_all_mono : forall envA n n', lt_all envA n -> Pos.le n n' -> lt_all envA n'.
+Proof. intros envA n n' L Le i. eapply atom_lt_mono; eauto. Qed.
+
+Lemma agree_refl : forall rho n, agree rho rho n.
+Proof. intros rho n x _. reflexivity. Qed.
+
+Lemma agree_trans : forall rho rho1 rho2 n n', agree rho rho1 n -> agree rho1 rho2 n' -> Pos.le n n' -> agree rho rho2 n.
+Proof. intros rho rho1 rho2 n n' A1 A2 Le x Lx. rewrite A2 by lia. apply A1; auto. Qed.
+
+Lemma agree_set : forall rho x v n, Pos.le n x -> agree rho (PTree.set x v rho) n.
+Proof. intros rho x v n Le y Ly. rewrite PTree.gso; auto. intro E; subst; lia. Qed.
+
+Lemma agree_set1 : forall rho rho1 x v nxt, agree rho rho1 nxt -> Pos.le nxt x -> agree rho (PTree.set x v rho1) nxt.
+Proof. intros rho rho1 x v nxt A L y Ly. rewrite PTree.gso by (intro; subst; lia). apply A; auto. Qed.
+
+Lemma agree_set2 : forall rho rho1 rho2 x v nxt n1, agree rho rho1 nxt -> agree rho1 rho2 n1 -> Pos.le nxt n1 -> Pos.le n1 x ->
+  agree rho (PTree.set x v rho2) nxt.
+Proof. intros rho rho1 rho2 x v nxt n1 A1 A2 L1 L2 y Ly. rewrite PTree.gso by (intro; subst; lia). rewrite A2 by lia. apply A1; auto. Qed.
+
+Lemma agree_3 : forall rho rho1 rho2 rho3 nxt n1 n2, agree rho rho1 nxt -> agree rho1 rho2 n1 -> agree rho2 rho3 n2 ->
+  Pos.le nxt n1 -> Pos.le n1 n2 -> agree rho rho3 nxt.
+Proof. intros rho rho1 rho2 rho3 nxt n1 n2 A1 A2 A3 L1 L2 y Ly. rewrite A3 by lia. rewrite A2 by lia. apply A1; auto. Qed.
+
+Lemma env_ok_agree : forall rho rho' envA denv n, env_ok rho envA denv -> lt_all envA n -> agree rho rho' n -> env_ok rho' envA denv.
+Proof. intros rho rho' envA denv n E L A i. rewrite (aval_agree rho rho' n); auto. Qed.
+
+Lemma env_ok_cons : forall rho envA denv a v, env_ok rho envA denv -> aval rho a = Some v -> env_ok rho (a :: envA) (v :: denv).
+Proof. intros rho envA denv a v E A [|i]; simpl; auto. Qed.
+
+Lemma lt_all_cons : forall envA a n, lt_all envA n -> atom_lt a n -> lt_all (a :: envA) n.
+Proof. intros envA a n L A [|i]; simpl; auto. Qed.
+
+Combined Scheme sexp_comb from sexp_mut, sexps_mut.
+
+Section Sim.
+Variables (P : prog) (f : fn) (g mv : ident) (M : kmemt) (r : bool) (k : nat) (rec : list i63 -> i63) (vm : i63).
+(** the recursive call, where it is allowed, computes [rec] *)
+Hypothesis Hrec : r = true -> forall vs, length vs = k -> runk P g (vm :: vs) M (rec vs) M.
+
+Lemma len_denote_es : forall es denv, length (denote_es rec denv M es) = len_s es.
+Proof. induction es; intros denv; simpl; auto. Qed.
+
+Definition inv (rho : env) (envA : list atom) (denv : list i63) (nxt : ident) : Prop :=
+  env_ok rho envA denv /\ lt_all envA nxt /\ Pos.lt mv nxt /\ (r = true -> rho ! mv = Some vm).
+
+Lemma inv_step : forall rho rho' envA denv nxt n', inv rho envA denv nxt -> agree rho rho' nxt -> Pos.le nxt n' ->
+  inv rho' envA denv n'.
+Proof.
+  intros rho rho' envA denv nxt n' (E & L & Mv & R) A Le. split; [|split; [|split]].
+  - eapply env_ok_agree; eauto.
+  - eapply lt_all_mono; eauto.
+  - lia.
+  - intro Rt. rewrite A by auto. auto.
+Qed.
+
+Lemma cexp_all :
+  (forall e envA denv nxt K rho v M', wf r k e = true -> inv rho envA denv nxt ->
+     (forall rho' n' a, agree rho rho' nxt -> Pos.le nxt n' -> atom_lt a n' -> aval rho' a = Some (denote_e rec denv M e) ->
+        evalk P f rho' M (K a n') v M') ->
+     evalk P f rho M (cexp g mv e envA nxt K) v M')
+  /\
+  (forall es envA denv nxt K rho v M', wfs r k es = true -> inv rho envA denv nxt ->
+     (forall rho' n' As, agree rho rho' nxt -> Pos.le nxt n' -> Forall (fun a => atom_lt a n') As ->
+        avals rho' As = Some (denote_es rec denv M es) -> evalk P f rho' M (K As n') v M') ->
+     evalk P f rho M (cexps g mv es envA nxt K) v M').
+Proof.
+  apply sexp_comb.
+  - (* SVar *) intros i envA denv nxt K rho v M' W Iv HK. simpl.
+    destruct Iv as (E & L & _ & _). apply HK; [apply agree_refl | lia | apply L | apply E].
+  - (* SInt *) intros n envA denv nxt K rho v M' W Iv HK. simpl. apply HK; [apply agree_refl | lia | exact Logic.I | reflexivity].
+  - (* SOp *) intros o a IHa b IHb envA denv nxt K rho v M' W Iv HK. simpl in *.
+    apply andb_true_iff in W as [Wa Wb].
+    apply IHa with (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
+    apply IHb with (denv := denv); auto. { eapply inv_step; eauto. }
+    intros rho2 n2 B A2 Le2 LB VB.
+    eapply K_op.
+    + rewrite (aval_agree rho1 rho2 n1); eauto.
+    + eauto.
+    + apply HK.
+      * eapply (agree_set2 rho rho1 rho2); eauto; lia.
+      * lia.
+      * simpl. lia.
+      * simpl. rewrite PTree.gss. reflexivity.
+  - (* SIf *) intros c a IHa b IHb t IHt e IHe envA denv nxt K rho v M' W Iv HK. simpl in *.
+    apply andb_true_iff in W as [W Wf]. apply andb_true_iff in W as [W Wt]. apply andb_true_iff in W as [Wa Wb].
+    apply IHa with (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
+    apply IHb with (denv := denv); auto. { eapply inv_step; eauto. }
+    intros rho2 n2 B A2 Le2 LB VB.
+    eapply K_if.
+    + rewrite (aval_agree rho1 rho2 n1); eauto.
+    + eauto.
+    + assert (I2 : inv rho2 envA denv n2). { eapply inv_step; [eapply inv_step; eauto | eauto | auto]. }
+      destruct (cmp_sem c (denote_e rec denv M a) (denote_e rec denv M b)) eqn:C.
+      * apply IHt with (denv := denv); auto. intros rho3 n3 a3 A3 Le3 L3 V3.
+        apply HK; [| lia | exact L3 | exact V3].
+        eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); eauto; lia.
+      * apply IHe with (denv := denv); auto. intros rho3 n3 a3 A3 Le3 L3 V3.
+        apply HK; [| lia | exact L3 | exact V3].
+        eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); eauto; lia.
+  - (* SLet *) intros e1 IH1 e2 IH2 envA denv nxt K rho v M' W Iv HK. simpl in *.
+    apply andb_true_iff in W as [W1 W2].
+    apply IH1 with (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
+    apply IH2 with (denv := denote_e rec denv M e1 :: denv); auto.
+    + destruct (inv_step rho rho1 envA denv nxt n1 Iv A1 Le1) as (E & L & Mv & R).
+      split; [|split; [|split]]; auto using env_ok_cons, lt_all_cons.
+    + intros rho2 n2 a2 A2 Le2 L2 V2. apply HK; [eapply (agree_trans rho rho1 rho2 nxt n1); eauto | lia | exact L2 | exact V2].
+  - (* SRd *) intros h IHh i IHi envA denv nxt K rho v M' W Iv HK. simpl in *.
+    apply andb_true_iff in W as [Wh Wi].
+    apply IHh with (denv := denv); auto. intros rho1 n1 H A1 Le1 LH VH.
+    apply IHi with (denv := denv); auto. { eapply inv_step; eauto. }
+    intros rho2 n2 J A2 Le2 LJ VJ.
+    eapply K_ld.
+    + rewrite (aval_agree rho1 rho2 n1); eauto.
+    + eauto.
+    + apply HK.
+      * eapply (agree_set2 rho rho1 rho2); eauto; lia.
+      * lia.
+      * simpl. lia.
+      * simpl. rewrite PTree.gss. reflexivity.
+  - (* SRec *) intros args IHs envA denv nxt K rho v M' W Iv HK. simpl in *.
+    apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [Wr Wk].
+    apply IHs with (denv := denv); auto. intros rho1 n1 As A1 Le1 LAs VAs.
+    destruct (Hrec Wr (denote_es rec denv M args)) as (fg & rho' & F & B & EV).
+    { rewrite len_denote_es. apply Nat.eqb_eq; auto. }
+    destruct (inv_step rho rho1 envA denv nxt n1 Iv A1 Le1) as (_ & _ & Mv1 & R1).
+    eapply K_call; eauto.
+    + simpl. rewrite (R1 Wr), VAs. reflexivity.
+    + apply HK.
+      * eapply (agree_set1 rho rho1); eauto; lia.
+      * lia.
+      * simpl. lia.
+      * simpl. rewrite PTree.gss. reflexivity.
+  - (* SNil *) intros envA denv nxt K rho v M' W Iv HK. simpl. apply HK; [apply agree_refl | lia | constructor | reflexivity].
+  - (* SCons *) intros e IHe es IHes envA denv nxt K rho v M' W Iv HK. simpl in *.
+    apply andb_true_iff in W as [We Wes].
+    apply IHe with (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
+    apply IHes with (denv := denv); auto. { eapply inv_step; eauto. }
+    intros rho2 n2 As A2 Le2 LAs VAs. apply HK.
+    + eapply (agree_trans rho rho1 rho2 nxt n1); eauto.
+    + lia.
+    + constructor; auto. eapply atom_lt_mono; eauto.
+    + simpl. rewrite (aval_agree rho1 rho2 n1), VA, VAs; auto.
+Qed.
+
+Definition cexp_ok := proj1 cexp_all.
+Definition cexps_ok := proj2 cexp_all.
+
+(** in tail position: the function's body ends with the value of [e] and the memory it started with *)
+Hypothesis Hf : find P g = Some f.
+
+Lemma ctail_ok : forall e envA denv nxt rho, wf r k e = true -> inv rho envA denv nxt ->
+  evalk P f rho M (ctail g mv e envA nxt) (denote_e rec denv M e) M.
+Proof.
+  induction e; intros envA denv nxt rho W Iv; cbn [ctail] in *; cbn [wf] in W.
+  - apply cexp_ok with (denv := denv); auto. intros. apply K_ret. auto.
+  - apply cexp_ok with (denv := denv); auto. intros. apply K_ret. auto.
+  - apply cexp_ok with (denv := denv); auto. intros. apply K_ret. auto.
+  - (* SIf *) apply andb_true_iff in W as [W Wf]. apply andb_true_iff in W as [W Wt]. apply andb_true_iff in W as [Wa Wb].
+    apply cexp_ok with (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
+    apply cexp_ok with (denv := denv); auto. { eapply inv_step; eauto. }
+    intros rho2 n2 B A2 Le2 LB VB.
+    eapply K_if.
+    + rewrite (aval_agree rho1 rho2 n1); eauto.
+    + eauto.
+    + assert (I2 : inv rho2 envA denv n2). { eapply inv_step; [eapply inv_step; eauto | eauto | auto]. }
+      cbn [denote_e]. destruct (cmp_sem c (denote_e rec denv M e1) (denote_e rec denv M e2)); auto.
+  - (* SLet *) apply andb_true_iff in W as [W1 W2].
+    apply cexp_ok with (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
+    cbn [denote_e]. apply IHe2; auto.
+    destruct (inv_step rho rho1 envA denv nxt n1 Iv A1 Le1) as (E & L & Mv & R).
+    split; [|split; [|split]]; auto using env_ok_cons, lt_all_cons.
+  - apply cexp_ok with (denv := denv); auto. intros. apply K_ret. auto.
+  - (* SRec *) apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [Wr Wk].
+    apply cexps_ok with (denv := denv); auto. intros rho1 n1 As A1 Le1 LAs VAs.
+    destruct (Hrec Wr (denote_es rec denv M args)) as (fg & rho' & F & B & EV).
+    { rewrite len_denote_es. apply Nat.eqb_eq; auto. }
+    rewrite Hf in F. injection F as <-.
+    destruct (inv_step rho rho1 envA denv nxt n1 Iv A1 Le1) as (_ & _ & Mv1 & R1).
+    cbn [denote_e]. eapply K_loop; eauto. simpl. rewrite (R1 Wr), VAs. reflexivity.
+Qed.
+End Sim.
+
+(* ---------------------------------------------------------------- the function *)
+Local Open Scope nat_scope.
+
+Lemma app_abs : forall k F vs s, length vs = k -> app k (abs k F) vs s = F (rev vs) s.
+Proof.
+  induction k as [|k IH]; intros F vs s L; destruct vs as [|v vs]; simpl in *; try discriminate; auto.
+  all: injection L as L; rewrite IH by auto; reflexivity.
+Qed.
+
+Lemma bind_some : forall xs vs rho, length xs = length vs -> exists rho', bind xs vs rho = Some rho'.
+Proof. induction xs as [|x xs IH]; intros [|v vs] rho L; simpl in *; try discriminate; eauto. Qed.
+
+Lemma bind_notin : forall xs vs rho rho' y, bind xs vs rho = Some rho' -> ~ In y xs -> rho' ! y = rho ! y.
+Proof.
+  induction xs as [|x xs IH]; intros [|v vs] rho rho' y B N; simpl in *; try discriminate.
+  - injection B as <-. reflexivity.
+  - rewrite (IH vs _ _ y B) by tauto. rewrite PTree.gso; auto.
+Qed.
+
+Lemma bind_nth : forall xs vs rho rho' j, NoDup xs -> bind xs vs rho = Some rho' -> j < length xs ->
+  rho' ! (nth j xs 1%positive) = Some (nth j vs 0%uint63).
+Proof.
+  induction xs as [|x xs IH]; intros [|v vs] rho rho' j ND B L; simpl in *; try discriminate; try lia.
+  inversion ND; subst. destruct j as [|j].
+  - rewrite (bind_notin xs vs _ _ x B) by auto. apply PTree.gss.
+  - apply (IH vs (PTree.set x v rho) rho' j); auto. lia.
+Qed.
+
+Lemma params_nth : forall k j, j <= k -> nth j (params k) 1%positive = Pos.of_succ_nat j.
+Proof.
+  intros k j L. unfold params. rewrite nth_indep with (d' := Pos.of_succ_nat 0) by (rewrite map_length, seq_length; lia).
+  rewrite map_nth, seq_nth by lia. reflexivity.
+Qed.
+
+Lemma params_nodup : forall k, NoDup (params k).
+Proof.
+  intro k. unfold params. apply FinFun.Injective_map_NoDup; [| apply seq_NoDup].
+  intros a b E. apply SuccNat2Pos.inj; auto.
+Qed.
+
+Lemma params_length : forall k, length (params k) = S k.
+Proof. intro k. unfold params. rewrite map_length, seq_length. reflexivity. Qed.
+
+Lemma env0_nth : forall k i, i < k -> nth i (env0 k) (Aint 0%uint63) = Avar (Pos.of_succ_nat (k - i)).
+Proof.
+  intros k i L. unfold env0.
+  rewrite nth_indep with (d' := Avar (Pos.of_succ_nat 0)) by (rewrite map_length, rev_length, seq_length; lia).
+  rewrite map_nth with (d := 0). rewrite rev_nth by (rewrite seq_length; lia). rewrite seq_length, seq_nth by lia.
+  f_equal. f_equal. lia.
+Qed.
+
+Lemma env0_out : forall k i, k <= i -> nth i (env0 k) (Aint 0%uint63) = Aint 0%uint63.
+Proof. intros k i L. apply nth_overflow. unfold env0. rewrite map_length, rev_length, seq_length. lia. Qed.
+
+Lemma env0_lt : forall k, lt_all (env0 k) (Pos.of_succ_nat (S k)).
+Proof.
+  intros k i. destruct (Nat.lt_ge_cases i k) as [L|L].
+  - rewrite env0_nth by auto. simpl. apply Pos2Nat.inj_lt. rewrite !SuccNat2Pos.id_succ. lia.
+  - rewrite env0_out by auto. simpl. auto.
+Qed.
+
+(** the parameters bound: the counter in 1, the numbers in 2 .. k+1, read by [env0] in the order of [denote_fun] *)
+Lemma bind_params : forall k n vs, length vs = k ->
+  exists rho0, bind (params k) (ofn n :: vs) (PTree.empty _) = Some rho0 /\
+    rho0 ! 1%positive = Some (ofn n) /\ env_ok rho0 (env0 k) (rev vs).
+Proof.
+  intros k n vs L. destruct (bind_some (params k) (ofn n :: vs) (PTree.empty _)) as [rho0 B].
+  { rewrite params_length. simpl. lia. }
+  exists rho0. split; auto. split.
+  - pose proof (bind_nth _ _ _ _ 0 (params_nodup k) B) as N. rewrite params_nth in N by lia. apply N. rewrite params_length. lia.
+  - intro i. destruct (Nat.lt_ge_cases i k) as [Li|Li].
+    + rewrite env0_nth by auto. simpl.
+      pose proof (bind_nth _ _ _ _ (k - i) (params_nodup k) B) as N. rewrite params_nth in N by lia.
+      rewrite N by (rewrite params_length; lia).
+      replace (k - i) with (S (length vs - S i)) by lia. simpl. rewrite rev_nth by lia. reflexivity.
+    + rewrite env0_out by auto. simpl. rewrite nth_overflow; auto. rewrite rev_length. lia.
+Qed.
+
+Theorem compile_fun_ok : forall P g k e0 e1,
+  find P g = Some (compile_fun g k e0 e1) -> wf false k e0 = true -> wf true k e1 = true ->
+  forall n vs M, length vs = k -> (Z.of_nat n < wB)%Z ->
+  runk P g (ofn n :: vs) M (app k (denote_fun k e0 e1 n) vs M) M.
+Proof.
+  intros P g k e0 e1 Hf W0 W1.
+  set (mv := Pos.of_succ_nat (S k)).
+  assert (Lmv : lt_all (env0 k) mv) by apply env0_lt.
+  induction n as [|m IH]; intros vs M L B.
+  - destruct (bind_params k 0 vs L) as (rho0 & Bd & R1 & E).
+    exists (compile_fun g k e0 e1), rho0. split; [exact Hf|]. split; [exact Bd|].
+    change (app k (denote_fun k e0 e1 0) vs M) with (app k (abs k (fun env s => denote_e (fun _ => 0%uint63) env s e0)) vs M).
+    rewrite app_abs by auto. simpl kbody.
+    eapply K_if; [simpl; eauto | reflexivity | ]. rewrite ofn_0. simpl.
+    apply (ctail_ok P _ g mv M false k (fun _ => 0%uint63) 0%uint63); auto; try discriminate.
+    split; [|split; [|split]]; auto; try discriminate.
+    + eapply lt_all_mono; eauto. lia.
+    + lia.
+  - destruct (bind_params k (S m) vs L) as (rho0 & Bd & R1 & E).
+    exists (compile_fun g k e0 e1), rho0. split; [exact Hf|]. split; [exact Bd|].
+    change (app k (denote_fun k e0 e1 (S m)) vs M)
+      with (app k (abs k (fun env s => denote_e (fun args => app k (denote_fun k e0 e1 m) args s) env s e1)) vs M).
+    rewrite app_abs by auto. simpl kbody.
+    eapply K_if; [simpl; eauto | reflexivity | ]. simpl cmp_sem. rewrite ofn_S_ne0 by lia.
+    eapply K_op; [simpl; eauto | reflexivity | ]. simpl binop_sem. rewrite ofn_pred by lia.
+    apply (ctail_ok P _ g mv M true k (fun args => app k (denote_fun k e0 e1 m) args M) (ofn m)); auto.
+    + intros _ vs' L'. apply IH; auto. lia.
+    + split; [|split; [|split]].
+      * eapply env_ok_agree; eauto. apply agree_set. apply Pos.le_refl.
+      * eapply lt_all_mono; eauto. lia.
+      * lia.
+      * intros _. apply PTree.gss.
+Qed.
+
+
+(* ================================================================ the measurement: the per-program check *)
 Open Scope uint63_scope.
 
 (* a counted loop, as a user writes it *)
@@ -69,14 +450,25 @@ Fixpoint sum (n : nat) (i acc : i63) (s : mem) : i63 :=
 
 (* its syntax: the numbers nearest first -- acc is SVar 0, i is SVar 1 *)
 Definition sum_s0 := SVar 0.
-Definition sum_s1 := SRec [SOp Badd (SVar 1) (SInt 1); SOp Badd (SVar 0) (SRd (SInt 0) (SVar 1))].
+Definition sum_s1 := SRec (SCons (SOp Badd (SVar 1) (SInt 1)) (SCons (SOp Badd (SVar 0) (SRd (SInt 0) (SVar 1))) SNil)).
 
 (* the per-program check: the kernel compares the user's function with the meaning of its syntax *)
 Time Lemma sum_is : sum = denote_fun 2 sum_s0 sum_s1.
 Proof. Time exact eq_refl. Time Qed.
 
+(* end to end, the way a user's program gets its theorem: the KQL function is [compile_fun] of the syntax; its statement follows
+   from [compile_fun_ok] and the kernel's computation alone -- no tactic searches anything *)
+Definition sum_fn := compile_fun 1000%positive 2 sum_s0 sum_s1.
+Definition sum_P := mkprog [(1000%positive, sum_fn)] [].
+Time Lemma sum_ok : forall n i acc M, (Z.of_nat n < wB)%Z -> runk sum_P 1000%positive [ofn n; i; acc] M (sum n i acc M) M.
+Proof.
+  intros n i acc M B.
+  change (sum n i acc M) with (app 2 (denote_fun 2 sum_s0 sum_s1 n) [i; acc] M).
+  exact (compile_fun_ok sum_P 1000%positive 2 sum_s0 sum_s1 eq_refl eq_refl eq_refl n [i; acc] M eq_refl B).
+Time Qed.
+
 (* a wrong syntax (1 replaced by 2) is refused *)
-Time Fail Definition sum_wrong : sum = denote_fun 2 sum_s0 (SRec [SOp Badd (SVar 1) (SInt 2); SOp Badd (SVar 0) (SRd (SInt 0) (SVar 1))]) := eq_refl.
+Time Fail Definition sum_wrong : sum = denote_fun 2 sum_s0 (SRec (SCons (SOp Badd (SVar 1) (SInt 2)) (SCons (SOp Badd (SVar 0) (SRd (SInt 0) (SVar 1))) SNil))) := eq_refl.
 
 Fixpoint long (n : nat) (a : i63) (s : mem) : i63 :=
   match n with
@@ -385,6 +777,17 @@ Fixpoint long (n : nat) (a : i63) (s : mem) : i63 :=
     long m x300 s
   end.
 
-Definition long_s1 := (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 1))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 2))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 3))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 4))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 5))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 6))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 7))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 8))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 9))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 10))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 11))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 12))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 13))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 14))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 15))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 16))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 17))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 18))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 19))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 20))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 21))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 22))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 23))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 24))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 25))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 26))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 27))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 28))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 29))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 30))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 31))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 32))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 33))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 34))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 35))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 36))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 37))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 38))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 39))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 40))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 41))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 42))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 43))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 44))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 45))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 46))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 47))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 48))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 49))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 50))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 51))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 52))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 53))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 54))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 55))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 56))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 57))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 58))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 59))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 60))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 61))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 62))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 63))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 64))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 65))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 66))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 67))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 68))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 69))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 70))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 71))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 72))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 73))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 74))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 75))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 76))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 77))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 78))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 79))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 80))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 81))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 82))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 83))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 84))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 85))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 86))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 87))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 88))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 89))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 90))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 91))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 92))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 93))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 94))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 95))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 96))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 97))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 98))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 99))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 100))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 101))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 102))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 103))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 104))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 105))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 106))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 107))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 108))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 109))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 110))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 111))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 112))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 113))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 114))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 115))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 116))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 117))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 118))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 119))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 120))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 121))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 122))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 123))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 124))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 125))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 126))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 127))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 128))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 129))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 130))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 131))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 132))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 133))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 134))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 135))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 136))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 137))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 138))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 139))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 140))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 141))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 142))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 143))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 144))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 145))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 146))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 147))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 148))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 149))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 150))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 151))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 152))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 153))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 154))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 155))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 156))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 157))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 158))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 159))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 160))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 161))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 162))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 163))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 164))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 165))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 166))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 167))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 168))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 169))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 170))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 171))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 172))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 173))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 174))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 175))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 176))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 177))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 178))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 179))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 180))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 181))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 182))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 183))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 184))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 185))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 186))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 187))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 188))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 189))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 190))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 191))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 192))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 193))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 194))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 195))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 196))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 197))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 198))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 199))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 200))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 201))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 202))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 203))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 204))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 205))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 206))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 207))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 208))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 209))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 210))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 211))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 212))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 213))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 214))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 215))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 216))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 217))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 218))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 219))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 220))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 221))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 222))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 223))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 224))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 225))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 226))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 227))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 228))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 229))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 230))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 231))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 232))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 233))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 234))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 235))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 236))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 237))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 238))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 239))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 240))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 241))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 242))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 243))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 244))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 245))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 246))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 247))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 248))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 249))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 250))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 251))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 252))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 253))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 254))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 255))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 256))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 257))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 258))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 259))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 260))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 261))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 262))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 263))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 264))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 265))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 266))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 267))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 268))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 269))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 270))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 271))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 272))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 273))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 274))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 275))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 276))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 277))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 278))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 279))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 280))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 281))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 282))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 283))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 284))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 285))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 286))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 287))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 288))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 289))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 290))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 291))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 292))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 293))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 294))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 295))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 296))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 297))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 298))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 299))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 300))) (SRec [SVar 0]))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))).
+Definition long_s1 := (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 1))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 2))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 3))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 4))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 5))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 6))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 7))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 8))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 9))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 10))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 11))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 12))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 13))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 14))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 15))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 16))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 17))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 18))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 19))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 20))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 21))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 22))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 23))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 24))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 25))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 26))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 27))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 28))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 29))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 30))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 31))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 32))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 33))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 34))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 35))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 36))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 37))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 38))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 39))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 40))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 41))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 42))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 43))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 44))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 45))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 46))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 47))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 48))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 49))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 50))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 51))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 52))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 53))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 54))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 55))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 56))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 57))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 58))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 59))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 60))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 61))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 62))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 63))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 64))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 65))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 66))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 67))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 68))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 69))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 70))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 71))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 72))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 73))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 74))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 75))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 76))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 77))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 78))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 79))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 80))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 81))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 82))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 83))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 84))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 85))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 86))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 87))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 88))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 89))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 90))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 91))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 92))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 93))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 94))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 95))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 96))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 97))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 98))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 99))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 100))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 101))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 102))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 103))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 104))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 105))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 106))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 107))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 108))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 109))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 110))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 111))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 112))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 113))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 114))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 115))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 116))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 117))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 118))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 119))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 120))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 121))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 122))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 123))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 124))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 125))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 126))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 127))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 128))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 129))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 130))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 131))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 132))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 133))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 134))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 135))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 136))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 137))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 138))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 139))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 140))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 141))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 142))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 143))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 144))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 145))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 146))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 147))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 148))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 149))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 150))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 151))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 152))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 153))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 154))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 155))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 156))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 157))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 158))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 159))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 160))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 161))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 162))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 163))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 164))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 165))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 166))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 167))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 168))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 169))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 170))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 171))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 172))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 173))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 174))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 175))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 176))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 177))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 178))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 179))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 180))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 181))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 182))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 183))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 184))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 185))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 186))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 187))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 188))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 189))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 190))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 191))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 192))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 193))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 194))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 195))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 196))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 197))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 198))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 199))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 200))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 201))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 202))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 203))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 204))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 205))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 206))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 207))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 208))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 209))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 210))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 211))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 212))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 213))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 214))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 215))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 216))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 217))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 218))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 219))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 220))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 221))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 222))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 223))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 224))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 225))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 226))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 227))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 228))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 229))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 230))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 231))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 232))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 233))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 234))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 235))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 236))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 237))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 238))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 239))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 240))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 241))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 242))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 243))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 244))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 245))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 246))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 247))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 248))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 249))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 250))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 251))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 252))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 253))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 254))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 255))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 256))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 257))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 258))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 259))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 260))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 261))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 262))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 263))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 264))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 265))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 266))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 267))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 268))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 269))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 270))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 271))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 272))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 273))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 274))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 275))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 276))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 277))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 278))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 279))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 280))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 281))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 282))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 283))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 284))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 285))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 286))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 287))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 288))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 289))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 290))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 291))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 292))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 293))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 294))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 295))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 296))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 297))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 298))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 299))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 300))) (SRec (SCons (SVar 0) SNil)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))).
 Time Lemma long_is : long = denote_fun 1 (SVar 0) long_s1.
 Proof. Time exact eq_refl. Time Qed.
+
+Definition long_fn := compile_fun 1001%positive 1 (SVar 0) long_s1.
+Definition long_P := mkprog [(1001%positive, long_fn)] [].
+Time Lemma long_ok : forall n a M, (Z.of_nat n < wB)%Z -> runk long_P 1001%positive [ofn n; a] M (long n a M) M.
+Proof.
+  intros n a M B.
+  change (long n a M) with (app 1 (denote_fun 1 (SVar 0) long_s1 n) [a] M).
+  exact (compile_fun_ok long_P 1001%positive 1 (SVar 0) long_s1 eq_refl eq_refl eq_refl n [a] M eq_refl B).
+Time Qed.
+
+Print Assumptions sum_ok.

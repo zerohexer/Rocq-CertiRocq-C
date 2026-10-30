@@ -1660,7 +1660,19 @@ construct table is unchanged or better.
 `Fixpoint`); the kernel accepts `sum = denote_fun 2 ..` for a counted loop in 0.000 s, refuses a wrong syntax tree in 0.008 s,
 and accepts a loop whose body is 300 `let`s with 300 memory reads in 0.001 s (proof) + 0.001 s (`Qed`) — the whole file in
 0.67 s, 494 MB.  Against 35–54 s of search per test kernel today.  Still to measure as the syntax grows: records, writes of the
-memory, calls of other functions, captures — each needs its meaning to reduce to the user's text exactly.  (1) The spike: `S` for numbers, tests, `let`, calls, recursion on a
+memory, calls of other functions, captures — each needs its meaning to reduce to the user's text exactly.
+**The verified compiler for the first subset is proved (2026-10-30, `proved/KQR.v`):** `sexp` / `sexps` (mutual: numbers,
+operations, tests, lets, reads of the memory, the recursive call on the counter's predecessor with its numbers), `denote_fun`,
+`compile_fun` (A-normal form in continuation style; a test at the end is a branch, the recursive call at the end a loop
+`Eloop`, elsewhere a call `Ecall`; the counter tested against 0 and its predecessor in a fresh variable, as the translator does
+it today) and **`compile_fun_ok`: for every well-formed tree, every counter below `wB` and every arguments, the KQL function
+computes `denote_fun`** — proved once by induction on the counter, over a mutual continuation lemma (`cexp_all`) and the tail
+lemma (`ctail_ok`); its assumptions are Rocq's primitive integers and the kit memory's declared operations only (no memory law is
+needed for reads; no admit).  End to end, a user's function gets its KQL statement with no tactic search: `sum_ok` (the counted
+loop) by `change` + `exact (compile_fun_ok ..)` in 0.001 s, `long_ok` (300 lets and reads) in 0.003 s.  Next: `reify` (the
+user's text to `sexp`, from the MetaRocq front end) so this runs on the examples and the corpus, then the constructs of the table
+(writes of the memory, records, calls of other functions, booleans, captures, ...), each an `sexp` node, a `denote` case, a
+`compile` case and its proof case.  (1) The spike: `S` for numbers, tests, `let`, calls, recursion on a
 counter; `denote`; `compile` proved for it (`compile s = Some k -> k computes denote s`); `reify` for it; the per-program check
 `denote s = f` measured against the walk on the counted loops of the examples and a few corpus programs.  Continue only if the
 check is fast and reliable.  (2) Growth, construct by construct from the construct table: `S` node, `denote` case, `compile` case,
@@ -1798,10 +1810,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `30d0199` (2026-10-30); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `0beefec` (2026-10-30); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
+| (this commit) | `proved/KQR.v`: the verified compiler by reflection for the first subset — `compile_fun_ok` proved once; per-program statements by computation in milliseconds |
+| `0beefec` | `proved/KQR.v`: the per-program check measured (meaning = function in about a millisecond) |
+| `741373f` | `kitc.py --emit-first`, `--no-proof` |
+| `b8ad7c9` | D27, the commuting memory law approved |
 | `30d0199` | booleans (results, parameters, made by `if`/`match`), values built and taken apart in place (`knorm`), a number and a memory as a result, records chosen by a test; 5 new table cells; the table at 759 / 20 of 780 |
 | `685b6ff` … `2e2be49` | the architecture decisions: §1.11 (CakeML), §1.12 (the verified compiler by reflection, D26), the MetaRocq route and its two problems |
 | `485465e` … `f0f9f26` | this file, its additions and corrections; `proved/matrix/run.sh`; the five design cells reclassified as gaps (41) |
