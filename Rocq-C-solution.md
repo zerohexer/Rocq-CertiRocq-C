@@ -1647,6 +1647,32 @@ rotate as single instructions.  Each is a constructor, a case of the generator's
 measure, no new assumption.  Accepted when the `wfix` examples written as `Program Fixpoint` compile, prove and give the same
 answers, and the construct table has cells for each spelling.
 
+**V, how `S` grows — the design (2026-10-30), so each step extends the proof instead of redoing it.**
+1. **Signatures.**  A function is: a counter or not (first parameter, `nat`, recursion on it), `k` numbers, a memory parameter
+   or not (last), a result (a number; then a memory, a boolean, a number and a memory, a record).  Its meaning has exactly the
+   user's curried type, built by `abs`/`app` generalized over the signature, so the per-program check stays a conversion.
+2. **Programs and calls.**  A program is its functions, callees first (as the translator orders them today).  A call is
+   `SCall i args` (and the counter argument when the callee recurses on one).  The meanings of the callees are *parameters* of
+   `denote`: at the per-program check they are the user's own constants, so the user's text `h a b s` is literally what the
+   meaning reduces to (no unfolding of `h`).  The theorem of `compile` assumes the callees' KQL statements — the same modular
+   structure as today's per-function statements: each function's theorem uses the ones before it, checked one by one.
+3. **Memory.**  Numbers and memories are two sorts with two environments (the numbers, the memories), `let` of either sort,
+   `SUpd` (a write) and the memory functions (growing, views, machine operations) as memory expressions.  `compile` checks
+   linearity — only the newest memory is used, as `KQMTrans` refuses "a memory used after it was handed on" — and the proof's
+   invariant is that the KQL memory is the newest memory.  Reads and writes need no memory law (KQL's semantics applies
+   `KQRun.rd` / `upd` themselves); the laws enter only where the slot block is put back (results of several numbers, D27).
+4. **Then, from the construct table:** booleans (a sort held as 1 or 0), records and pairs (their fields as separate
+   variables; several numbers as a result through the slot block), a number and a memory as a result, values taken apart in
+   place (the reifier does `knorm`'s rewrites before building the tree, so they are no construct of `S` at all), functions given
+   to functions (the reifier makes the copy per function given, as the translator does; the copy is an ordinary `S` function),
+   measure recursion (`wfix`, as a template).
+5. **`kitc.py --reflect`** compiles a program through `compile` when its root and every callee are in `S` (the C at once, each
+   function's theorem one `exact` and a conversion), and falls back to the translator with the walk otherwise; the gate runs
+   both; each step of `S` moves programs from the fallback to the verified path, measured on the examples, the corpus, the
+   kernels and the table.
+Each step: the `sexp` node(s), the `denote` case, the `compile` case, the proof case; `sum` and `long` re-checked; an example
+added; the per-program check timed on the longest function it now covers.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
