@@ -1682,8 +1682,11 @@ every file compiled and every proof checked by the patched kernel (the cache key
 stock kernel's the same day 36–57 s); **the generated C byte-identical to the stock kernel's for all 66 programs** (22 examples,
 8 kernel programs, 36 corpus).  Trap: a fresh tree has no `big/` inputs (`*.mem`, `*.args`, `*.in`, the C++ answers are
 git-ignored, made by the setup scripts), so `corpus.sh` reports every program as not agreeing with `result 0` — copy or make
-them first.  **Left of (3):** Rocq's own test suite on the fork (its many tests that two terms must *not* be convertible are
-where a memo bug would show), and the memo-off comparison; then (4): the per-program step of `KQR.v` by `exact_no_check` (the
+them first.  **Rocq's own test suite on the fork, the memo on and off (2026-10-31):** the same patched binary, run as the
+`rocq-test-suite` package runs it (`make -k`, against the installed `rocq`; the OCaml unit tests need `ounit2`, not installed,
+so they do not run): **2,521 tests pass and 1 fails in each run, and no test changes its verdict when the memo is switched on**
+— the suite's tests that two terms must *not* be convertible included.  The one failure, the same in both, is
+`misc/bench-render` (`rocq timelog2html`, a tool rendering timing logs as HTML: not the kernel).  **(3) is done.**  Then (4): the per-program step of `KQR.v` by `exact_no_check` (the
 kernel checks at `Qed`, where the memo works; the elaborator's unification does not use it) and the 30- and 100-step chains
 back among the pinned tests.
 
