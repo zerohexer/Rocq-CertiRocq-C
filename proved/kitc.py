@@ -356,8 +356,16 @@ def main():
     entry_name = "body"
     ext = None
     names = []
+    # --emit-first: the C is printed and built right after the translation (it is a function of the KQL program alone), the
+    # proofs run after it; --no-proof: the C without the proofs (with --no-build: only the translation, a check of what is read)
+    emit_first = False
+    no_proof = False
     for a in sys.argv[1:]:
-        if a == "--no-build":
+        if a == "--emit-first":
+            emit_first = True
+        elif a == "--no-proof":
+            no_proof = True
+        elif a == "--no-build":
             build = False
         elif a == "--bare":
             build = False; bare = True
@@ -397,11 +405,29 @@ def main():
         helpers = mh.group(1).split() if mh else []
         me = re.search(r"KQM entry: (\w+) (\d+) (\w*) (\w)", out)
         _, eid, kinds, res = me.groups()
+        mpf = re.search(r"KQM pairfns:([^\n]*)", out)
+        pairfns = mpf.group(1).split() if mpf else []
+
+        def emit():
+            # the C, from the KQL program alone, with its driver; then the build
+            fc = os.path.join(GEN, f"{name}_c.v")
+            open(fc, "w").write(HDR + f"From KQG Require Import {name}_t.\n" + c_print(name))
+            rc, out = coqc(fc)
+            if rc != 0:
+                print(name, "C NOT PRINTED:", out[-400:].replace("\n", " "), flush=True); return False
+            write_c(name, eid, kinds, res, args, wrap, bare, prefix, entry_name, secondary, ext, pairfns)
+            return (not build) or build_bin(name, bare)
+
+        if emit_first or no_proof:
+            if not emit():
+                continue
+            if no_proof:
+                print(name, "NOT PROVED (proofs skipped)", len(fns), "functions; entry", entry, "id", eid, kinds, "->", res, flush=True)
+                continue
+            print(name, "C printed" + (" and built" if build else "") + "; the proofs follow", flush=True)
         # 2: prove, and print the C
         f1 = os.path.join(GEN, f"{name}_p.v")
         groups = [g.split() for g in re.findall(r"KQM group: ([\w' ]+)", out)]
-        mpf = re.search(r"KQM pairfns:([^\n]*)", out)
-        pairfns = mpf.group(1).split() if mpf else []
         unproved = []
         if os.environ.get("KQ_MONO"):
             t = proof_file(name, prog, entry, fns, helpers, groups, pairfns)
@@ -411,7 +437,12 @@ def main():
                 continue
             unproved = up
             t = HDR + f"From KQG Require Import {name}_t.\n"
-        t += f'\nFrom Stdlib Require Import String.\nLocal Open Scope string_scope.\nRedirect "{name}_c" Eval vm_compute in (KQLPrint.pstr 77777%positive (KQMTop.tr_kit_program {name}_prog)).\n'
+            if emit_first:
+                # the C is already printed and built; the proofs were checked unit by unit
+                print(name, ("UNPROVED " + " ".join(unproved) + " of") if unproved else "PROVED", len(fns), "functions"
+                      + (" (the rest proved)" if unproved else "") + "; entry", entry, "id", eid, kinds, "->", res)
+                continue
+        t += c_print(name)
         # a lemma the kernel does not finish (KQ_TIMEOUT) is left unproved (Admitted): the C is still made and is
         # checked by tests only; the program is then reported as unproved
         while True:
@@ -446,25 +477,43 @@ def main():
             print(name, "UNPROVED", " ".join(unproved), "of", len(fns), "functions (the rest proved); entry", entry, "id", eid, kinds, "->", res)
         else:
             print(name, "PROVED", len(fns), "functions; entry", entry, "id", eid, kinds, "->", res)
+        if emit_first:
+            # (KQ_MONO) the proofs checked together; the C is already printed and built
+            continue
         # 3: the C
-        raw = open(os.path.join(GEN, f"{name}_c.out")).read()
-        c = raw[raw.index('"') + 1: raw.rindex('"')].replace('""', '"')
-        cfile = os.path.join(GEN, f"{name}_bare.c" if bare else f"{name}_proved.c")
-        uses_hw = re.search(r"\bf91[01]\d\d\b", c) is not None
-        if prefix:
-            c = re.sub(r"\bf(1\d{3})\b", prefix + r"f\1", c)
-        open(cfile, "w").write('#include "gc_stack.h"\n#include "kq_io.h"\n' + ('#include "kq_hw.h"\n' if uses_hw else "") + c
-                               + driver(name, eid, kinds, res, args, wrap, uses_hw, bare, prefix, entry_name, secondary, ext, bool(pairfns)))
+        write_c(name, eid, kinds, res, args, wrap, bare, prefix, entry_name, secondary, ext, pairfns)
         if not build:
             continue
         # 4: build, as the kit builds its programs
-        rt = glob.glob(os.path.expanduser("~/.opam/*/lib/coq/user-contrib/CertiRocq/Plugin/runtime"))[0]
-        os.makedirs("bld/user", exist_ok=True); os.makedirs("bin", exist_ok=True)
-        for f in glob.glob("sup/v4/*.h") + glob.glob("sup/v4/*.c") + ["hw/kq_hw.h"]:
-            run(["cp", f, "bld/user/"])
-        cf = ["-w", "-O2", "-flto", "-fomit-frame-pointer", "-Ibld/user", f"-I{rt}", "-I."]
-        r = run(["clang", *cf, "-o", f"bin/P_{name}", "bld/user/kq_io3.c", cfile, f"{rt}/gc_stack.c", "bld/user/kq_prim63.c"])
-        print(name, "built bin/P_" + name if r.returncode == 0 else "BUILD FAILED: " + r.stderr[-400:])
+        build_bin(name, bare)
+
+def c_print(name):
+    """the command that prints the C of a translated program (from its KQL alone) into NAME_c.out"""
+    return (f'\nFrom Stdlib Require Import String.\nLocal Open Scope string_scope.\n'
+            f'Redirect "{name}_c" Eval vm_compute in (KQLPrint.pstr 77777%positive (KQMTop.tr_kit_program {name}_prog)).\n')
+
+def write_c(name, eid, kinds, res, args, wrap, bare, prefix, entry_name, secondary, ext, pairfns):
+    """NAME_c.out -> the C file with its driver"""
+    raw = open(os.path.join(GEN, f"{name}_c.out")).read()
+    c = raw[raw.index('"') + 1: raw.rindex('"')].replace('""', '"')
+    cfile = os.path.join(GEN, f"{name}_bare.c" if bare else f"{name}_proved.c")
+    uses_hw = re.search(r"\bf91[01]\d\d\b", c) is not None
+    if prefix:
+        c = re.sub(r"\bf(1\d{3})\b", prefix + r"f\1", c)
+    open(cfile, "w").write('#include "gc_stack.h"\n#include "kq_io.h"\n' + ('#include "kq_hw.h"\n' if uses_hw else "") + c
+                           + driver(name, eid, kinds, res, args, wrap, uses_hw, bare, prefix, entry_name, secondary, ext, bool(pairfns)))
+
+def build_bin(name, bare):
+    """build bin/P_NAME as the kit builds its programs"""
+    cfile = os.path.join(GEN, f"{name}_bare.c" if bare else f"{name}_proved.c")
+    rt = glob.glob(os.path.expanduser("~/.opam/*/lib/coq/user-contrib/CertiRocq/Plugin/runtime"))[0]
+    os.makedirs("bld/user", exist_ok=True); os.makedirs("bin", exist_ok=True)
+    for f in glob.glob("sup/v4/*.h") + glob.glob("sup/v4/*.c") + ["hw/kq_hw.h"]:
+        run(["cp", f, "bld/user/"])
+    cf = ["-w", "-O2", "-flto", "-fomit-frame-pointer", "-Ibld/user", f"-I{rt}", "-I."]
+    r = run(["clang", *cf, "-o", f"bin/P_{name}", "bld/user/kq_io3.c", cfile, f"{rt}/gc_stack.c", "bld/user/kq_prim63.c"])
+    print(name, "built bin/P_" + name if r.returncode == 0 else "BUILD FAILED: " + r.stderr[-400:], flush=True)
+    return r.returncode == 0
 
 if __name__ == "__main__":
     main()

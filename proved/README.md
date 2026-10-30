@@ -352,6 +352,10 @@ python3 proved/kitc.py NAME ...   # translate, prove, print, build bin/P_NAME
 bash proved/corpus.sh [times]     # all of hand.tsv; "times" also times each next to the kit's build
 ```
 
+`kitc.py --emit-first` prints the C and builds the binary right after the translation and runs the proofs behind it (the C is
+a function of the KQL program alone); `--no-proof` leaves the proofs out, and with `--no-build` only translates: a check of
+what is read and what is refused.
+
 `KQ_TIMEOUT` (seconds, default 300) bounds each proof.
 
 Each function's proof is checked alone, in its own file, against the statements of the functions before it, and the

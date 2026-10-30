@@ -481,7 +481,11 @@ function and checks each function's statement in its own file (`proved/gen/NAME_
 key is in the cache (`proved/gen/cache/`); prints the C (`Redirect .. Eval vm_compute in (KQLPrint.pstr .. (tr_kit_program
 NAME_prog))`); writes the driver (fills the tables from the loader, calls the entry with the numbers `main` gives); builds
 `bin/P_NAME` with the kit's support code.  Options: `--no-build`, `--bare`, `--secondary --prefix= --entry=` (a second program
-of a kernel), `--ext=` (the program's own routines).  Environment: `KQ_STRICT=1` (a proof that fails is an error, not
+of a kernel), `--ext=` (the program's own routines), `--emit-first` (the C printed and built right after the translation, the
+proofs after it — the C is a function of the KQL program alone), `--no-proof` (the C without the proofs; with `--no-build`, a
+check of what the translator reads).  Measured on `CF622F` (8 functions, the corpus's slowest proof): the binary at 15.3 s and
+the proofs at 76.2 s with `--emit-first`, against nothing before 76.7 s in the default order; the check alone 14.9 s, nearly all
+of it the translation.  The default order is unchanged, so the gate means what it meant.  Environment: `KQ_STRICT=1` (a proof that fails is an error, not
 `Admitted`), `KQ_TIMEOUT` (seconds per proof, default 300), `KQ_JOBS` (default 3), `KQ_MONO=1` (the whole program in one file,
 no cache), `KQ_TIMES=1` (each proof's time).
 
@@ -1568,8 +1572,8 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 
 Each item: what, why, and how it is accepted.  The order is by how much of the goal it closes per unit of risk.
 
-**The order to take them in** (the letters are names, not the order): the batch of **A** in progress lands → **B**'s
-emit-then-prove part (the C at once: the interim for other people's programs) → **V** (the verified compiler by reflection:
+**The order to take them in** (the letters are names, not the order): the batch of **A** in progress lands (done,
+`30d0199`) → **B**'s emit-then-prove part (done: `--emit-first`, `--no-proof`) → **V** (the verified compiler by reflection:
 spike, then growth; D26) → the rest of **A**, **L**, **P** (the user's ordinary text refused), done as constructs of `S` →
 **O** (operations C has) → the rest of **B** (compiling like `lean --c`) → **C** → **D** → **E** → **H** (with release builds
 through `ccomp`) → **G** → **M** → **J**; **F**, **I** and **N** when their condition arises; **K** when the owner says.
@@ -1586,9 +1590,9 @@ the gate (examples, corpus, kernels if the walk changed) passes.
 **B. Compiling from an ordinary `.v` file, as simply as `lean --c`.**
 - A command (`Kq Compile solve.`) in an ordinary Rocq file: the entry's arguments are read from its signature (numbers from the
   command line, the memory from the memory file), replacing the `main` convention of `.body` files.
-- Emit first, prove behind: the C is printed in seconds; the proofs run cached and in parallel; the program is reported proved
-  when they finish.
-- A check-only mode that runs the translator on every function and reports what is refused, in seconds.
+- ~~Emit first, prove behind~~ — **done 2026-10-30**: `kitc.py --emit-first` (the C and the binary right after the
+  translation, the proofs behind; §1.7).
+- ~~A check-only mode~~ — **done 2026-10-30**: `kitc.py --no-proof --no-build` (the translation alone, with its refusals).
 - Refusal messages that say what to write instead (the library, the rewrite), with a pointer into this file.
 Accepted when: every example and corpus program compiles from a `.v` file with the command, with the same C as today.
 
@@ -1670,6 +1674,8 @@ Everything runs in the repository's CertiRocq image (Rocq 9 with MetaRocq, CompC
 ```
 bash proved/make.sh                     # every proof of the route, "core-ok" at the end (ASSUME=1: print the assumptions)
 python3 proved/kitc.py NAME ...         # translate, prove each function, print the C, build bin/P_NAME
+python3 proved/kitc.py --emit-first NAME  # the same, with the C and the binary first and the proofs behind
+python3 proved/kitc.py --no-proof --no-build NAME   # the translation alone: what is read, what is refused
 bash proved/examples.sh                 # every proved/examples/*.body: proved, built, answer = NAME.expect
 bash proved/corpus.sh [times]           # every program of hand.tsv; "times" also times each next to the kit's build
 bash hw/spec.sh                         # the laws, the model, the demos, the library theorems rest on the laws alone
