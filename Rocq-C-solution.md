@@ -1831,6 +1831,31 @@ as values (9 of 67 through the verified compiler), booleans (20), narrow memory 
 records, `u64`, negation, mutual recursion (67).  The reasons are a scan of each function's text, so removing one may reveal a
 reason of place behind it; the gate counts after each step.  **Next: counters as values.**
 
+**Step 4, counters as values — the design (2026-10-31).**
+- *Signatures*: `sc : bool` becomes `sn : nat`, the number of counter parameters, first (the first is the one a recursive body
+  recurses on); `ftype g := ctype (sn g) (ntype ..)` with `ctype x T` = `x` arrows from `nat`; `absc` / `appc` bind and apply
+  them as `absn` / `appn` do numbers; a call is `callf g h cvs vs s`.
+- *Syntax*: a fourth mutual sort `scnt` — `CVar i` (the `i`-th counter variable, nearest first), `CO`, `CS c`, `CNat e`
+  (`kq_nat e`, a budget from a number; `kq_nat` stays opaque, the proof uses `kq_nat_val` / `kq_nat_le`).  `SCall f cs args`,
+  `MCall f cs args m` give the callee its counters; `SRec cs args`, `MRec cs args m` give the recursive call its counters after
+  the first (the first is the predecessor, as now).  `SMatch c e0 e1` / `MMatch c m0 m1`: a match on a counter variable inside a
+  body, the predecessor `CVar 0` in the second branch.  `ncnt` (`NNone | NCnt | NPred`) is gone: it was these three lists.
+- *Meaning*: `denote_e` / `denote_m` take the counter environment `cenv : list nat` (nearest first); the recursive call's meaning
+  takes the counters after the first, `rec : list nat -> list i63 -> mem -> ..`.
+- *KQL*: the counters in variables `1 .. sn` (the first in 1, as now), the numbers after them, the predecessor after those;
+  `CS` an addition, `CO` the atom 0, `CNat` the clamp the translator makes (two conditional moves), `SMatch` an `Eif` against 0
+  and a subtraction.
+- *Bounds* (a counter's machine number `ofn n` wraps at `wB`, so the zero test needs `n < wB`; `S` makes counters grow): function
+  `j` of a program assumes its counters below `cbz j := 2^62 - j·2^20`, which falls as `j` grows; a caller comes after its callees,
+  so a counter it holds plus up to `2^20` steps of `S` is still below a callee's bound.  `wf` checks: a callee's counter
+  arguments nest `S` at most `2^20` deep; the recursive call's counters after the first and `SMatch`'s subject have no `S` (a
+  counter grown at every round has no bound); `CNat` is at most `2^60`, below every `cbz j` of a program of fewer than `2^41`
+  functions.  The proof's invariant gains: the atoms of the counter environment hold `ofn` of its values, all below `cbz j`.
+- *Reifier*: counter entries in the context, read off `nat` parameters and the predecessor of a match on a counter; `S`, `O`,
+  `kq_nat` as counter expressions.  `kitc.py`: the entry's kinds `N` × `sn`.
+- *Not in this step*: a `let` of a counter, arithmetic and comparisons on counters (`Nat.eqb`, `n + n`), counters after a number
+  parameter (§3.7).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
