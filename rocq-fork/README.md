@@ -12,3 +12,8 @@ copy of its own text) takes time exponential in the number of steps; with it, li
   (`table_functional`).  Assumed only what the kernel already assumes.  `rocq c ConvMemo.v`.
 - `check_patch.py ROCQ_SRC` -- the facts the model assumes of the OCaml, checked on a patched tree (every cell built with
   identity 0, one place gives identities, in-place writes keep a cell's meaning, the table only for checked conversion).
+- `rebuild.sh` -- the image on the fork (`kernelq-certirocq:1b45a1aa-kq2-fork`): the V9.1.1 source fetched and checked by its
+  SHA-256, the patch applied and checked, every package of the image recompiled on it, the kq2 CertiRocq patch again.  Run
+  by `images.sh` (its third stage).  The image in use was built by the same steps from a copied source tree; this script
+  itself has not yet been run end to end.
+
