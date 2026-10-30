@@ -1812,8 +1812,13 @@ Names are qualified (`KQR.`, `KQRReify.`), so a user's function may be called li
 Measured on `proved/examples/reflect_calls.body` (a loop over block 0 calling a helper without memory; answer 2515, worked out
 by hand): proved by the verified compiler, 2 functions, built, 2515; the whole `kitc.py` run 2.31 s against 4.32 s for the
 translator and the walk (the theorems take milliseconds; the rest is starting Rocq and loading).  The fallback: `loop_while`
-(`loop_two`, not in `S`) is reported not read, then proved by the translator, answer 41.  Next: the gate with `KQ_REFLECT=1`
-(how many programs take the verified path — the measure `S` grows against), then the table's constructs.
+(`loop_two`, not in `S`) is reported not read, then proved by the translator, answer 41.  **The gate with `KQ_REFLECT=1`, on
+the fork (2026-10-31): everything passes** — `make.sh` `core-ok`; examples 23 / 23; corpus 36 / 36 equal to the C++ answers;
+the five kernels proved and built (36–54 s, as without it) — and **the baseline `S` grows against: 1 of 67 programs through the
+verified compiler** (`reflect_calls`), **66 read by the translator** (fallback), **0 read but refused by the check**.  Next: the
+reifier says *why* it does not read a program (the first construct it stops at), so the constructs are added in the order of
+how many programs they unblock — then booleans, records and several results, number-and-memory results, functions given to
+functions, `wfix`, machine operations, as §12.V's list.
 
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
