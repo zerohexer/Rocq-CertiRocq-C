@@ -1684,8 +1684,14 @@ for any memory) and `denote_rec_ext` (the meaning depends on the recursive call 
 case.  End to end with a call: `h` (a plain helper without memory) and `loop` (a loop calling `h acc (rd 0 i s)`) — the kernel
 accepts `loop = denote_f [existT ftype h_g h] ..` with the user's own `h` as the callee's meaning, and `loop_ok` is
 `compile_f_ok` with `h_ok` as the callee assumption: each per-program step 0.000–0.004 s; assumptions Rocq's integers and the
-kit memory's declared operations only.  The reifier reads one recursive function so far; next it reads programs (callees
-first, `SCall` from the user's calls, plain functions), then memory writes (step 3 of the design).
+kit memory's declared operations only.  **The reifier reads programs (2026-10-31):** `reify_prog` takes the quoted root, finds the
+program's functions with `reach` (the root's own file's constants that have a body, callees first, as the old translator orders
+them), and reads each with `reify_fun` — a recursive function (`FRec`) or a plain one (`FPlain`), its signature off its
+parameter types (`read_sig`), the user's calls as `SCall` (the callee's counter and memory read off the arguments).  From
+`loop`'s text it finds `h`, orders it first, and gives exactly the hand-written trees; the KQL program is made from the reified
+list (`funs_of`), and the per-program theorems follow — `h_ok_r`, then `loop_ok_r` with `h_ok_r` as the callee assumption —
+0.000–0.002 s each, assumptions the same base.  Next: step 3 of the design, memory writes (numbers and memories as two sorts,
+linearity checked by `compile`), then `kitc.py --reflect`.
 
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
@@ -1863,7 +1869,8 @@ Pushed to the public repository up to `0beefec` (2026-10-30); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | `proved/KQR.v` step 1: signatures, plain functions, calls; the modular theorem `compile_f_ok` |
+| (this commit) | `proved/KQRReify.v`: programs (`reach`, plain functions, calls); per-program theorems from the text |
+| `08304f4` | `proved/KQR.v` step 1: signatures, plain functions, calls; the modular theorem `compile_f_ok` |
 | `52b0012` | `proved/KQRReify.v`: the reifier (the user's text to the syntax); the per-program theorem from the text in 0.003 s |
 | `9cdbf38` | `proved/KQR.v`: the verified compiler by reflection for the first subset — `compile_fun_ok` proved once; per-program statements by computation in milliseconds |
 | `0beefec` | `proved/KQR.v`: the per-program check measured (meaning = function in about a millisecond) |
