@@ -44,8 +44,9 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    with a control (§3.5, §3.6).
 2. **A verified compiler by reflection** (§1.12, D26, §12.V): a syntax `S` of the fragment, its meaning `denote`, a compiler
    `compile : S -> KQL` proved once; the user's function is reified into `S` (untrusted) and per program only `denote s = f` is
-   checked by conversion — zero proof search, nothing added to the trust, for other people's programs.  Emit-then-prove is the
-   interim; a spike measures the check first.
+   checked by conversion — zero proof search, nothing added to the trust, for other people's programs.  Built so far
+   (`proved/KQR.v`, `KQRReify.v`): numbers, tests, lets, reads, calls, recursion on a counter, memory writes — each
+   per-program step in milliseconds (one measured limit, F46); next `kitc.py --reflect`.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -768,7 +769,9 @@ time before the systems story exists.
 
 *Where reflection is honestly weak (and what answers it).*  It covers a fragment `S` — so the construct table and the
 completeness theorem must be strong (§3, §3.8).  The per-program check grows with the program — measured by the spike on the
-longest kernel function.  `S` must be designed well up front — from the construct table, so it is not redone.
+longest kernel function.  Measured since (F46): linear for numbers and for memories used once per step, exponential for a
+straight-line body that reads and then writes the same memory step after step (about 1 s at 20 steps) — a property of Rocq's
+conversion that the walk shares, so it is no worse than today, and it is open.  `S` must be designed well up front — from the construct table, so it is not redone.
 
 *"A fragment `S` versus all of Rocq" — is that patching, or less native?*  Neither; it is a technical detail.  Both routes
 cover a fragment: "over Rocq" in the MetaRocq route only means the theorem's statement mentions all Rocq terms — its translator
@@ -1563,6 +1566,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F43 | Giving back more than two numbers needs the caller to put back several cells of the slot block, which needs writes to different cells to commute; the laws have no such statement and it does not follow from `upd_upd` / `upd_rd_id` (memories are equal only through those) | waits on the owner (adding a law to `real_laws` is adding to the trust); the model would prove it with functional extensionality, as it proves the others |
 | F44 | `kitc.py` prints only the last 300 characters of a failed translation, mostly warnings; the classifier then cannot see the reason | read the `.v`'s error, or the `KQM: refused:` line; `run.sh` keeps 400 characters of a cell's output |
 | F45 | The dead-`let` check of the normalizer made the three kernels with the 2,400-step function 10–20% slower to build: `||` and `existsb` work out both sides under `vm_compute`, so every memory `let` scanned the whole rest of the function (quadratic in its length) | the type is looked at first, and the scan stops at the first occurrence; the kernels back within a few percent of the pushed translator, measured the same day (§7.3) |
+| F46 | The per-program check `denote s = f` is exponential in the number of steps of a straight-line body that reads a memory and then writes it (`let s1 := upd 0 1 (rd 0 0 s + 1) s in ..`, each memory used twice): 10 steps 0.003 s, 20 steps 0.7–1.0 s, 30 steps over 120 s (`KQR.v`, `chain10`/`chain20`, 2026-10-31).  It is Rocq's conversion: after the `let`s are substituted the kernel compares the two sides path by path, with no memory of what it has already compared, and a memory used twice per step doubles the paths per step.  Measured apart from `S`: the same chain against a verbatim copy of its own text, 16/18/20 steps, 0.09/0.24/0.73 s by the elaborator's conversion and 0.015/0.065/0.25 s by the VM's (`vm_cast`), the same growth.  The walk met the same wall (F11).  Not affected: memories used once per step (`x86_setup`'s chain of `hw_store`s), lets of numbers (the 300-let body: 0.001 s), and the same steps in a helper or a loop, because a call or the recursive call is a constant on both sides and the comparison stops there | open.  What would remove it, none done: (1) skip the check for such a function, trusting the reifier there (adds trust: the owner's decision, §13.9); (2) a conversion in Rocq's kernel that shares the comparison of shared subterms (upstream); (3) programs keep long read-modify-write sequences in helpers or loops — a style rule, so not a fix (D13, D22) |
 | F38 | MetaRocq's formal evaluation (`EWcbvEval.eval`, `PCUICWcbvEval`) has rules for primitive values only, none for primitive operations: `PrimInt63.add` has no body, `eval_delta` cannot fire, every program here is stuck in it | the verified compiler is built by reflection over our own syntax instead (D26, §1.12) (read in the image's MetaRocq sources, 2026-10-30) |
 | F37 | CakeML's architecture is ours: a proof-producing translator from the logic's functions on top, one verified compiler below; Pancake is verified through a proof-producing decompiler.  The difference is that CakeML builds each proof by construction while ours searches | D25, §1.11 (read in the CakeML repository, 2026-10-30) |
 
@@ -1712,6 +1716,41 @@ linearity checked by `compile`), then `kitc.py --reflect`.
   after such a call the caller's memory in Rocq is still the old one while the KQL memory has changed; today's translator
   handles it by invalidating the caller's memory (`runx`), and so will this, with its own statement.
 - *Laws.*  Writes need none (KQL's semantics applies `KQRun.upd` itself, as for reads).
+
+**Step 3 done (2026-10-31): memory writes.**  Built in `proved/KQR.v` and `proved/KQRReify.v`, with two changes to the design
+above, both found by reading KQL's semantics against the user's text:
+- *`smem` is its own inductive, not mutual with `sexp`*, and numbers gain no `SLetM`: in this step a number never writes (a
+  function giving back a number that writes is the deferred `runx` case), so a number expression is evaluated on one memory and
+  the number lemmas (`cexp_all`, `ctail_ok`) only gained the memory as an argument instead of a section variable.  When the
+  `runx` case comes, a writing number body is a third sort over `smem` and `sexp` (`let s2 := .. in` then a number), which
+  again leaves `sexp` as it is.
+- *`MRec args m` and `MCall f c args m` carry their memory argument as a sub-expression* instead of always passing the newest
+  memory: `fill m (i + 1) (upd 0 i v s)` is read as written, and the number arguments are worked out on the memory before the
+  write — what the text means when an argument reads `s` and the memory argument writes it (with the `let` reading of the design,
+  such an argument would read the written memory and the check would refuse the tree).  So `menv` is not needed: only the
+  newest memory can be named at all.
+The syntax: `MCur`, `MUpd h i v m`, `MLet e m`, `MLetM m1 m2` (`let s2 := m1 in m2`), `MIf c a b m1 m2`, `MRec args m`,
+`MCall f c args m`; `sig` gained `sr` (a memory as the result; `ntype k m r`, `rty r`); a call's number and memory are `calln` /
+`callm`; `fbody` gained `FRecM` / `FPlainM`; `callee_ok` says a function giving back a memory returns 0 and leaves
+`callm ..`, one giving back a number keeps the memory.  `cmem` compiles a memory in continuation style (the numbers, then the
+memory given, then `Ekst` or the call), `ctailm` in tail position (a test is a branch, the recursive call `Eloop`, the end
+`Eret 0`).  **`cmem_ok`: KQL's memory after the code is the memory the Rocq text makes** — that is the whole invariant, since
+the syntax names only the newest memory; `ctailm_ok` for the tail; `compile_f_ok` gained the two memory cases (the counter's
+induction for `FRecM`), proved on the first compile.  `wfm` checks the memory side (the recursive call only where allowed, a
+callee called for a memory takes and gives one, a callee called for a number gives a number).  **Linearity**: in the syntax, by
+construction; in the reifier, a `let s2 := .. in` marks every older memory dead (`CDead`, `kill_mem`), so a text that uses an
+older memory after a newer one (`dup`: `let s2 := upd .. s in upd 0 1 (rd 0 0 s) s2`) has no tree and is refused there, with
+its reason (§0.5's third refusal).  **Measured** (`KQR.v`, `KQRReify.v`): `fill` (a loop writing the memory), `suffix` (a
+recursion that is not a tail call, its result bound by a memory `let` and then read and written), `init` (a test, a write, a
+call of `fill` on the written memory), each `denote = f` and each composed theorem 0.000–0.02 s; the reifier gives exactly the
+hand-written trees, finds `fill` from `init`'s text and orders it first, and `init_ok_r` takes `fill_ok_r` as its callee
+assumption; `Print Assumptions` of `init_ok`, `init_ok_r`, `chain20_ok`: Rocq's integers and the kit memory's declared
+operations, no memory law, no admit; `make.sh` `core-ok`.  **A limit found, shared with the walk (F46):** a straight-line body
+that reads a memory and then writes it, step after step, makes the check exponential in the number of such steps (10 steps
+0.003 s, 20 steps 0.7–1.0 s, 30 steps over 120 s) — a property of Rocq's conversion, not of `S`: the same chain compared with a
+verbatim copy of its own text grows the same way.  The same steps in a helper or a loop cost per step.  Next: `kitc.py
+--reflect`, then the table's constructs (booleans, records and several results through the slot block with D27, number-and-
+memory results and writing number functions, functions given to functions, `wfix`, `Program Fixpoint`).
 
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
@@ -1889,7 +1928,8 @@ Pushed to the public repository up to `0beefec` (2026-10-30); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | `proved/KQRReify.v`: programs (`reach`, plain functions, calls); per-program theorems from the text |
+| (this commit) | `proved/KQR.v` + `KQRReify.v` step 3: memory writes (`smem`, `cmem_ok`, `ctailm_ok`, the memory cases of `compile_f_ok`; the reifier reads memory bodies, linearity by dead memories); F46 |
+| `a8206b2` | `proved/KQRReify.v`: programs (`reach`, plain functions, calls); per-program theorems from the text |
 | `08304f4` | `proved/KQR.v` step 1: signatures, plain functions, calls; the modular theorem `compile_f_ok` |
 | `52b0012` | `proved/KQRReify.v`: the reifier (the user's text to the syntax); the per-program theorem from the text in 0.003 s |
 | `9cdbf38` | `proved/KQR.v`: the verified compiler by reflection for the first subset — `compile_fun_ok` proved once; per-program statements by computation in milliseconds |
