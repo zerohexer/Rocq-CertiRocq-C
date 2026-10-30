@@ -1,0 +1,8 @@
+(* through the verified compiler (kitc.py --reflect): a loop over block 0 calling a helper that takes no memory.  With n = 6
+   on the cells 36 24 100 35 17 5: acc = 2 acc + cell from 0 gives 36, 96, 292, 619, 1255, 2515 *)
+Definition step (acc x : int) : int := 2 * acc + x.
+Fixpoint walk (n : nat) (i acc : int) (s : mem) : int :=
+  match n with O => acc | S m => walk m (i + 1) (step acc (rd 0 i s)) s end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  walk (kq_nat (kq_arg 0)) 0 0 (kq_input 0).

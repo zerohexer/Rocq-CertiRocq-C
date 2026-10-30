@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """kitc.py [--no-build] NAME...   (inside the image, in the repo's directory)
 
-A kit program (hand/NAME.body, or a path to a .body file) through the proved route:
+A kit program (hand/NAME.body, or a path to a .body file) through the proved route (with --reflect, first through the
+verified compiler: see reflect(); a program it does not read takes the steps below):
   1. the translator reads the function `main` applies and every function of the file it uses (proved/KQMTrans.v)
      and the kernel checks, for each, that the KQL function computes it (proved/KQMAuto.v);
   2. the generated Clight is printed as C (proved/KQLPrint.v);
@@ -361,6 +362,47 @@ value {entry_name}(struct thread_info *ti) {{
 def run(cmd, **kw):
     return subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT, **kw)
 
+def reflect(name, entry, prog, no_proof):
+    """--reflect: the verified compiler (proved/KQR.v, Rocq-C-solution.md §1.12).  The reifier reads the entry `main`
+    applies and every function it reaches (proved/KQRReify.v); each function is compiled by KQR.compile_f, and gets its
+    statement from KQR.compile_f_ok -- proved once -- with the theorems of the functions before it as its callee
+    assumption: one [exact_no_check] per function, which the kernel checks at Qed (the meaning of the syntax tree against
+    the user's function, by conversion).  No tactic, no search.  -> (eid, kinds, res, n) or None (not read: the caller
+    takes the translator)"""
+    f0 = os.path.join(GEN, f"{name}_r.v")
+    open(f0, "w").write(HDR + "From KQC Require KQR KQRReify.\n" + prog
+        + f"\nDefinition {name}_src := ltac:(run_template_program (tmQuoteRec {entry})\n"
+        + "  (fun q => let r := eval vm_compute in (KQRReify.reify_prog q) in exact r)).\n"
+        + f'Redirect "{name}_rinfo" Eval vm_compute in (option_map KQRReify.info_of {name}_src).\n')
+    rc, out = coqc(f0)
+    info = open(os.path.join(GEN, f"{name}_rinfo.out")).read() if rc == 0 and os.path.exists(os.path.join(GEN, f"{name}_rinfo.out")) else ""
+    fs = re.findall(r'\("([^"]+)"(?:%bs)?,\s*(true|false),\s*(\d+)(?:%nat)?,\s*(true|false),\s*(true|false)\)', info)
+    if rc != 0 or not fs or "= None" in info:
+        print(name, "reflect: not read by the verified compiler's reifier; the translator follows", flush=True)
+        return None
+    sig = lambda f: f"(KQR.mksig {f[1]} {f[2]} {f[3]} {f[4]})"
+    t = HDR + "From KQC Require KQR KQRReify.\nImport ListNotations.\n" + f"From KQG Require Import {name}_r.\n"
+    t += f"Definition {name}_funs := match {name}_src with Some l => l | None => [] end.\n"
+    t += f"Definition {name}_prog := KQL.mkprog (KQRReify.funs_of 0 {name}_funs) [].\n"
+    if not no_proof:
+        for j, f in enumerate(fs):
+            cs = "[" + "; ".join(f"existT KQR.ftype {sig(g)} {g[0]}" for g in fs[:j]) + "]"
+            oks = "".join(f"(conj {name}_rok{i} " for i in range(j)) + "Logic.I" + ")" * j
+            t += (f"Lemma {name}_rok{j} : KQR.callee_ok {name}_prog (KQR.gid1 {j}) {sig(f)} {f[0]}.\n"
+                  f"Proof. exact_no_check (KQR.compile_f_ok {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j})"
+                  f" eq_refl eq_refl (KQR.all_ok_callees {name}_prog KQR.gid1 {cs} {oks})). Qed.\n")
+    t += c_print(name)
+    f1 = os.path.join(GEN, f"{name}_rp.v")
+    open(f1, "w").write(t)
+    rc, out = coqc(f1)
+    if rc != 0:
+        print(name, "REFLECT CHECK FAILED (the translator follows):", out[-400:].replace("\n", " "), flush=True)
+        return None
+    idx = [f[0] for f in fs].index(entry) if entry in [f[0] for f in fs] else len(fs) - 1
+    e = fs[idx]
+    kinds = ("N" if e[1] == "true" else "") + "I" * int(e[2]) + ("M" if e[3] == "true" else "")
+    return 1000 + idx, kinds, "M" if e[4] == "true" else "I", len(fs)
+
 def main():
     build = True
     bare = False
@@ -373,8 +415,11 @@ def main():
     # proofs run after it; --no-proof: the C without the proofs (with --no-build: only the translation, a check of what is read)
     emit_first = False
     no_proof = False
+    reflect_mode = bool(os.environ.get("KQ_REFLECT"))   # KQ_REFLECT=1: as --reflect (for the scripts that call kitc.py)
     for a in sys.argv[1:]:
-        if a == "--emit-first":
+        if a == "--reflect":
+            reflect_mode = True
+        elif a == "--emit-first":
             emit_first = True
         elif a == "--no-proof":
             no_proof = True
@@ -406,6 +451,16 @@ def main():
             entry, args, wrap = parse_main(mt)
         except SystemExit as ex:
             print(name, "NOT READ:", ex); continue
+        if reflect_mode:
+            r = reflect(name, entry, prog, no_proof)
+            if r:
+                eid, kinds, res, n = r
+                print(name, ("NOT PROVED (proofs skipped)" if no_proof else "PROVED"), n, "functions by the verified compiler; entry",
+                      entry, "id", eid, kinds, "->", res, flush=True)
+                write_c(name, eid, kinds, res, args, wrap, bare, prefix, entry_name, secondary, ext, [])
+                if build:
+                    build_bin(name, bare)
+                continue
         # 1: translate
         f0 = os.path.join(GEN, f"{name}_t.v")
         open(f0, "w").write(HDR + prog + f'\nMetaRocq Run ({translate_cmd(prog, entry, name)}).\n')

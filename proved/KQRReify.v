@@ -338,6 +338,10 @@ Definition reify_prog (p : program) : option (list (kername * sig * fbody)) :=
   | _ => None
   end.
 
+(** what [kitc.py --reflect] reads of a program: each function's name and signature, in order *)
+Definition info_of (l : list (kername * sig * fbody)) :=
+  map (fun x : kername * sig * fbody => let '(kn, g, _) := x in (snd kn, sc g, sk g, sm g, sr g)) l.
+
 (** compatibility: one recursive function *)
 Definition reify_top (p : program) : option (sig * fbody) :=
   match reify_prog p with Some [(_, gs, b)] => Some (gs, b) | _ => None end.

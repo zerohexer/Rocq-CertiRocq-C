@@ -1005,6 +1005,27 @@ Proof.
 Qed.
 
 
+(** the callees' theorems, one after the other, as the callee assumption of the next function: [kitc.py --reflect] gives
+    function [j] of a program the theorems of functions [0 .. j-1] this way *)
+Fixpoint all_ok (P : prog) (gidf : nat -> ident) (cs : list callee) (k : nat) : Prop :=
+  match cs with
+  | [] => True
+  | c :: r => (let '(existT _ gs h) := c in callee_ok P (gidf k) gs h) /\ all_ok P gidf r (S k)
+  end.
+
+Lemma all_ok_nth : forall P gidf cs k, all_ok P gidf cs k ->
+  forall f, match nth_error cs f with Some (existT _ gs h) => callee_ok P (gidf (k + f)%nat) gs h | None => True end.
+Proof.
+  intros P gidf cs. unfold callee in *. induction cs as [|[gs h] r IH]; intros k H f; simpl in *.
+  - destruct f; exact Logic.I.
+  - destruct H as [H0 H1]. destruct f as [|f]; simpl.
+    + rewrite Nat.add_0_r. exact H0.
+    + rewrite <- Nat.add_succ_comm. exact (IH (S k) H1 f).
+Qed.
+
+Lemma all_ok_callees : forall P gidf cs, all_ok P gidf cs 0 -> callees_ok P gidf cs.
+Proof. intros P gidf cs H f. exact (all_ok_nth P gidf cs 0 H f). Qed.
+
 (* ================================================================ the measurement: the per-program check, end to end *)
 Local Open Scope uint63_scope.
 

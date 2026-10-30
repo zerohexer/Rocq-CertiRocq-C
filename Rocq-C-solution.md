@@ -1801,6 +1801,20 @@ verbatim copy of its own text grows the same way.  The same steps in a helper or
 --reflect`, then the table's constructs (booleans, records and several results through the slot block with D27, number-and-
 memory results and writing number functions, functions given to functions, `wfix`, `Program Fixpoint`).
 
+**`kitc.py --reflect` (2026-10-31; `KQ_REFLECT=1` for the scripts that call it).**  Per program: `NAME_r.v` quotes the entry
+`main` applies and runs `KQRReify.reify_prog` on it (printing each function's name and signature, `info_of`); if every reached
+function is read, `NAME_rp.v` defines `NAME_prog` from `KQR.compile_f` and gives function `j` its theorem
+`KQR.callee_ok NAME_prog (gid1 j) ..` by one `exact_no_check (KQR.compile_f_ok ..)`, the theorems of functions `0 .. j-1` as its
+callee assumption (`KQR.all_ok_callees`, a lemma that packs them); the kernel checks each at `Qed`.  The C is printed from
+`NAME_prog` by the same printer, the driver filled from the entry's signature (its id `1000 + j`, its parameter kinds, its
+result).  A program the reifier does not read, or whose check fails, takes the translator and the walk as before (reported).
+Names are qualified (`KQR.`, `KQRReify.`), so a user's function may be called like a test of `KQR.v` (`sum`, `loop`, ...).
+Measured on `proved/examples/reflect_calls.body` (a loop over block 0 calling a helper without memory; answer 2515, worked out
+by hand): proved by the verified compiler, 2 functions, built, 2515; the whole `kitc.py` run 2.31 s against 4.32 s for the
+translator and the walk (the theorems take milliseconds; the rest is starting Rocq and loading).  The fallback: `loop_while`
+(`loop_two`, not in `S`) is reported not read, then proved by the translator, answer 41.  Next: the gate with `KQ_REFLECT=1`
+(how many programs take the verified path — the measure `S` grows against), then the table's constructs.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
