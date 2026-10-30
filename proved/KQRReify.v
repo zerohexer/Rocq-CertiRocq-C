@@ -353,14 +353,14 @@ Check (eq_refl : sum_src = (sum_g, sum_b)).
 (* the per-program theorem: [compile_f_ok] at the reified tree; the kernel checks that the tree means [sum] *)
 Definition sum_Pr := mkprog [(gid1 0, compile_f gid1 0 (fst sum_src) (snd sum_src))] [].
 Time Lemma sum_ok_r : callee_ok sum_Pr (gid1 0) (fst sum_src) sum.
-Proof. Time exact (compile_f_ok sum_Pr [] gid1 0 (fst sum_src) (snd sum_src) eq_refl eq_refl (no_callees sum_Pr gid1)). Time Qed.
+Proof. Time exact_no_check (compile_f_ok sum_Pr [] gid1 0 (fst sum_src) (snd sum_src) eq_refl eq_refl (no_callees sum_Pr gid1)). Time Qed.
 
 Definition long_src := ltac:(run_template_program (tmQuoteRec long)
   (fun q => let r := eval vm_compute in (reify_top q) in match r with Some ?x => exact x end)).
 Check (eq_refl : long_src = (long_g, long_b)).
 Definition long_Pr := mkprog [(gid1 0, compile_f gid1 0 (fst long_src) (snd long_src))] [].
 Time Lemma long_ok_r : callee_ok long_Pr (gid1 0) (fst long_src) long.
-Proof. Time exact (compile_f_ok long_Pr [] gid1 0 (fst long_src) (snd long_src) eq_refl eq_refl (no_callees long_Pr gid1)). Time Qed.
+Proof. Time exact_no_check (compile_f_ok long_Pr [] gid1 0 (fst long_src) (snd long_src) eq_refl eq_refl (no_callees long_Pr gid1)). Time Qed.
 
 (* a program: [loop] and the helper it calls, found and ordered callees first by [reach] *)
 Definition hl_src := ltac:(run_template_program (tmQuoteRec loop)
@@ -378,7 +378,7 @@ Definition hl_Pr := mkprog (funs_of 0 hl_src) [].
 
 (* each function's theorem, the callees' theorems before it: nothing searched, each a computation by the kernel *)
 Time Lemma h_ok_r : callee_ok hl_Pr (gid1 0) (sig_at hl_src 0) h.
-Proof. Time exact (compile_f_ok hl_Pr [] gid1 0 (sig_at hl_src 0) (body_at hl_src 0) eq_refl eq_refl (no_callees hl_Pr gid1)). Time Qed.
+Proof. Time exact_no_check (compile_f_ok hl_Pr [] gid1 0 (sig_at hl_src 0) (body_at hl_src 0) eq_refl eq_refl (no_callees hl_Pr gid1)). Time Qed.
 Time Lemma loop_ok_r : callee_ok hl_Pr (gid1 1) (sig_at hl_src 1) loop.
 Proof.
   refine (compile_f_ok hl_Pr [existT ftype (sig_at hl_src 0) h] gid1 1 (sig_at hl_src 1) (body_at hl_src 1) eq_refl eq_refl _).
@@ -405,7 +405,7 @@ Definition if_src := ltac:(run_template_program (tmQuoteRec init)
 Check (eq_refl : map (fun x => (snd (fst x), snd x)) if_src = [(fill_g, fill_b); (init_g, init_b)]).
 Definition if_Pr := mkprog (funs_of 0 if_src) [].
 Time Lemma fill_ok_r : callee_ok if_Pr (gid1 0) (sig_at if_src 0) fill.
-Proof. Time exact (compile_f_ok if_Pr [] gid1 0 (sig_at if_src 0) (body_at if_src 0) eq_refl eq_refl (no_callees if_Pr gid1)). Time Qed.
+Proof. Time exact_no_check (compile_f_ok if_Pr [] gid1 0 (sig_at if_src 0) (body_at if_src 0) eq_refl eq_refl (no_callees if_Pr gid1)). Time Qed.
 Time Lemma init_ok_r : callee_ok if_Pr (gid1 1) (sig_at if_src 1) init.
 Proof.
   refine (compile_f_ok if_Pr [existT ftype (sig_at if_src 0) fill] gid1 1 (sig_at if_src 1) (body_at if_src 1) eq_refl eq_refl _).

@@ -1026,12 +1026,12 @@ Definition sum_b := FRec sum_s0 sum_s1.
 
 (* the per-program check: the kernel compares the user's function with the meaning of its syntax *)
 Time Lemma sum_is : sum = denote_f [] sum_g sum_b.
-Proof. Time exact eq_refl. Time Qed.
+Proof. Time exact_no_check (eq_refl sum). Time Qed.
 
 (* end to end: the KQL function is [compile_f] of the syntax; its statement is [compile_f_ok] and the kernel's computation *)
 Definition sum_P := mkprog [(gid1 0, compile_f gid1 0 sum_g sum_b)] [].
 Time Lemma sum_ok : callee_ok sum_P (gid1 0) sum_g sum.
-Proof. Time exact (compile_f_ok sum_P [] gid1 0 sum_g sum_b eq_refl eq_refl (no_callees sum_P gid1)). Time Qed.
+Proof. Time exact_no_check (compile_f_ok sum_P [] gid1 0 sum_g sum_b eq_refl eq_refl (no_callees sum_P gid1)). Time Qed.
 
 (* a wrong syntax (1 replaced by 2) is refused *)
 Time Fail Definition sum_wrong : sum = denote_f [] sum_g (FRec sum_s0 (SRec (SCons (SOp Badd (SVar 1) (SInt 2)) (SCons (SOp Badd (SVar 0) (SRd (SInt 0) (SVar 1))) SNil)))) := eq_refl.
@@ -1047,7 +1047,7 @@ Definition loop_b := FRec (SVar 0) (SRec (SCons (SOp Badd (SVar 1) (SInt 1))
                                   (SCons (SCall 0 NNone (SCons (SVar 0) (SCons (SRd (SInt 0) (SVar 1)) SNil))) SNil))).
 Definition hl_P := mkprog [(gid1 0, compile_f gid1 0 h_g h_b); (gid1 1, compile_f gid1 1 loop_g loop_b)] [].
 Time Lemma h_ok : callee_ok hl_P (gid1 0) h_g h.
-Proof. Time exact (compile_f_ok hl_P [] gid1 0 h_g h_b eq_refl eq_refl (no_callees hl_P gid1)). Time Qed.
+Proof. Time exact_no_check (compile_f_ok hl_P [] gid1 0 h_g h_b eq_refl eq_refl (no_callees hl_P gid1)). Time Qed.
 Time Lemma loop_ok : callee_ok hl_P (gid1 1) loop_g loop.
 Proof.
   refine (compile_f_ok hl_P [existT ftype h_g h] gid1 1 loop_g loop_b eq_refl eq_refl _).
@@ -1366,10 +1366,10 @@ Definition long_s1 := (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 1))) (SLet (S
 Definition long_g := mksig true 1 true false.
 Definition long_b := FRec (SVar 0) long_s1.
 Time Lemma long_is : long = denote_f [] long_g long_b.
-Proof. Time exact eq_refl. Time Qed.
+Proof. Time exact_no_check (eq_refl long). Time Qed.
 Definition long_P := mkprog [(gid1 0, compile_f gid1 0 long_g long_b)] [].
 Time Lemma long_ok : callee_ok long_P (gid1 0) long_g long.
-Proof. Time exact (compile_f_ok long_P [] gid1 0 long_g long_b eq_refl eq_refl (no_callees long_P gid1)). Time Qed.
+Proof. Time exact_no_check (compile_f_ok long_P [] gid1 0 long_g long_b eq_refl eq_refl (no_callees long_P gid1)). Time Qed.
 
 (* ---------------------------------------------------------------- memory writes *)
 (* a loop filling the memory: cell i of block 0 gets 2 i, for n cells *)
@@ -1378,7 +1378,7 @@ Fixpoint fill (n : nat) (i : i63) (s : mem) : mem :=
 Definition fill_g := mksig true 1 true true.
 Definition fill_b := FRecM MCur (MRec (SCons (SOp Badd (SVar 0) (SInt 1)) SNil) (MUpd (SInt 0) (SVar 0) (SOp Bmul (SVar 0) (SInt 2)) MCur)).
 Time Lemma fill_is : fill = denote_f [] fill_g fill_b.
-Proof. Time exact eq_refl. Time Qed.
+Proof. Time exact_no_check (eq_refl fill). Time Qed.
 
 (* not a tail call: the cells after i first, then cell i gets itself plus the next cell (a suffix sum) *)
 Fixpoint suffix (n : nat) (i : i63) (s : mem) : mem :=
@@ -1403,9 +1403,9 @@ Definition init_b := FPlainM (MIf Clt (SVar 0) (SInt 10)
 Definition mem_P := mkprog [(gid1 0, compile_f gid1 0 fill_g fill_b); (gid1 1, compile_f gid1 1 suffix_g suffix_b);
                             (gid1 2, compile_f gid1 2 init_g init_b)] [].
 Time Lemma fill_ok : callee_ok mem_P (gid1 0) fill_g fill.
-Proof. Time exact (compile_f_ok mem_P [] gid1 0 fill_g fill_b eq_refl eq_refl (no_callees mem_P gid1)). Time Qed.
+Proof. Time exact_no_check (compile_f_ok mem_P [] gid1 0 fill_g fill_b eq_refl eq_refl (no_callees mem_P gid1)). Time Qed.
 Time Lemma suffix_ok : callee_ok mem_P (gid1 1) suffix_g suffix.
-Proof. Time exact (compile_f_ok mem_P [] gid1 1 suffix_g suffix_b eq_refl eq_refl (no_callees mem_P gid1)). Time Qed.
+Proof. Time exact_no_check (compile_f_ok mem_P [] gid1 1 suffix_g suffix_b eq_refl eq_refl (no_callees mem_P gid1)). Time Qed.
 Time Lemma init_ok : callee_ok mem_P (gid1 2) init_g init.
 Proof.
   refine (compile_f_ok mem_P [existT ftype fill_g fill] gid1 2 init_g init_b eq_refl eq_refl _).
@@ -1433,10 +1433,10 @@ Definition chain10 (s : mem) : mem :=
   s10.
 Definition chain10_b := FPlainM (MLetM (MUpd (SInt 0) (SInt 1) (SOp Badd (SRd (SInt 0) (SInt 0)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 2) (SOp Badd (SRd (SInt 0) (SInt 1)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 3) (SOp Badd (SRd (SInt 0) (SInt 2)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 4) (SOp Badd (SRd (SInt 0) (SInt 3)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 5) (SOp Badd (SRd (SInt 0) (SInt 4)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 6) (SOp Badd (SRd (SInt 0) (SInt 5)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 7) (SOp Badd (SRd (SInt 0) (SInt 6)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 8) (SOp Badd (SRd (SInt 0) (SInt 7)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 9) (SOp Badd (SRd (SInt 0) (SInt 8)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 10) (SOp Badd (SRd (SInt 0) (SInt 9)) (SInt 1)) MCur) MCur)))))))))).
 Time Lemma chain10_is : chain10 = denote_f [] chain_g chain10_b.
-Proof. Timeout 120 Time exact eq_refl. Time Qed.
+Proof. Time exact_no_check (eq_refl chain10). Time Qed.
 Definition chain10_P := mkprog [(gid1 0, compile_f gid1 0 chain_g chain10_b)] [].
 Time Lemma chain10_ok : callee_ok chain10_P (gid1 0) chain_g chain10.
-Proof. Timeout 120 Time exact (compile_f_ok chain10_P [] gid1 0 chain_g chain10_b eq_refl eq_refl (no_callees chain10_P gid1)). Time Qed.
+Proof. Time exact_no_check (compile_f_ok chain10_P [] gid1 0 chain_g chain10_b eq_refl eq_refl (no_callees chain10_P gid1)). Time Qed.
 Definition chain20 (s : mem) : mem :=
   let s1 := KQ.KQRun.upd 0 1 (PrimInt63.add (KQ.KQRun.rd 0 0 s) 1) s in
   let s2 := KQ.KQRun.upd 0 2 (PrimInt63.add (KQ.KQRun.rd 0 1 s1) 1) s1 in
@@ -1461,7 +1461,7 @@ Definition chain20 (s : mem) : mem :=
   s20.
 Definition chain20_b := FPlainM (MLetM (MUpd (SInt 0) (SInt 1) (SOp Badd (SRd (SInt 0) (SInt 0)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 2) (SOp Badd (SRd (SInt 0) (SInt 1)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 3) (SOp Badd (SRd (SInt 0) (SInt 2)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 4) (SOp Badd (SRd (SInt 0) (SInt 3)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 5) (SOp Badd (SRd (SInt 0) (SInt 4)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 6) (SOp Badd (SRd (SInt 0) (SInt 5)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 7) (SOp Badd (SRd (SInt 0) (SInt 6)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 8) (SOp Badd (SRd (SInt 0) (SInt 7)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 9) (SOp Badd (SRd (SInt 0) (SInt 8)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 10) (SOp Badd (SRd (SInt 0) (SInt 9)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 11) (SOp Badd (SRd (SInt 0) (SInt 10)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 12) (SOp Badd (SRd (SInt 0) (SInt 11)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 13) (SOp Badd (SRd (SInt 0) (SInt 12)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 14) (SOp Badd (SRd (SInt 0) (SInt 13)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 15) (SOp Badd (SRd (SInt 0) (SInt 14)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 16) (SOp Badd (SRd (SInt 0) (SInt 15)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 17) (SOp Badd (SRd (SInt 0) (SInt 16)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 18) (SOp Badd (SRd (SInt 0) (SInt 17)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 19) (SOp Badd (SRd (SInt 0) (SInt 18)) (SInt 1)) MCur) (MLetM (MUpd (SInt 0) (SInt 20) (SOp Badd (SRd (SInt 0) (SInt 19)) (SInt 1)) MCur) MCur)))))))))))))))))))).
 Time Lemma chain20_is : chain20 = denote_f [] chain_g chain20_b.
-Proof. Timeout 120 Time exact eq_refl. Time Qed.
+Proof. Time exact_no_check (eq_refl chain20). Time Qed.
 Definition chain20_P := mkprog [(gid1 0, compile_f gid1 0 chain_g chain20_b)] [].
 Time Lemma chain20_ok : callee_ok chain20_P (gid1 0) chain_g chain20.
-Proof. Timeout 120 Time exact (compile_f_ok chain20_P [] gid1 0 chain_g chain20_b eq_refl eq_refl (no_callees chain20_P gid1)). Time Qed.
+Proof. Time exact_no_check (compile_f_ok chain20_P [] gid1 0 chain_g chain20_b eq_refl eq_refl (no_callees chain20_P gid1)). Time Qed.

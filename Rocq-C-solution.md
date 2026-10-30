@@ -46,7 +46,8 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    `compile : S -> KQL` proved once; the user's function is reified into `S` (untrusted) and per program only `denote s = f` is
    checked by conversion — zero proof search, nothing added to the trust, for other people's programs.  Built so far
    (`proved/KQR.v`, `KQRReify.v`): numbers, tests, lets, reads, calls, recursion on a counter, memory writes — each
-   per-program step in milliseconds (one measured limit, F46); next `kitc.py --reflect`.  Emit-then-prove is the interim.
+   per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`);
+   next `kitc.py --reflect`.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -769,9 +770,10 @@ time before the systems story exists.
 
 *Where reflection is honestly weak (and what answers it).*  It covers a fragment `S` — so the construct table and the
 completeness theorem must be strong (§3, §3.8).  The per-program check grows with the program — measured by the spike on the
-longest kernel function.  Measured since (F46): linear for numbers and for memories used once per step, exponential for a
-straight-line body that reads and then writes the same memory step after step (about 1 s at 20 steps) — a property of Rocq's
-conversion that the walk shares, so it is no worse than today, and it is open.  `S` must be designed well up front — from the construct table, so it is not redone.
+longest kernel function.  Measured since (F46): linear for numbers and for memories used once per step, exponential on Rocq's
+stock kernel for a straight-line body that reads and then writes the same memory step after step (about 1 s at 20 steps) — a
+property of Rocq's conversion that the walk shares; closed by our fork's conversion memo (D28, §12.R): 300 such steps in
+milliseconds.  `S` must be designed well up front — from the construct table, so it is not redone.
 
 *"A fragment `S` versus all of Rocq" — is that patching, or less native?*  Neither; it is a technical detail.  Both routes
 cover a fragment: "over Rocq" in the MetaRocq route only means the theorem's statement mentions all Rocq terms — its translator
@@ -1686,9 +1688,12 @@ them first.  **Rocq's own test suite on the fork, the memo on and off (2026-10-3
 `rocq-test-suite` package runs it (`make -k`, against the installed `rocq`; the OCaml unit tests need `ounit2`, not installed,
 so they do not run): **2,521 tests pass and 1 fails in each run, and no test changes its verdict when the memo is switched on**
 — the suite's tests that two terms must *not* be convertible included.  The one failure, the same in both, is
-`misc/bench-render` (`rocq timelog2html`, a tool rendering timing logs as HTML: not the kernel).  **(3) is done.**  Then (4): the per-program step of `KQR.v` by `exact_no_check` (the
-kernel checks at `Qed`, where the memo works; the elaborator's unification does not use it) and the 30- and 100-step chains
-back among the pinned tests.
+`misc/bench-render` (`rocq timelog2html`, a tool rendering timing logs as HTML: not the kernel).  **(3) is done.**  **(4) done (2026-10-31):** the per-program steps of `KQR.v` and
+`KQRReify.v` are `exact_no_check` (the elaborator does not run its own, unmemoized comparison; the kernel checks the term at
+`Qed`, with the memo — nothing more is trusted), and `proved/KQRChain.v` (in `make.sh`) pins read-then-write chains of 30, 100
+and 300 steps: on the fork, `make.sh` `core-ok`, each `denote = f` 0.000–0.002 s at `Qed` and each composed theorem 0.003–0.076
+s to elaborate and 0.002–0.006 s at `Qed`; `Print Assumptions` the same base.  **§12.R is done: the fork is the route's kernel**
+(images.sh's third image; `KQRChain.v` needs it — on the stock kernel it is exponential).
 
 **P. Rocq's own measure recursion (§4.5) — the owner's "level 2".**  Read `Program Fixpoint {measure ..}` (then `Function`,
 `Equations`) as `wfix` is read: the same KQL, the walk unfolding with `Corelib.Program.Wf.fix_sub_eq` and inducting on the

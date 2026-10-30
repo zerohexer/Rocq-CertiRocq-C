@@ -5,7 +5,7 @@
 cd "$(dirname "$0")/.."; eval $(opam env)
 for f in KQRun KQBound KQSpec KQModel hw/Runtime hw/User lib/Loop lib/LoopSpec; do coqc -w -all -R . KQ $f.v || exit 1; done
 cd proved
-for f in KQLSigned KQL KQTArith KQW64 KQByteArith KQBytes KQLGen KQMSem KQLProof KQLBack KQLAuto KQM KQMNames KQMAuto KQLoopSpec KQLoopExamples KQMTrans KQMTop KQLPrint KQR KQRReify; do
+for f in KQLSigned KQL KQTArith KQW64 KQByteArith KQBytes KQLGen KQMSem KQLProof KQLBack KQLAuto KQM KQMNames KQMAuto KQLoopSpec KQLoopExamples KQMTrans KQMTop KQLPrint KQR KQRReify KQRChain; do
   coqc -w -all -R .. KQ -Q . KQC $f.v || { echo "FAILED $f"; exit 1; }
 done
 if [ -n "$ASSUME" ]; then
