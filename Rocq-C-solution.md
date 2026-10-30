@@ -1654,7 +1654,13 @@ construct by construct, the walk as fallback until the last construct has its le
 and kernel proves with emitted proofs and no searching tactic on the main path, proof time is measured and not worse, and the
 construct table is unchanged or better.
 
-**V. The verified compiler by reflection (§1.12, D26).**  (1) The spike: `S` for numbers, tests, `let`, calls, recursion on a
+**V. The verified compiler by reflection (§1.12, D26).**  **The per-program check is measured (2026-10-30, `proved/KQR.v`):**
+`sexp` (numbers, operations, tests, lets, reads of the memory, the recursive call on the counter's predecessor) and `denote_fun`
+(the parameters bound first with `abs`, calls applied with `app`, so the meaning reduces to exactly the shape of the user's
+`Fixpoint`); the kernel accepts `sum = denote_fun 2 ..` for a counted loop in 0.000 s, refuses a wrong syntax tree in 0.008 s,
+and accepts a loop whose body is 300 `let`s with 300 memory reads in 0.001 s (proof) + 0.001 s (`Qed`) — the whole file in
+0.67 s, 494 MB.  Against 35–54 s of search per test kernel today.  Still to measure as the syntax grows: records, writes of the
+memory, calls of other functions, captures — each needs its meaning to reduce to the user's text exactly.  (1) The spike: `S` for numbers, tests, `let`, calls, recursion on a
 counter; `denote`; `compile` proved for it (`compile s = Some k -> k computes denote s`); `reify` for it; the per-program check
 `denote s = f` measured against the walk on the counted loops of the examples and a few corpus programs.  Continue only if the
 check is fast and reliable.  (2) Growth, construct by construct from the construct table: `S` node, `denote` case, `compile` case,
