@@ -10,7 +10,7 @@ A kit program (hand/NAME.body, or a path to a .body file) through the proved rou
   4. clang builds it with the kit's support code: bin/P_NAME, a program that reads the same memory file and the
      same command line as the kit's own.
 The Rocq files are written to proved/gen/, the C to proved/gen/NAME_proved.c."""
-import re, subprocess, sys, os, glob, hashlib, time, concurrent.futures
+import re, subprocess, sys, os, glob, hashlib, time, concurrent.futures, shutil, functools
 
 ROOT = os.getcwd()
 GEN = os.path.join(ROOT, "proved", "gen")
@@ -147,11 +147,24 @@ def proof_file(name, prog, entry, fns, helpers, groups=(), pairfns=()):
         t += unit_text(fns, f, i, grp)
     return t
 
+@functools.lru_cache(maxsize=None)
+def rocq_id():
+    """the Rocq that checks the proofs: the content of its executables (the kernel is linked into them -- an upgrade or
+    our fork must not reuse proofs another kernel checked) and whether the kernel's conversion memo is on"""
+    h = hashlib.sha256()
+    for exe in ("coqc", "rocq"):
+        p = shutil.which(exe)
+        if p:
+            h.update(open(os.path.realpath(p), "rb").read())
+    h.update(os.environ.get("ROCQ_CONV_CACHE", "").encode())
+    return h.hexdigest()
+
 def lib_hash():
     h = hashlib.sha256()
     for p in sorted(glob.glob(os.path.join(ROOT, "proved", "*.v")) + [os.path.join(ROOT, "KQRun.v")]):
         h.update(open(p, "rb").read())
     h.update(HDR.encode())
+    h.update(rocq_id().encode())
     return h.hexdigest()
 
 def unit_keys(name, fns, helpers, groups, pairfns, setup):
