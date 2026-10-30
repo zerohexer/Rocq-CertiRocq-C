@@ -1674,8 +1674,12 @@ user's quoted `Fixpoint f (n : nat) (x1 .. xk : int) (s : mem) : int := match n 
 `(k, e0, e1)`, or `None` outside the subset; it is independent of the old translator.  End to end from the text: the trees it
 gives for `sum` and the 300-step loop are the hand-written ones (checked by `eq_refl`), and the per-program theorems
 (`sum_ok_r`, `long_ok_r`: `compile_fun_ok` at the reified tree, the kernel checking that the tree means the function) take
-0.003 s; assumptions the same base.  Next: the C printed from `compile_fun`'s KQL through the existing generator, a `kitc.py`
-path for programs in the subset, then the constructs of the table
+0.003 s; assumptions the same base.  **The code is the same as today's:** for `sum`, the KQL of `compile_fun` and the old
+translator's `sum_kqm` are the same instructions in the same order (`Eif Ceq` on the counter, `Eop Bsub`, `Eop Badd`, `Ekld`,
+`Eop Badd`, `Eloop`), only the temporaries numbered from 4 instead of 5 — so the C is the same code, and the existing printer
+(`KQLPrint.pstr` of `KQMTop.tr_kit_program`) prints it from the reflect route's program unchanged.  Next: a `kitc.py` path
+for programs in the subset (quote, reify, compile, the per-program lemma by `exact`, the C; no walk), then the constructs of
+the table
 (writes of the memory, records, calls of other functions, booleans, captures, ...), each an `sexp` node, a `denote` case, a
 `compile` case and its proof case.  (1) The spike: `S` for numbers, tests, `let`, calls, recursion on a
 counter; `denote`; `compile` proved for it (`compile s = Some k -> k computes denote s`); `reify` for it; the per-program check
