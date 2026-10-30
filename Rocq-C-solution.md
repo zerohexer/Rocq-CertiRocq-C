@@ -1674,6 +1674,18 @@ the lock of a cell under reduction, `FLOCKED`, written back by `update`; the tab
 `gen_conv`, off for `generic_conv` and for the pre-check registered on CClosure; a hit returns the universe state as given);
 on stock 9.1.1 it fails.  **(3), the image:** building on the work laptop (opam pins `rocq-runtime`/`rocq-core` to the patched
 tree and recompiles every package of the image, then the kq2 CertiRocq patch as `patch/rebuild.sh` does).
+**The image is built** (`kernelq-certirocq:1b45a1aa-kq2-fork`, on the heavy-run machine; the disk-safe recipe of F47: 69
+minutes, the container grew 4.09 GB) **and the cold gate passes on it (2026-10-31)** — a fresh tree from the repository at HEAD,
+every file compiled and every proof checked by the patched kernel (the cache key now names the kernel, F48): `make.sh`
+`core-ok` (36 s); examples 22 / 22 give the expected answer (4 m 56 s); corpus 36 / 36 proved, built and equal to the C++ answers
+(7 m 16 s for the proofs); the five kernels proved and built in 34 / 35 / 36 / 54 / 40 s (irqnow, fault, smp, own, kernel; the
+stock kernel's the same day 36–57 s); **the generated C byte-identical to the stock kernel's for all 66 programs** (22 examples,
+8 kernel programs, 36 corpus).  Trap: a fresh tree has no `big/` inputs (`*.mem`, `*.args`, `*.in`, the C++ answers are
+git-ignored, made by the setup scripts), so `corpus.sh` reports every program as not agreeing with `result 0` — copy or make
+them first.  **Left of (3):** Rocq's own test suite on the fork (its many tests that two terms must *not* be convertible are
+where a memo bug would show), and the memo-off comparison; then (4): the per-program step of `KQR.v` by `exact_no_check` (the
+kernel checks at `Qed`, where the memo works; the elaborator's unification does not use it) and the 30- and 100-step chains
+back among the pinned tests.
 
 **P. Rocq's own measure recursion (§4.5) — the owner's "level 2".**  Read `Program Fixpoint {measure ..}` (then `Function`,
 `Equations`) as `wfix` is read: the same KQL, the walk unfolding with `Corelib.Program.Wf.fix_sub_eq` and inducting on the
