@@ -38,8 +38,8 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
 
 **Where the work is, in the order to take it (§12 has each item with its acceptance):**
 1. The 20 gaps of the construct table (§3.5): proof search of pair-valued choices (6); polymorphic and class-based helpers
-   (4); arithmetic on counters (4); records of three numbers given back by recursion (3: they wait on the owner's decision on a
-   memory law, §3.5); an `option` given back by a recursive function or kept as a loop's state (2: its tag and its field); a
+   (4); arithmetic on counters (4); records of three numbers given back by recursion (3: with the memory law the owner approved, D27,
+   §3.5); an `option` given back by a recursive function or kept as a loop's state (2: its tag and its field); a
    local `fix` naming the caller's variables (1).  Then the by-design boundaries pinned by cells that show their cause, each
    with a control (§3.5, §3.6).
 2. **A verified compiler by reflection** (§1.12, D26, §12.V): a syntax `S` of the fragment, its meaning `denote`, a compiler
@@ -931,7 +931,7 @@ written in the program read as a written budget.
 | 6 | the translation is accepted, **the proof is not found** | `P_pair_if`, `P_pair_if_inside`, `P_pair_call_arith`, `P_pair_nontail_if`, `P_pair_proj_pair`, `P_int_match_nat2` | proof search only: a pair built by an `if` (each field a conditional move) needs the walk to take the record apart on the Rocq side the same way; `match n with O | S O | S (S _)` needs the nested counter test in `kqm_test`.  Under §12.V these become cases of `compile`, where nothing is searched |
 | 4 | **polymorphic / class-based helpers** | `A_par_poly_id`, `A_par_poly_pair`, `A_par_poly_hof`, `A_par_typeclass` | specialization at the use (Lean's `fixedInst`): a type argument and an instance argument are put in like a known function; types are erased in KQL already |
 | 4 | **arithmetic and comparisons on counters** | `A_par_nat_eqb`, `A_par_nat_ltb`, `A_par_nat_mul` (`n + n`), `A_par_nat_pred` | a counter is one machine number (`ofn`); `Nat.eqb`/`Nat.ltb` are comparisons of those, `pred` is a conditional move, `n + n` is an addition with the bound kept under `cbk` |
-| 3 | **a record of three numbers given back by recursion** | `P_rec3_tail_rec`, `P_rec3_nontail`, `P_pairp_rec` | the slot block from one cell to k-1 cells.  **Waits on the owner:** a caller puts k-1 cells back after the call, which needs the law that writes to two different cells can be swapped (`Upd h i v (Upd h j w s) = Upd h j w (Upd h i v s)` for different cells).  It does not follow from `upd_upd` and `upd_rd_id`; the model proves it the way it proves those (functional extensionality), but it is one more statement assumed of the real memory (§13.9) — F43 |
+| 3 | **a record of three numbers given back by recursion** | `P_rec3_tail_rec`, `P_rec3_nontail`, `P_pairp_rec` | the slot block from one cell to k-1 cells.  A caller puts k-1 cells back after the call, which needs the law that writes to two different cells can be swapped (`Upd h i v (Upd h j w s) = Upd h j w (Upd h i v s)` for different cells).  It does not follow from `upd_upd` and `upd_rd_id`; the model proves it the way it proves those (functional extensionality).  **Approved by the owner (2026-10-30, D27)**; it goes into `KQSpec.laws` (proved in `KQModel.v`) together with the construct that uses it, as a construct of `S` (§12.V) — F43 |
 | 2 | **an `option` given back by a recursive function, or kept as a loop's state** | `A_par_option_rec`, `A_par_option_state` | a non-recursive inductive of numbers held as its tag and its fields: a kind for it (parameters, results through the slot block, a `match` as a test of the tag) |
 | 1 | a local `fix` that names a variable of the caller | `P_int_local_fix` | a local `fix` is a template whose copy takes its free variables as parameters (lambda lifting, as captures do) |
 
@@ -1505,6 +1505,7 @@ Each with its reason.  Re-opening one needs a new fact, not a new preference.
 | D23 | **A refusal reads like a type error, not a syntax error**: it names the construct, the place in the user's text, the reason (one of §0.5, or "not yet translated" for a gap), and what to write instead | the user writes ordinary Rocq; a refusal is about meaning (it needs a runtime), never about spelling |
 | D24 | **The operation set is finite and is completed against freestanding C's operations (§2.1); full higher-order function values are not needed** | the generator's theorem is one case per operation; C has no closures, and its function pointers are an explicit table |
 | D25 | **The top half moves to proofs built by construction, the CakeML way: the translator emits each piece of KQL with the lemma that justifies it (one lemma per construct), so no proof is searched for.  The hybrid stays (per-program proofs on top, one proved generator below); the translator itself is not proved (no single "for every program" theorem).  Spike first, then convert construct by construct, then the completeness theorem; release builds through `ccomp`**  *(Its plan — converting the walk — was superseded the same day by D26.)* | CakeML, the strongest project of this kind, uses this split with a proof-producing translator on top (§1.11); it removes proof-search failures and most proof time and makes each new construct one rule plus one lemma, at a fraction of the cost of a verified translator, which would mean proving the translator against MetaRocq's semantics with primitive integers for months (owner, 2026-10-30: "go ahead, record this decision with every context") |
+| D27 | **The memory law "writes to two different cells commute" may be added to `KQSpec.laws`** (proved for the model in `KQModel.v`, with functional extensionality as the other laws are), when the construct that needs it is built — results of more than two numbers through the slot block | it holds of every memory; it does not follow from the two existing equations (F43); one more statement assumed of the real memory, so the owner decided (2026-10-30: "go ahead") |
 | D26 | **A verified compiler by reflection: a syntax `S` of the accepted fragment, its meaning `denote`, a compiler `compile : S -> KQL` proved once, the user's function reified into `S` by an untrusted reifier, and per program only the conversion check `denote s = f`.  The current translator with the walk stays as the fallback until `S` covers the table; emit-then-prove is the interim.  The walk is not converted to proofs built by construction (D25's plan dropped)** | the owner needs other people's programs compiled with zero proof time (2026-10-30); MetaRocq's formal evaluation has no rule for primitive operations, so a translator verified against it cannot even state our programs' runs and would add MetaRocq's quote and typing/erasure assumptions to the trust; reflection gives one theorem for every program of `S`, no search per program and nothing added to the trust (§1.12).  The owner, after the full comparison (§1.12, "the weighing"): "we are going with reflection" |
 
 ---
@@ -1576,7 +1577,7 @@ through `ccomp`) → **G** → **M** → **J**; **F**, **I** and **N** when thei
 
 **A. The construct-table gaps (20 cells, §3.5), then the by-design pins.**  The categories of §3.5: proof search for
 pair-valued choices and nested counter tests (6); polymorphic and class-based helpers by specialization (4); arithmetic and
-comparisons on counters (4); records of three numbers by recursion (3, after the owner's decision on the commuting law); an
+comparisons on counters (4); records of three numbers by recursion (3, with the commuting law, D27); an
 `option` across a call or as a loop's state (2); a local `fix` with captures (1).  Under §12.V the remaining ones are done as
 constructs of `S`.  Then the pins of §0.5's boundaries, each with its control (§3.5): cells added to `gen.py` and to
 `DESIGN_CELLS` together.  Accepted when: the category's cells are `ok`, the full table is re-run and `MATRIX.md` updated, and
@@ -1785,11 +1786,11 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `f0f9f26` (2026-10-30); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `30d0199` (2026-10-30); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | booleans (results, parameters, made by `if`/`match`), values built and taken apart in place (`knorm`), a number and a memory as a result, records chosen by a test; 5 new table cells; the table at 759 / 20 of 780 |
+| `30d0199` | booleans (results, parameters, made by `if`/`match`), values built and taken apart in place (`knorm`), a number and a memory as a result, records chosen by a test; 5 new table cells; the table at 759 / 20 of 780 |
 | `685b6ff` … `2e2be49` | the architecture decisions: §1.11 (CakeML), §1.12 (the verified compiler by reflection, D26), the MetaRocq route and its two problems |
 | `485465e` … `f0f9f26` | this file, its additions and corrections; `proved/matrix/run.sh`; the five design cells reclassified as gaps (41) |
 | `7e41ee8` | the construct table re-run: 775 cells, 733 proved, 5 by design, 36 gaps |
