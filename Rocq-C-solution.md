@@ -1693,6 +1693,26 @@ list (`funs_of`), and the per-program theorems follow — `h_ok_r`, then `loop_o
 0.000–0.002 s each, assumptions the same base.  Next: step 3 of the design, memory writes (numbers and memories as two sorts,
 linearity checked by `compile`), then `kitc.py --reflect`.
 
+**Step 3, memory writes — the design in detail (2026-10-31).**
+- *Syntax.*  A third mutual sort `smem`: `MCur` (the newest memory), `MUpd h i v m` (`upd h i v m`), `MLet e m` (a number
+  `let`), `MLetM m1 m2` (`let s2 := m1 in m2`), `MIf c a b m1 m2`, `MRec args` and `MCall f c args` (calls of functions that
+  give back a memory).  Numbers gain `SLetM m e` (`let s2 := m in e`).  A read `SRd h i` and every call pass **the newest
+  memory**; a call or read on a written memory written inline (`h a (upd .. s)`) is reified as `let s2 := upd .. s in h a s2`
+  — the kernel's conversion includes `let` (zeta), so the per-program check is unchanged.
+- *Signatures* gain the result kind (`sr`: a memory, which requires `sm`): `ntype k m r` ends in `mem` or `i63`; the recursive
+  call's meaning is of that kind.
+- *Meaning.*  `denote_e` / `denote_m` take the memories in scope `menv` (nearest first): `MCur` is the nearest, `MLetM` binds
+  `let s2 := .. in ..` exactly as the user's text.
+- *Linearity, checked by `compile`'s well-formedness.*  Only the newest memory is ever named, and an expression that writes
+  consumes it: after a write the memory before it is dead.  The KQL memory is threaded; the proof's invariant is **"the KQL
+  memory is the newest memory of `menv`"**.  Inside one construct the numbers are worked out first, reading the memory before
+  the construct's own writes (`MUpd h i v m`: `h i v` read the memory `m` starts from — what the Rocq text means — then `m`
+  writes, then the write), as `tr_mem` does today.
+- *Refused for now* (a later step, the number-and-memory results): a function giving back a number that writes the memory —
+  after such a call the caller's memory in Rocq is still the old one while the KQL memory has changed; today's translator
+  handles it by invalidating the caller's memory (`runx`), and so will this, with its own statement.
+- *Laws.*  Writes need none (KQL's semantics applies `KQRun.upd` itself, as for reads).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
