@@ -338,6 +338,145 @@ Definition reify_prog (p : program) : option (list (kername * sig * fbody)) :=
   | _ => None
   end.
 
+(* ---------------------------------------------------------------- why a program is not read *)
+
+Definition add_s (x : string) (l : list string) : list string := if existsb (fun y => y == x) l then l else l ++ [x].
+
+(** the constants the syntax reads: the integer operations and comparisons, [rd], [upd], the program's functions *)
+Definition known_const (fns : list kername) (kn : kername) : bool :=
+  (eq_mp (fst kn) prim_mp && (match binop_v (snd kn), cmp_v (snd kn) with None, None => false | _, _ => true end))
+  || Kername.eqb kn kn_rd || Kername.eqb kn kn_upd || existsb (Kername.eqb kn) fns
+  || Kername.eqb kn kn_int || Kername.eqb kn kn_mem.     (* as type arguments *)
+
+Definition head_name (t : term) : string :=
+  match t with
+  | tConst kn _ => snd kn
+  | tInd i _ => snd (inductive_mind i)
+  | tApp (tConst kn _) _ => snd kn
+  | tApp (tInd i _) _ => snd (inductive_mind i)
+  | tProd _ _ _ => "a function"
+  | _ => "a type"
+  end.
+
+(** what in a function's body lies outside the syntax: its constants, constructors, matches, projections, local
+    fixpoints and lets of other types (the types of binders are not looked at) *)
+Fixpoint blockers (fuel : nat) (fns : list kername) (t : term) (acc : list string) : list string :=
+  match fuel with
+  | O => acc
+  | S fuel =>
+      match t with
+      | tConst kn _ => if known_const fns kn then acc else add_s (snd kn) acc
+      | tApp f args => fold_left (fun a x => blockers fuel fns x a) args (blockers fuel fns f acc)
+      | tLambda _ _ b => blockers fuel fns b acc
+      | tLetIn _ b ty body =>
+          let acc := if is_ty kn_int ty || is_ty kn_mem ty then acc else add_s ("a let of " ^ head_name ty) acc in
+          blockers fuel fns body (blockers fuel fns b acc)
+      | tCase ci _ c brs =>
+          let i := ci_ind ci in
+          let acc := if Kername.eqb (inductive_mind i) (inductive_mind ind_nat) || Kername.eqb (inductive_mind i) (inductive_mind ind_bool)
+                     then acc else add_s ("a match on " ^ snd (inductive_mind i)) acc in
+          fold_left (fun a br => blockers fuel fns (bbody br) a) brs (blockers fuel fns c acc)
+      | tProj _ c => blockers fuel fns c (add_s "a projection" acc)
+      | tConstruct i _ _ => add_s ("a constructor of " ^ snd (inductive_mind i)) acc
+      | tFix _ _ => add_s "a local fix" acc
+      | _ => acc
+      end
+  end.
+
+(** known constructs where the syntax does not read them yet *)
+Fixpoint writes (fuel : nat) (t : term) : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      match t with
+      | tConst kn _ => Kername.eqb kn kn_upd
+      | tApp f args => writes fuel f || existsb (writes fuel) args
+      | tLambda _ _ b => writes fuel b
+      | tLetIn _ b ty body => is_ty kn_mem ty || writes fuel b || writes fuel body
+      | tCase _ _ c brs => writes fuel c || existsb (fun br => writes fuel (bbody br)) brs
+      | _ => false
+      end
+  end.
+
+Fixpoint inner_nat_match (fuel : nat) (top : bool) (t : term) : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      match t with
+      | tApp f args => inner_nat_match fuel false f || existsb (inner_nat_match fuel false) args
+      | tLambda _ _ b => inner_nat_match fuel top b
+      | tLetIn _ b _ body => inner_nat_match fuel false b || inner_nat_match fuel false body
+      | tCase ci _ c brs =>
+          (negb top && Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_nat))
+          || existsb (fun br => inner_nat_match fuel false (bbody br)) brs
+      | _ => false
+      end
+  end.
+
+Fixpoint bool_test (fuel : nat) (t : term) : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      match t with
+      | tApp f args => bool_test fuel f || existsb (bool_test fuel) args
+      | tLambda _ _ b => bool_test fuel b
+      | tLetIn _ b _ body => bool_test fuel b || bool_test fuel body
+      | tCase ci _ c brs =>
+          (Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_bool)
+           && match c with tApp (tConst kn _) [_; _] => negb (eq_mp (fst kn) prim_mp && match cmp_v (snd kn) with Some _ => true | None => false end) | _ => true end)
+          || bool_test fuel c || existsb (fun br => bool_test fuel (bbody br)) brs
+      | _ => false
+      end
+  end.
+
+(** a function's reasons: its signature, its recursion, its constructs, their places *)
+Definition why_fun (Σ : global_env) (fns bad : list kername) (kn : kername) : list string :=
+  match lookup_env Σ kn with
+  | Some (ConstantDecl cb) =>
+      match cst_body cb with
+      | Some b =>
+          let '(rec, body, ty) :=
+            match b with
+            | tFix [d] _ => (if Nat.eqb (rarg d) 0 then "" else "recursion not on the first parameter", dbody d, dtype d)
+            | tFix _ _ => ("mutual recursion", b, cst_type cb)
+            | _ => (""%bs, b, cst_type cb)
+            end in
+          let '(tys, inner) := lams body in
+          let odd := fold_left (fun a t => if is_ty kn_int t || is_ty kn_mem t || is_nat t then a else add_s (head_name t) a)
+                               (tys ++ [ret_ty ty]) [] in
+          let sigr := match read_sig tys (ret_ty ty), odd with
+                      | Some _, _ => []
+                      | None, [] => ["parameters in an order not read (a counter not first, or the memory not last)"]
+                      | None, x :: r => ["a parameter or result of type " ^ fold_left (fun a y => a ^ ", " ^ y) r x]
+                      end in
+          let r0 := if rec == "" then sigr else rec :: sigr in
+          let r1 := blockers 100000 fns inner r0 in
+          let numfn := negb (is_ty kn_mem (ret_ty ty)) in
+          let r2 := if numfn && writes 100000 inner then add_s "a number function that writes the memory" r1 else r1 in
+          let r3 := if inner_nat_match 100000 true inner then add_s "a match on a counter inside the body" r2 else r2 in
+          let r4 := if bool_test 100000 inner then add_s "a test that is a boolean value" r3 else r3 in
+          let r4 := fold_left (fun a k => if existsb (Kername.eqb k) bad then add_s ("calls " ^ snd k ^ ", not read") a else a)
+                              (consts 10000 inner []) r4 in
+          match r4 with [] => ["a construct in a place not read (not classified)"] | _ => r4 end
+      | None => ["no body"]
+      end
+  | _ => ["not a constant"]
+  end.
+
+(** for each function of the program not read (in [reach]'s order), its reasons *)
+Definition reify_why (p : program) : list (string * list string) :=
+  match p with
+  | (Σ, tConst root _) =>
+      let kns := reach 1000 Σ (fst root) root [] in
+      let '(_, _, out) := fold_left (fun '(acc, bad, out) kn =>
+                         match reify_fun Σ acc kn with
+                         | Some (gs, _) => (acc ++ [(kn, gs)], bad, out)
+                         | None => (acc, bad ++ [kn], out ++ [(snd kn, why_fun Σ kns bad kn)])
+                         end) kns ([], [], []) in
+      out
+  | _ => [("", ["the root is not a constant"])]
+  end.
+
 (** what [kitc.py --reflect] reads of a program: each function's name and signature, in order *)
 Definition info_of (l : list (kername * sig * fbody)) :=
   map (fun x : kername * sig * fbody => let '(kn, g, _) := x in (snd kn, sc g, sk g, sm g, sr g)) l.
@@ -422,3 +561,9 @@ Definition dup (s : mem) : mem := let s2 := KQ.KQRun.upd 0 0 1 s in KQ.KQRun.upd
 Definition dup_src := ltac:(run_template_program (tmQuoteRec dup)
   (fun q => let r := eval vm_compute in (reify_top q) in exact r)).
 Check (eq_refl : dup_src = None).
+
+(* why a program is not read: [loop_while]'s shape (a helper over loop_two, a closure, a test that is a boolean value) *)
+Definition lw_gcd (a b : int) : int := if PrimInt63.ltb 0 b then b else a.
+Definition lw_pair (n : nat) (a : int) : int * int := (a, a).
+Definition lw (n : nat) (i : int) (s : mem) : int := let p := lw_pair n i in fst p.
+Eval vm_compute in ltac:(run_template_program (tmQuoteRec lw) (fun q => let r := eval vm_compute in (reify_why q) in exact r)).

@@ -371,14 +371,20 @@ def reflect(name, entry, prog, no_proof):
     takes the translator)"""
     f0 = os.path.join(GEN, f"{name}_r.v")
     open(f0, "w").write(HDR + "From KQC Require KQR KQRReify.\n" + prog
-        + f"\nDefinition {name}_src := ltac:(run_template_program (tmQuoteRec {entry})\n"
-        + "  (fun q => let r := eval vm_compute in (KQRReify.reify_prog q) in exact r)).\n"
-        + f'Redirect "{name}_rinfo" Eval vm_compute in (option_map KQRReify.info_of {name}_src).\n')
+        + f"\nDefinition {name}_res := ltac:(run_template_program (tmQuoteRec {entry})\n"
+        + "  (fun q => let r := eval vm_compute in (KQRReify.reify_prog q, KQRReify.reify_why q) in exact r)).\n"
+        + f"Definition {name}_src := fst {name}_res.\n"
+        + f'Redirect "{name}_rinfo" Eval vm_compute in (option_map KQRReify.info_of {name}_src).\n'
+        + f'Redirect "{name}_rwhy" Eval vm_compute in (snd {name}_res).\n')
     rc, out = coqc(f0)
     info = open(os.path.join(GEN, f"{name}_rinfo.out")).read() if rc == 0 and os.path.exists(os.path.join(GEN, f"{name}_rinfo.out")) else ""
     fs = re.findall(r'\("([^"]+)"(?:%bs)?,\s*(true|false),\s*(\d+)(?:%nat)?,\s*(true|false),\s*(true|false)\)', info)
     if rc != 0 or not fs or "= None" in info:
-        print(name, "reflect: not read by the verified compiler's reifier; the translator follows", flush=True)
+        wp = os.path.join(GEN, f"{name}_rwhy.out")
+        why = open(wp).read() if os.path.exists(wp) else ""
+        rs = [f + ": " + ", ".join(re.findall(r'"([^"]*)"', r)) for f, r in re.findall(r'\("([^"]+)",\s*\[(.*?)\]\)', why, re.S)]
+        print(name, "reflect: not read by the verified compiler's reifier (" + ("; ".join(rs) if rs else "the reifier did not run")
+              + "); the translator follows", flush=True)
         return None
     sig = lambda f: f"(KQR.mksig {f[1]} {f[2]} {f[3]} {f[4]})"
     t = HDR + "From KQC Require KQR KQRReify.\nImport ListNotations.\n" + f"From KQG Require Import {name}_r.\n"

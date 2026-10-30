@@ -1815,10 +1815,21 @@ translator and the walk (the theorems take milliseconds; the rest is starting Ro
 (`loop_two`, not in `S`) is reported not read, then proved by the translator, answer 41.  **The gate with `KQ_REFLECT=1`, on
 the fork (2026-10-31): everything passes** — `make.sh` `core-ok`; examples 23 / 23; corpus 36 / 36 equal to the C++ answers;
 the five kernels proved and built (36–54 s, as without it) — and **the baseline `S` grows against: 1 of 67 programs through the
-verified compiler** (`reflect_calls`), **66 read by the translator** (fallback), **0 read but refused by the check**.  Next: the
-reifier says *why* it does not read a program (the first construct it stops at), so the constructs are added in the order of
-how many programs they unblock — then booleans, records and several results, number-and-memory results, functions given to
-functions, `wfix`, machine operations, as §12.V's list.
+verified compiler** (`reflect_calls`), **66 read by the translator** (fallback), **0 read but refused by the check**.
+**Why a program is not read (2026-10-31, `KQRReify.reify_why`, printed by `kitc.py --reflect`):** for each function not read,
+its constants outside the syntax, constructors, matches on other types, projections, local fixpoints, lets of other types, a
+signature not read (with the types, or "parameters in an order not read" when every type is a number, counter or memory), and
+known constructs in places not read yet (a number function that writes the memory, a match on a counter inside the body, a test
+that is a boolean value), and "calls f, not read".  **The tally over the gate's 67 programs** (the reasons grouped by construct;
+a program is done only when all of its are): counters as values — a second counter (`rounds (r n : nat) ..` recurses on `r` and
+passes `n` on), `S`/`O`, budgets `kq_nat` — 56 programs; booleans 27; number functions that write the memory 25; `KQRun.v`'s
+helpers `zdiv`/`zmod`/`zmin` (C's signed division, a minimum: defined outside the program's file, so not reached) 21; narrow
+memory (32-bit cells, bytes, views) 15; machine operations 10; functions given to functions (the loop library, `wfix`) 8;
+records and pairs 4; `u64` 2; negation (`opp`) 2; mutual recursion 1.  **The order that completes the most programs**: counters
+as values (9 of 67 through the verified compiler), booleans (20), narrow memory (26), number functions that write (31),
+`KQRun.v`'s helpers read as functions (41), machine operations (51 — the kernels), functions given to functions (58), then
+records, `u64`, negation, mutual recursion (67).  The reasons are a scan of each function's text, so removing one may reveal a
+reason of place behind it; the gate counts after each step.  **Next: counters as values.**
 
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
