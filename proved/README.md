@@ -174,8 +174,8 @@ as it stands: `proved/examples/heap.body` is a hash set whose entries are slab o
 answer equal to the same set written with `malloc` and `free` in C.  Three things the route needed for it:
 a budget `kq_nat n` for a number n worked out while the program runs (it is at most 2^60 now, `kq_nat_le`, so a counter
 always has room to count a few more), a bound on any such counter that the proof gets without working the number out, and
-a first parameter of type `int` no longer tried as an induction.  Not read yet: a recursive function that gives back a
-`bool` (return 0 or 1; a helper that is not recursive is fine).
+a first parameter of type `int` no longer tried as an induction.  A recursive function may give back a `bool` (returned as 1
+or 0) or take one, and may give back a number with a memory (`int * mem`).
 
 Views on one memory (`lib/View.v`).  A narrow block is raw memory laid out as the machine does (little-endian), seen as
 bytes (`rd8`, `upd8`), halfwords (`rd16`, `upd16`) and 32-bit words (`rd32`, `upd32`); `view_rd64` / `view_upd64` add the
@@ -200,8 +200,11 @@ the named walk, 45 s after the plain one has run out its 150 s.  What remains is
 Also fixed: a helper that writes the memory is now seen as writing, so the function that uses it is
 stated and proved with the memory it leaves.
 
-Anything else is refused with the reason.  Not read yet: a function that gives back more than two numbers (and a choice
-between two records), closures.
+A value built and taken apart in the same text (an `option` or a sum matched where it is made, a list cell, a function in a
+pair, a pair holding a memory) is never built: the `match` takes its branch with the fields bound as `let`s.
+
+Anything else is refused with the reason.  Not read yet: a recursive function that gives back more than two numbers, an
+`option` given back by a recursive function or kept as a loop's state; `../Rocq-C-solution.md` §3.5 has the live list.
 
 ## Machine operations
 

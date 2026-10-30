@@ -250,6 +250,13 @@ addA("par_mem_record", "", "k s a", "Record ms := mkms { mv : int; mm : mem }.\n
 addA("par_option", "", "match k a with Some x => x | None => 0 end", "Definition k (x : int) : option int := if x <? 0 then None else Some x.\n")
 addA("par_list", "", "match k a with nil => 0 | cons x _ => x end", "Definition k (x : int) : list int := cons x nil.\n")
 addA("par_sum", "", "match k a with inl x => x | inr y => y end", "Definition k (x : int) : int + int := if x <? 0 then inl x else inr x.\n")
+# a boolean as a parameter and a result of a recursive function; a number and a memory given back by a recursive function and
+# taken apart by [fst]/[snd]; an option given back by a recursive function and as a loop's state (its tag and its field)
+addA("par_bool_rec", "", "k n (a <? b) a", "Fixpoint k (n : nat) (c : bool) (x : int) : int := match n with O => x | S m => k m (negb c) (if c then x + 1 else x) end.\n")
+addA("par_bool_rec_negb", "", "if k n a then a else b", "Fixpoint k (n : nat) (x : int) : bool := match n with O => x <? 3 | S m => negb (k m (x + 1)) end.\n")
+addA("par_mem_pair_rec", "", "let r := k n a s in fst r + rd 0 0 (snd r)", "Fixpoint k (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => k m (x + 1) (upd 0 x x t) end.\n")
+addA("par_option_rec", "", "match k n a with Some y => y | None => 0 end", "Fixpoint k (n : nat) (x : int) : option int := match n with O => None | S m => if x =? 5 then Some x else k m (x + 1) end.\n")
+addA("par_option_state", "", "k n a None", "Fixpoint k (n : nat) (x : int) (o : option int) : int := match n with O => match o with Some y => y | None => x end | S m => k m (x + 1) (if x =? 3 then Some x else o) end.\n")
 addA("par_unit", "", "k tt a", "Definition k (u : unit) (x : int) : int := x.\n")
 addA("par_prop_arg", "", "k a", "Definition k (x : int) : int := x.\n")
 addA("par_poly_id", "", "pid a", "Definition pid {A : Type} (x : A) : A := x.\n")

@@ -29,7 +29,7 @@ GAP = [
   (r"must name no variable of the caller", "a function given that names a variable of the caller (a closure)"),
   (r"a let of a type this translator does not read", "a local function, a polymorphic or class-based helper, a memory inside a record"),
   (r"not a test this translator reads", "a boolean made by an if or a match"),
-  (r"parameters or result are not of a kind", "a function giving back a boolean, a record of three, or a number with a memory, by recursion"),
+  (r"parameters or result are not of a kind", "a recursive function giving back a record of three numbers, or giving back or taking an option"),
   (r"a match used as a (number|memory) that this translator does not read", "a match on a counter that is not a recursion"),
   (r"not a counter this translator reads|not a test: (eqb|ltb)", "arithmetic or a comparison on counters"),
   (r"a match this translator does not read", "a pair of a number and a memory"),

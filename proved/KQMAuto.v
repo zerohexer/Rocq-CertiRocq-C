@@ -227,7 +227,14 @@ Ltac kqm_ifs :=
   repeat first [ rewrite if_andb_l | rewrite if_orb_l | rewrite if_negb_l
                | rewrite if_andb_u | rewrite if_orb_u | rewrite if_negb_u ].
 
-Ltac kqm_red0 := cbv beta iota delta [cmp_sem binop_sem hw_sem hwf_sem andb orb negb fst snd KQ.KQRun.rd16 KQ.KQRun.upd16
+(** a boolean a function gives back is the number 1 or 0 its KQL returns; the statement says so with [kq_b2i] *)
+Definition kq_b2i (b : bool) : i63 := if b then 1%uint63 else 0%uint63.
+(** a test of such a number against 0 is the test of the boolean itself *)
+Lemma b2i_eqb0 : forall (c : bool) (T : Type) (x y : T),
+  (if PrimInt63.eqb (if c then 1%uint63 else 0%uint63) 0%uint63 then x else y) = (if c then y else x).
+Proof. intros. destruct c; reflexivity. Qed.
+
+Ltac kqm_red0 := cbv beta iota delta [kq_b2i cmp_sem binop_sem hw_sem hwf_sem andb orb negb fst snd KQ.KQRun.rd16 KQ.KQRun.upd16
   KQ.KQRun.u64_add KQ.KQRun.u64_sub KQ.KQRun.u64_mul KQ.KQRun.u64_and KQ.KQRun.u64_or KQ.KQRun.u64_xor KQ.KQRun.u64_shl
   KQ.KQRun.u64_shr KQ.KQRun.u64_ltb KQ.KQRun.u64_leb KQ.KQRun.u64_eqb KQ.KQRun.u64_of_int KQ.KQRun.u64_to_int KQ.KQRun.u64_of_halves
   KQ.KQRun.u64_lo32 KQ.KQRun.u64_hi32 KQ.KQRun.w_lo KQ.KQRun.w_hi
@@ -453,6 +460,14 @@ Ltac kqm_test :=
   first
     [ rewrite ofn_0, eqb00; kqm_red
     | rewrite ofn_S_ne0 by kqm_bound; kqm_red
+    | (* a test of a boolean held as 1 or 0: the test of the boolean (the shape is looked at first, so this costs nothing
+         when it does not apply) *)
+      lazymatch goal with
+      | |- evalk _ _ _ _ (if PrimInt63.eqb (if _ then 1%uint63 else 0%uint63) 0%uint63 then _ else _) _ _ => rewrite b2i_eqb0
+      end;
+      match goal with
+      | |- evalk _ _ _ _ (if ?b then _ else _) _ _ => destruct b eqn:?; kqm_red; try kqm_known
+      end
     | match goal with
       | |- evalk _ _ _ _ (if ?b then _ else _) _ _ => destruct b eqn:?; kqm_red; try kqm_known
       end
@@ -622,6 +637,8 @@ Ltac kqm_walk := repeat (kqm_compact; kqm_share; kqm_step).
 Ltac kqm_unf2 := idtac.
 
 Ltac kqm_head t := match t with ?f _ => kqm_head f | _ => t end.
+(** the function a statement is about: the head of its value, inside [kq_b2i] for a function giving back a boolean *)
+Ltac kqm_vhead v := lazymatch v with kq_b2i ?c => kqm_head c | _ => kqm_head v end.
 
 (** Enter a function: its KQL body on the left, its Rocq definition opened one step on the right. *)
 (** how the function of a statement is opened: unfolded, or (when pairs are taken apart in the goal, which would change a
@@ -631,8 +648,8 @@ Ltac kqm_enter :=
   eapply runk_intro; [reflexivity | reflexivity | simpl kbody ];
   match goal with
   | |- evalk _ _ _ _ _ ?v ?m =>
-      first [ let h := kqm_head v in progress kqm_uh h
-            | let h := kqm_head v in progress cbn [h]
+      first [ let h := kqm_vhead v in progress kqm_uh h
+            | let h := kqm_vhead v in progress cbn [h]
             | let h := kqm_head m in progress unfold h
             | let h := kqm_head m in progress cbn [h]
             | idtac ]
@@ -645,7 +662,7 @@ Ltac kqm_enter0 :=
   eapply runk_intro; [reflexivity | reflexivity | simpl kbody ];
   match goal with
   | |- evalk _ _ _ _ _ ?v ?m =>
-      first [ let h := kqm_head v in progress cbv beta iota delta [h]
+      first [ let h := kqm_vhead v in progress cbv beta iota delta [h]
             | let h := kqm_head m in progress cbv beta iota delta [h]
             | idtac ]
   end;
@@ -669,6 +686,14 @@ Ltac kqx_test :=
   first
     [ rewrite ofn_0, eqb00; kqm_red
     | rewrite ofn_S_ne0 by kqm_bound; kqm_red
+    | (* a test of a boolean held as 1 or 0: the test of the boolean (the shape is looked at first, so this costs nothing
+         when it does not apply) *)
+      lazymatch goal with
+      | |- evalx _ _ _ _ (if PrimInt63.eqb (if _ then 1%uint63 else 0%uint63) 0%uint63 then _ else _) _ => rewrite b2i_eqb0
+      end;
+      match goal with
+      | |- evalx _ _ _ _ (if ?b then _ else _) _ => destruct b eqn:?; kqm_red; try kqm_known
+      end
     | match goal with
       | |- evalx _ _ _ _ (if ?b then _ else _) _ => destruct b eqn:?; kqm_red; try kqm_known
       end
@@ -713,8 +738,8 @@ Ltac kqx_enter :=
   eapply runx_intro; [reflexivity | reflexivity | simpl kbody ];
   match goal with
   | |- evalx _ _ _ _ _ ?v =>
-      first [ let h := kqm_head v in progress kqm_uh h
-            | let h := kqm_head v in progress cbn [h]
+      first [ let h := kqm_vhead v in progress kqm_uh h
+            | let h := kqm_vhead v in progress cbn [h]
             | idtac ]
   end;
   kqm_unf; kqm_unf2.
@@ -723,7 +748,7 @@ Ltac kqx_enter0 :=
   eapply runx_intro; [reflexivity | reflexivity | simpl kbody ];
   match goal with
   | |- evalx _ _ _ _ _ ?v =>
-      first [ let h := kqm_head v in progress cbv beta iota delta [h]
+      first [ let h := kqm_vhead v in progress cbv beta iota delta [h]
             | idtac ]
   end;
   kqm_unf_nz; kqm_name_lets; kqm_unf; kqm_unf2.

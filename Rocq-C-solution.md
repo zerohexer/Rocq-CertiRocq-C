@@ -28,8 +28,8 @@ examples     22 programs (records, pairs, mutual recursion, functions as values,
              views, a growing heap, machine operations): all proved, built, answers equal to hand-computed values
 kernels      5 test kernels (interrupts, a page fault handled in Rocq, a second processor, an interrupt entry written in Rocq
              byte by byte, a kernel with page tables/IDT/PCI/atomics) proved and booting in QEMU (TCG and KVM)
-naturalness  construct table: 775 cells, 733 translated and proved, 41 gaps, none by design yet (first full run: 533 / 231;
-             the five cells once counted by design build and take apart their value in place, so they are gaps: §3.5)
+naturalness  construct table: 780 cells, 759 translated and proved, 20 gaps, none by design yet (first full run 533 / 231
+             of 770; 733 / 41 of 775 on the morning of 2026-10-30)
 proof time   cold 35-54 s per test kernel (was 2m29-4m18); a rerun of an unchanged program ~15 s (per-function proof cache);
              corpus: 243 function proofs, 1.9 s on average
 theorems     the slab heap keeps its invariant through init/set/free/take; views of one memory are consistent; loops whose budget
@@ -37,12 +37,11 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
 ```
 
 **Where the work is, in the order to take it (§12 has each item with its acceptance):**
-1. The 41 gaps of the construct table, in order of cells closed (§3.5): recursive functions returning a bool / a record of
-   three / a number with a memory (9), `int * mem` (7), proof search of pair-valued choices (6), polymorphic and class-based
-   helpers (5), a value built and taken apart in place — `option`, a sum, a list cell, a function in a pair (4) — arithmetic
-   on counters (4), booleans made by `if`/`match` (3), a local `fix` naming the caller's variables (1), a dead memory `let`
-   (1), a choice between records (1).  Then the by-design boundaries pinned by cells that show their cause, each with a
-   control (§3.5, §3.6).
+1. The 20 gaps of the construct table (§3.5): proof search of pair-valued choices (6); polymorphic and class-based helpers
+   (4); arithmetic on counters (4); records of three numbers given back by recursion (3: they wait on the owner's decision on a
+   memory law, §3.5); an `option` given back by a recursive function or kept as a loop's state (2: its tag and its field); a
+   local `fix` naming the caller's variables (1).  Then the by-design boundaries pinned by cells that show their cause, each
+   with a control (§3.5, §3.6).
 2. **A verified compiler by reflection** (§1.12, D26, §12.V): a syntax `S` of the fragment, its meaning `denote`, a compiler
    `compile : S -> KQL` proved once; the user's function is reified into `S` (untrusted) and per program only `denote s = f` is
    checked by conversion — zero proof search, nothing added to the trust, for other people's programs.  Emit-then-prove is the
@@ -82,7 +81,7 @@ decision (§13.8).
 - §1  THE ARCHITECTURE AS BUILT — pipeline, KQL, numbers, memory, translator, statements, generator, printer, hardware, libraries
       — §1.11 the CakeML comparison — §1.12 THE DECISION IN FORCE: a verified compiler by reflection (zero proof search)
 - §2  WHAT C CAN DO, AND ITS COUNTERPART IN ROCQ — the capability table with today's state
-- §3  NATURALNESS — THE CONSTRUCT TABLE: method, generator, classification, numbers, the 41 gaps, how to close one, the
+- §3  NATURALNESS — THE CONSTRUCT TABLE: method, generator, classification, numbers, the 20 gaps, how to close one, the
       translator's own side conditions, naturalness as a theorem
 - §4  LOOPS AND RECURSION — fuel, counted loops, measure loops, measure recursion (`wfix`) and its theory, Rocq's own forms
       (owed: the owner's "level 2")
@@ -410,6 +409,30 @@ applications merged, a known function parameter put in); `deep_norm` does the sa
 A choice on `a && b`, `a || b`, `negb a` is translated as choices on the parts, and the proof rewrites the goal the same way
 (`kqm_ifs`), so the kernel's check needs no case split per test.
 
+**Booleans (2026-10-30).**  A boolean is the number 1 or 0 (`EBool`, and the kind `KBool` for parameters and record fields).  A
+recursive function may give one back (`fi_rbool`): its value is returned as 1 or 0.  At the end of such a function `a || b` is
+read as `if a then true else b` and `a && b` as `if a then b else false`, so a call of the function itself in `b` stays a loop
+(what C's short-circuit makes of it).  A call of a function giving back a boolean is a call followed by a test against 0 where it
+is a test (`tr_cond`), and the number itself where it is a value (`tr_boolval`).  A test made by an `if` is the first test, then
+the test of the branch taken (nothing is computed twice); a test made by a `match` on a counter is the counter's test against 0.
+A boolean value made by an `if` of cheap branches is a conditional move, otherwise a branch.
+
+**Values built and taken apart in place (`knorm`, 2026-10-30).**  Every reader starts from `knorm Γ t`, which adds to `app_norm`:
+a `match` on a constructor takes its branch with the fields bound as `let`s (case of a known constructor; a memory field bound
+last, so a number read before the write is read first); a `match` on a `let` or on an `if` is put inside it; a helper's call as a
+scrutinee or a `let`'s value is written out first (`unfold_h`); `fst`/`snd` (and a primitive projection) of a constructor is the
+field; a `let` of a constructor value is its fields bound as `let`s; a `let` never used is dropped; a `let` of a number-and-memory
+pair made by a call becomes a `match` taking it apart.  **These rules fire only for values the readers do not hold as they are**
+(`held_ty`: not a number, counter, boolean, memory or record of numbers) and for a dead memory `let`, so a program read before is
+read the same way — measured: the C of every example, corpus program and kernel (142 files) is byte-identical with and without
+these changes.  The readers rebind `t` to the normalized term, because a case that builds from `t` itself (a literal's atom) must
+see what the `match` saw (§11, F41).
+
+**A number and a memory as a result (`fi_rim`, 2026-10-30).**  A function giving back `int * mem` (or a record of one number and
+one memory, `mem_pair`) returns the number and ends with the memory: the pair at its end is the number worked out first, then the
+memory's work; a call is one call, the version of the memory bumped, its pair taken apart where it is made (`tr_rec_case`).  A
+record chosen by a test is the test, then the record of the branch taken (`tr_recv`).
+
 ### 1.6 The per-function statement and its proof
 
 For a function `g` with KQL id `f`, the statement says that running `f` on the arguments from memory `M` gives the Rocq
@@ -420,7 +443,11 @@ gives a memory:          forall xs M, bounds -> runk P f args M 0 (g xs M)
 gives a number, reads:   forall xs M, bounds -> runk P f args M (g xs M) M
 gives a number, writes:  forall xs M, bounds -> runx P f args M (g xs M)          (the end memory exists)
 gives two numbers:       ... runk P f args M (fst (g ..)) (upd 63 0 (snd (g ..)) M), with 1 < kq_len 63
+gives a boolean:         as for a number, with the value kq_b2i (g xs M), the number 1 or 0 (KQMAuto.v)
+gives a number and a memory:  forall xs M, bounds -> runk P f args M (fst (g xs M)) (snd (g xs M))
 ```
+
+A boolean parameter is quantified as a `bool` and passed to the KQL function as `kq_b2i x`.
 
 `bounds` says each counter is below `cbk i` (a bound a little under 2^62, lower for functions later in the file, so a caller's
 counter plus a few is still inside the callee's).  A record parameter is the record's constructor applied to its fields.
@@ -433,6 +460,12 @@ callee's statement (put in the context with `pose proof`) or the induction hypot
 a budget is bounded by `kqm_bound`.  Three devices keep long bodies tractable (§7.2): the variable bindings are compacted into a
 tree every 24 bindings (`kqm_compact`), the memories of the function's `let`s get names (`kqm_name_lets`, `kqm_share`), and
 counter rewrites are tried only where a counter is added to and only inside an induction.
+
+Booleans in the walk: `kq_b2i` is unfolded with the other definitions (`kqm_red0`); a test of a boolean held as 1 or 0
+(`eqb (if c then 1 else 0) 0`) is rewritten to the test of `c` itself (`b2i_eqb0`) before it is split on — the shape is looked at
+first, so this costs nothing where it does not apply — so splitting on it splits the Rocq text's `if c` too; the function a
+statement is about is found inside `kq_b2i` (`kqm_vhead`).  A function giving back a number and a memory is listed with the
+functions giving back two numbers (`KQM pairfns`), whose pairs the walk already takes apart (`kqm_pairs_on`).
 
 **Budgets.**  `kq_nat x` is the counter of a number: `x` if positive, 0 otherwise, at most 2^60 (`kq_nat_le`), computed by
 `kq_nat_go 63` without building a unary number.  A budget written as a number is the atom `Abud`; a budget made only of numbers
@@ -610,8 +643,11 @@ evaluation `EWcbvEval.eval` has 21 rules (`eval_box`, `eval_beta`, `eval_zeta`, 
 `eval_prim`, `eval_atom`); `eval_prim` / `eval_primitive` only says a primitive *value* (`prim_int i`) evaluates to itself, and
 PCUIC's `PCUICWcbvEval` is the same.  There is no rule for a primitive *operation*: `PrimInt63.add` is a constant without a body,
 so `eval_delta` cannot fire, and every program here — all arithmetic is `PrimInt63` — is stuck in that semantics.  This is the
-same gap as CertiRocq's front end (`convert_top_anf_correct` assumes `no_prims`, §1.1, F1).  The cost-shape work did not meet
-it because its programs compute on `Z`, an inductive type.
+same gap as CertiRocq's front end (`convert_top_anf_correct` assumes `no_prims`, §1.1, F1).  The cost-shape work met the same
+wall and went around it, without adding a rule: its record (`docs/rocq-cost-shape-solution.md` in KernelQ, "ROUTE 1, MACHINE
+INTEGERS — REFUTED BY MEASUREMENT") says a rung written with `Int63` arithmetic "would have no derivation at all, so every
+theorem about it would be VACUOUS", and its programs compute on `Z`, an inductive type, instead.  So there is no extension of
+MetaRocq of ours to reuse.
 
 **The chosen design: proof by reflection.**  The standard Rocq technique for compiling functions of the logic with a compiler
 proved once, used for example by Fiat Cryptography (functions reified to a syntax, compiler passes proved once, the per-program
@@ -880,6 +916,7 @@ changed the translator or the walk.
 | first full run (2026-10-27) | 770 | 533 | 5 | 231 | 1 |
 | after counter matches anywhere, local functions, captures, comparison of terms with tests, budgets of constants (2026-10-30) | 775 | **733** | 5 | **36** | 1 |
 | the same results classified again: the five "by design" cells build and take apart their value in place (2026-10-30, F35) | 775 | **733** | **0** | **41** | 1 |
+| after booleans (results, parameters, made by `if`/`match`), values built and taken apart in place, a number and a memory as a result, records chosen by a test; 5 new cells (2026-10-30, evening) | 780 | **759** | 0 | **20** | 1 |
 
 What closed the 195 cells: a `match` on a counter read anywhere, not only at the top of a recursion (≈190 cells of family N and
 P — the single largest gap, found only because the nestings put a `match` inside every other construct); a `let`-bound local
@@ -887,30 +924,24 @@ function put in at each use (5); a function given to a template that names varia
 functions compared as terms when they contain a test, a `let`, a projection or a local `fix`; a budget made only of numbers
 written in the program read as a written budget.
 
-### 3.5 The 41 gaps (the live list, from `MATRIX.md`)
+### 3.5 The 20 gaps (the live list, from `MATRIX.md`)
 
 | Cells | Category | Cells by name | What it takes |
 |---|---|---|---|
-| 9 | a recursive function giving back a **boolean**, a **record of three**, or a **number with a memory** | `P_bool_tail_rec`, `P_bool_rec_search`, `P_bool_nontail_and`, `P_bool_nontail_or`, `P_rec3_tail_rec`, `P_rec3_nontail`, `P_pairp_rec`, `P_intmem_tail_rec`, `P_intmem_nontail` | `result_kind` accepts only `int`, `mem`, a record of exactly two numbers.  A boolean result is a number 0/1 with the statement on `if r then 1 else 0` (as `tr_boolval` already does for helpers); a record of k fields generalizes the slot block from one cell to k-1 cells; `int * mem` is a writing function whose number is returned and whose memory is the end memory (`runx`-like statement with both) |
-| 7 | a **pair of a number and a memory** (`int * mem`) as a value | `A_par_mem_pair`, `P_intmem_lit`, `P_intmem_wr`, `P_intmem_let`, `P_intmem_if`, `P_intmem_call`, `P_intmem_alloc_like` | `kind_of` refuses a record that contains a memory.  Split it: the number part as a `KRec` field, the memory part as the (single, linear) memory of the function; the destructuring `let '(x, s2) := ..` binds both |
-| 6 | the translation is accepted, **the proof is not found** | `P_pair_if`, `P_pair_if_inside`, `P_pair_call_arith`, `P_pair_proj_pair`, `P_pair_nontail_if`, `P_int_match_nat2` | proof search only: a pair built by an `if` (each field a conditional move) needs the walk to take the record apart on the Rocq side the same way; `match n with O | S O | S (S _)` needs the nested counter test in `kqm_test` |
-| 5 | **polymorphic / class-based helpers**, a memory inside a record | `A_par_poly_id`, `A_par_poly_pair`, `A_par_poly_hof`, `A_par_typeclass`, `A_par_mem_record` | specialization at the use (Lean's `fixedInst`): a type argument and an instance argument are put in like a known function; types are erased in KQL already |
-| 4 | a **value built and taken apart in place**: `option`, a sum, a list cell, a function in a pair | `A_par_option`, `A_par_sum`, `A_par_list`, `A_par_fun_in_pair` | once the helper is put in, the `match` (or the projection) meets the constructor and the value is never built — case of a known constructor, a general simplification (Lean's `simp` does it).  Where an `option` or a sum crosses a call or is a loop's state, it is its tag and its fields, a kind like `KRec` with a tag; add cells for that (a recursive function giving back an `option`, an `option` as a loop's state, an enumeration with fields) |
-| 4 | **arithmetic and comparisons on counters** | `A_par_nat_eqb`, `A_par_nat_ltb`, `A_par_nat_mul`, `A_par_nat_pred` | a counter is one machine number (`ofn`); `Nat.eqb`/`Nat.ltb` are comparisons of those, `pred` is `Esel`, `n + n` is an addition with the bound kept under `cbk` |
-| 3 | a **boolean made by an `if` or a `match`** | `P_bool_if`, `P_bool_if_call`, `P_bool_match_nat` | `tr_cond` / `tr_boolval` accept `if c then true else false`-shaped terms only through comparisons; read a boolean-valued `if` as a choice between 0/1 |
+| 6 | the translation is accepted, **the proof is not found** | `P_pair_if`, `P_pair_if_inside`, `P_pair_call_arith`, `P_pair_nontail_if`, `P_pair_proj_pair`, `P_int_match_nat2` | proof search only: a pair built by an `if` (each field a conditional move) needs the walk to take the record apart on the Rocq side the same way; `match n with O | S O | S (S _)` needs the nested counter test in `kqm_test`.  Under §12.V these become cases of `compile`, where nothing is searched |
+| 4 | **polymorphic / class-based helpers** | `A_par_poly_id`, `A_par_poly_pair`, `A_par_poly_hof`, `A_par_typeclass` | specialization at the use (Lean's `fixedInst`): a type argument and an instance argument are put in like a known function; types are erased in KQL already |
+| 4 | **arithmetic and comparisons on counters** | `A_par_nat_eqb`, `A_par_nat_ltb`, `A_par_nat_mul` (`n + n`), `A_par_nat_pred` | a counter is one machine number (`ofn`); `Nat.eqb`/`Nat.ltb` are comparisons of those, `pred` is a conditional move, `n + n` is an addition with the bound kept under `cbk` |
+| 3 | **a record of three numbers given back by recursion** | `P_rec3_tail_rec`, `P_rec3_nontail`, `P_pairp_rec` | the slot block from one cell to k-1 cells.  **Waits on the owner:** a caller puts k-1 cells back after the call, which needs the law that writes to two different cells can be swapped (`Upd h i v (Upd h j w s) = Upd h j w (Upd h i v s)` for different cells).  It does not follow from `upd_upd` and `upd_rd_id`; the model proves it the way it proves those (functional extensionality), but it is one more statement assumed of the real memory (§13.9) — F43 |
+| 2 | **an `option` given back by a recursive function, or kept as a loop's state** | `A_par_option_rec`, `A_par_option_state` | a non-recursive inductive of numbers held as its tag and its fields: a kind for it (parameters, results through the slot block, a `match` as a test of the tag) |
 | 1 | a local `fix` that names a variable of the caller | `P_int_local_fix` | a local `fix` is a template whose copy takes its free variables as parameters (lambda lifting, as captures do) |
-| 1 | a **memory made by a `let` and never used**, the old memory used after it | `P_mem_dup` | drop the dead `let` before the linearity check: the rule is about two versions both used (§0.5) |
-| 1 | a **choice between records** | `P_rec3_if` | each field a conditional move (as for pairs, §1.5) |
 
-**By design: none yet.**  The five cells once counted by design (`A_par_option`, `A_par_list`, `A_par_sum`,
-`A_par_fun_in_pair`, `P_mem_dup`) were refused by generic messages ("a match this translator does not read"), and their programs
-show no cause: each value is built and taken apart in place, or the second memory is never used (§11, F35).  `A_par_fun_result`
-(a function returned by a helper), listed with them, is accepted and proved; it is the control for "a function value that
-escapes".  The boundaries of §0.5 still need their pins, each next to its control: a list built by recursion with its length from
-the data (control: `A_par_list`); a function returned by a recursive function and called later (control: `A_par_fun_result`);
-both versions of the memory used (control: `P_mem_dup`, once the dead `let` is dropped); a `Z` result (control: the same
-program on `int`).  **Not Rocq (1):** `A_par_nat_arith` (`k (m + 0)` is not a
-structurally smaller argument; the generated program itself is rejected by Rocq, so there is no verdict).
+**By design: none yet.**  The cells once counted by design (`A_par_option`, `A_par_list`, `A_par_sum`, `A_par_fun_in_pair`,
+`P_mem_dup`) build and take apart their value in place, or never use the second memory (F35); they are now translated and proved
+(`knorm`), and `A_par_fun_result` was all along.  They are the **controls** for the boundaries of §0.5, whose **pins** are still
+to be written: a list built by recursion with its length from the data (control `A_par_list`); a function returned by a
+recursive function and called later (control `A_par_fun_result`); both versions of the memory used (control `P_mem_dup`); a `Z`
+result (control: the same program on `int`).  **Not Rocq (1):** `A_par_nat_arith` (`k (m + 0)` is not a structurally smaller
+argument; the generated program itself is rejected by Rocq, so there is no verdict).
 
 ### 3.6 How a gap is closed
 
@@ -1290,6 +1321,9 @@ parameter of type `int` is never tried as an induction (only a `nat`).
 | kernel | | 1m12 | 44 s | **40 s** |
 
 - A rerun of an unchanged kernel: **~15 s** (translation, printing, building; every proof from the cache).
+- 2026-10-30, one machine, one day (whole build, translation included; this machine varies ~15% from run to run): the pushed
+  translator 35.6 / 42.9 / 41.7 / 56.9 / 44.6 s (irqnow, fault, smp, own, kernel); after the boolean, `knorm` and
+  number-and-memory work 37.9 / 41.8 / 42.1 / 58.0 / 45.6 s.
 - The 36-program corpus: 243 function proofs, 462 s in sum, **1.9 s on average**, the slowest 59 s (`lagrange` of CF622F).
 - The critical path of every test kernel is one function, `x86_setup`: about 2,400 straight-line steps, ~18 s now (24 s
   before).  Parallel files cannot split a single function.
@@ -1517,6 +1551,13 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F34 | Lean's freedom comes from its runtime; its front-end passes are the model | §5.7 |
 | F35 | The five cells counted "by design" (`option`, a sum, a list cell, a function in a pair, a dead memory `let`) were classified by type; their programs build and take apart the value in place or never use the second memory, and `A_par_fun_result`, in the same list, was accepted all along | reclassified as gaps (41); §0.5 now says the cause is size and lifetime, never type; a design cell needs a pin that shows the cause, and a control (2026-10-30) |
 | F36 | The owner asked for loops "level 2" — Rocq's own `Program Fixpoint`, as offered; `wfix` was built instead and recorded as the decision, the owner's form "optional" | the owner's request is the target again (D12, §4.5, §12.P); §13.8 has a row for this drift (2026-10-30) |
+| F39 | `a || b` at the end of a function giving back a boolean, read as `orb` (both sides worked out, then combined), makes a call of the function itself in `b` a real call: the recursion grows the stack | read as `if a then true else b` there, so the call is a loop, as C's short-circuit makes it |
+| F40 | The rules for values built and taken apart in place, applied everywhere, could change the C of programs that were already read | they apply only to values the readers do not hold and to dead memory lets; measured: 142 generated C files byte-identical with and without (2026-10-30) |
+| F41 | After normalizing, a reader's literal case built its atom from the original term: `Aint (let s := .. in 7)`, a free variable at definition time ("The reference 4 is free"), seen on the simplest cell `P_int_lit` | every reader rebinds `t` to the normalized term |
+| F42 | In the table's cells the value taken apart is usually a helper's call (`match k a with ..`), which the normalizer did not see through | `unfold_h` writes a helper's call out before the rules look at it |
+| F43 | Giving back more than two numbers needs the caller to put back several cells of the slot block, which needs writes to different cells to commute; the laws have no such statement and it does not follow from `upd_upd` / `upd_rd_id` (memories are equal only through those) | waits on the owner (adding a law to `real_laws` is adding to the trust); the model would prove it with functional extensionality, as it proves the others |
+| F44 | `kitc.py` prints only the last 300 characters of a failed translation, mostly warnings; the classifier then cannot see the reason | read the `.v`'s error, or the `KQM: refused:` line; `run.sh` keeps 400 characters of a cell's output |
+| F45 | The dead-`let` check of the normalizer made the three kernels with the 2,400-step function 10–20% slower to build: `||` and `existsb` work out both sides under `vm_compute`, so every memory `let` scanned the whole rest of the function (quadratic in its length) | the type is looked at first, and the scan stops at the first occurrence; the kernels back within a few percent of the pushed translator, measured the same day (§7.3) |
 | F38 | MetaRocq's formal evaluation (`EWcbvEval.eval`, `PCUICWcbvEval`) has rules for primitive values only, none for primitive operations: `PrimInt63.add` has no body, `eval_delta` cannot fire, every program here is stuck in it | the verified compiler is built by reflection over our own syntax instead (D26, §1.12) (read in the image's MetaRocq sources, 2026-10-30) |
 | F37 | CakeML's architecture is ours: a proof-producing translator from the logic's functions on top, one verified compiler below; Pancake is verified through a proof-producing decompiler.  The difference is that CakeML builds each proof by construction while ours searches | D25, §1.11 (read in the CakeML repository, 2026-10-30) |
 
@@ -1533,15 +1574,13 @@ spike, then growth; D26) → the rest of **A**, **L**, **P** (the user's ordinar
 through `ccomp`) → **G** → **M** → **J**; **F**, **I** and **N** when their condition arises; **K** when the owner says.
 **Q** is dropped (D26).
 
-**A. The construct-table gaps (41 cells, §3.5), then the by-design pins.**  In order: (1) recursive functions giving back a
-boolean, a record of three, a number with a memory — 9; (2) `int * mem` values — 7; (3) proof search for pair-valued choices and
-nested counter tests — 6; (4) polymorphic and class-based helpers by specialization — 5; (5) values built and taken apart in
-place (`option`, a sum, a list cell, a function in a pair: case of a known constructor once the helper is put in), then
-non-recursive inductive values held as tag and fields where they cross a call or are a loop's state, with new cells for that —
-4; (6) arithmetic and comparisons on counters — 4; (7) booleans made by `if`/`match` — 3; (8) a local `fix` with captures — 1;
-(9) a dead memory `let` — 1; (10) a choice between records — 1.  Then the pins of §0.5's boundaries, each with its control
-(§3.5): cells added to `gen.py` and to `DESIGN_CELLS` together.  Accepted when: the category's cells
-are `ok`, the full table is re-run and `MATRIX.md` updated, and the gate (examples, corpus, kernels if the walk changed) passes.
+**A. The construct-table gaps (20 cells, §3.5), then the by-design pins.**  The categories of §3.5: proof search for
+pair-valued choices and nested counter tests (6); polymorphic and class-based helpers by specialization (4); arithmetic and
+comparisons on counters (4); records of three numbers by recursion (3, after the owner's decision on the commuting law); an
+`option` across a call or as a loop's state (2); a local `fix` with captures (1).  Under §12.V the remaining ones are done as
+constructs of `S`.  Then the pins of §0.5's boundaries, each with its control (§3.5): cells added to `gen.py` and to
+`DESIGN_CELLS` together.  Accepted when: the category's cells are `ok`, the full table is re-run and `MATRIX.md` updated, and
+the gate (examples, corpus, kernels if the walk changed) passes.
 
 **B. Compiling from an ordinary `.v` file, as simply as `lean --c`.**
 - A command (`Kq Compile solve.`) in an ordinary Rocq file: the entry's arguments are read from its signature (numbers from the
@@ -1746,12 +1785,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `76e777a`; `git log --oneline origin/main..HEAD` lists what is local (2026-10-30:
-`3184a86` … `7e41ee8` and the documentation commits after them).
+Pushed to the public repository up to `f0f9f26` (2026-10-30); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| `485465e` … | this file, its additions and corrections; `proved/matrix/run.sh`; the five design cells reclassified as gaps (41) |
+| (this commit) | booleans (results, parameters, made by `if`/`match`), values built and taken apart in place (`knorm`), a number and a memory as a result, records chosen by a test; 5 new table cells; the table at 759 / 20 of 780 |
+| `685b6ff` … `2e2be49` | the architecture decisions: §1.11 (CakeML), §1.12 (the verified compiler by reflection, D26), the MetaRocq route and its two problems |
+| `485465e` … `f0f9f26` | this file, its additions and corrections; `proved/matrix/run.sh`; the five design cells reclassified as gaps (41) |
 | `7e41ee8` | the construct table re-run: 775 cells, 733 proved, 5 by design, 36 gaps |
 | `b014f1d` | measure recursion (`wfix*`): the budget is the measure; equation and induction proved; termination tactic; `tri_closed`, `gcd_correct`; functions with tests compared as terms; budgets of constants |
 | `39b81ee` | `loop_two` and `loop_two_ends` |
