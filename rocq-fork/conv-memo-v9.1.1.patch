@@ -1,0 +1,612 @@
+Rocq 9.1.1 + a conversion memo (one table per checked conversion: a pair of closure cells already found
+convertible, or not, at a pair of lifts, is answered from the table), backported from rocq-prover/rocq#22309
+(kernel/cClosure.ml: a stable cell identity [fid], 0 for every cell built, kept by the in-place [update]; the
+ConvCache module; kernel/conversion.ml: the lookup in [ccnv], on for checked conversion [gen_conv], off for
+unification [generic_conv]).  ROCQ_CONV_CACHE=0 turns it off.  Apply with: git apply -p1 (or patch -p1) in a V9.1.1 tree.
+See Rocq-C-solution.md F46 and D28.
+diff -ru a/kernel/cClosure.ml b/kernel/cClosure.ml
+--- a/kernel/cClosure.ml
++++ b/kernel/cClosure.ml
+@@ -78,6 +78,9 @@
+ type fconstr = {
+   mutable mark : red_state;
+   mutable term: fterm;
++  (* Stable cell id for the conversion cache; 0 = unassigned. Preserved by
++     in-place [update], reset by copies. *)
++  mutable fid : int;
+ }
+ 
+ and fterm =
+@@ -112,6 +115,112 @@
+ let get_invert fiv = fiv
+ 
+ let fterm_of v = v.term
++
++(* Identities are drawn from a global counter, so they are dense and
++   distinct; 0 is reserved for "not yet assigned" and never handed out.
++   They are only ever consumed by [ConvCache] below, so both the counter
++   and the identities stay local to this module. *)
++let fid_counter = ref 0
++let uid v =
++  if v.fid != 0 then v.fid
++  else begin incr fid_counter; v.fid <- !fid_counter; !fid_counter end
++
++(* Conversion result cache. Within one conversion session the same pair of
++   cells is typically compared many times over, because beta-substitution
++   shares payload cells across all the occurrences of a variable. Entries
++   record the outcome (success or failure) for a pair of cells, identified
++   by their stable ids, at a given lift pair and conversion problem. Only
++   sound for checked conversion, where results are deterministic and no
++   universe constraints are accumulated. *)
++module ConvCache = struct
++
++  module Key = struct
++    (* ids of the two cells, and whether the problem is cumulativity *)
++    type t = int * int * bool
++    (* branch-free: all three comparisons are computed and combined with
++       [land] instead of short-circuiting *)
++    let equal (u1, v1, b1) (u2, v2, b2) =
++      (Bool.to_int (Int.equal u1 u2)
++       land Bool.to_int (Int.equal v1 v2)
++       land Bool.to_int (Bool.equal b1 b2)) = 1
++    let hash (u, v, b) =
++      (* ids are dense small integers, already good hashes *)
++      let h = u * 0x3B9ACA07 + v in
++      let h = h lxor (h lsr 16) in
++      h lxor (Bool.to_int b * 0x5BF03635)
++  end
++
++  module Tbl = Hashtbl.Make(Key)
++
++  type t = {
++    tbl : (lift * lift * bool) list ref Tbl.t;
++    mutable size : int;
++  }
++
++  (* Optional cap on cached entries per session (ROCQ_CONV_CACHE_MAX; 0 means
++     unlimited). Unbounded by default: like [clos_tab], the table is
++     session-scoped, so its lifetime bounds memory. *)
++  let max_size =
++    match int_of_string (Sys.getenv "ROCQ_CONV_CACHE_MAX") with
++    | 0 -> max_int
++    | n -> n
++    | exception _ -> max_int
++
++  (* The cache is enabled by default; set ROCQ_CONV_CACHE=0 to disable. *)
++  let enabled =
++    match Sys.getenv "ROCQ_CONV_CACHE" with
++    | "0" -> false
++    | _ -> true
++    | exception Not_found -> true
++
++  let create () = if enabled then Some { tbl = Tbl.create 16; size = 0 } else None
++
++  (* Lifts are part of the entries rather than the keys: cells are shared
++     under beta-substitution at varying depths, so the same pair recurs
++     under a handful of lift pairs and a short scan beats hashing them. *)
++  let rec strip_flift k v = match [@ocaml.warning "-4"] v.term with
++  | FLIFT (n, v') -> strip_flift (k + n) v'
++  | _ -> (k, v)
++
++  (* [probe] and [record] renormalize the pair independently, so nothing
++     probe computed needs to stay live across the comparison run between
++     the two calls: a memoized lookup state would be promoted to the major
++     heap whenever the comparison spans a minor collection. *)
++
++  let probe cache ~cumul lft1 t1 lft2 t2 =
++    let (k1, v1) = strip_flift 0 t1 in
++    let (k2, v2) = strip_flift 0 t2 in
++    let l1 = el_shft k1 lft1 in
++    let l2 = el_shft k2 lft2 in
++    let key = (uid v1, uid v2, cumul) in
++    match Tbl.find_opt cache.tbl key with
++    | None -> None
++    | Some entries ->
++      let rec find = function
++      | [] -> None
++      | (l1', l2', r) :: rest ->
++        if eq_lift l1' l1 && eq_lift l2' l2 then
++          (* constant blocks: the hit path does not allocate *)
++          if r then Some true else Some false
++        else find rest
++      in
++      find !entries
++
++  let record cache ~cumul lft1 t1 lft2 t2 r =
++    if cache.size < max_size then begin
++      let (k1, v1) = strip_flift 0 t1 in
++      let (k2, v2) = strip_flift 0 t2 in
++      let l1 = el_shft k1 lft1 in
++      let l2 = el_shft k2 lft2 in
++      let key = (uid v1, uid v2, cumul) in
++      cache.size <- cache.size + 1;
++      match Tbl.find_opt cache.tbl key with
++      | Some entries -> entries := (l1, l2, r) :: !entries
++      | None -> Tbl.add cache.tbl key (ref [(l1, l2, r)])
++    end
++
++end
++
+ let set_ntrl v = v.mark <- Ntrl
+ 
+ (* Could issue a warning if no is still Red, pointing out that we loose
+@@ -215,26 +324,26 @@
+ let rec lft_fconstr n ft =
+   match ft.term with
+     | (FInd _|FConstruct (_,[||])|FFlex(ConstKey _|VarKey _)|FInt _|FFloat _|FString _|FIrrelevant) -> ft
+-    | FRel i -> {mark=ft.mark;term=FRel(i+n)}
+-    | FLambda(k,tys,f,e) -> {mark=Cstr; term=FLambda(k,tys,f,usubs_shft(n,e))}
++    | FRel i -> {fid = 0; mark=ft.mark;term=FRel(i+n)}
++    | FLambda(k,tys,f,e) -> {fid = 0; mark=Cstr; term=FLambda(k,tys,f,usubs_shft(n,e))}
+     | FFix(fx,e) ->
+-      {mark=Cstr; term=FFix(fx,usubs_shft(n,e))}
++      {fid = 0; mark=Cstr; term=FFix(fx,usubs_shft(n,e))}
+     | FCoFix(cfx,e) ->
+-      {mark=Cstr; term=FCoFix(cfx,usubs_shft(n,e))}
++      {fid = 0; mark=Cstr; term=FCoFix(cfx,usubs_shft(n,e))}
+     | FLIFT(k,m) -> lft_fconstr (n+k) m
+-    | FConstruct (c,args) -> {mark=Cstr; term=FConstruct(c,Array.Fun1.map lft_fconstr n args)}
++    | FConstruct (c,args) -> {fid = 0; mark=Cstr; term=FConstruct(c,Array.Fun1.map lft_fconstr n args)}
+     | FLOCKED -> assert false
+     | FFlex (RelKey _) | FAtom _ | FApp _ | FProj _ | FCaseT _ | FCaseInvert _ | FProd _
+-      | FLetIn _ | FEvar _ | FCLOS _ | FArray _ -> {mark=ft.mark; term=FLIFT(n,ft)}
++      | FLetIn _ | FEvar _ | FCLOS _ | FArray _ -> {fid = 0; mark=ft.mark; term=FLIFT(n,ft)}
+ let lift_fconstr k f =
+   if Int.equal k 0 then f else lft_fconstr k f
+ 
+ let clos_rel e i =
+   match expand_rel i e with
+     | Inl(n,mt) -> lift_fconstr n mt
+-    | Inr(k,None) -> {mark=Ntrl; term= FRel k}
++    | Inr(k,None) -> {fid = 0; mark=Ntrl; term= FRel k}
+     | Inr(k,Some p) ->
+-        lift_fconstr (k-p) {mark=Red;term=FFlex(RelKey p)}
++        lift_fconstr (k-p) {fid = 0; mark=Red;term=FFlex(RelKey p)}
+ 
+ (* since the head may be reducible, we might introduce lifts of 0 *)
+ let compact_stack head stk =
+@@ -297,7 +406,7 @@
+   | FLambda(_,[(na,ty)],b,e) ->
+     (usubst_binder e na,clos_fun e ty,clos_fun (usubs_lift e) b)
+   | FLambda(n,(na,ty)::tys,b,e) ->
+-    (usubst_binder e na,clos_fun e ty,{mark=t.mark;term=FLambda(n-1,tys,b,usubs_lift e)})
++    (usubst_binder e na,clos_fun e ty,{fid = 0; mark =t.mark;term=FLambda(n-1,tys,b,usubs_lift e)})
+   | _ -> assert false
+ 
+ (* Optimization: do not enclose variables in a closure.
+@@ -305,25 +414,25 @@
+ let mk_clos (e:usubs) t =
+   match kind t with
+     | Rel i -> clos_rel (fst e) i
+-    | Var x -> {mark = Red; term = FFlex (VarKey x) }
+-    | Const c -> {mark = Red; term = FFlex (ConstKey (usubst_punivs e c)) }
++    | Var x -> {fid = 0; mark = Red; term = FFlex (VarKey x) }
++    | Const c -> {fid = 0; mark = Red; term = FFlex (ConstKey (usubst_punivs e c)) }
+     | Sort s ->
+       let s = usubst_sort e s in
+-      {mark = Ntrl; term = FAtom (mkSort s) }
+-    | Meta _ -> {mark = Ntrl; term = FAtom t }
+-    | Ind kn -> {mark = Ntrl; term = FInd (usubst_punivs e kn) }
+-    | Construct kn -> {mark = Cstr; term = FConstruct (usubst_punivs e kn,[||]) }
+-    | Int i -> {mark = Cstr; term = FInt i}
+-    | Float f -> {mark = Cstr; term = FFloat f}
+-    | String s -> {mark = Cstr; term = FString s}
++      {fid = 0; mark = Ntrl; term = FAtom (mkSort s) }
++    | Meta _ -> {fid = 0; mark = Ntrl; term = FAtom t }
++    | Ind kn -> {fid = 0; mark = Ntrl; term = FInd (usubst_punivs e kn) }
++    | Construct kn -> {fid = 0; mark = Cstr; term = FConstruct (usubst_punivs e kn,[||]) }
++    | Int i -> {fid = 0; mark = Cstr; term = FInt i}
++    | Float f -> {fid = 0; mark = Cstr; term = FFloat f}
++    | String s -> {fid = 0; mark = Cstr; term = FString s}
+     | (CoFix _|Lambda _|Fix _|Prod _|Evar _|App _|Case _|Cast _|LetIn _|Proj _|Array _) ->
+-        {mark = Red; term = FCLOS(t,e)}
++        {fid = 0; mark = Red; term = FCLOS(t,e)}
+ 
+ let injectu c u = mk_clos (subs_id 0, u) c
+ 
+ let inject c = injectu c UVars.Instance.empty
+ 
+-let mk_irrelevant = { mark = Cstr; term = FIrrelevant }
++let mk_irrelevant = { fid = 0; mark = Cstr; term = FIrrelevant }
+ 
+ let is_irrelevant info r = match info.i_cache.i_mode with
+ | Reduction -> false
+@@ -621,7 +730,7 @@
+   | LocalAssum (n, ty) :: ctx ->
+       let assums, ctx = List.map_until (function LocalAssum (n, ty) -> Some (n, ty) | LocalDef _ -> None) ctx in
+       let assums = (n, ty) :: assums in
+-      { term = FLambda(List.length assums, assums, Term.it_mkLambda_or_LetIn (term_of_fconstr t) (List.rev ctx), (subs_id l, UVars.Instance.empty)); mark = t.mark }
++      { fid = 0; term = FLambda(List.length assums, assums, Term.it_mkLambda_or_LetIn (term_of_fconstr t) (List.rev ctx), (subs_id l, UVars.Instance.empty)); mark = t.mark }
+   | LocalDef _ :: _ ->
+       mk_clos (subs_id l, UVars.Instance.empty) (Term.it_mkLambda_or_LetIn (term_of_fconstr t) ctx)
+ 
+@@ -637,10 +746,10 @@
+   else match[@warning "-4"] h.term with
+     | FConstruct (c, args0) ->
+       let args = if CArray.is_empty args0 then args else Array.append args0 args in
+-      {mark=Cstr; term=FConstruct(c, args)}
++      {fid = 0; mark =Cstr; term=FConstruct(c, args)}
+     | _ ->
+       (* don't bother collapsing FApp nodes *)
+-      {mark=neutr h.mark; term=FApp(h,args)}
++      {fid = 0; mark =neutr h.mark; term=FApp(h,args)}
+ 
+ let rec zip m stk =
+   match stk with
+@@ -649,10 +758,10 @@
+     | ZcaseT(ci, u, pms, p, br, e)::s ->
+         let t = FCaseT(ci, u, pms, p, m, br, e) in
+         let mark = (neutr m.mark) in
+-        zip {mark; term=t} s
++        zip {fid = 0; mark; term=t} s
+     | Zproj (p,r) :: s ->
+         let mark = (neutr m.mark) in
+-        zip {mark; term=FProj(Projection.make p true,r,m)} s
++        zip {fid = 0; mark; term=FProj(Projection.make p true,r,m)} s
+     | Zfix(fx,par)::s ->
+         zip fx (par @ append_stack [|m|] s)
+     | Zshift(n)::s ->
+@@ -663,9 +772,9 @@
+         zip rf s
+     | Zprimitive(_op,c,rargs,kargs)::s ->
+       let args = List.rev_append rargs (m::List.map snd kargs) in
+-      let f = {mark = Red; term = FFlex (ConstKey c)} in
++      let f = {fid = 0; mark = Red; term = FFlex (ConstKey c)} in
+       (* don't need to mkFApp because not a constructor *)
+-      zip {mark=(neutr m.mark); term = FApp (f, Array.of_list args)} s
++      zip {fid = 0; mark =(neutr m.mark); term = FApp (f, Array.of_list args)} s
+ 
+ let fapp_stack (m,stk) = zip m stk
+ 
+@@ -771,7 +880,7 @@
+           let etys = List.skipn na tys in
+           get_args (n-na) etys f (usubs_consn l 0 na e) s
+     | ((ZcaseT _ | Zproj _ | Zfix _ | Zprimitive _) :: _ | []) as stk ->
+-      (Inr {mark=Cstr; term=FLambda(n,tys,f,e)}, stk)
++      (Inr {fid = 0; mark =Cstr; term=FLambda(n,tys,f,e)}, stk)
+ 
+ (* Eta expansion: add a reference to implicit surrounding lambda at end of stack *)
+ let rec eta_expand_stack info na = function
+@@ -781,7 +890,7 @@
+   | [] ->
+     let arg =
+       if is_irrelevant info na.binder_relevance then mk_irrelevant
+-      else {mark = Ntrl; term = FRel 1}
++      else {fid = 0; mark = Ntrl; term = FRel 1}
+     in
+     [Zshift 1; Zapp [|arg|]]
+ 
+@@ -812,13 +921,13 @@
+            Zapp (Array.of_list eargs) :: s')
+         | rnargs, kargs, _ ->
+           (* head of h is not constructor -> no need to mkFApp *)
+-          strip_rec rnargs {mark = h.mark;term=FApp(h, args)} depth kargs s'
++          strip_rec rnargs {fid = 0; mark = h.mark;term=FApp(h, args)} depth kargs s'
+       end
+     | Zupdate(m) :: s ->
+       let () = update m h.mark h.term in
+       strip_rec rnargs m depth  kargs s
+     | (Zprimitive _ | ZcaseT _ | Zproj _ | Zfix _) :: _ | [] -> assert false
+-  in strip_rec [] {mark = Red; term = FFlex(ConstKey c)} 0 kargs stk
++  in strip_rec [] {fid = 0; mark = Red; term = FFlex(ConstKey c)} 0 kargs stk
+ 
+ let get_native_args1 op c stk =
+   match get_native_args op c stk with
+@@ -924,7 +1033,7 @@
+       then raise Not_found (* partially applied constructor (missing non-param arguments) *)
+     in
+     let hstack = Array.map (fun (p,r) ->
+-        { mark = Red; (* right can't be a constructor though *)
++        { fid = 0; mark = Red; (* right can't be a constructor though *)
+           term = FProj (Projection.make p true, UVars.subst_instance_relevance u r, right) })
+         projs
+     in
+@@ -945,12 +1054,12 @@
+     match [@ocaml.warning "-4"] fix with
+       | FFix (((reci,i),(_,_,bds as rdcl)),env) ->
+           (bds.(i),
+-           (fun j -> { mark = Cstr;
++           (fun j -> { fid = 0; mark = Cstr;
+                        term = FFix (((reci,j),rdcl),env) }),
+            env, Array.length bds)
+       | FCoFix ((i,(_,_,bds as rdcl)),env) ->
+           (bds.(i),
+-           (fun j -> { mark = Cstr;
++           (fun j -> { fid = 0; mark = Cstr;
+                        term = FCoFix ((j,rdcl),env) }),
+            env, Array.length bds)
+       | _ -> assert false
+@@ -981,7 +1090,7 @@
+ 
+     let mk_construct c =
+       (* All constructors used in primitive functions are relevant *)
+-      { mark = Cstr; term = FConstruct (UVars.in_punivs c, [||]) }
++      { fid = 0; mark = Cstr; term = FConstruct (UVars.in_punivs c, [||]) }
+ 
+     let get = Array.get
+ 
+@@ -1005,7 +1114,7 @@
+       | FArray (_u,t,_ty) -> t
+       | _ -> assert false
+ 
+-    let dummy = {mark = Ntrl; term = FRel 0}
++    let dummy = {fid = 0; mark = Ntrl; term = FRel 0}
+ 
+     let current_retro = ref Retroknowledge.empty
+     let defined_int = ref false
+@@ -1015,7 +1124,7 @@
+       match retro.Retroknowledge.retro_int63 with
+       | Some c ->
+         defined_int := true;
+-        fint := { mark = Ntrl; term = FFlex (ConstKey (UVars.in_punivs c)) }
++        fint := { fid = 0; mark = Ntrl; term = FFlex (ConstKey (UVars.in_punivs c)) }
+       | None -> defined_int := false
+ 
+     let defined_float = ref false
+@@ -1025,7 +1134,7 @@
+       match retro.Retroknowledge.retro_float64 with
+       | Some c ->
+         defined_float := true;
+-        ffloat := { mark = Ntrl; term = FFlex (ConstKey (UVars.in_punivs c)) }
++        ffloat := { fid = 0; mark = Ntrl; term = FFlex (ConstKey (UVars.in_punivs c)) }
+       | None -> defined_float := false
+ 
+     let defined_string = ref false
+@@ -1035,7 +1144,7 @@
+       match retro.Retroknowledge.retro_string with
+       | Some c ->
+         defined_string := true;
+-        fstring := { mark = Ntrl; term = FFlex (ConstKey (UVars.in_punivs c)) }
++        fstring := { fid = 0; mark = Ntrl; term = FFlex (ConstKey (UVars.in_punivs c)) }
+       | None -> defined_string := false
+ 
+     let defined_bool = ref false
+@@ -1086,7 +1195,7 @@
+         fLt := mk_construct cLt;
+         fGt := mk_construct cGt;
+         let (icmp, _) = cEq in
+-        fcmp := { mark = Ntrl; term = FInd (UVars.in_punivs icmp) }
++        fcmp := { fid = 0; mark = Ntrl; term = FInd (UVars.in_punivs icmp) }
+       | None -> defined_cmp := false
+ 
+     let defined_f_cmp = ref false
+@@ -1195,15 +1304,15 @@
+ 
+     let mkInt env i =
+       check_int env;
+-      { mark = Cstr; term = FInt i }
++      { fid = 0; mark = Cstr; term = FInt i }
+ 
+     let mkFloat env f =
+       check_float env;
+-      { mark = Cstr; term = FFloat f }
++      { fid = 0; mark = Cstr; term = FFloat f }
+ 
+     let mkString env s =
+       check_string env;
+-      { mark = Cstr; term = FString s }
++      { fid = 0; mark = Cstr; term = FString s }
+ 
+     let mkBool env b =
+       check_bool env;
+@@ -1288,7 +1397,7 @@
+ 
+     let mkArray env u t ty =
+       check_array env;
+-      { mark = Cstr; term = FArray (u,t,ty)}
++      { fid = 0; mark = Cstr; term = FArray (u,t,ty)}
+ 
+   end
+ 
+@@ -1367,12 +1476,12 @@
+         (mk_irrelevant, skip_irrelevant_stack info stk)
+       else
+         let term = FCaseInvert (ci, u, pms, p, (Array.map (mk_clos e) indices), mk_clos e t, br, e) in
+-        { mark = Red; term }, stk
++        { fid = 0; mark = Red; term }, stk
+     | Fix (((_, n), (lna, _, _)) as fx) ->
+       if is_irrelevant info (usubst_relevance e (lna.(n)).binder_relevance) then
+         (mk_irrelevant, skip_irrelevant_stack info stk)
+       else
+-        knh info { mark = Cstr; term = FFix (fx, e) } stk
++        knh info { fid = 0; mark = Cstr; term = FFix (fx, e) } stk
+     | Cast(a,_,_) -> knht info e a stk
+     | Rel n -> knh info (clos_rel (fst e) n) stk
+     | Proj (p, r, c) ->
+@@ -1380,18 +1489,18 @@
+       if is_irrelevant info r then
+         (mk_irrelevant, skip_irrelevant_stack info stk)
+       else begin match unfold_projection info p r with
+-      | None -> ({ mark = Red; term = FProj (p, r, mk_clos e c) }, stk)
++      | None -> ({ fid = 0; mark = Red; term = FProj (p, r, mk_clos e c) }, stk)
+       | Some s -> knht info e c (s :: stk)
+       end
+     | Construct _ -> knh info (mk_clos e t) stk
+     | (Ind _|Const _|Var _|Meta _ | Sort _ | Int _|Float _|String _) -> (mk_clos e t, stk)
+     | CoFix cfx ->
+-      { mark = Cstr; term = FCoFix (cfx,e) }, stk
+-    | Lambda _ -> { mark = Cstr ; term = mk_lambda e t }, stk
++      { fid = 0; mark = Cstr; term = FCoFix (cfx,e) }, stk
++    | Lambda _ -> { fid = 0; mark = Cstr ; term = mk_lambda e t }, stk
+     | Prod (n, t, c) ->
+-      { mark = Ntrl; term = FProd (n, mk_clos e t, c, e) }, stk
++      { fid = 0; mark = Ntrl; term = FProd (n, mk_clos e t, c, e) }, stk
+     | LetIn (n,b,t,c) ->
+-      { mark = Red; term = FLetIn (n, mk_clos e b, mk_clos e t, c, e) }, stk
++      { fid = 0; mark = Red; term = FLetIn (n, mk_clos e b, mk_clos e t, c, e) }, stk
+     | Evar ev ->
+       begin match info.i_cache.i_sigma.evar_expand ev with
+       | EvarDefined c -> knht info e c stk
+@@ -1401,14 +1510,14 @@
+           (mk_irrelevant, skip_irrelevant_stack info stk)
+         else
+           let repack = info.i_cache.i_sigma.evar_repack in
+-          { mark = Ntrl; term = FEvar (evk, args, e, repack) }, stk
++          { fid = 0; mark = Ntrl; term = FEvar (evk, args, e, repack) }, stk
+       end
+     | Array(u,t,def,ty) ->
+       let len = Array.length t in
+       let ty = mk_clos e ty in
+       let t = Parray.init (Uint63.of_int len) (fun i -> mk_clos e t.(i)) (mk_clos e def) in
+       let term = FArray (u,t,ty) in
+-      knh info { mark = Cstr; term } stk
++      knh info { fid = 0; mark = Cstr; term } stk
+ 
+ (************************************************************************)
+ 
+@@ -1607,7 +1716,7 @@
+   | ZcaseT (ci, u, pms, (p, r), brs, e) :: s ->
+       let t = FCaseT(ci, u, pms, (p, r), head, brs, e) in
+       let mark = neutr head.mark in
+-      let head = {mark; term=t} in
++      let head = {fid = 0; mark; term=t} in
+       let specif = Environ.lookup_mind (fst ci.ci_ind) info.i_cache.i_env in
+       let specif = (specif, specif.mind_packets.(snd ci.ci_ind)) in
+       let ntys_ret = Environ.expand_arity specif (ci.ci_ind, u) pms (fst p) in
+@@ -1629,7 +1738,7 @@
+       match_main red info tab ~pat_state states loc
+   | Zproj (proj', r) :: s ->
+       let mark = (neutr head.mark) in
+-      let head = {mark; term=FProj(Projection.make proj' true, r, head)} in
++      let head = {fid = 0; mark; term=FProj(Projection.make proj' true, r, head)} in
+       let elims, states = extract_or_kill2 (function [@ocaml.warning "-4"]
+       | PEProj proj :: es, subst ->
+         if not @@ Projection.Repr.CanOrd.equal proj proj' then None else
+@@ -1810,7 +1919,7 @@
+       | None -> Dead, Ignore
+     ) (Array.of_list r)
+   in
+-  let m = { mark = Red; term = FFlex fl } in
++  let m = { fid = 0; mark = Red; term = FFlex fl } in
+   let loc = LocStart { elims; context=[]; head = m; stack = stk; next = Return (unfold_fix, m, stk) } in
+   match_main red info tab ~pat_state states loc
+ 
+@@ -2018,7 +2127,7 @@
+   begin match expand_rel i (fst e) with
+   | Inl (n, mt) -> kl info tab @@ lift_fconstr n mt
+   | Inr (k, None) -> if Int.equal k i then t else mkRel k
+-  | Inr (k, Some p) -> kl info tab @@ lift_fconstr (k-p) {mark=Red;term=FFlex(RelKey p)}
++  | Inr (k, Some p) -> kl info tab @@ lift_fconstr (k-p) {fid = 0; mark=Red;term=FFlex(RelKey p)}
+   end
+ | App (hd, args) ->
+   begin match kind hd with
+diff -ru a/kernel/cClosure.mli b/kernel/cClosure.mli
+--- a/kernel/cClosure.mli
++++ b/kernel/cClosure.mli
+@@ -111,6 +111,33 @@
+ val zip : fconstr -> stack -> fconstr
+ 
+ val fterm_of : fconstr -> fterm
++
++(** Conversion result cache, recording the outcome (success or failure)
++    of comparing a pair of cells at a given lift pair and conversion
++    problem. Within one conversion session the same pair of cells is
++    typically compared many times over, because beta-substitution shares
++    payload cells across all the occurrences of a variable. Pairs are
++    identified by stable cell identities, assigned on demand: an identity
++    survives the in-place [update] performed during reduction, and a copy
++    of a cell gets a fresh one. The identity bookkeeping is internal to
++    this module. Only sound for checked conversion, where results are
++    deterministic and no universe constraints are accumulated. *)
++module ConvCache : sig
++  type t
++
++  val create : unit -> t option
++  (** [None] when the cache is disabled ([ROCQ_CONV_CACHE=0]). *)
++
++  val probe : t -> cumul:bool -> lift -> fconstr -> lift -> fconstr -> bool option
++  (** Looks up the outcome of comparing the two cells (which may still
++      carry [FLIFT]s) at the given lifts, for conversion ([cumul:false])
++      or cumulativity ([cumul:true]). *)
++
++  val record : t -> cumul:bool -> lift -> fconstr -> lift -> fconstr -> bool -> unit
++  (** Records an outcome for a pair on which [probe] returned [None].
++      No-op once the [ROCQ_CONV_CACHE_MAX] cap is reached. *)
++end
++
+ val term_of_fconstr : fconstr -> constr
+ val term_of_process : fconstr -> stack -> constr
+ val destFLambda :
+diff -ru a/kernel/conversion.ml b/kernel/conversion.ml
+--- a/kernel/conversion.ml
++++ b/kernel/conversion.ml
+@@ -200,6 +200,7 @@
+   lft_tab : clos_tab;
+   rgt_tab : clos_tab;
+   err_ret : 'e -> payload;
++  cnv_cache : ConvCache.t option;
+ }
+ (** Invariant: for any tl ∈ lft_tab and tr ∈ rgt_tab, there is no mutable memory
+     location contained both in tl and in tr. *)
+@@ -379,7 +380,21 @@
+   let fast = fast_test lft1 term1 lft2 term2 in
+   if fast then cuniv
+   else
+-    eqappr cv_pb l2r infos (lft1, (term1,[])) (lft2, (term2,[])) cuniv
++    match infos.cnv_cache with
++    | None ->
++      eqappr cv_pb l2r infos (lft1, (term1,[])) (lft2, (term2,[])) cuniv
++    | Some cache ->
++      let cumul = match cv_pb with CONV -> false | CUMUL -> true in
++      match ConvCache.probe cache ~cumul lft1 term1 lft2 term2 with
++      | Some true -> cuniv
++      | Some false -> raise NotConvertible
++      | None ->
++        match eqappr cv_pb l2r infos (lft1, (term1,[])) (lft2, (term2,[])) cuniv with
++        | cuniv ->
++          ConvCache.record cache ~cumul lft1 term1 lft2 term2 true; cuniv
++        | exception NotConvertible ->
++          ConvCache.record cache ~cumul lft1 term1 lft2 term2 false;
++          raise NotConvertible
+ 
+ (* Conversion between [lft1](hd1 v1) and [lft2](hd2 v2) *)
+ and eqappr cv_pb l2r infos (lft1,st1) (lft2,st2) cuniv =
+@@ -931,18 +946,20 @@
+   convert_list l2r infos lft1 lft2 v1 v2 cuniv
+ | _, _ -> raise NotConvertible
+ 
+-let clos_gen_conv (type err) ~typed trans cv_pb l2r evars env graph univs t1 t2 =
++let clos_gen_conv (type err) ~typed ~use_cache trans cv_pb l2r evars env graph univs t1 t2 =
+   NewProfile.profile "Conversion" begin fun () ->
+       let reds = RedFlags.red_add_transparent RedFlags.betaiotazeta trans in
+       let infos = create_conv_infos ~univs:graph ~evars reds env in
+       let module Error = struct type payload += Error of err end in
+       let box e = Error.Error e in
++      let cache = if use_cache then ConvCache.create () else None in
+       let infos = {
+         cnv_inf = infos;
+         cnv_typ = typed;
+         lft_tab = create_tab ();
+         rgt_tab = create_tab ();
+         err_ret = box;
++        cnv_cache = cache;
+       } in
+       try Result.Ok (ccnv cv_pb l2r infos el_id el_id (inject t1) (inject t2) univs)
+       with
+@@ -982,7 +999,7 @@
+     try
+       let box = Empty.abort in
+       let univs = info_univs infos in
+-      let infos = { cnv_inf = infos; cnv_typ = true; lft_tab = tab; rgt_tab = tab; err_ret = box } in
++      let infos = { cnv_inf = infos; cnv_typ = true; lft_tab = tab; rgt_tab = tab; err_ret = box; cnv_cache = None } in
+       let univs', _ = ccnv CONV false infos el_id el_id a b
+           (univs, checked_universes)
+       in
+@@ -1001,7 +1018,7 @@
+     else eq_constr_univs univs t1 t2
+   in
+     if b then Result.Ok ()
+-    else match clos_gen_conv ~typed reds cv_pb l2r evars env univs (univs, checked_universes) t1 t2 with
++    else match clos_gen_conv ~typed ~use_cache:true reds cv_pb l2r evars env univs (univs, checked_universes) t1 t2 with
+     | Result.Ok (_ : UGraph.t * (UGraph.t, Empty.t) universe_compare)-> Result.Ok ()
+     | Result.Error None -> Result.Error ()
+     | Result.Error (Some e) -> Empty.abort e
+@@ -1011,7 +1028,7 @@
+ 
+ let generic_conv cv_pb ~l2r reds env ?(evars=default_evar_handler env) univs t1 t2 =
+   let graph = Environ.universes env in
+-  match clos_gen_conv ~typed:false reds cv_pb l2r evars env graph univs t1 t2 with
++  match clos_gen_conv ~typed:false ~use_cache:false reds cv_pb l2r evars env graph univs t1 t2 with
+   | Result.Ok (s, _) -> Result.Ok s
+   | Result.Error e -> Result.Error e
+ 
