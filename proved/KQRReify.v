@@ -113,7 +113,7 @@ Fixpoint lams (t : term) : list term * term :=
 Definition is_ty (kn : kername) (t : term) : bool := match t with tConst k _ => Kername.eqb k kn | _ => false end.
 
 (** the user's function: [Fixpoint f (n : nat) (x1 .. xk : int) (s : mem) : int := match n with O => e0 | S m => e1 end] *)
-Definition reify_top (p : program) : option (nat * sexp * sexp) :=
+Definition reify_top (p : program) : option (sig * fbody) :=
   match p with
   | (Σ, tConst kn _) =>
       match lookup_env Σ kn with
@@ -131,7 +131,7 @@ Definition reify_top (p : program) : option (nat * sexp * sexp) :=
                     then
                       let ctx := CMem :: repeat CNum k ++ [CCnt; CSelf] in
                       match reify 100000 ctx (bbody b0), reify 100000 (CPred :: ctx) (bbody b1) with
-                      | Some e0, Some e1 => Some (k, e0, e1)
+                      | Some e0, Some e1 => Some (mksig true k true, FRec e0 e1)
                       | _, _ => None
                       end
                     else None
@@ -151,24 +151,18 @@ Definition sum_src := ltac:(run_template_program (tmQuoteRec sum)
   (fun q => let r := eval vm_compute in (reify_top q) in match r with Some ?x => exact x end)).
 
 (* the reified tree is the one written by hand in KQR.v *)
-Check (eq_refl : sum_src = (2, sum_s0, sum_s1)).
+Check (eq_refl : sum_src = (sum_g, sum_b)).
 
-(* the per-program theorem: [compile_fun_ok] at the reified tree; the kernel checks that the tree means [sum] *)
-Definition sum_Pr := mkprog [(1000%positive, compile_fun 1000%positive 2 (snd (fst sum_src)) (snd sum_src))] [].
-Time Lemma sum_ok_r : forall n vs M, length vs = 2 -> (Z.of_nat n < wB)%Z ->
-  runk sum_Pr 1000%positive (ofn n :: vs) M (app 2 (sum n) vs M) M.
-Proof.
-  Time exact (fun n vs M L B => compile_fun_ok sum_Pr 1000%positive 2 (snd (fst sum_src)) (snd sum_src) eq_refl eq_refl eq_refl n vs M L B).
-Time Qed.
+(* the per-program theorem: [compile_f_ok] at the reified tree; the kernel checks that the tree means [sum] *)
+Definition sum_Pr := mkprog [(gid1 0, compile_f gid1 0 (fst sum_src) (snd sum_src))] [].
+Time Lemma sum_ok_r : callee_ok sum_Pr (gid1 0) (fst sum_src) sum.
+Proof. Time exact (compile_f_ok sum_Pr [] gid1 0 (fst sum_src) (snd sum_src) eq_refl eq_refl (no_callees sum_Pr gid1)). Time Qed.
 
 Definition long_src := ltac:(run_template_program (tmQuoteRec long)
   (fun q => let r := eval vm_compute in (reify_top q) in match r with Some ?x => exact x end)).
-Check (eq_refl : long_src = (1, SVar 0, long_s1)).
-Definition long_Pr := mkprog [(1001%positive, compile_fun 1001%positive 1 (snd (fst long_src)) (snd long_src))] [].
-Time Lemma long_ok_r : forall n vs M, length vs = 1 -> (Z.of_nat n < wB)%Z ->
-  runk long_Pr 1001%positive (ofn n :: vs) M (app 1 (long n) vs M) M.
-Proof.
-  Time exact (fun n vs M L B => compile_fun_ok long_Pr 1001%positive 1 (snd (fst long_src)) (snd long_src) eq_refl eq_refl eq_refl n vs M L B).
-Time Qed.
+Check (eq_refl : long_src = (long_g, long_b)).
+Definition long_Pr := mkprog [(gid1 0, compile_f gid1 0 (fst long_src) (snd long_src))] [].
+Time Lemma long_ok_r : callee_ok long_Pr (gid1 0) (fst long_src) long.
+Proof. Time exact (compile_f_ok long_Pr [] gid1 0 (fst long_src) (snd long_src) eq_refl eq_refl (no_callees long_Pr gid1)). Time Qed.
 
 Print Assumptions long_ok_r.

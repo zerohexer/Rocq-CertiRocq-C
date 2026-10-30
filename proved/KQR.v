@@ -1,10 +1,13 @@
-(** KQR.v -- the verified compiler by reflection (Rocq-C-solution.md §1.12, §12.V): the spike.
+(** KQR.v -- the verified compiler by reflection (Rocq-C-solution.md §1.12, §12.V).
 
-    [sexp] is a syntax of a fragment (numbers, operations, tests, lets, reads of the memory, a recursive call on the counter's
-    predecessor); [denote_fun] gives the Rocq function a syntax tree stands for, reduced to exactly the shape of the user's
-    [Fixpoint], so that the per-program check [f = denote_fun ..] is the kernel's computation alone (measured at the end).
-    [compile_fun] makes the KQL function, and [compile_fun_ok] -- proved once, for every syntax tree -- says the KQL computes
-    the meaning. *)
+    [sexp] is a syntax of a fragment: numbers, operations, tests, lets, reads of the memory, the recursive call on the
+    counter's predecessor, calls of the program's other functions.  A function has a signature (a counter or not, [k] numbers,
+    a memory or not) and a body (recursive on the counter, or plain).  [denote_f] gives the Rocq function a syntax tree stands
+    for, reduced to exactly the shape of the user's text, with the meanings of the callees as parameters -- at the
+    per-program check they are the user's own functions -- so that the check [f = denote_f ..] is the kernel's computation
+    alone.  [compile_f] makes the KQL function; [compile_f_ok] -- proved once, for every syntax tree -- says: if the callees'
+    KQL compute their meanings, the function's KQL computes its meaning (the modular shape of today's per-function
+    statements). *)
 
 From Stdlib Require Import List Uint63 ZArith Lia.
 From Stdlib Require FinFun.
@@ -15,6 +18,9 @@ Import ListNotations.
 
 Notation mem := KQ.KQRun.mem.
 
+(** the counter given to a callee: none, this function's counter, its predecessor *)
+Inductive ncnt := NNone | NCnt | NPred.
+
 Inductive sexp : Type :=
 | SVar (i : nat)                     (* a number: the i-th of the function's numbers and lets, the nearest first *)
 | SInt (n : i63)
@@ -23,58 +29,107 @@ Inductive sexp : Type :=
 | SLet (e1 e2 : sexp)                (* let x := e1 in e2; x is SVar 0 in e2 *)
 | SRd (h i : sexp)                   (* rd h i s, s the function's memory *)
 | SRec (args : sexps)                (* the function itself on the counter's predecessor, these numbers, the memory *)
+| SCall (f : nat) (c : ncnt) (args : sexps)   (* function f of the program, with that counter, these numbers, the memory *)
 with sexps : Type :=
 | SNil
 | SCons (e : sexp) (r : sexps).
 
 Scheme sexp_mut := Induction for sexp Sort Prop
 with sexps_mut := Induction for sexps Sort Prop.
+Combined Scheme sexp_comb from sexp_mut, sexps_mut.
 
-(** a function of [k] numbers and a memory *)
-Fixpoint nfun (k : nat) : Type := match k with O => mem -> i63 | S k => i63 -> nfun k end.
+(** a function's signature: a counter first or not, [sk] numbers, a memory last or not *)
+Record sig := mksig { sc : bool; sk : nat; sm : bool }.
 
-(** [abs k F] is [fun x1 .. xk s => F [xk; ..; x1] s]: the parameters are bound before anything else, as in the user's text *)
-Fixpoint abs (k : nat) : (list i63 -> mem -> i63) -> nfun k :=
-  match k with
-  | O => fun F s => F [] s
-  | S k => fun F x => abs k (fun env s => F (env ++ [x]) s)
+Fixpoint ntype (k : nat) (m : bool) : Type :=
+  match k with O => if m then (mem -> i63) else i63 | S k => i63 -> ntype k m end.
+
+Definition ftype (g : sig) : Type := if sc g then nat -> ntype (sk g) (sm g) else ntype (sk g) (sm g).
+
+(** a memory for the meaning of a function that takes none: never read (a well formed body reads no memory then) *)
+Definition dummy_mem : mem := KQ.KQRun.kq_input 0%uint63.
+
+(** [absn k m F] is [fun x1 .. xk (s) => F [xk; ..; x1] s]: the parameters bound before anything else, as in the user's text *)
+Fixpoint absn (k : nat) (m : bool) {struct k} : (list i63 -> mem -> i63) -> ntype k m :=
+  match k as k0 return (list i63 -> mem -> i63) -> ntype k0 m with
+  | O => if m as m0 return (list i63 -> mem -> i63) -> ntype O m0 then (fun F s => F [] s) else (fun F => F [] dummy_mem)
+  | S k => fun F x => absn k m (fun env s => F (env ++ [x]) s)
   end.
 
-(** [app k g [v1; ..; vk] s] is [g v1 .. vk s] *)
-Fixpoint app (k : nat) : nfun k -> list i63 -> mem -> i63 :=
-  match k with
-  | O => fun g _ s => g s
-  | S k => fun g l s => match l with x :: l => app k (g x) l s | [] => app k (g 0%uint63) [] s end
+(** [appn k m g [v1; ..; vk] s] is [g v1 .. vk (s)] *)
+Fixpoint appn (k : nat) (m : bool) {struct k} : ntype k m -> list i63 -> mem -> i63 :=
+  match k as k0 return ntype k0 m -> list i63 -> mem -> i63 with
+  | O => if m as m0 return ntype O m0 -> list i63 -> mem -> i63 then (fun g _ s => g s) else (fun g _ _ => g)
+  | S k => fun g l s => match l with x :: l => appn k m (g x) l s | [] => appn k m (g 0%uint63) [] s end
   end.
 
-Fixpoint denote_e (rec : list i63 -> i63) (env : list i63) (s : mem) (e : sexp) {struct e} : i63 :=
+(** a call of a function of signature [g] *)
+Definition callf (g : sig) : ftype g -> nat -> list i63 -> mem -> i63 :=
+  match g as g0 return ftype g0 -> nat -> list i63 -> mem -> i63 with
+  | mksig c k m => if c as c0 return ftype (mksig c0 k m) -> nat -> list i63 -> mem -> i63
+                   then (fun h n vs s => appn k m (h n) vs s)
+                   else (fun h _ vs s => appn k m h vs s)
+  end.
+
+(** a callee: its signature and its meaning *)
+Definition callee := { g : sig & ftype g }.
+
+Definition cval (c : ncnt) (cn cm : nat) : nat := match c with NNone => O | NCnt => cn | NPred => cm end.
+
+Fixpoint denote_e (cs : list callee) (cn cm : nat) (rec : list i63 -> i63) (env : list i63) (s : mem) (e : sexp) {struct e} : i63 :=
   match e with
   | SVar i => nth i env 0%uint63
   | SInt n => n
-  | SOp o a b => binop_sem o (denote_e rec env s a) (denote_e rec env s b)
-  | SIf c a b t f => if cmp_sem c (denote_e rec env s a) (denote_e rec env s b) then denote_e rec env s t else denote_e rec env s f
-  | SLet e1 e2 => let x := denote_e rec env s e1 in denote_e rec (x :: env) s e2
-  | SRd h i => KQ.KQRun.rd (denote_e rec env s h) (denote_e rec env s i) s
-  | SRec args => rec (denote_es rec env s args)
+  | SOp o a b => binop_sem o (denote_e cs cn cm rec env s a) (denote_e cs cn cm rec env s b)
+  | SIf c a b t f => if cmp_sem c (denote_e cs cn cm rec env s a) (denote_e cs cn cm rec env s b)
+                     then denote_e cs cn cm rec env s t else denote_e cs cn cm rec env s f
+  | SLet e1 e2 => let x := denote_e cs cn cm rec env s e1 in denote_e cs cn cm rec (x :: env) s e2
+  | SRd h i => KQ.KQRun.rd (denote_e cs cn cm rec env s h) (denote_e cs cn cm rec env s i) s
+  | SRec args => rec (denote_es cs cn cm rec env s args)
+  | SCall f c args =>
+      match nth_error cs f with
+      | Some (existT _ g h) => callf g h (cval c cn cm) (denote_es cs cn cm rec env s args) s
+      | None => 0%uint63
+      end
   end
-with denote_es (rec : list i63 -> i63) (env : list i63) (s : mem) (es : sexps) {struct es} : list i63 :=
+with denote_es (cs : list callee) (cn cm : nat) (rec : list i63 -> i63) (env : list i63) (s : mem) (es : sexps) {struct es}
+  : list i63 :=
   match es with
   | SNil => []
-  | SCons e r => denote_e rec env s e :: denote_es rec env s r
+  | SCons e r => denote_e cs cn cm rec env s e :: denote_es cs cn cm rec env s r
   end.
 
-(** a function recursive on a counter: [k] numbers, a memory; [e0] when the counter is 0, [e1] otherwise *)
-Definition denote_fun (k : nat) (e0 e1 : sexp) : nat -> nfun k :=
-  fix go (n : nat) : nfun k :=
-    abs k (fun env s => match n with
-                        | O => denote_e (fun _ => 0%uint63) env s e0
-                        | S m => denote_e (fun args => app k (go m) args s) env s e1
-                        end).
+(** a function's body: recursive on the counter ([e0] when it is 0, [e1] otherwise), or plain *)
+Inductive fbody := FRec (e0 e1 : sexp) | FPlain (e : sexp).
+
+Definition denote_f (cs : list callee) (g : sig) (b : fbody) : ftype g :=
+  match g as g0 return ftype g0 with
+  | mksig c k m =>
+      if c as c0 return ftype (mksig c0 k m) then
+        match b with
+        | FRec e0 e1 =>
+            fix go (n : nat) : ntype k m :=
+              absn k m (fun env s => match n with
+                                     | O => denote_e cs n O (fun _ => 0%uint63) env s e0
+                                     | S n' => denote_e cs n n' (fun args => appn k m (go n') args s) env s e1
+                                     end)
+        | FPlain e => fun n => absn k m (fun env s => denote_e cs n O (fun _ => 0%uint63) env s e)
+        end
+      else
+        match b with
+        | FPlain e => absn k m (fun env s => denote_e cs O O (fun _ => 0%uint63) env s e)
+        | FRec _ _ => absn k m (fun _ _ => 0%uint63)
+        end
+  end.
 
 (* ================================================================ compile *)
 Section C.
-Variable g : ident.     (* the function's own name in the program *)
-Variable mv : ident.    (* the variable holding the counter's predecessor *)
+Variable gidf : nat -> ident.   (* the KQL name of the program's function i *)
+Variable g : ident.             (* the function's own name *)
+Variable mv : ident.            (* the variable holding the counter's predecessor *)
+
+Definition catoms (c : ncnt) : list atom :=
+  match c with NNone => [] | NCnt => [Avar 1%positive] | NPred => [Avar mv] end.
 
 (** a number, worked out in A-normal form; [K] gets the atom holding it and the next free variable *)
 Fixpoint cexp (e : sexp) (env : list atom) (nxt : ident) (K : atom -> ident -> exp) {struct e} : exp :=
@@ -86,6 +141,7 @@ Fixpoint cexp (e : sexp) (env : list atom) (nxt : ident) (K : atom -> ident -> e
   | SLet e1 e2 => cexp e1 env nxt (fun A n1 => cexp e2 (A :: env) n1 K)
   | SRd h i => cexp h env nxt (fun H n1 => cexp i env n1 (fun I n2 => Ekld n2 H I (K (Avar n2) (Pos.succ n2))))
   | SRec args => cexps args env nxt (fun As n => Ecall n g (Avar mv :: As) (K (Avar n) (Pos.succ n)))
+  | SCall f c args => cexps args env nxt (fun As n => Ecall n (gidf f) (catoms c ++ As) (K (Avar n) (Pos.succ n)))
   end
 with cexps (es : sexps) (env : list atom) (nxt : ident) (K : list atom -> ident -> exp) {struct es} : exp :=
   match es with
@@ -105,26 +161,56 @@ End C.
 
 Fixpoint len_s (es : sexps) : nat := match es with SNil => O | SCons _ es => S (len_s es) end.
 
-(** well formed: a recursive call has [k] numbers, and is allowed only where [r] says (not when the counter is 0) *)
-Fixpoint wf (r : bool) (k : nat) (e : sexp) {struct e} : bool :=
+Definition cnt_ok (c : ncnt) (scg hasc haspred : bool) : bool :=
+  match c with NNone => negb scg | NCnt => scg && hasc | NPred => scg && haspred end.
+
+(** well formed, in a function whose callees have the signatures [sigs]: the recursive call only where [r] allows it, with [k]
+    numbers; a counter given only where there is one; the memory read, or given to a callee, only where there is one ([mok]) *)
+Fixpoint wf (sigs : list sig) (r hasc haspred mok : bool) (k : nat) (e : sexp) {struct e} : bool :=
   match e with
   | SVar _ | SInt _ => true
-  | SOp _ a b | SLet a b | SRd a b => wf r k a && wf r k b
-  | SIf _ a b t f => wf r k a && wf r k b && wf r k t && wf r k f
-  | SRec args => r && Nat.eqb (len_s args) k && wfs r k args
+  | SOp _ a b | SLet a b => wf sigs r hasc haspred mok k a && wf sigs r hasc haspred mok k b
+  | SRd a b => mok && wf sigs r hasc haspred mok k a && wf sigs r hasc haspred mok k b
+  | SIf _ a b t f => wf sigs r hasc haspred mok k a && wf sigs r hasc haspred mok k b
+                     && wf sigs r hasc haspred mok k t && wf sigs r hasc haspred mok k f
+  | SRec args => r && haspred && Nat.eqb (len_s args) k && wfs sigs r hasc haspred mok k args
+  | SCall f c args =>
+      match nth_error sigs f with
+      | Some gs => Nat.eqb (len_s args) (sk gs) && implb (sm gs) mok && cnt_ok c (sc gs) hasc haspred
+                   && wfs sigs r hasc haspred mok k args
+      | None => false
+      end
   end
-with wfs (r : bool) (k : nat) (es : sexps) {struct es} : bool :=
-  match es with SNil => true | SCons e es => wf r k e && wfs r k es end.
+with wfs (sigs : list sig) (r hasc haspred mok : bool) (k : nat) (es : sexps) {struct es} : bool :=
+  match es with SNil => true | SCons e es => wf sigs r hasc haspred mok k e && wfs sigs r hasc haspred mok k es end.
 
-(** the function: parameters 1 (the counter) and 2 .. k+1 (the numbers); k+2 holds the counter's predecessor *)
-Definition params (k : nat) : list ident := map Pos.of_succ_nat (seq 0 (S k)).
-Definition env0 (k : nat) : list atom := map (fun i => Avar (Pos.of_succ_nat i)) (rev (seq 1 k)).
-Definition compile_fun (g : ident) (k : nat) (e0 e1 : sexp) : fn :=
-  let mv := Pos.of_succ_nat (S k) in
-  mkfn (params k)
-       (Eif Ceq (Avar 1%positive) (Aint 0%uint63)
-            (ctail g mv e0 (env0 k) (Pos.succ mv))
-            (Eop mv Bsub (Avar 1%positive) (Aint 1%uint63) (ctail g mv e1 (env0 k) (Pos.succ mv)))).
+Definition wf_f (sigs : list sig) (gs : sig) (b : fbody) : bool :=
+  match b with
+  | FRec e0 e1 => sc gs && wf sigs false true false (sm gs) (sk gs) e0 && wf sigs true true true (sm gs) (sk gs) e1
+  | FPlain e => wf sigs false (sc gs) false (sm gs) (sk gs) e
+  end.
+
+(** the function: the counter in 1 (if there is one), then the numbers; the next variable holds the counter's predecessor *)
+Definition ibase (c : bool) : nat := if c then 1 else 0.
+Definition params (c : bool) (k : nat) : list ident := map Pos.of_succ_nat (seq 0 (k + ibase c)).
+Definition env0 (c : bool) (k : nat) : list atom := map (fun i => Avar (Pos.of_succ_nat (ibase c + i))) (rev (seq 0 k)).
+Definition pmv (gs : sig) : ident := Pos.of_succ_nat (sk gs + ibase (sc gs)).
+
+Definition compile_f (gidf : nat -> ident) (j : nat) (gs : sig) (b : fbody) : fn :=
+  let mv := pmv gs in
+  mkfn (params (sc gs) (sk gs))
+       match b with
+       | FRec e0 e1 =>
+           Eif Ceq (Avar 1%positive) (Aint 0%uint63)
+               (ctail gidf (gidf j) mv e0 (env0 (sc gs) (sk gs)) (Pos.succ mv))
+               (Eop mv Bsub (Avar 1%positive) (Aint 1%uint63) (ctail gidf (gidf j) mv e1 (env0 (sc gs) (sk gs)) (Pos.succ mv)))
+       | FPlain e => ctail gidf (gidf j) mv e (env0 (sc gs) (sk gs)) (Pos.succ mv)
+       end.
+
+(** what a function's theorem says, and what a caller assumes of a callee *)
+Definition callee_ok (P : prog) (id : ident) (gs : sig) (h : ftype gs) : Prop :=
+  forall n vs M, length vs = sk gs -> (Z.of_nat n < wB)%Z ->
+    runk P id ((if sc gs then [ofn n] else []) ++ vs) M (callf gs h n vs M) M.
 
 (* ================================================================ the theorem, proved once for every syntax tree *)
 
@@ -175,39 +261,128 @@ Proof. intros rho envA denv a v E A [|i]; simpl; auto. Qed.
 Lemma lt_all_cons : forall envA a n, lt_all envA n -> atom_lt a n -> lt_all (a :: envA) n.
 Proof. intros envA a n L A [|i]; simpl; auto. Qed.
 
-Combined Scheme sexp_comb from sexp_mut, sexps_mut.
+Lemma avals_app : forall rho l1 l2 v1 v2, avals rho l1 = Some v1 -> avals rho l2 = Some v2 -> avals rho (l1 ++ l2) = Some (v1 ++ v2).
+Proof.
+  induction l1 as [|a l1 IH]; intros l2 v1 v2 A1 A2; simpl in *.
+  - injection A1 as <-. exact A2.
+  - destruct (aval rho a) eqn:Ea; [|discriminate]. destruct (avals rho l1) eqn:El; [|discriminate].
+    injection A1 as <-. rewrite (IH l2 l v2 eq_refl A2). reflexivity.
+Qed.
+
+Definition callees_ok (P : prog) (gidf : nat -> ident) (cs : list callee) : Prop :=
+  forall f, match nth_error cs f with Some (existT _ gs h) => callee_ok P (gidf f) gs h | None => True end.
+
+Lemma no_callees : forall P gidf, callees_ok P gidf [].
+Proof. intros P gidf [|f]; exact Logic.I. Qed.
+
+Lemma nth_sigs : forall (cs : list callee) f, nth_error (map (@projT1 _ _) cs) f = option_map (@projT1 _ _) (nth_error cs f).
+Proof. induction cs as [|c cs IH]; intros [|f]; simpl; auto. Qed.
+
+Lemma len_denote_es : forall cs cn cm rec denv s es, length (denote_es cs cn cm rec denv s es) = len_s es.
+Proof. intros cs cn cm rec denv s es. induction es; simpl; auto. Qed.
+
+(** a function without a memory never reads one: its meaning is the same for any memory *)
+Lemma appn_false : forall k (x : ntype k false) vs s s', appn k false x vs s = appn k false x vs s'.
+Proof. induction k as [|k IH]; intros x vs s s'; simpl; auto. destruct vs; apply IH. Qed.
+
+Lemma callf_nomem : forall gs h n vs s s', sm gs = false -> callf gs h n vs s = callf gs h n vs s'.
+Proof. intros [c k m] h n vs s s' E; simpl in E; subst m. destruct c; apply appn_false. Qed.
+
+Lemma denote_nomem :
+  (forall e cs cn cm rec env s s' r hasc haspred k, wf (map (@projT1 _ _) cs) r hasc haspred false k e = true ->
+     denote_e cs cn cm rec env s e = denote_e cs cn cm rec env s' e)
+  /\
+  (forall es cs cn cm rec env s s' r hasc haspred k, wfs (map (@projT1 _ _) cs) r hasc haspred false k es = true ->
+     denote_es cs cn cm rec env s es = denote_es cs cn cm rec env s' es).
+Proof.
+  apply sexp_comb.
+  - intros; reflexivity.
+  - intros; reflexivity.
+  - intros o a IHa b IHb cs cn cm rec env s s' r hasc haspred k W. simpl in *. apply andb_true_iff in W as [Wa Wb].
+    rewrite (IHa cs cn cm rec env s s' r hasc haspred k Wa), (IHb cs cn cm rec env s s' r hasc haspred k Wb). reflexivity.
+  - intros c a IHa b IHb t IHt e IHe cs cn cm rec env s s' r hasc haspred k W. simpl in *.
+    apply andb_true_iff in W as [W Wf]. apply andb_true_iff in W as [W Wt]. apply andb_true_iff in W as [Wa Wb].
+    rewrite (IHa _ _ _ _ _ s s' _ _ _ _ Wa), (IHb _ _ _ _ _ s s' _ _ _ _ Wb), (IHt _ _ _ _ _ s s' _ _ _ _ Wt),
+            (IHe _ _ _ _ _ s s' _ _ _ _ Wf). reflexivity.
+  - intros e1 IH1 e2 IH2 cs cn cm rec env s s' r hasc haspred k W. simpl in *. apply andb_true_iff in W as [W1 W2].
+    rewrite (IH1 _ _ _ _ _ s s' _ _ _ _ W1). apply (IH2 _ _ _ _ _ s s' _ _ _ _ W2).
+  - intros h IHh i IHi cs cn cm rec env s s' r hasc haspred k W. simpl in W. discriminate.
+  - intros args IHs cs cn cm rec env s s' r hasc haspred k W. simpl in *. apply andb_true_iff in W as [W Ws].
+    rewrite (IHs _ _ _ _ _ s s' _ _ _ _ Ws). reflexivity.
+  - intros fi c args IHs cs cn cm rec env s s' r hasc haspred k W. cbn [wf] in W. rewrite nth_sigs in W. cbn [denote_e].
+    unfold callee in *. destruct (nth_error cs fi) as [[gs h]|] eqn:E; simpl in W; [|discriminate].
+    apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [W Wc]. apply andb_true_iff in W as [Wk Wm].
+    rewrite (IHs _ _ _ _ _ s s' _ _ _ _ Ws). apply callf_nomem. destruct (sm gs); [discriminate | reflexivity].
+  - intros; reflexivity.
+  - intros e IHe es IHes cs cn cm rec env s s' r hasc haspred k W. simpl in *. apply andb_true_iff in W as [We Wes].
+    rewrite (IHe _ _ _ _ _ s s' _ _ _ _ We), (IHes _ _ _ _ _ s s' _ _ _ _ Wes). reflexivity.
+Qed.
+
+(** the meaning depends on the recursive call's meaning only through its values *)
+Lemma denote_rec_ext :
+  (forall e cs cn cm rec1 rec2 env s, (forall l, rec1 l = rec2 l) -> denote_e cs cn cm rec1 env s e = denote_e cs cn cm rec2 env s e)
+  /\
+  (forall es cs cn cm rec1 rec2 env s, (forall l, rec1 l = rec2 l) -> denote_es cs cn cm rec1 env s es = denote_es cs cn cm rec2 env s es).
+Proof.
+  apply sexp_comb.
+  - intros; reflexivity.
+  - intros; reflexivity.
+  - intros o a IHa b IHb cs cn cm r1 r2 env s E. simpl. rewrite (IHa cs cn cm r1 r2 env s E), (IHb cs cn cm r1 r2 env s E). reflexivity.
+  - intros c a IHa b IHb t IHt e IHe cs cn cm r1 r2 env s E. simpl.
+    rewrite (IHa _ _ _ _ _ _ _ E), (IHb _ _ _ _ _ _ _ E), (IHt _ _ _ _ _ _ _ E), (IHe _ _ _ _ _ _ _ E). reflexivity.
+  - intros e1 IH1 e2 IH2 cs cn cm r1 r2 env s E. simpl. rewrite (IH1 _ _ _ _ _ _ _ E). apply (IH2 _ _ _ _ _ _ _ E).
+  - intros h IHh i IHi cs cn cm r1 r2 env s E. simpl. rewrite (IHh _ _ _ _ _ _ _ E), (IHi _ _ _ _ _ _ _ E). reflexivity.
+  - intros args IHs cs cn cm r1 r2 env s E. simpl. rewrite (IHs _ _ _ _ _ _ _ E). apply E.
+  - intros fi c args IHs cs cn cm r1 r2 env s E. simpl. rewrite (IHs _ _ _ _ _ _ _ E). reflexivity.
+  - intros; reflexivity.
+  - intros e IHe es IHes cs cn cm r1 r2 env s E. simpl. rewrite (IHe _ _ _ _ _ _ _ E), (IHes _ _ _ _ _ _ _ E). reflexivity.
+Qed.
 
 Section Sim.
-Variables (P : prog) (f : fn) (g mv : ident) (M : kmemt) (r : bool) (k : nat) (rec : list i63 -> i63) (vm : i63).
-(** the recursive call, where it is allowed, computes [rec] *)
-Hypothesis Hrec : r = true -> forall vs, length vs = k -> runk P g (vm :: vs) M (rec vs) M.
+Variables (P : prog) (f : fn) (gidf : nat -> ident) (g mv : ident) (M : kmemt).
+Variables (cs : list callee) (r hasc haspred mok : bool) (k : nat) (rec : list i63 -> i63) (cn cm : nat).
+(** the recursive call, where it is allowed, computes [rec]; the callees compute their meanings; the counters are in range *)
+Hypothesis Hrec : r = true -> forall vs, length vs = k -> runk P g (ofn cm :: vs) M (rec vs) M.
+Hypothesis Hcs : callees_ok P gidf cs.
+Hypothesis Hbn : hasc = true -> (Z.of_nat cn < wB)%Z.
+Hypothesis Hbm : haspred = true -> (Z.of_nat cm < wB)%Z.
 
-Lemma len_denote_es : forall es denv, length (denote_es rec denv M es) = len_s es.
-Proof. induction es; intros denv; simpl; auto. Qed.
+Let sigs := map (@projT1 _ _) cs.
 
 Definition inv (rho : env) (envA : list atom) (denv : list i63) (nxt : ident) : Prop :=
-  env_ok rho envA denv /\ lt_all envA nxt /\ Pos.lt mv nxt /\ (r = true -> rho ! mv = Some vm).
+  env_ok rho envA denv /\ lt_all envA nxt /\ Pos.lt mv nxt /\
+  (hasc = true -> rho ! 1%positive = Some (ofn cn)) /\ (haspred = true -> rho ! mv = Some (ofn cm)).
 
 Lemma inv_step : forall rho rho' envA denv nxt n', inv rho envA denv nxt -> agree rho rho' nxt -> Pos.le nxt n' ->
   inv rho' envA denv n'.
 Proof.
-  intros rho rho' envA denv nxt n' (E & L & Mv & R) A Le. split; [|split; [|split]].
+  intros rho rho' envA denv nxt n' (E & L & Mv & C & R) A Le. split; [|split; [|split; [|split]]].
   - eapply env_ok_agree; eauto.
   - eapply lt_all_mono; eauto.
   - lia.
-  - intro Rt. rewrite A by auto. auto.
+  - intro Hc. rewrite A by lia. auto.
+  - intro Hp. rewrite A by auto. auto.
+Qed.
+
+Lemma catoms_ok : forall c gs rho nxt, inv rho [] [] nxt -> cnt_ok c (sc gs) hasc haspred = true ->
+  avals rho (catoms mv c) = Some (if sc gs then [ofn (cval c cn cm)] else []) /\ (Z.of_nat (cval c cn cm) < wB)%Z.
+Proof.
+  intros c gs rho nxt (_ & _ & _ & C & R) W. destruct c; simpl in *.
+  - destruct (sc gs); simpl in W; [discriminate|]. split; [reflexivity|]. unfold wB. simpl. lia.
+  - apply andb_true_iff in W as [S1 S2]. rewrite S1. rewrite (C S2). split; auto.
+  - apply andb_true_iff in W as [S1 S2]. rewrite S1. rewrite (R S2). split; auto.
 Qed.
 
 Lemma cexp_all :
-  (forall e envA denv nxt K rho v M', wf r k e = true -> inv rho envA denv nxt ->
-     (forall rho' n' a, agree rho rho' nxt -> Pos.le nxt n' -> atom_lt a n' -> aval rho' a = Some (denote_e rec denv M e) ->
+  (forall e envA denv nxt K rho v M', wf sigs r hasc haspred mok k e = true -> inv rho envA denv nxt ->
+     (forall rho' n' a, agree rho rho' nxt -> Pos.le nxt n' -> atom_lt a n' -> aval rho' a = Some (denote_e cs cn cm rec denv M e) ->
         evalk P f rho' M (K a n') v M') ->
-     evalk P f rho M (cexp g mv e envA nxt K) v M')
+     evalk P f rho M (cexp gidf g mv e envA nxt K) v M')
   /\
-  (forall es envA denv nxt K rho v M', wfs r k es = true -> inv rho envA denv nxt ->
+  (forall es envA denv nxt K rho v M', wfs sigs r hasc haspred mok k es = true -> inv rho envA denv nxt ->
      (forall rho' n' As, agree rho rho' nxt -> Pos.le nxt n' -> Forall (fun a => atom_lt a n') As ->
-        avals rho' As = Some (denote_es rec denv M es) -> evalk P f rho' M (K As n') v M') ->
-     evalk P f rho M (cexps g mv es envA nxt K) v M').
+        avals rho' As = Some (denote_es cs cn cm rec denv M es) -> evalk P f rho' M (K As n') v M') ->
+     evalk P f rho M (cexps gidf g mv es envA nxt K) v M').
 Proof.
   apply sexp_comb.
   - (* SVar *) intros i envA denv nxt K rho v M' W Iv HK. simpl.
@@ -235,7 +410,7 @@ Proof.
     + rewrite (aval_agree rho1 rho2 n1); eauto.
     + eauto.
     + assert (I2 : inv rho2 envA denv n2). { eapply inv_step; [eapply inv_step; eauto | eauto | auto]. }
-      destruct (cmp_sem c (denote_e rec denv M a) (denote_e rec denv M b)) eqn:C.
+      destruct (cmp_sem c (denote_e cs cn cm rec denv M a) (denote_e cs cn cm rec denv M b)) eqn:C.
       * apply IHt with (denv := denv); auto. intros rho3 n3 a3 A3 Le3 L3 V3.
         apply HK; [| lia | exact L3 | exact V3].
         eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); eauto; lia.
@@ -245,12 +420,12 @@ Proof.
   - (* SLet *) intros e1 IH1 e2 IH2 envA denv nxt K rho v M' W Iv HK. simpl in *.
     apply andb_true_iff in W as [W1 W2].
     apply IH1 with (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
-    apply IH2 with (denv := denote_e rec denv M e1 :: denv); auto.
-    + destruct (inv_step rho rho1 envA denv nxt n1 Iv A1 Le1) as (E & L & Mv & R).
-      split; [|split; [|split]]; auto using env_ok_cons, lt_all_cons.
+    apply IH2 with (denv := denote_e cs cn cm rec denv M e1 :: denv); auto.
+    + destruct (inv_step rho rho1 envA denv nxt n1 Iv A1 Le1) as (E & L & Mv & C & R).
+      split; [|split; [|split; [|split]]]; auto using env_ok_cons, lt_all_cons.
     + intros rho2 n2 a2 A2 Le2 L2 V2. apply HK; [eapply (agree_trans rho rho1 rho2 nxt n1); eauto | lia | exact L2 | exact V2].
   - (* SRd *) intros h IHh i IHi envA denv nxt K rho v M' W Iv HK. simpl in *.
-    apply andb_true_iff in W as [Wh Wi].
+    apply andb_true_iff in W as [W Wi]. apply andb_true_iff in W as [_ Wh].
     apply IHh with (denv := denv); auto. intros rho1 n1 H A1 Le1 LH VH.
     apply IHi with (denv := denv); auto. { eapply inv_step; eauto. }
     intros rho2 n2 J A2 Le2 LJ VJ.
@@ -263,13 +438,29 @@ Proof.
       * simpl. lia.
       * simpl. rewrite PTree.gss. reflexivity.
   - (* SRec *) intros args IHs envA denv nxt K rho v M' W Iv HK. simpl in *.
-    apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [Wr Wk].
+    apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [W Wk]. apply andb_true_iff in W as [Wr Wp].
     apply IHs with (denv := denv); auto. intros rho1 n1 As A1 Le1 LAs VAs.
-    destruct (Hrec Wr (denote_es rec denv M args)) as (fg & rho' & F & B & EV).
+    destruct (Hrec Wr (denote_es cs cn cm rec denv M args)) as (fg & rho' & F & B & EV).
     { rewrite len_denote_es. apply Nat.eqb_eq; auto. }
-    destruct (inv_step rho rho1 envA denv nxt n1 Iv A1 Le1) as (_ & _ & Mv1 & R1).
+    destruct (inv_step rho rho1 envA denv nxt n1 Iv A1 Le1) as (_ & _ & Mv1 & C1 & R1).
     eapply K_call; eauto.
-    + simpl. rewrite (R1 Wr), VAs. reflexivity.
+    + simpl. rewrite (R1 Wp), VAs. reflexivity.
+    + apply HK.
+      * eapply (agree_set1 rho rho1); eauto; lia.
+      * lia.
+      * simpl. lia.
+      * simpl. rewrite PTree.gss. reflexivity.
+  - (* SCall *) intros fi c args IHs envA denv nxt K rho v M' W Iv HK. simpl in *.
+    unfold sigs in W. rewrite nth_sigs in W. pose proof (Hcs fi) as Hc.
+    unfold callee in *. destruct (nth_error cs fi) as [[gs h]|] eqn:E; simpl in W; [|discriminate].
+    apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [W Wc]. apply andb_true_iff in W as [Wk Wm].
+    apply IHs with (denv := denv); auto. intros rho1 n1 As A1 Le1 LAs VAs.
+    destruct (inv_step rho rho1 envA denv nxt n1 Iv A1 Le1) as (E1 & L1 & Mv1 & C1 & R1).
+    destruct (catoms_ok c gs rho1 n1) as (CA & CB); auto. { split; [|split; [|split; [|split]]]; auto; intro i; destruct i; simpl; auto. }
+    destruct (Hc (cval c cn cm) (denote_es cs cn cm rec denv M args) M) as (fg & rho' & F & B & EV); auto.
+    { rewrite len_denote_es. apply Nat.eqb_eq; auto. }
+    eapply K_call; eauto.
+    + apply avals_app; eauto.
     + apply HK.
       * eapply (agree_set1 rho rho1); eauto; lia.
       * lia.
@@ -293,14 +484,14 @@ Definition cexps_ok := proj2 cexp_all.
 (** in tail position: the function's body ends with the value of [e] and the memory it started with *)
 Hypothesis Hf : find P g = Some f.
 
-Lemma ctail_ok : forall e envA denv nxt rho, wf r k e = true -> inv rho envA denv nxt ->
-  evalk P f rho M (ctail g mv e envA nxt) (denote_e rec denv M e) M.
+Lemma ctail_ok : forall e envA denv nxt rho, wf sigs r hasc haspred mok k e = true -> inv rho envA denv nxt ->
+  evalk P f rho M (ctail gidf g mv e envA nxt) (denote_e cs cn cm rec denv M e) M.
 Proof.
-  induction e; intros envA denv nxt rho W Iv; cbn [ctail] in *; cbn [wf] in W.
+  induction e; intros envA denv nxt rho W Iv; cbn [ctail] in *.
   - apply cexp_ok with (denv := denv); auto. intros. apply K_ret. auto.
   - apply cexp_ok with (denv := denv); auto. intros. apply K_ret. auto.
   - apply cexp_ok with (denv := denv); auto. intros. apply K_ret. auto.
-  - (* SIf *) apply andb_true_iff in W as [W Wf]. apply andb_true_iff in W as [W Wt]. apply andb_true_iff in W as [Wa Wb].
+  - (* SIf *) cbn [wf] in W. apply andb_true_iff in W as [W Wf]. apply andb_true_iff in W as [W Wt]. apply andb_true_iff in W as [Wa Wb].
     apply cexp_ok with (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
     apply cexp_ok with (denv := denv); auto. { eapply inv_step; eauto. }
     intros rho2 n2 B A2 Le2 LB VB.
@@ -308,30 +499,32 @@ Proof.
     + rewrite (aval_agree rho1 rho2 n1); eauto.
     + eauto.
     + assert (I2 : inv rho2 envA denv n2). { eapply inv_step; [eapply inv_step; eauto | eauto | auto]. }
-      cbn [denote_e]. destruct (cmp_sem c (denote_e rec denv M e1) (denote_e rec denv M e2)); auto.
-  - (* SLet *) apply andb_true_iff in W as [W1 W2].
+      cbn [denote_e]. destruct (cmp_sem c (denote_e cs cn cm rec denv M e1) (denote_e cs cn cm rec denv M e2)); auto.
+  - (* SLet *) cbn [wf] in W. apply andb_true_iff in W as [W1 W2].
     apply cexp_ok with (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
     cbn [denote_e]. apply IHe2; auto.
-    destruct (inv_step rho rho1 envA denv nxt n1 Iv A1 Le1) as (E & L & Mv & R).
-    split; [|split; [|split]]; auto using env_ok_cons, lt_all_cons.
+    destruct (inv_step rho rho1 envA denv nxt n1 Iv A1 Le1) as (E & L & Mv & C & R).
+    split; [|split; [|split; [|split]]]; auto using env_ok_cons, lt_all_cons.
   - apply cexp_ok with (denv := denv); auto. intros. apply K_ret. auto.
-  - (* SRec *) apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [Wr Wk].
+  - (* SRec *) cbn [wf] in W. apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [W Wk]. apply andb_true_iff in W as [Wr Wp].
     apply cexps_ok with (denv := denv); auto. intros rho1 n1 As A1 Le1 LAs VAs.
-    destruct (Hrec Wr (denote_es rec denv M args)) as (fg & rho' & F & B & EV).
+    destruct (Hrec Wr (denote_es cs cn cm rec denv M args)) as (fg & rho' & F & B & EV).
     { rewrite len_denote_es. apply Nat.eqb_eq; auto. }
     rewrite Hf in F. injection F as <-.
-    destruct (inv_step rho rho1 envA denv nxt n1 Iv A1 Le1) as (_ & _ & Mv1 & R1).
-    cbn [denote_e]. eapply K_loop; eauto. simpl. rewrite (R1 Wr), VAs. reflexivity.
+    destruct (inv_step rho rho1 envA denv nxt n1 Iv A1 Le1) as (_ & _ & Mv1 & C1 & R1).
+    cbn [denote_e]. eapply K_loop; eauto. simpl. rewrite (R1 Wp), VAs. reflexivity.
+  - apply cexp_ok with (denv := denv); auto. intros. apply K_ret. auto.
 Qed.
 End Sim.
 
 (* ---------------------------------------------------------------- the function *)
 Local Open Scope nat_scope.
 
-Lemma app_abs : forall k F vs s, length vs = k -> app k (abs k F) vs s = F (rev vs) s.
+Lemma appn_absn : forall k m F vs s, length vs = k -> appn k m (absn k m F) vs s = F (rev vs) (if m then s else dummy_mem).
 Proof.
-  induction k as [|k IH]; intros F vs s L; destruct vs as [|v vs]; simpl in *; try discriminate; auto.
-  all: injection L as L; rewrite IH by auto; reflexivity.
+  induction k as [|k IH]; intros m F vs s L; destruct vs as [|v vs]; simpl in *; try discriminate.
+  - destruct m; reflexivity.
+  - injection L as L. rewrite IH by auto. reflexivity.
 Qed.
 
 Lemma bind_some : forall xs vs rho, length xs = length vs -> exists rho', bind xs vs rho = Some rho'.
@@ -353,93 +546,152 @@ Proof.
   - apply (IH vs (PTree.set x v rho) rho' j); auto. lia.
 Qed.
 
-Lemma params_nth : forall k j, j <= k -> nth j (params k) 1%positive = Pos.of_succ_nat j.
+Lemma params_nth : forall c k j, j < k + ibase c -> nth j (params c k) 1%positive = Pos.of_succ_nat j.
 Proof.
-  intros k j L. unfold params. rewrite nth_indep with (d' := Pos.of_succ_nat 0) by (rewrite map_length, seq_length; lia).
+  intros c k j L. unfold params. rewrite nth_indep with (d' := Pos.of_succ_nat 0) by (rewrite map_length, seq_length; lia).
   rewrite map_nth, seq_nth by lia. reflexivity.
 Qed.
 
-Lemma params_nodup : forall k, NoDup (params k).
+Lemma params_nodup : forall c k, NoDup (params c k).
 Proof.
-  intro k. unfold params. apply FinFun.Injective_map_NoDup; [| apply seq_NoDup].
+  intros c k. unfold params. apply FinFun.Injective_map_NoDup; [| apply seq_NoDup].
   intros a b E. apply SuccNat2Pos.inj; auto.
 Qed.
 
-Lemma params_length : forall k, length (params k) = S k.
-Proof. intro k. unfold params. rewrite map_length, seq_length. reflexivity. Qed.
+Lemma params_length : forall c k, length (params c k) = k + ibase c.
+Proof. intros c k. unfold params. rewrite map_length, seq_length. reflexivity. Qed.
 
-Lemma env0_nth : forall k i, i < k -> nth i (env0 k) (Aint 0%uint63) = Avar (Pos.of_succ_nat (k - i)).
+Lemma env0_nth : forall c k i, i < k -> nth i (env0 c k) (Aint 0%uint63) = Avar (Pos.of_succ_nat (ibase c + (k - 1 - i))).
 Proof.
-  intros k i L. unfold env0.
-  rewrite nth_indep with (d' := Avar (Pos.of_succ_nat 0)) by (rewrite map_length, rev_length, seq_length; lia).
+  intros c k i L. unfold env0.
+  rewrite nth_indep with (d' := Avar (Pos.of_succ_nat (ibase c + 0))) by (rewrite map_length, rev_length, seq_length; lia).
   rewrite map_nth with (d := 0). rewrite rev_nth by (rewrite seq_length; lia). rewrite seq_length, seq_nth by lia.
   f_equal. f_equal. lia.
 Qed.
 
-Lemma env0_out : forall k i, k <= i -> nth i (env0 k) (Aint 0%uint63) = Aint 0%uint63.
-Proof. intros k i L. apply nth_overflow. unfold env0. rewrite map_length, rev_length, seq_length. lia. Qed.
+Lemma env0_out : forall c k i, k <= i -> nth i (env0 c k) (Aint 0%uint63) = Aint 0%uint63.
+Proof. intros c k i L. apply nth_overflow. unfold env0. rewrite map_length, rev_length, seq_length. lia. Qed.
 
-Lemma env0_lt : forall k, lt_all (env0 k) (Pos.of_succ_nat (S k)).
+Lemma env0_lt : forall gs, lt_all (env0 (sc gs) (sk gs)) (pmv gs).
 Proof.
-  intros k i. destruct (Nat.lt_ge_cases i k) as [L|L].
-  - rewrite env0_nth by auto. simpl. apply Pos2Nat.inj_lt. rewrite !SuccNat2Pos.id_succ. lia.
+  intros [c k m] i. unfold pmv. simpl. destruct (Nat.lt_ge_cases i k) as [L|L].
+  - rewrite env0_nth by auto. simpl. apply Pos2Nat.inj_lt. rewrite !SuccNat2Pos.id_succ. unfold ibase. destruct c; lia.
   - rewrite env0_out by auto. simpl. auto.
 Qed.
 
-(** the parameters bound: the counter in 1, the numbers in 2 .. k+1, read by [env0] in the order of [denote_fun] *)
-Lemma bind_params : forall k n vs, length vs = k ->
-  exists rho0, bind (params k) (ofn n :: vs) (PTree.empty _) = Some rho0 /\
-    rho0 ! 1%positive = Some (ofn n) /\ env_ok rho0 (env0 k) (rev vs).
+(** the parameters bound: the counter in 1 (if any), the numbers after it, read by [env0] in the order of [denote_f] *)
+Lemma bind_params : forall c k n vs, length vs = k ->
+  exists rho0, bind (params c k) ((if c then [ofn n] else []) ++ vs) (PTree.empty _) = Some rho0 /\
+    (c = true -> rho0 ! 1%positive = Some (ofn n)) /\ env_ok rho0 (env0 c k) (rev vs).
 Proof.
-  intros k n vs L. destruct (bind_some (params k) (ofn n :: vs) (PTree.empty _)) as [rho0 B].
-  { rewrite params_length. simpl. lia. }
+  intros c k n vs L. destruct (bind_some (params c k) ((if c then [ofn n] else []) ++ vs) (PTree.empty _)) as [rho0 B].
+  { rewrite params_length, app_length. unfold ibase. destruct c; simpl; lia. }
   exists rho0. split; auto. split.
-  - pose proof (bind_nth _ _ _ _ 0 (params_nodup k) B) as N. rewrite params_nth in N by lia. apply N. rewrite params_length. lia.
+  - intro Hc. subst c. pose proof (bind_nth _ _ _ _ 0 (params_nodup true k) B) as N. rewrite params_nth in N by (unfold ibase; lia).
+    apply N. rewrite params_length. unfold ibase. lia.
   - intro i. destruct (Nat.lt_ge_cases i k) as [Li|Li].
     + rewrite env0_nth by auto. simpl.
-      pose proof (bind_nth _ _ _ _ (k - i) (params_nodup k) B) as N. rewrite params_nth in N by lia.
-      rewrite N by (rewrite params_length; lia).
-      replace (k - i) with (S (length vs - S i)) by lia. simpl. rewrite rev_nth by lia. reflexivity.
+      pose proof (bind_nth _ _ _ _ (ibase c + (k - 1 - i)) (params_nodup c k) B) as N.
+      rewrite params_nth in N by (unfold ibase; destruct c; lia).
+      rewrite N by (rewrite params_length; unfold ibase; destruct c; lia).
+      rewrite rev_nth by lia. unfold ibase. destruct c; simpl.
+      * f_equal. f_equal. lia.
+      * f_equal. f_equal. lia.
     + rewrite env0_out by auto. simpl. rewrite nth_overflow; auto. rewrite rev_length. lia.
 Qed.
 
-Theorem compile_fun_ok : forall P g k e0 e1,
-  find P g = Some (compile_fun g k e0 e1) -> wf false k e0 = true -> wf true k e1 = true ->
-  forall n vs M, length vs = k -> (Z.of_nat n < wB)%Z ->
-  runk P g (ofn n :: vs) M (app k (denote_fun k e0 e1 n) vs M) M.
+Theorem compile_f_ok : forall P cs gidf j gs b,
+  find P (gidf j) = Some (compile_f gidf j gs b) -> wf_f (map (@projT1 _ _) cs) gs b = true -> callees_ok P gidf cs ->
+  callee_ok P (gidf j) gs (denote_f cs gs b).
 Proof.
-  intros P g k e0 e1 Hf W0 W1.
-  set (mv := Pos.of_succ_nat (S k)).
-  assert (Lmv : lt_all (env0 k) mv) by apply env0_lt.
-  induction n as [|m IH]; intros vs M L B.
-  - destruct (bind_params k 0 vs L) as (rho0 & Bd & R1 & E).
-    exists (compile_fun g k e0 e1), rho0. split; [exact Hf|]. split; [exact Bd|].
-    change (app k (denote_fun k e0 e1 0) vs M) with (app k (abs k (fun env s => denote_e (fun _ => 0%uint63) env s e0)) vs M).
-    rewrite app_abs by auto. simpl kbody.
-    eapply K_if; [simpl; eauto | reflexivity | ]. rewrite ofn_0. simpl.
-    apply (ctail_ok P _ g mv M false k (fun _ => 0%uint63) 0%uint63); auto; try discriminate.
-    split; [|split; [|split]]; auto; try discriminate.
-    + eapply lt_all_mono; eauto. lia.
-    + lia.
-  - destruct (bind_params k (S m) vs L) as (rho0 & Bd & R1 & E).
-    exists (compile_fun g k e0 e1), rho0. split; [exact Hf|]. split; [exact Bd|].
-    change (app k (denote_fun k e0 e1 (S m)) vs M)
-      with (app k (abs k (fun env s => denote_e (fun args => app k (denote_fun k e0 e1 m) args s) env s e1)) vs M).
-    rewrite app_abs by auto. simpl kbody.
-    eapply K_if; [simpl; eauto | reflexivity | ]. simpl cmp_sem. rewrite ofn_S_ne0 by lia.
-    eapply K_op; [simpl; eauto | reflexivity | ]. simpl binop_sem. rewrite ofn_pred by lia.
-    apply (ctail_ok P _ g mv M true k (fun args => app k (denote_fun k e0 e1 m) args M) (ofn m)); auto.
-    + intros _ vs' L'. apply IH; auto. lia.
-    + split; [|split; [|split]].
-      * eapply env_ok_agree; eauto. apply agree_set. apply Pos.le_refl.
+  intros P cs gidf j [c k m] b Hf W Hcs. unfold callee_ok. simpl sc. simpl sk. simpl sm.
+  set (mv := pmv (mksig c k m)).
+  assert (Lmv : lt_all (env0 c k) mv) by apply (env0_lt (mksig c k m)).
+  destruct b as [e0 e1 | e]; simpl in W.
+  - (* recursive on the counter *)
+    destruct c; simpl in W; [|discriminate]. apply andb_true_iff in W as [W0 W1].
+    assert (Mvgt : Pos.lt 1 mv).
+    { unfold mv, pmv. simpl. apply Pos2Nat.inj_lt. rewrite SuccNat2Pos.id_succ. simpl. lia. }
+    induction n as [|n' IH]; intros vs M L B.
+    + destruct (bind_params true k 0 vs L) as (rho0 & Bd & R1 & E).
+      exists (compile_f gidf j (mksig true k m) (FRec e0 e1)), rho0. split; [exact Hf|]. split; [exact Bd|].
+      change (callf (mksig true k m) (denote_f cs (mksig true k m) (FRec e0 e1)) 0 vs M)
+        with (appn k m (absn k m (fun env s => denote_e cs 0 0 (fun _ => 0%uint63) env s e0)) vs M).
+      rewrite appn_absn by auto. simpl kbody.
+      eapply K_if; [simpl; eauto | reflexivity | ]. rewrite ofn_0. simpl.
+      assert (EQ : denote_e cs 0 0 (fun _ => 0%uint63) (rev vs) (if m then M else dummy_mem) e0
+                   = denote_e cs 0 0 (fun _ => 0%uint63) (rev vs) M e0).
+      { destruct m; [reflexivity|]. eapply (proj1 denote_nomem); eauto. }
+      rewrite EQ.
+      refine (ctail_ok P _ gidf (gidf j) mv M cs false true false m k (fun _ => 0%uint63) 0 0 _ Hcs _ _ Hf _ _ _ _ _ W0 _).
+      * intros Habs; discriminate Habs.
+      * intros _. reflexivity.
+      * intros Habs; discriminate Habs.
+      * split; [|split; [|split; [|split]]].
+        -- exact E.
+        -- eapply lt_all_mono; eauto. lia.
+        -- lia.
+        -- intros _. apply R1; reflexivity.
+        -- intros Habs; discriminate Habs.
+    + destruct (bind_params true k (S n') vs L) as (rho0 & Bd & R1 & E).
+      exists (compile_f gidf j (mksig true k m) (FRec e0 e1)), rho0. split; [exact Hf|]. split; [exact Bd|].
+      set (dfn := denote_f cs (mksig true k m) (FRec e0 e1)).
+      change (callf (mksig true k m) dfn (S n') vs M)
+        with (appn k m (absn k m (fun env s => denote_e cs (S n') n' (fun args => appn k m (dfn n') args s) env s e1)) vs M).
+      rewrite appn_absn by auto. simpl kbody.
+      eapply K_if; [simpl; eauto | reflexivity | ]. simpl cmp_sem. rewrite ofn_S_ne0 by lia.
+      eapply K_op; [simpl; eauto | reflexivity | ]. simpl binop_sem. rewrite ofn_pred by lia.
+      assert (EQ : denote_e cs (S n') n' (fun args => appn k m (dfn n') args (if m then M else dummy_mem)) (rev vs)
+                     (if m then M else dummy_mem) e1
+                   = denote_e cs (S n') n' (fun args => appn k m (dfn n') args M) (rev vs) M e1).
+      { destruct m; [reflexivity|].
+        rewrite (proj1 denote_rec_ext e1 cs (S n') n' _ (fun args => appn k false (dfn n') args M)) by (intro; apply appn_false).
+        eapply (proj1 denote_nomem); eauto. }
+      rewrite EQ.
+      refine (ctail_ok P _ gidf (gidf j) mv M cs true true true m k (fun args => appn k m (dfn n') args M) (S n') n'
+                       _ Hcs _ _ Hf _ _ _ _ _ W1 _).
+      * intros _ vs' L'. apply (IH vs' M L'). lia.
+      * intros _. lia.
+      * intros _. lia.
+      * split; [|split; [|split; [|split]]].
+        -- eapply env_ok_agree; [exact E | exact Lmv | apply agree_set; apply Pos.le_refl].
+        -- eapply lt_all_mono; eauto. lia.
+        -- lia.
+        -- intros _. rewrite PTree.gso by (intro Hx; rewrite Hx in Mvgt; lia). apply R1; reflexivity.
+        -- intros _. apply PTree.gss.
+  - (* plain *)
+    intros n vs M L B.
+    destruct (bind_params c k n vs L) as (rho0 & Bd & R1 & E).
+    exists (compile_f gidf j (mksig c k m) (FPlain e)), rho0. split; [exact Hf|]. split; [exact Bd|].
+    assert (V : callf (mksig c k m) (denote_f cs (mksig c k m) (FPlain e)) n vs M
+                = denote_e cs (if c then n else 0) 0 (fun _ => 0%uint63) (rev vs) M e).
+    { destruct c.
+      - change (callf (mksig true k m) (denote_f cs (mksig true k m) (FPlain e)) n vs M)
+          with (appn k m (absn k m (fun env s => denote_e cs n 0 (fun _ => 0%uint63) env s e)) vs M).
+        rewrite appn_absn by auto. destruct m; [reflexivity|]. eapply (proj1 denote_nomem); eauto.
+      - change (callf (mksig false k m) (denote_f cs (mksig false k m) (FPlain e)) n vs M)
+          with (appn k m (absn k m (fun env s => denote_e cs 0 0 (fun _ => 0%uint63) env s e)) vs M).
+        rewrite appn_absn by auto. destruct m; [reflexivity|]. eapply (proj1 denote_nomem); eauto. }
+    rewrite V. simpl kbody.
+    refine (ctail_ok P _ gidf (gidf j) mv M cs false c false m k (fun _ => 0%uint63) (if c then n else 0) 0
+                     _ Hcs _ _ Hf _ _ _ _ _ W _).
+    + intros Habs; discriminate Habs.
+    + intros Hc. subst c. exact B.
+    + intros Habs; discriminate Habs.
+    + split; [|split; [|split; [|split]]].
+      * exact E.
       * eapply lt_all_mono; eauto. lia.
       * lia.
-      * intros _. apply PTree.gss.
+      * intros Hc. subst c. apply R1; reflexivity.
+      * intros Habs; discriminate Habs.
 Qed.
 
 
-(* ================================================================ the measurement: the per-program check *)
+(* ================================================================ the measurement: the per-program check, end to end *)
 Local Open Scope uint63_scope.
+
+(* the KQL name of the program's function i: 1000 + i *)
+Definition gid1 (i : nat) : ident := Pos.of_succ_nat (999 + i).
 
 (* a counted loop, as a user writes it *)
 Fixpoint sum (n : nat) (i acc : i63) (s : mem) : i63 :=
@@ -449,27 +701,42 @@ Fixpoint sum (n : nat) (i acc : i63) (s : mem) : i63 :=
   end.
 
 (* its syntax: the numbers nearest first -- acc is SVar 0, i is SVar 1 *)
+Definition sum_g := mksig true 2 true.
 Definition sum_s0 := SVar 0.
 Definition sum_s1 := SRec (SCons (SOp Badd (SVar 1) (SInt 1)) (SCons (SOp Badd (SVar 0) (SRd (SInt 0) (SVar 1))) SNil)).
+Definition sum_b := FRec sum_s0 sum_s1.
 
 (* the per-program check: the kernel compares the user's function with the meaning of its syntax *)
-Time Lemma sum_is : sum = denote_fun 2 sum_s0 sum_s1.
+Time Lemma sum_is : sum = denote_f [] sum_g sum_b.
 Proof. Time exact eq_refl. Time Qed.
 
-(* end to end, the way a user's program gets its theorem: the KQL function is [compile_fun] of the syntax; its statement follows
-   from [compile_fun_ok] and the kernel's computation alone -- no tactic searches anything *)
-Definition sum_fn := compile_fun 1000%positive 2 sum_s0 sum_s1.
-Definition sum_P := mkprog [(1000%positive, sum_fn)] [].
-Time Lemma sum_ok : forall n i acc M, (Z.of_nat n < wB)%Z -> runk sum_P 1000%positive [ofn n; i; acc] M (sum n i acc M) M.
-Proof.
-  intros n i acc M B.
-  change (sum n i acc M) with (app 2 (denote_fun 2 sum_s0 sum_s1 n) [i; acc] M).
-  exact (compile_fun_ok sum_P 1000%positive 2 sum_s0 sum_s1 eq_refl eq_refl eq_refl n [i; acc] M eq_refl B).
-Time Qed.
+(* end to end: the KQL function is [compile_f] of the syntax; its statement is [compile_f_ok] and the kernel's computation *)
+Definition sum_P := mkprog [(gid1 0, compile_f gid1 0 sum_g sum_b)] [].
+Time Lemma sum_ok : callee_ok sum_P (gid1 0) sum_g sum.
+Proof. Time exact (compile_f_ok sum_P [] gid1 0 sum_g sum_b eq_refl eq_refl (no_callees sum_P gid1)). Time Qed.
 
 (* a wrong syntax (1 replaced by 2) is refused *)
-Time Fail Definition sum_wrong : sum = denote_fun 2 sum_s0 (SRec (SCons (SOp Badd (SVar 1) (SInt 2)) (SCons (SOp Badd (SVar 0) (SRd (SInt 0) (SVar 1))) SNil))) := eq_refl.
+Time Fail Definition sum_wrong : sum = denote_f [] sum_g (FRec sum_s0 (SRec (SCons (SOp Badd (SVar 1) (SInt 2)) (SCons (SOp Badd (SVar 0) (SRd (SInt 0) (SVar 1))) SNil)))) := eq_refl.
 
+(* calls: a helper without memory, and a loop calling it; the helper's theorem is the callee assumption of the loop's *)
+Definition h (a b : i63) : i63 := PrimInt63.add (PrimInt63.mul a 2) b.
+Definition h_g := mksig false 2 false.
+Definition h_b := FPlain (SOp Badd (SOp Bmul (SVar 1) (SInt 2)) (SVar 0)).
+Fixpoint loop (n : nat) (i acc : i63) (s : mem) : i63 :=
+  match n with O => acc | S m => loop m (PrimInt63.add i 1) (h acc (KQ.KQRun.rd 0 i s)) s end.
+Definition loop_g := mksig true 2 true.
+Definition loop_b := FRec (SVar 0) (SRec (SCons (SOp Badd (SVar 1) (SInt 1))
+                                  (SCons (SCall 0 NNone (SCons (SVar 0) (SCons (SRd (SInt 0) (SVar 1)) SNil))) SNil))).
+Definition hl_P := mkprog [(gid1 0, compile_f gid1 0 h_g h_b); (gid1 1, compile_f gid1 1 loop_g loop_b)] [].
+Time Lemma h_ok : callee_ok hl_P (gid1 0) h_g h.
+Proof. Time exact (compile_f_ok hl_P [] gid1 0 h_g h_b eq_refl eq_refl (no_callees hl_P gid1)). Time Qed.
+Time Lemma loop_ok : callee_ok hl_P (gid1 1) loop_g loop.
+Proof.
+  refine (compile_f_ok hl_P [existT ftype h_g h] gid1 1 loop_g loop_b eq_refl eq_refl _).
+  intros [|[|f]]; simpl; [exact h_ok | exact Logic.I | exact Logic.I].
+Time Qed.
+
+(* a loop whose body is 300 lets, each with a read of the memory *)
 Fixpoint long (n : nat) (a : i63) (s : mem) : i63 :=
   match n with
   | O => a
@@ -778,16 +1045,10 @@ Fixpoint long (n : nat) (a : i63) (s : mem) : i63 :=
   end.
 
 Definition long_s1 := (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 1))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 2))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 3))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 4))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 5))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 6))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 7))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 8))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 9))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 10))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 11))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 12))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 13))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 14))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 15))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 16))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 17))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 18))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 19))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 20))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 21))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 22))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 23))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 24))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 25))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 26))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 27))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 28))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 29))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 30))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 31))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 32))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 33))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 34))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 35))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 36))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 37))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 38))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 39))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 40))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 41))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 42))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 43))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 44))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 45))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 46))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 47))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 48))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 49))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 50))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 51))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 52))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 53))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 54))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 55))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 56))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 57))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 58))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 59))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 60))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 61))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 62))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 63))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 64))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 65))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 66))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 67))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 68))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 69))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 70))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 71))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 72))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 73))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 74))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 75))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 76))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 77))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 78))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 79))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 80))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 81))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 82))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 83))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 84))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 85))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 86))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 87))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 88))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 89))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 90))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 91))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 92))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 93))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 94))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 95))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 96))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 97))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 98))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 99))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 100))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 101))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 102))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 103))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 104))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 105))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 106))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 107))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 108))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 109))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 110))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 111))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 112))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 113))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 114))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 115))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 116))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 117))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 118))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 119))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 120))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 121))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 122))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 123))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 124))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 125))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 126))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 127))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 128))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 129))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 130))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 131))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 132))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 133))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 134))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 135))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 136))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 137))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 138))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 139))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 140))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 141))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 142))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 143))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 144))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 145))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 146))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 147))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 148))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 149))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 150))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 151))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 152))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 153))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 154))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 155))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 156))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 157))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 158))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 159))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 160))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 161))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 162))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 163))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 164))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 165))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 166))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 167))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 168))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 169))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 170))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 171))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 172))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 173))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 174))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 175))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 176))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 177))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 178))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 179))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 180))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 181))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 182))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 183))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 184))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 185))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 186))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 187))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 188))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 189))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 190))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 191))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 192))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 193))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 194))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 195))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 196))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 197))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 198))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 199))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 200))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 201))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 202))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 203))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 204))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 205))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 206))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 207))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 208))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 209))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 210))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 211))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 212))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 213))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 214))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 215))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 216))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 217))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 218))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 219))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 220))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 221))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 222))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 223))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 224))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 225))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 226))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 227))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 228))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 229))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 230))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 231))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 232))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 233))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 234))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 235))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 236))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 237))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 238))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 239))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 240))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 241))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 242))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 243))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 244))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 245))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 246))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 247))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 248))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 249))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 250))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 251))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 252))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 253))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 254))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 255))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 256))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 257))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 258))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 259))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 260))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 261))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 262))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 263))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 264))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 265))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 266))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 267))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 268))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 269))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 270))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 271))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 272))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 273))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 274))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 275))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 276))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 277))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 278))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 279))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 280))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 281))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 282))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 283))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 284))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 285))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 286))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 287))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 288))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 289))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 290))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 291))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 292))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 293))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 294))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 295))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 296))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 297))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 298))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 299))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 300))) (SRec (SCons (SVar 0) SNil)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))).
-Time Lemma long_is : long = denote_fun 1 (SVar 0) long_s1.
+Definition long_g := mksig true 1 true.
+Definition long_b := FRec (SVar 0) long_s1.
+Time Lemma long_is : long = denote_f [] long_g long_b.
 Proof. Time exact eq_refl. Time Qed.
-
-Definition long_fn := compile_fun 1001%positive 1 (SVar 0) long_s1.
-Definition long_P := mkprog [(1001%positive, long_fn)] [].
-Time Lemma long_ok : forall n a M, (Z.of_nat n < wB)%Z -> runk long_P 1001%positive [ofn n; a] M (long n a M) M.
-Proof.
-  intros n a M B.
-  change (long n a M) with (app 1 (denote_fun 1 (SVar 0) long_s1 n) [a] M).
-  exact (compile_fun_ok long_P 1001%positive 1 (SVar 0) long_s1 eq_refl eq_refl eq_refl n [a] M eq_refl B).
-Time Qed.
-
-Print Assumptions sum_ok.
+Definition long_P := mkprog [(gid1 0, compile_f gid1 0 long_g long_b)] [].
+Time Lemma long_ok : callee_ok long_P (gid1 0) long_g long.
+Proof. Time exact (compile_f_ok long_P [] gid1 0 long_g long_b eq_refl eq_refl (no_callees long_P gid1)). Time Qed.

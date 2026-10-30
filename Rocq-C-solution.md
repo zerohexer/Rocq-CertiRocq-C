@@ -1673,6 +1673,20 @@ answers, and the construct table has cells for each spelling.
 Each step: the `sexp` node(s), the `denote` case, the `compile` case, the proof case; `sum` and `long` re-checked; an example
 added; the per-program check timed on the longest function it now covers.
 
+**Step 1 done (2026-10-30): signatures, plain functions, calls.**  A function has a signature `sig` (`sc`: a counter first;
+`sk` numbers; `sm`: a memory last) and a body `FRec e0 e1` (recursive on the counter) or `FPlain e`; its meaning has the user's
+curried type (`ntype`, `ftype`, `absn`, `appn`, `callf`; a function without a memory gets the kit's declared `kq_input 0` as a
+memory it never reads).  A call is `SCall f c args` (`c`: no counter, this function's counter, its predecessor); the meanings of
+the callees are parameters of `denote_f` (`callee := {g : sig & ftype g}`).  **`compile_f_ok`: if every callee's KQL computes
+its meaning (`callees_ok`), the function's KQL computes its meaning (`callee_ok`)** — proved once, with the counter's induction
+for `FRec`, over `cexp_all` (now with the call case) and `ctail_ok`; `denote_nomem` (a body that reads no memory means the same
+for any memory) and `denote_rec_ext` (the meaning depends on the recursive call only through its values) carry the no-memory
+case.  End to end with a call: `h` (a plain helper without memory) and `loop` (a loop calling `h acc (rd 0 i s)`) — the kernel
+accepts `loop = denote_f [existT ftype h_g h] ..` with the user's own `h` as the callee's meaning, and `loop_ok` is
+`compile_f_ok` with `h_ok` as the callee assumption: each per-program step 0.000–0.004 s; assumptions Rocq's integers and the
+kit memory's declared operations only.  The reifier reads one recursive function so far; next it reads programs (callees
+first, `SCall` from the user's calls, plain functions), then memory writes (step 3 of the design).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -1849,7 +1863,8 @@ Pushed to the public repository up to `0beefec` (2026-10-30); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | `proved/KQRReify.v`: the reifier (the user's text to the syntax); the per-program theorem from the text in 0.003 s |
+| (this commit) | `proved/KQR.v` step 1: signatures, plain functions, calls; the modular theorem `compile_f_ok` |
+| `52b0012` | `proved/KQRReify.v`: the reifier (the user's text to the syntax); the per-program theorem from the text in 0.003 s |
 | `9cdbf38` | `proved/KQR.v`: the verified compiler by reflection for the first subset — `compile_fun_ok` proved once; per-program statements by computation in milliseconds |
 | `0beefec` | `proved/KQR.v`: the per-program check measured (meaning = function in about a millisecond) |
 | `741373f` | `kitc.py --emit-first`, `--no-proof` |
