@@ -2184,6 +2184,28 @@ costs nothing in KQL (a `let` binds the argument's atom, a written number stays 
   inside expressions (+4, 51), machine operations (+9, 60: the kernels), tests on calls giving back a boolean (+3, 63), records
   (+2, 65), then `u64`, bytes, the rest.  **Next: functions given to functions.**
 
+**Step 10, functions given to functions — the design (2026-11-01).**  A recursive function that takes functions (`applyn n f
+x`, the loop library's `loop_up_go`, `wfix1_go k F a`) is a *template*: as in the translator (§5.1), each call that gives it
+known functions gets a copy of its own, and the template itself is no function of the program.
+- *Reifier*: a template's function parameter is bound to the function given (a context entry `CFn p t`): where the body
+  applies it, the function is written out (`wout`, as a helper); in the template's own recursive calls the same parameter is
+  passed on and is dropped, so a copy's recursion is an ordinary recursive call — `wfix1_go`'s `F (wfix1_go k' F) a` becomes,
+  once `F` is written out, `.. rec (a - 1) ..` with `rec := wfix1_go k' F`, a call of the copy itself.  The call sites are
+  found in each function's text with its helpers written out (`wfix1 meas F a` is `wfix1_go (kq_nat (meas a + 1)) F a`), and
+  the copies are read before the function that calls them, one per template and functions given (compared as terms); a call
+  is then `SCall` / `MCall` of the copy with the arguments that are not functions.  Functions given that name the caller's
+  variables (closures, §5.2) are not in this step.
+- *The copy's statement*: its meaning is the template applied to the functions given — `fun n x => applyn n add3 x` — which
+  is what the caller's text reduces to, so the caller's check is unchanged.  But it is not a `fix`, so the copy cannot be
+  checked like a function, by comparing its text with the meaning of its tree: that meaning is a `fix` over the counter.  So
+  `KQR.v` gains `compile_f_okr` (and `compile_f_okrm` for a memory): a function `h` given by its two equations — `h 0` is the
+  tree's meaning at 0, `h (S n)` is the tree's recursive body with `h n` as its recursive call — has the statement.  Each
+  equation is checked by conversion (`eq_refl`; the template unfolds one round on `0` or `S n`); the theorem is proved once
+  from `compile_f_ok` (by induction on the counter: `h` and the tree's meaning agree at every counter, the meaning depending
+  on its recursive call only through its values — `denote_rec_ext`).  Nothing is added to what is trusted.
+- *`kitc.py`*: a copy's meaning is defined from the term the reifier gives (`tmMkDefinition`), and its theorem is
+  `compile_f_okr` with the two equations; the templates are unfolded last, like the program's functions (F50).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
