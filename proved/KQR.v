@@ -39,6 +39,7 @@ Inductive sexp : Type :=
 | SMatch (c : nat) (e0 e1 : sexp)    (* match on counter variable c: e0 at 0, e1 otherwise (the predecessor is CVar 0) *)
 | SIfB (b : sbool) (t e : sexp)      (* if b then t else e, a test that is not one comparison *)
 | SLetB (b : sbool) (e : sexp)       (* let x := b in e, x a boolean: BVar 0 in e *)
+| SRd32 (h i : sexp)                 (* rd32 h i s: cell i of narrow block h (4-byte cells), s the newest memory *)
 with sexps : Type :=
 | SNil
 | SCons (e : sexp) (r : sexps)
@@ -78,7 +79,8 @@ Inductive smem : Type :=
 | MCall (f : nat) (cs : scnts) (args : sexps) (m : smem)   (* function f, giving back a memory, on the memory m *)
 | MMatch (c : nat) (m0 m1 : smem)    (* match on counter variable c *)
 | MIfB (b : sbool) (m1 m2 : smem)    (* if b then m1 else m2, a test that is not one comparison *)
-| MLetB (b : sbool) (m : smem).      (* let x := b in m, x a boolean *)
+| MLetB (b : sbool) (m : smem)       (* let x := b in m, x a boolean *)
+| MUpd32 (h i v : sexp) (m : smem).  (* upd32 h i v m *)
 
 (** a function's signature: [sn] counters first, [sk] numbers, a memory last or not, a memory as the result or a number,
     and for a number: whether the function writes the memory ([sw]: its KQL ends with some memory, not the one it was given) *)
@@ -158,6 +160,7 @@ Fixpoint denote_e (cs : list callee) (rec : list nat -> list i63 -> mem -> i63) 
       match nth c cenv O with O => denote_e cs rec cenv benv env s e0 | S p => denote_e cs rec (p :: cenv) benv env s e1 end
   | SIfB b t f => if denote_b cs rec cenv benv env s b then denote_e cs rec cenv benv env s t else denote_e cs rec cenv benv env s f
   | SLetB b e => let x := denote_b cs rec cenv benv env s b in denote_e cs rec cenv (x :: benv) env s e
+  | SRd32 h i => KQ.KQRun.rd32 (denote_e cs rec cenv benv env s h) (denote_e cs rec cenv benv env s i) s
   end
 with denote_es (cs : list callee) (rec : list nat -> list i63 -> mem -> i63) (cenv : list nat) (benv : list bool)
   (env : list i63) (s : mem) (es : sexps) {struct es} : list i63 :=
@@ -217,6 +220,8 @@ Fixpoint denote_m (cs : list callee) (rec : list nat -> list i63 -> mem -> i63) 
   | MIfB b m1 m2 => if denote_b cs rec cenv benv env s b then denote_m cs rec recm cenv benv env s m1
                     else denote_m cs rec recm cenv benv env s m2
   | MLetB b m => let x := denote_b cs rec cenv benv env s b in denote_m cs rec recm cenv (x :: benv) env s m
+  | MUpd32 h i v m => KQ.KQRun.upd32 (denote_e cs rec cenv benv env s h) (denote_e cs rec cenv benv env s i)
+                                     (denote_e cs rec cenv benv env s v) (denote_m cs rec recm cenv benv env s m)
   end.
 
 (** a number made after memories: the memories first ([let s2 := m in ..], each the newest in what follows), then the number
@@ -320,7 +325,7 @@ Definition cap60 : i63 := 1152921504606846976%uint63.
 Fixpoint spec (e : sexp) : bool :=
   match e with
   | SVar _ | SInt _ => true
-  | SOp _ a b | SRd a b => spec a && spec b
+  | SOp _ a b | SRd a b | SRd32 a b => spec a && spec b
   | SIf _ a b t f => spec a && spec b && spec t && spec f
   | SIfB b t f => specb b && spec t && spec f
   | _ => false
@@ -334,7 +339,7 @@ with specb (b : sbool) : bool :=
   end.
 Fixpoint nrd (e : sexp) : nat :=
   match e with
-  | SRd a b => S (nrd a + nrd b)
+  | SRd a b | SRd32 a b => S (nrd a + nrd b)
   | SOp _ a b => nrd a + nrd b
   | SIf _ a b t f => nrd a + nrd b + nrd t + nrd f
   | SIfB b t f => nrdb b + nrd t + nrd f
@@ -435,6 +440,7 @@ Fixpoint cexp (e : sexp) (cenv benv env : list atom) (nxt : ident) (K : atom -> 
                       Esel n3 Ceq C (Aint 0%uint63) F T (K (Avar n3) (Pos.succ n3)))))
                   else ccond b cenv benv env nxt (fun n => cexp t cenv benv env n K) (fun n => cexp f cenv benv env n K)
   | SLetB b e => cbval b cenv benv env nxt (fun A n1 => cexp e cenv (A :: benv) env n1 K)
+  | SRd32 h i => cexp h cenv benv env nxt (fun H n1 => cexp i cenv benv env n1 (fun I n2 => Ekld32 n2 H I (K (Avar n2) (Pos.succ n2))))
   end
 with cexps (es : sexps) (cenv benv env : list atom) (nxt : ident) (K : list atom -> ident -> exp) {struct es} : exp :=
   match es with
@@ -546,6 +552,8 @@ Fixpoint cmem (m : smem) (cenv benv env : list atom) (nxt : ident) (K : ident ->
                              (cmem m1 (Avar (after nxt t0) :: cenv) benv env (Pos.succ (after nxt t0)) K))
   | MIfB b m1 m2 => ccond b cenv benv env nxt (fun n => cmem m1 cenv benv env n K) (fun n => cmem m2 cenv benv env n K)
   | MLetB b m => cbval b cenv benv env nxt (fun A n1 => cmem m cenv (A :: benv) env n1 K)
+  | MUpd32 h i v m => cexp h cenv benv env nxt (fun H n1 => cexp i cenv benv env n1 (fun I n2 => cexp v cenv benv env n2 (fun V n3 =>
+                        cmem m cenv benv env n3 (fun n4 => Ekst32 H I V (K n4)))))
   end.
 
 (** a memory in tail position: a test is a branch, the recursive call a loop, the end returns 0 with the memory made *)
@@ -599,7 +607,7 @@ Fixpoint wf (sigs : list sig) (r mok : bool) (nx k : nat) (e : sexp) {struct e} 
   match e with
   | SVar _ | SInt _ => true
   | SOp _ a b | SLet a b => wf sigs r mok nx k a && wf sigs r mok nx k b
-  | SRd a b => mok && wf sigs r mok nx k a && wf sigs r mok nx k b
+  | SRd a b | SRd32 a b => mok && wf sigs r mok nx k a && wf sigs r mok nx k b
   | SIf _ a b t f => wf sigs r mok nx k a && wf sigs r mok nx k b && wf sigs r mok nx k t && wf sigs r mok nx k f
   | SRec ccs args => r && Nat.eqb (len_c ccs) nx && Nat.eqb (len_s args) k && all_c flat ccs
                      && wfcs sigs r mok nx k ccs && wfs sigs r mok nx k args
@@ -632,7 +640,7 @@ with wfb (sigs : list sig) (r mok : bool) (nx k : nat) (b : sbool) {struct b} : 
 Fixpoint wfm (sigs : list sig) (r rm mok : bool) (nx k : nat) (m : smem) {struct m} : bool :=
   match m with
   | MCur => true
-  | MUpd h i v m => wf sigs r mok nx k h && wf sigs r mok nx k i && wf sigs r mok nx k v && wfm sigs r rm mok nx k m
+  | MUpd h i v m | MUpd32 h i v m => wf sigs r mok nx k h && wf sigs r mok nx k i && wf sigs r mok nx k v && wfm sigs r rm mok nx k m
   | MLet e m => wf sigs r mok nx k e && wfm sigs r rm mok nx k m
   | MLetM m1 m2 => wfm sigs r rm mok nx k m1 && wfm sigs r rm mok nx k m2
   | MIf _ a b m1 m2 => wf sigs r mok nx k a && wf sigs r mok nx k b && wfm sigs r rm mok nx k m1 && wfm sigs r rm mok nx k m2
@@ -932,6 +940,7 @@ Proof.
     rewrite (IHb _ _ _ _ _ s s' _ _ _ Hr Wb), (IHt _ _ _ _ _ s s' _ _ _ Hr Wt), (IHe _ _ _ _ _ s s' _ _ _ Hr We). reflexivity.
   - intros b IHb e IHe cs rec cenv benv env s s' r nx k Hr W. simpl in *. apply andb_true_iff in W as [Wb We].
     rewrite (IHb _ _ _ _ _ s s' _ _ _ Hr Wb). apply (IHe _ _ _ _ _ s s' _ _ _ Hr We).
+  - intros h IHh i IHi cs rec cenv benv env s s' r nx k Hr W. simpl in W. discriminate.
   - intros; reflexivity.
   - intros e IHe es IHes cs rec cenv benv env s s' r nx k Hr W. simpl in *. apply andb_true_iff in W as [We Wes].
     rewrite (IHe _ _ _ _ _ s s' _ _ _ Hr We), (IHes _ _ _ _ _ s s' _ _ _ Hr Wes). reflexivity.
@@ -1322,6 +1331,19 @@ Proof.
     apply IHe with (cenv := cenv) (benv := denote_b cs rec cenv benv denv M b :: benv) (denv := denv); auto.
     + apply inv_blet; auto. eapply inv_step; eauto.
     + intros rho2 n2 a2 A2 Le2 L2 V2. apply HK; [eapply (agree_trans rho rho1 rho2 nxt n1); eauto | lia | exact L2 | exact V2].
+  - (* SRd32 *) intros h IHh i IHi cenvA benvA envA cenv benv denv nxt K rho M v M' W Iv HK. simpl in *.
+    apply andb_true_iff in W as [W Wi]. apply andb_true_iff in W as [_ Wh].
+    apply IHh with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho1 n1 H A1 Le1 LH VH.
+    apply IHi with (cenv := cenv) (benv := benv) (denv := denv); auto. { eapply inv_step; eauto. }
+    intros rho2 n2 J A2 Le2 LJ VJ.
+    eapply K_ld32.
+    + rewrite (aval_agree rho1 rho2 n1); eauto.
+    + eauto.
+    + apply HK.
+      * eapply (agree_set2 rho rho1 rho2); eauto; lia.
+      * lia.
+      * simpl. lia.
+      * simpl. rewrite PTree.gss. reflexivity.
   - (* SNil *) intros cenvA benvA envA cenv benv denv nxt K rho M v M' W Iv HK. simpl. apply HK; [apply agree_refl | lia | constructor | reflexivity].
   - (* SCons *) intros e IHe es IHes cenvA benvA envA cenv benv denv nxt K rho M v M' W Iv HK. simpl in *.
     apply andb_true_iff in W as [We Wes].
@@ -1606,7 +1628,7 @@ Lemma cmem_ok : forall m cenvA benvA envA cenv benv denv nxt K rho M v M', wfm s
   evalk P f rho M (cmem gidf g mv m cenvA benvA envA nxt K) v M'.
 Proof.
   induction m as [| h i x m IH | e m IH | m1 IH1 m2 IH2 | c a b m1 IH1 m2 IH2 | ccs args m IH | fi ccs args m IH | c m0 IH0 m1 IH1
-                 | b m1 IH1 m2 IH2 | b m IH];
+                 | b m1 IH1 m2 IH2 | b m IH | h i x m IH];
     intros cenvA benvA envA cenv benv denv nxt K rho M v M' W Iv HK; cbn [cmem wfm] in *.
   - (* MCur *) apply HK; [apply agree_refl | lia].
   - (* MUpd *) apply andb_true_iff in W as [W Wm]. apply andb_true_iff in W as [W Wx]. apply andb_true_iff in W as [Wh Wi].
@@ -1737,6 +1759,21 @@ Proof.
     apply IH with (cenv := cenv) (benv := denote_b cs rec cenv benv denv M b :: benv) (denv := denv); auto.
     + apply inv_blet; auto. eapply inv_step; eauto.
     + intros rho2 n2 A2 Le2. apply HK; [eapply (agree_trans rho rho1 rho2 nxt n1); eauto | lia].
+  - (* MUpd32 *) apply andb_true_iff in W as [W Wm]. apply andb_true_iff in W as [W Wx]. apply andb_true_iff in W as [Wh Wi].
+    apply cexp_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho1 n1 H A1 Le1 LH VH.
+    pose proof (inv_step rho rho1 cenvA benvA envA cenv benv denv nxt n1 Iv A1 Le1) as I1.
+    apply cexp_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho2 n2 J A2 Le2 LJ VJ.
+    pose proof (inv_step rho1 rho2 cenvA benvA envA cenv benv denv n1 n2 I1 A2 Le2) as I2.
+    apply cexp_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho3 n3 X A3 Le3 LX VX.
+    pose proof (inv_step rho2 rho3 cenvA benvA envA cenv benv denv n2 n3 I2 A3 Le3) as I3.
+    apply IH with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho4 n4 A4 Le4.
+    apply K_st32 with (vh := denote_e cs rec cenv benv denv M h) (vi := denote_e cs rec cenv benv denv M i)
+                    (va := denote_e cs rec cenv benv denv M x).
+    + rewrite (aval_agree rho3 rho4 n3), (aval_agree rho2 rho3 n2), (aval_agree rho1 rho2 n1); auto;
+        eapply atom_lt_mono; eauto; lia.
+    + rewrite (aval_agree rho3 rho4 n3), (aval_agree rho2 rho3 n2); auto; eapply atom_lt_mono; eauto; lia.
+    + rewrite (aval_agree rho3 rho4 n3); auto.
+    + apply HK; [| lia]. apply (agree_4 rho rho1 rho2 rho3 rho4 nxt n1 n2 n3); auto.
 Qed.
 
 (** in tail position: the function's body ends with the value of [e] and the memory it started with *)
@@ -1768,7 +1805,7 @@ Lemma ctail_ok : forall e cenvA benvA envA cenv benv denv nxt rho M, wf sigs r m
   evalk P f rho M (ctail gidf g mv e cenvA benvA envA nxt) (denote_e cs rec cenv benv denv M e) M.
 Proof.
   induction e as [i | n | o a IHa b IHb | c a IHa b IHb t IHt u IHu | e1 IH1 e2 IH2 | h IHh i IHi | ccs args | fi ccs args
-                 | c e0 IH0 e1 IH1 | b t IHt u IHu | b e IHe];
+                 | c e0 IH0 e1 IH1 | b t IHt u IHu | b e IHe | h IHh i IHi];
     intros cenvA benvA envA cenv benv denv nxt rho M W Iv; cbn [ctail] in *.
   - apply cexp_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. intros. apply K_ret. auto.
   - apply cexp_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. intros. apply K_ret. auto.
@@ -1852,6 +1889,7 @@ Proof.
   - (* SLetB *) cbn [wf] in W. apply andb_true_iff in W as [Wb We].
     apply (cbval_ok b) with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
     cbn [denote_e]. apply IHe; auto. apply inv_blet; auto. eapply inv_step; eauto.
+  - apply cexp_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. intros. apply K_ret. auto.
 Qed.
 
 (** a memory in tail position: the function's body returns 0 and ends with the memory the Rocq text makes *)
@@ -1859,7 +1897,7 @@ Lemma ctailm_ok : forall m cenvA benvA envA cenv benv denv nxt rho M, wfm sigs r
   evalk P f rho M (ctailm gidf g mv m cenvA benvA envA nxt) 0%uint63 (denote_m cs rec recm cenv benv denv M m).
 Proof.
   induction m as [| h i x m IH | e m IH | m1 IH1 m2 IH2 | c a b m1 IH1 m2 IH2 | ccs args m IH | fi ccs args m IH | c m0 IH0 m1 IH1
-                 | b m1 IH1 m2 IH2 | b m IH];
+                 | b m1 IH1 m2 IH2 | b m IH | h i x m IH];
     intros cenvA benvA envA cenv benv denv nxt rho M W Iv; cbn [ctailm] in *.
   - apply cmem_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. intros. apply K_ret. reflexivity.
   - apply cmem_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. intros. apply K_ret. reflexivity.
@@ -1952,6 +1990,7 @@ Proof.
   - (* MLetB *) cbn [wfm] in W. apply andb_true_iff in W as [Wb Wm].
     apply (cbval_ok b) with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
     cbn [denote_m]. apply IH; auto. apply inv_blet; auto. eapply inv_step; eauto.
+  - apply cmem_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. intros. apply K_ret. reflexivity.
 Qed.
 (** a number made after memories, in tail position: the body ends with its number and the last memory made (no recursive
     call is in it: [r], [rm] false; the memory is there: [mok]) *)
@@ -3061,3 +3100,23 @@ Definition argmin_P := mkprog [(gid1 0, compile_f gid1 0 argmin_g argmin_b)] [].
 Time Lemma argmin_ok : callee_ok argmin_P (gid1 0) (cbz 0) argmin_g argmin.
 Proof. Time exact_no_check (compile_f_ok argmin_P [] gid1 0 argmin_g argmin_b eq_refl eq_refl (no_callees argmin_P gid1) eq_refl eq_refl). Time Qed.
 Check (eq_refl : has_sel (kbody (compile_f gid1 0 argmin_g argmin_b)) = true).
+
+(* ---------------------------------------------------------------- narrow memory: cells of 4 bytes *)
+Fixpoint acc32 (n : nat) (i : i63) (s : mem) : mem :=
+  match n with
+  | O => s
+  | S m => acc32 m (PrimInt63.add i 1) (KQ.KQRun.upd32 1 i (PrimInt63.add (KQ.KQRun.rd32 1 (PrimInt63.sub i 1) s) i) s)
+  end.
+Fixpoint sum32 (n : nat) (i acc : i63) (s : mem) : i63 :=
+  match n with O => acc | S m => sum32 m (PrimInt63.add i 1) (PrimInt63.add acc (KQ.KQRun.rd32 1 i s)) s end.
+Definition acc32_g := mksig 1 1 true true false.
+Definition acc32_b := FRecM MCur (MRec CNil (SCons (SOp Badd (SVar 0) (SInt 1)) SNil)
+  (MUpd32 (SInt 1) (SVar 0) (SOp Badd (SRd32 (SInt 1) (SOp Bsub (SVar 0) (SInt 1))) (SVar 0)) MCur)).
+Definition sum32_g := mksig 1 2 true false false.
+Definition sum32_b := FRec (SVar 0) (SRec CNil (SCons (SOp Badd (SVar 1) (SInt 1)) (SCons (SOp Badd (SVar 0) (SRd32 (SInt 1) (SVar 1))) SNil))).
+Definition nar_P := mkprog [(gid1 0, compile_f gid1 0 acc32_g acc32_b); (gid1 1, compile_f gid1 1 sum32_g sum32_b)] [].
+Time Lemma acc32_ok : callee_ok nar_P (gid1 0) (cbz 0) acc32_g acc32.
+Proof. Time exact_no_check (compile_f_ok nar_P [] gid1 0 acc32_g acc32_b eq_refl eq_refl (no_callees nar_P gid1) eq_refl eq_refl). Time Qed.
+Time Lemma sum32_ok : callee_ok nar_P (gid1 1) (cbz 1) sum32_g sum32.
+Proof. Time exact_no_check (compile_f_ok nar_P [] gid1 1 sum32_g sum32_b eq_refl eq_refl (no_callees nar_P gid1) eq_refl eq_refl). Time Qed.
+Print Assumptions acc32_ok.

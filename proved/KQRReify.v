@@ -25,6 +25,8 @@ Definition eq_mp (a b : modpath) : bool := match ModPathComp.compare a b with Eq
 Definition prim_mp : modpath := fst (kn_of <% PrimInt63.add %>).
 Definition kn_rd := kn_of <% KQ.KQRun.rd %>.
 Definition kn_upd := kn_of <% KQ.KQRun.upd %>.
+Definition kn_rd32 := kn_of <% KQ.KQRun.rd32 %>.
+Definition kn_upd32 := kn_of <% KQ.KQRun.upd32 %>.
 Definition kn_int := kn_of <% PrimInt63.int %>.
 Definition kn_mem := kn_of <% KQ.KQRun.mem %>.
 Definition kn_kq_nat := kn_of <% KQ.KQRun.kq_nat %>.
@@ -128,11 +130,14 @@ Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option 
             match reify fuel ctx a, reify fuel ctx b with Some x, Some y => Some (SOp o x y) | _, _ => None end
         | _, _ => None
         end
-      else if Kername.eqb kn kn_rd then
+      else if Kername.eqb kn kn_rd || Kername.eqb kn kn_rd32 then
         match args with
         | [h; i; tRel m] =>
             if is_ent CMem ctx m then
-              match reify fuel ctx h, reify fuel ctx i with Some x, Some y => Some (SRd x y) | _, _ => None end
+              match reify fuel ctx h, reify fuel ctx i with
+              | Some x, Some y => Some (if Kername.eqb kn kn_rd then SRd x y else SRd32 x y)
+              | _, _ => None
+              end
             else None
         | _ => None
         end
@@ -238,11 +243,11 @@ Fixpoint reify_m (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
   match t with
   | tRel i => if is_ent CMem ctx i then Some MCur else None
   | tApp (tConst kn _) args =>
-      if Kername.eqb kn kn_upd then
+      if Kername.eqb kn kn_upd || Kername.eqb kn kn_upd32 then
         match args with
         | [h; i; v; m] =>
             match reify fuel ctx h, reify fuel ctx i, reify fuel ctx v, reify_m fuel ctx m with
-            | Some a, Some b, Some c, Some d => Some (MUpd a b c d)
+            | Some a, Some b, Some c, Some d => Some (if Kername.eqb kn kn_upd then MUpd a b c d else MUpd32 a b c d)
             | _, _, _, _ => None
             end
         | _ => None
@@ -363,12 +368,12 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
         end
       else None
   | tApp (tConst kn _) args =>
-      if Kername.eqb kn kn_rd then
+      if Kername.eqb kn kn_rd || Kername.eqb kn kn_rd32 then
         match args with
         | [h; i; m] =>
             if is_rel m then fallback else
             match reify_m fuel ctx m, reify fuel (kill_mem ctx) h, reify fuel (kill_mem ctx) i with
-            | Some mm, Some x, Some y => Some (XLetM mm (XRet (SRd x y)))
+            | Some mm, Some x, Some y => Some (XLetM mm (XRet (if Kername.eqb kn kn_rd then SRd x y else SRd32 x y)))
             | _, _, _ => None
             end
         | _ => None
@@ -529,7 +534,8 @@ Definition add_s (x : string) (l : list string) : list string := if existsb (fun
 (** the constants the syntax reads: the integer operations and comparisons, [rd], [upd], the program's functions *)
 Definition known_const (fns : list kername) (kn : kername) : bool :=
   (eq_mp (fst kn) prim_mp && (match binop_v (snd kn), cmp_v (snd kn) with None, None => false | _, _ => true end))
-  || Kername.eqb kn kn_rd || Kername.eqb kn kn_upd || Kername.eqb kn kn_kq_nat || existsb (Kername.eqb kn) fns
+  || Kername.eqb kn kn_rd || Kername.eqb kn kn_upd || Kername.eqb kn kn_rd32 || Kername.eqb kn kn_upd32
+  || Kername.eqb kn kn_kq_nat || existsb (Kername.eqb kn) fns
   || Kername.eqb kn kn_andb || Kername.eqb kn kn_orb || Kername.eqb kn kn_negb
   || Kername.eqb kn kn_int || Kername.eqb kn kn_mem.     (* as type arguments *)
 
@@ -846,6 +852,14 @@ Check (eq_refl : mark_src = (mark_g, mark_b)).
 Definition after_src := ltac:(run_template_program (tmQuoteRec mafter)
   (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
 Check (eq_refl : map (fun x => (snd (fst x), snd x)) after_src = [(bump_g, bump_b); (fill_g, fill_b); (after_g, after_b)]).
+
+(* ---------------------------------------------------------------- narrow memory, from the user's text *)
+Definition acc32_src := ltac:(run_template_program (tmQuoteRec acc32)
+  (fun q => let r := eval vm_compute in (reify_top q) in match r with Some ?x => exact x end)).
+Check (eq_refl : acc32_src = (acc32_g, acc32_b)).
+Definition sum32_src := ltac:(run_template_program (tmQuoteRec sum32)
+  (fun q => let r := eval vm_compute in (reify_top q) in match r with Some ?x => exact x end)).
+Check (eq_refl : sum32_src = (sum32_g, sum32_b)).
 
 (* linearity: a memory used after a newer one was made has no tree *)
 Definition dup (s : mem) : mem := let s2 := KQ.KQRun.upd 0 0 1 s in KQ.KQRun.upd 0 1 (KQ.KQRun.rd 0 0 s) s2.
