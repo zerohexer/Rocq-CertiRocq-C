@@ -2486,3 +2486,24 @@ Time Fail Definition chk_wrong : chk = denote_f [] chk_g (FPlain (SOp Badd
   (SOp Badd (SIfB (BOr (BCmp Clt (SRd (SInt 0) (SInt 5)) (SInt 500)) (BCmp Clt (SRd (SInt 0) (SInt 6)) (SInt 500))) (SInt 0) (SInt 7))
             (SIfB (BNot (BCmp Clt (SRd (SInt 0) (SInt 11)) (SInt 500))) (SInt 0) (SInt 31))))) := eq_refl.
 Print Assumptions cnt_in_ok.
+
+(* ---------------------------------------------------------------- a written counter given to a call (F50) *)
+(* the kernel compares [big] with the meaning of its tree; left to its own choice it unfolds [tw] first, and [tw] applied to
+   20 is worked out round by round (two calls a round: 2^20 of them, 4.7 s and 1.2 GB measured).  The program's functions are
+   unfolded last ([Strategy opaque], the order of unfolding only), and the check takes no time *)
+Fixpoint tw (n : nat) (a : i63) : i63 := match n with O => a | S m => PrimInt63.add (tw m a) (tw m (PrimInt63.add a 1)) end.
+Definition big (x : i63) : i63 := tw 20 x.
+Definition tw_g := mksig 1 1 false false.
+Definition tw_b := FRec (SVar 0) (SOp Badd (SRec CNil (SCons (SVar 0) SNil)) (SRec CNil (SCons (SOp Badd (SVar 0) (SInt 1)) SNil))).
+Definition big_g := mksig 0 1 false false.
+Definition big_b := FPlain (SCall 0 (CCons (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS CO))))))))))))))))))))
+  CNil) (SCons (SVar 0) SNil)).
+Definition lit_P := mkprog [(gid1 0, compile_f gid1 0 tw_g tw_b); (gid1 1, compile_f gid1 1 big_g big_b)] [].
+Strategy opaque [tw big].
+Time Lemma tw_ok : callee_ok lit_P (gid1 0) (cbz 0) tw_g tw.
+Proof. Time exact_no_check (compile_f_ok lit_P [] gid1 0 tw_g tw_b eq_refl eq_refl (no_callees lit_P gid1) eq_refl eq_refl). Time Qed.
+Time Lemma big_ok : callee_ok lit_P (gid1 1) (cbz 1) big_g big.
+Proof.
+  Time exact_no_check (compile_f_ok lit_P [existT ftype tw_g tw] gid1 1 big_g big_b eq_refl eq_refl
+    (all_ok_callees lit_P gid1 [existT ftype tw_g tw] (conj tw_ok Logic.I)) eq_refl eq_refl).
+Time Qed.

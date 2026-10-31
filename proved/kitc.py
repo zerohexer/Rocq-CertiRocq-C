@@ -390,6 +390,10 @@ def reflect(name, entry, prog, no_proof):
     t = HDR + "From KQC Require KQR KQRReify.\nImport ListNotations.\n" + f"From KQG Require Import {name}_r.\n"
     t += f"Definition {name}_funs := match {name}_src with Some l => l | None => [] end.\n"
     t += f"Definition {name}_prog := KQL.mkprog (KQRReify.funs_of 0 {name}_funs) [].\n"
+    # the program's functions are unfolded last when the kernel compares a function with the meaning of its syntax tree: a
+    # function applied to a written counter (f 20 ..) would otherwise be worked out round by round (F50).  The order of
+    # unfolding only: nothing that converts stops converting
+    t += "Strategy opaque [" + " ".join(f[0] for f in fs) + "].\n"
     if not no_proof:
         for j, f in enumerate(fs):
             cs = "[" + "; ".join(f"existT KQR.ftype {sig(g)} {g[0]}" for g in fs[:j]) + "]"

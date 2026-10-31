@@ -1,7 +1,7 @@
 (* through the verified compiler (kitc.py --reflect): booleans -- tests made of &&, || and negb, a boolean let, choices on
-   them taken by conditional moves.  On the cells 36 24 100 35 17 5 7 77 63 49 18 9 (n = 12): count_in counts the cells
+   them taken by conditional moves.  On the cells 36 24 100 35 17 5 7 7 63 49 18 9 (n = 12): count_in counts the cells
    with 20 <= x < 60, 36 24 35 49, so 4; score gives 1 to a cell below 10 or above 90 and 10 to a cell other than 35 below
-   50: 10 10 1 0 10 11 11 0 0 10 10 11, so 84; 4 * 1000 + 84 = 4084 *)
+   50: 10 10 1 0 10 11 11 11 0 10 10 11, so 95; 4 * 1000 + 95 = 4095 *)
 Fixpoint count_in (n : nat) (i lo hi acc : int) (s : mem) : int :=
   match n with
   | O => acc
