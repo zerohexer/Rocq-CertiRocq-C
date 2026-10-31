@@ -47,10 +47,12 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    checked by conversion — zero proof search, nothing added to the trust, for other people's programs.  Built so far
    (`proved/KQR.v`, `KQRReify.v`): numbers, tests, lets, reads, calls, recursion on a counter, memory writes, counters as
    values (several counters, `S`/`O`, budgets, a match on a counter inside a body), booleans (tests made of `&&`, `||`,
-   `negb`, boolean lets), choices between numbers as conditional moves — each per-program step in milliseconds, long
+   `negb`, boolean lets), choices between numbers as conditional moves, number functions that write the memory, cells of 4
+   bytes — each per-program step in milliseconds, long
    read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program
-   through it when every function is read (24 of the gate's 70 programs today, each timed against the translator's build), the
-   translator otherwise; next narrow memory, in the order of §12.V's tally.  Emit-then-prove is the interim.
+   through it when every function is read (29 of the gate's 70 programs today, each timed against the translator's build), the
+   translator otherwise; next helpers written out where they are used, in the order of §12.V's tally.  Emit-then-prove is the
+   interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -2049,6 +2051,35 @@ the end memory hidden: `runx` (`exists M', runk .. M'`).
   writing functions and reads in place inside expressions (+3, 35), machine operations (+8, 43: the kernels), functions given
   to functions (+4, 47), loops that write and give a number (+5, 52), then the rest.  **Next: narrow memory.**
 
+**Step 7 done (2026-10-31): narrow memory — cells of 4 bytes.**  The five programs it completes use `rd32` / `upd32` only
+(bytes and halfwords, `rd8` / `upd8` / `rd16` / `upd16`, are definitions over them in `KQRun.v`, met in 3 programs; they come with
+the helpers, next).  `SRd32 h i` among the numbers and `MUpd32 h i v m` among the memories, meaning `KQRun.rd32` / `upd32`
+themselves, compiled to `Ekld32` / `Ekst32`, whose rules have exactly the shape of the wide cells' (`K_ld32`, `K_st32`), so the
+proof cases are those of `SRd` / `MUpd`; a 32-bit read counts as a read for the conditional-move rule (as the translator's
+`choice_ok` counts `rd32`).  Tests: `acc32` (a loop writing 4-byte cells from the cell before), `sum32`; the reifier gives the
+hand-written trees.  **29 of the gate's 70 programs through the verified compiler** (was 24): `CF339Dn`, `CF295Bn`, `CF235Cn`,
+`CF380Cn`, `CF165En`.  Timed against the translator's build (best of 7 ms): `CF339Dn` 111.4 / 110.8, `CF295Bn` 118.3 / 119.0,
+`CF235Cn` 37.2 / 36.7, `CF380Cn` 55.9 / 56.7, `CF165En` 58.6 / 57.5 — the same.
+The gate with `KQ_REFLECT=1`, on the fork, on the final tree (2026-10-31): everything passes — `make.sh` `core-ok`; examples
+26 / 26; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (37 / 37 / 39 / 57 / 42 s); **29 programs
+through the verified compiler, 0 read but refused by the check**.
+**The order that completes the most now**: `KQRun.v`'s helpers (+4, 33 of 70 — and needed by 21), functions given to functions
+(+3, 36), calls of writing functions and reads in place inside expressions (+3, 39), machine operations (+8, 47: the kernels),
+loops that write and give a number (+5, 52), a `let` of a counter (+3, 55), then the rest.
+
+**Step 8, helpers written out where they are used — the design (2026-10-31).**  `zdiv`, `zmod`, `zmin`, `zmax`, `zabs`
+(`KQRun.v`: C's signed division and remainder corrected to `Z`'s rounding, a minimum) are not reached today because the reifier
+follows only the root's own file — and they should not become functions of their own: the translator writes them out at
+their uses (§1.5, `helper_body`), where the divisor is usually a number written in the program and the C compiler turns the
+division into a multiplication.  So the reifier does the same, for the same set: a definition of the program's file, of
+`KQRun.v` or of `Uint63` that has no fixpoint and is not one of the program's functions is read at a call as its body with the
+arguments as `let`s (`beta_lets`, as the translator's); `reach` keeps as functions only the root, the recursive definitions and
+the helpers larger than the translator's bound (`big_fun`, 40 nodes).  Nothing changes in the proved compiler: the kernel's
+check unfolds the helper and the `let`s itself (`zdiv a b` is `let a0 := a in let b0 := b in ..` up to delta, beta and zeta),
+and the program's functions set to be unfolded last (F50) are only the ones that stay functions.  A `let` of an argument
+costs nothing in KQL (a `let` binds the argument's atom, a written number stays a number).  Helpers met in a boolean position
+(a test on a helper giving back a boolean) are not read yet (a boolean `let` is not in the boolean sort).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -2221,11 +2252,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `a947eeb` (2026-10-31); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `f0f06ae` (2026-10-31); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 6 done (number functions that write the memory; merging calls; one number per variable): F51, the timing of all 16 programs, the tally (24 of 70), the gate |
+| (this commit) | §12.V: step 7 done (narrow memory: 29 of 70), its timing and gate; step 8's design (helpers written out) |
+| `5881c07` | `proved/KQR.v` + `KQRReify.v` step 7: 4-byte cells |
+| `f0f06ae` | §12.V: step 6 done (number functions that write the memory; merging calls; one number per variable): F51, the timing of all 16 programs, the tally (24 of 70), the gate |
 | `345077b` | `proved/KQR.v` + `KQRReify.v` step 6; `compile`'s call merging and numbering; `kitc.py`; `proved/examples/reflect_writes` |
 | `13b80d2` | §12.V: step 6's design |
 | `a947eeb` | §12.V: step 5 done (booleans): its tests, the tally (17 of 69), the timing, F50, the gate |
