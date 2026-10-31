@@ -2318,6 +2318,52 @@ is not read yet", on their `solve`) is this same last call; `hw_mmio` waits on m
   27 / 27; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (37 / 38 / 39 / 56 / 43 s); **52
   programs through the verified compiler, 0 read but refused by the check**.
 
+
+**Step 12, records and pairs — the design (2026-11-01).**  Six programs of the gate need them: `pair_ret` and `rec_pair`
+(pairs only), `rec_ret` and `rec_state` (records of the program's own types, `Record span := mkspan {lo; hi}`), `views` and
+`w64` (with other constructs).  The places: a record parameter (`inner .. (p : int * int) ..`, a loop's state), its fields
+(`fst p`, `acc r`), taking it apart (`let '(h, l) := ..`), a record built and passed (`inner f (i + 1) (fst p + h, snd p + l)
+s`), a function giving one back (`minmax` at the end of a loop, `fibp` after taking its own recursive call apart), a record
+bound by a `let` and used through its fields (`let w := scan .. in .. hi w ..`).
+- *Why the record must stay a value in the meaning.*  The translator states a record parameter as the constructor applied
+  to its fields (§1.6) and its walk proves the rest by case analysis.  Here the check is conversion only, and Rocq has no eta
+  for `prod` or for a non-primitive record: `g w` is not convertible to `g (fst w, snd w)`, nor `let w := c in .. hi w ..` to
+  `match c with mkspan a b => .. b .. end`.  So the meaning holds the user's record value itself — `p`, `w` — and its fields
+  are the user's own match on it; KQL holds the fields (D15), and the invariant says each field's atom holds that field.
+- *Record types*: a program's record types are **descriptors** given to the meaning as parameters, as the callees are: a type
+  `T`, its number of fields `rn`, its constructor on a list of numbers `rmk`, and its match `relim : forall P, T -> (list
+  i63 -> P) -> P` — for `prod`, `fun P v k => match v with (a, b) => k [a; b] end`, so a field is `relim v (fun l => nth j l
+  0)`, which reduces to the user's `fst p` / `hi w` (both are that match).  A descriptor's laws — building then taking
+  apart gives the fields back, `relim v k = k (relim v id)`, `rn` fields — are what the proof needs of it; for each program
+  they are proof terms by a dependent match (`match v with (a, b) => eq_refl end`), checked by the kernel like the copies'
+  equations.  Records of numbers only (D15); a pair and a record of the program's own type are the same construct.
+- *Signatures*: the parameters after the counters become a list of kinds, `KNum`, `KBool`, `KRec r` (record type `r`), in
+  the user's order — booleans as parameters come with it (step 5 deferred them to this step); the result gains `RRec r`.
+  The meaning's type is still the user's curried type, so the check stays a conversion.
+- *Syntax*: a sort of records (mutual with the numbers): a record variable, the constructor on numbers, a call or the
+  recursive call giving one back, tests and lets around one, taking one apart; among the numbers: a field of a record
+  variable, a `let` of a record, taking a record apart (`let '(a, b) := r in e`); a call's arguments become a list of
+  numbers, booleans and records.  A function's body may be a record (recursive on its counter or plain).
+- *KQL*: a record is its field atoms; passed as arguments, its fields.  **A function giving back a record returns its first
+  field and writes the others into cells `0 .. rn-2` of the slot block (63), the last one first (D16); the caller saves those
+  cells before the call, reads the fields after it and writes the saved values back, cell 0 first.**  Its statement: the
+  first field, with the end memory those writes make; the caller's memory is then the text's again by three of the memory
+  laws (`upd_upd`, `upd_rd_id`, `rd_upd_ne`: cell 0 written back over its write gives the memory with cells 1 .. written,
+  and so on down) — so a record of any number of fields needs no new law (F43 asked for the commuting law, D27; this order
+  of writing back does not need it).  The laws are `KQSpec.real_laws`, already in the trusted base (§1.10); the verified
+  compiler's theorem gains it as an assumption for programs that give back records.  Reading a slot cell back needs the
+  block to have room: every statement of a program takes `rn - 1 < kq_len 63` for its largest record (the translator
+  takes `1 < kq_len 63`, the driver provides it).
+- *Proof*: the invariant gains the record variables (each field's atom holds that field); the mutual lemma gains the record
+  sort and the argument lists; the callee assumption is stated over argument values of each kind (a record argument is a
+  value, its KQL arguments its fields), so passing a record variable needs no eta.
+- *Reifier*: kinds read off the parameter types (a record type: an inductive with one constructor whose fields are numbers;
+  `prod int int`); the program's descriptors made from the types met, with their law terms, defined by `kitc.py` like the
+  copies' meanings; `fst`, `snd` and a record's own projections as fields; a match on a record; a record built.
+- *Built in three parts*, each with its tests and the gate green: (1) kinds in signatures and argument lists (numbers and
+  booleans; the C of every program unchanged), (2) record parameters, fields, records built and passed, lets and matches,
+  (3) records given back through the slot block.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
