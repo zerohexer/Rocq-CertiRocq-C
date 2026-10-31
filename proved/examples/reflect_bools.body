@@ -1,0 +1,19 @@
+(* through the verified compiler (kitc.py --reflect): booleans -- tests made of &&, || and negb, a boolean let, choices on
+   them taken by conditional moves.  On the cells 36 24 100 35 17 5 7 77 63 49 18 9 (n = 12): count_in counts the cells
+   with 20 <= x < 60, 36 24 35 49, so 4; score gives 1 to a cell below 10 or above 90 and 10 to a cell other than 35 below
+   50: 10 10 1 0 10 11 11 0 0 10 10 11, so 84; 4 * 1000 + 84 = 4084 *)
+Fixpoint count_in (n : nat) (i lo hi acc : int) (s : mem) : int :=
+  match n with
+  | O => acc
+  | S m => let x := rd 0 i s in
+           let ok := (lo <=? x) && (x <? hi) in
+           count_in m (i + 1) lo hi (if ok then acc + 1 else acc) s
+  end.
+Definition score (x : int) : int :=
+  (if (x <? 10) || (90 <? x) then 1 else 0) + (if negb (x =? 35) && (x <? 50) then 10 else 0).
+Fixpoint total (n : nat) (i acc : int) (s : mem) : int :=
+  match n with O => acc | S m => total m (i + 1) (acc + score (rd 0 i s)) s end.
+Definition solve (n : nat) (s : mem) : int := count_in n 0 20 60 0 s * 1000 + total n 0 0 s.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_input 0).
