@@ -405,9 +405,12 @@ def reflect(name, entry, prog, no_proof):
             t += f"Lemma {name}_rok{j} : KQR.callee_ok {name}_prog (KQR.gid1 {j}) (KQR.cbz {j}) {sig(f)} {f[0]}.\n"
             if "__c" in f[0]:
                 # a copy: not a fix over its counter, so its statement comes from its two equations, each by conversion
-                thm, p0, p1 = ("compile_f_okrm", "KQR.fm0", "KQR.fm1") if f[4] == "true" else ("compile_f_okr", "KQR.fr0", "KQR.fr1")
+                # (a copy that writes the memory and gives back a number has a memory: no memory argument)
+                thm, p0, p1, mm = (("compile_f_okrm", "KQR.fm0", "KQR.fm1", f" {f[3]}") if f[4] == "true" else
+                                   ("compile_f_okrx", "KQR.fx0", "KQR.fx1", "") if f[5] == "true" else
+                                   ("compile_f_okr", "KQR.fr0", "KQR.fr1", f" {f[3]}"))
                 b = f"(KQRReify.body_at {name}_funs {j})"
-                t += (f"Proof. exact_no_check (KQR.{thm} {name}_prog {cs} KQR.gid1 {j} {int(f[1]) - 1} {f[2]} {f[3]} ({p0} {b}) ({p1} {b})"
+                t += (f"Proof. exact_no_check (KQR.{thm} {name}_prog {cs} KQR.gid1 {j} {int(f[1]) - 1} {f[2]}{mm} ({p0} {b}) ({p1} {b})"
                       f" {f[0]} eq_refl eq_refl (KQR.all_ok_callees {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl eq_refl"
                       f" (fun n => eq_refl)). Qed.\n")
             else:

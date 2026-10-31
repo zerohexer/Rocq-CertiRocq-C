@@ -271,7 +271,7 @@ Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option 
         match find_callee kn1 callees 0 with
         | Some (f, gs) =>
             let args := args1 in
-            if sr gs || negb (Nat.leb (sn gs) (length args)) then None else
+            if sr gs || sw gs || negb (Nat.leb (sn gs) (length args)) then None else
             match reify_cs (firstn (sn gs) args), read_mem ctx (sm gs) (skipn (sn gs) args) with
             | Some cs, Some nums => option_map (SCall f cs) (reify_args nums)
             | _, _ => None
@@ -567,12 +567,41 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
               | Some mm, Some cs, Some As => Some (XLetM mm (XRet (SCall f cs As)))
               | _, _, _ => None
               end
+            else if negb (sr gs) && sw gs && sm gs && Nat.leb (sn gs) (length (rev rnums)) then
+              (* a number function that writes, called at the end: its numbers on the memory before the one it is given *)
+              let rest := rev rnums in
+              match reify_m fuel ctx m, reify_cs ctx (firstn (sn gs) rest), reify_args ctx (skipn (sn gs) rest) with
+              | Some mm, Some cs, Some As => Some (XCall f cs As mm)
+              | _, _, _ => None
+              end
             else fallback
         | None, _ => match hb kn with Some b => reify_x fuel ctx (wout b args) | None => fallback end
         | _, _ => fallback
         end
   | tConst kn _ => match hb kn with Some b => reify_x fuel ctx b | None => fallback end
-  | tApp (tRel i) args => match nth_error ctx i with Some (CFn _ t) => reify_x fuel ctx (wout t args) | _ => fallback end
+  | tApp (tRel fi) args0 =>
+      match nth_error ctx fi, args0 with
+      | Some (CFn _ t), _ => reify_x fuel ctx (wout t args0)
+      | _, tRel mi :: rest0 =>
+          if is_ent CSelf ctx fi then
+            (* the recursive call at the end, given a memory made from the newest one *)
+            match drop_fns ctx fd rest0 with
+            | Some rest =>
+                if is_ent CPred ctx mi && Nat.leb fnx (length rest) then
+                  match rev (skipn fnx rest) with
+                  | m :: rnums =>
+                      match reify_cs ctx (firstn fnx rest), reify_args ctx (rev rnums), reify_m fuel ctx m with
+                      | Some cs, Some As, Some d => Some (XRec cs As d)
+                      | _, _, _ => None
+                      end
+                  | [] => None
+                  end
+                else None
+            | None => None
+            end
+          else fallback
+      | _, _ => fallback
+      end
   | _ => fallback
   end
   end.
@@ -627,7 +656,15 @@ Definition read_fun (Σ : global_env) (hb : kername -> option term) (tc : kernam
                   else
                     match reify callees (sm gs) nx hb tc [] 100000 ctx (bbody b0), reify callees (sm gs) nx hb tc [] 100000 (CPred :: ctx) (bbody b1) with
                     | Some e0, Some e1 => Some (gs, FRec e0 e1)
-                    | _, _ => None
+                    | _, _ =>
+                        (* a number made after memories in both branches: a loop that writes and gives back a number *)
+                        if sm gs then
+                          match reify_x callees (sm gs) nx hb tc [] 100000 ctx (bbody b0),
+                                reify_x callees (sm gs) nx hb tc [] 100000 (CPred :: ctx) (bbody b1) with
+                          | Some x0, Some x1 => Some (mksig (sn gs) (sk gs) true false true, FRecX x0 x1)
+                          | _, _ => None
+                          end
+                        else None
                     end
                 else None
             | _, _ => None
@@ -909,7 +946,14 @@ Definition read_tmpl (Σ : global_env) (hb : kername -> option term) (tc : kerna
                   match reify callees (sm gs) nx hb tc fd 100000 ctx (bbody b0),
                         reify callees (sm gs) nx hb tc fd 100000 (CPred :: ctx) (bbody b1) with
                   | Some e0, Some e1 => Some (gs, FRec e0 e1)
-                  | _, _ => None
+                  | _, _ =>
+                      if sm gs then
+                        match reify_x callees (sm gs) nx hb tc fd 100000 ctx (bbody b0),
+                              reify_x callees (sm gs) nx hb tc fd 100000 (CPred :: ctx) (bbody b1) with
+                        | Some x0, Some x1 => Some (mksig (sn gs) (sk gs) true false true, FRecX x0 x1)
+                        | _, _ => None
+                        end
+                      else None
                   end
               else None
           | _, _ => None
@@ -1117,8 +1161,8 @@ Definition why_fun (Σ : global_env) (hb : kername -> option term) (tc : kername
   if match read_fun Σ hb tc callees kn with Some _ => true | None => false end then
     ["read, but not well formed: a recursive call given a counter grown by S (it would have no bound), a call given fewer"
      ^ " arguments than its function takes, a counter more than 2^20 successors deep, a let of a counter grown by S over a"
-     ^ " variable (above the function's bound), or a call of a number function that writes the memory (not yet: the"
-     ^ " caller's memory would not be the text's)"]
+     ^ " variable (above the function's bound), or a call of a number function that writes the memory, or of the function"
+     ^ " itself when it writes, inside an expression (not yet: the caller's memory would not be the text's)"]
   else
   match lookup_env Σ kn with
   | Some (ConstantDecl cb) =>
@@ -1144,12 +1188,10 @@ Definition why_fun (Σ : global_env) (hb : kername -> option term) (tc : kername
           let r0 := if rec == "" then sigr else rec :: sigr in
           let r1 := fold_left (fun a t => blockers 100000 (fns ++ hs) nohb t a) texts r0 in
           let numfn := negb (is_ty kn_mem (ret_ty ty)) in
-          let isfix := match b with tFix _ _ => true | _ => false end in
           let mfns := filter (fun k => match lookup_env Σ k with
                                        | Some (ConstantDecl c) => is_ty kn_mem (ret_ty (cst_type c)) | _ => false end) fns in
           let r2 := if numfn && existsb (writes 100000 nohb mfns) texts
-                    then add_s (if isfix then "a recursive function that writes the memory and gives back a number"
-                                else "a number function that writes the memory where it is not read yet") r1
+                    then add_s "a number function that writes the memory where it is not read yet" r1
                     else r1 in
           let r3 := if nat_match_value 100000 inner then add_s "a match on a counter that is not a variable" r2 else r2 in
           let r4 := if bool_test 100000 inner then add_s "a test on a boolean that is not read (a call giving back a boolean)" r3 else r3 in
@@ -1551,6 +1593,86 @@ Time Lemma rw_ok1 : callee_ok rw_Pr (gid1 1) (cbz 1) (sig_at rw_src 1) rw.
 Proof.
   Time exact_no_check (compile_f_ok rw_Pr [existT ftype (sig_at rw_src 0) rw_c0] gid1 1 (sig_at rw_src 1) (body_at rw_src 1)
     eq_refl eq_refl (all_ok_callees rw_Pr gid1 [existT ftype (sig_at rw_src 0) rw_c0] (conj rw_ok0 Logic.I)) eq_refl eq_refl).
+Time Qed.
+
+(* ---------------------------------------------------------------- loops that write and give back a number *)
+(* [rdeg] (the shape of CF7D's loop) and [rdeg_top], its caller, read from the text: the recursive call at the end given a
+   written memory ([XRec]), the caller's last call ([XCall]) -- the trees of KQR.v's [deg] and [deg_top] *)
+Fixpoint rdeg (n : nat) (i acc : i63) (s : mem) : i63 :=
+  match n with
+  | O => acc
+  | S m => let d := PrimInt63.add (KQ.KQRun.rd 1 (PrimInt63.sub i 1) s) 1 in
+           rdeg m (PrimInt63.add i 1) (PrimInt63.add acc d) (KQ.KQRun.upd 1 i d s)
+  end.
+Definition rdeg_top (n : nat) (s : mem) : i63 := rdeg n 1 0 (KQ.KQRun.upd 1 0 0 s).
+Definition rdeg_src := ltac:(run_template_program (tmQuoteRec rdeg_top)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : map (fun x => (snd (fst x), snd x)) rdeg_src = [(deg_g, deg_b); (degt_g, degt_b)]).
+Definition rdeg_Pr := mkprog (funs_of 0 rdeg_src) [].
+Time Lemma rdeg_ok : callee_ok rdeg_Pr (gid1 0) (cbz 0) (sig_at rdeg_src 0) rdeg.
+Proof. Time exact_no_check (compile_f_ok rdeg_Pr [] gid1 0 (sig_at rdeg_src 0) (body_at rdeg_src 0) eq_refl eq_refl (no_callees rdeg_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma rdeg_top_ok : callee_ok rdeg_Pr (gid1 1) (cbz 1) (sig_at rdeg_src 1) rdeg_top.
+Proof.
+  Time exact_no_check (compile_f_ok rdeg_Pr [existT ftype (sig_at rdeg_src 0) rdeg] gid1 1 (sig_at rdeg_src 1) (body_at rdeg_src 1)
+    eq_refl eq_refl (all_ok_callees rdeg_Pr gid1 [existT ftype (sig_at rdeg_src 0) rdeg] (conj rdeg_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
+
+(* [rsearch] (the shape of CF460C's search): a memory made by a call, a boolean let on it, the recursive call given that memory
+   and a number chosen on the boolean *)
+Fixpoint rfill (n : nat) (i : i63) (s : mem) : mem := match n with O => s | S m => rfill m (PrimInt63.add i 1) (KQ.KQRun.upd 0 i i s) end.
+Fixpoint rsearch (n k : nat) (lo : i63) (s : mem) : i63 :=
+  match n with
+  | O => lo
+  | S m => let s1 := rfill k lo s in
+           let ok := PrimInt63.eqb (KQ.KQRun.rd 0 lo s1) lo in
+           rsearch m k (if ok then PrimInt63.add lo 1 else lo) s1
+  end.
+Definition rsearch_src := ltac:(run_template_program (tmQuoteRec rsearch)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : map (fun x => (snd (fst x), snd x)) rsearch_src =
+  [(mksig 1 1 true true false, FRecM MCur (MRec CNil (SCons (SOp Badd (SVar 0) (SInt 1)) SNil) (MUpd (SInt 0) (SVar 0) (SVar 0) MCur)));
+   (mksig 2 1 true false true, FRecX (XRet (SVar 0))
+      (XLetM (MCall 0 (CCons (CVar 1) CNil) (SCons (SVar 0) SNil) MCur)
+        (XLetB (BCmp Ceq (SRd (SInt 0) (SVar 0)) (SVar 0))
+          (XRec (CCons (CVar 1) CNil) (SCons (SIfB (BVar 0) (SOp Badd (SVar 0) (SInt 1)) (SVar 0)) SNil) MCur))))]).
+Definition rsearch_Pr := mkprog (funs_of 0 rsearch_src) [].
+Time Lemma rfill_ok : callee_ok rsearch_Pr (gid1 0) (cbz 0) (sig_at rsearch_src 0) rfill.
+Proof. Time exact_no_check (compile_f_ok rsearch_Pr [] gid1 0 (sig_at rsearch_src 0) (body_at rsearch_src 0) eq_refl eq_refl (no_callees rsearch_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma rsearch_ok : callee_ok rsearch_Pr (gid1 1) (cbz 1) (sig_at rsearch_src 1) rsearch.
+Proof.
+  Time exact_no_check (compile_f_ok rsearch_Pr [existT ftype (sig_at rsearch_src 0) rfill] gid1 1 (sig_at rsearch_src 1) (body_at rsearch_src 1)
+    eq_refl eq_refl (all_ok_callees rsearch_Pr gid1 [existT ftype (sig_at rsearch_src 0) rfill] (conj rfill_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
+Print Assumptions rsearch_ok.
+
+(* a template that writes and gives back a number: its copy is read as a loop that writes ([read_tmpl]), its statement from
+   its two equations ([compile_f_okrx]), the caller's last call a call of the copy; the function given is written out, its
+   argument bound by a let where it is not a variable *)
+Fixpoint rtdeg (n : nat) (f : i63 -> i63) (i acc : i63) (s : mem) : i63 :=
+  match n with
+  | O => acc
+  | S m => rtdeg m f (PrimInt63.add i 1) (PrimInt63.add acc (f (KQ.KQRun.rd 1 i s))) (KQ.KQRun.upd 1 i (f i) s)
+  end.
+Definition rtuse (n : nat) (s : mem) : i63 := rtdeg n radd3 0 0 s.
+Definition rtuse_res := ltac:(run_template_program (tmQuoteRec rtuse)
+  (fun q => let r := eval vm_compute in (reify_prog2 q) in match r with Some ?x => exact x end)).
+Definition rtuse_src := fst rtuse_res.
+Check (eq_refl : map (fun x => (snd (fst (fst x)), snd x)) rtuse_src =
+  [("rtdeg__c0"%bs, FRecX (XRet (SVar 0))
+      (XRec CNil (SCons (SOp Badd (SVar 1) (SInt 1)) (SCons (SOp Badd (SVar 0) (SLet (SRd (SInt 1) (SVar 1)) (SOp Badd (SVar 0) (SInt 3)))) SNil))
+         (MUpd (SInt 1) (SVar 1) (SOp Badd (SVar 1) (SInt 3)) MCur)));
+   ("rtuse"%bs, FPlainX (XCall 0 (CCons (CVar 0) CNil) (SCons (SInt 0) (SCons (SInt 0) SNil)) MCur))]).
+MetaRocq Run (tmMkDefinition "rtuse_c0"%bs (meaning_of (snd rtuse_res) "rtdeg__c0"%bs)).
+Definition rtuse_Pr := mkprog (funs_of 0 rtuse_src) [].
+Time Lemma rtuse_ok0 : callee_ok rtuse_Pr (gid1 0) (cbz 0) (sig_at rtuse_src 0) rtuse_c0.
+Proof.
+  Time exact_no_check (compile_f_okrx rtuse_Pr [] gid1 0 0 2 (fx0 (body_at rtuse_src 0)) (fx1 (body_at rtuse_src 0)) rtuse_c0
+    eq_refl eq_refl (no_callees rtuse_Pr gid1) eq_refl eq_refl eq_refl (fun n => eq_refl)).
+Time Qed.
+Time Lemma rtuse_ok1 : callee_ok rtuse_Pr (gid1 1) (cbz 1) (sig_at rtuse_src 1) rtuse.
+Proof.
+  Time exact_no_check (compile_f_ok rtuse_Pr [existT ftype (sig_at rtuse_src 0) rtuse_c0] gid1 1 (sig_at rtuse_src 1) (body_at rtuse_src 1)
+    eq_refl eq_refl (all_ok_callees rtuse_Pr gid1 [existT ftype (sig_at rtuse_src 0) rtuse_c0] (conj rtuse_ok0 Logic.I)) eq_refl eq_refl).
 Time Qed.
 
 (* linearity: a memory used after a newer one was made has no tree *)
