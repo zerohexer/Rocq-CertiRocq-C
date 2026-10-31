@@ -49,9 +49,8 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    values (several counters, `S`/`O`, budgets, a match on a counter inside a body), booleans (tests made of `&&`, `||`,
    `negb`, boolean lets), choices between numbers as conditional moves — each per-program step in milliseconds, long
    read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program
-   through it when every function is read (17 of the gate's 69 programs today, each timed against the translator's build), the
-   translator otherwise; next number functions that write the memory, in the order of §12.V's tally.  Emit-then-prove is the
-   interim.
+   through it when every function is read (24 of the gate's 70 programs today, each timed against the translator's build), the
+   translator otherwise; next narrow memory, in the order of §12.V's tally.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -1579,6 +1578,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F48 | The proof cache's key did not include Rocq itself: the tactic libraries, `KQRun.v`, the header and the printed functions only.  A tree that kept its cache across a change of kernel (an upgrade, our fork, D28) would have reused proofs the old kernel checked without checking them again (found 2026-10-31 when the kernel changed) | the key includes the content of the `coqc` / `rocq` executables (the kernel is linked into them) and `ROCQ_CONV_CACHE` (`rocq_id` in `kitc.py`); every cached proof is missed once after the change |
 | F49 | Moving a program from the translator to the verified compiler changes its C, and the gate checks answers, not speed: two corpus programs became 1.45x slower in step 4 (`CF295B`, `CF295Bv2`: a minimum written into a cell, a conditional move in the translator's C, a jump in `compile`'s), unseen by the gate (2026-10-31) | if-conversion in `compile` (§12.V), timed again: within the spread; a program moved to the verified path is timed against the translator's build before the move is reported |
 | F50 | A call given a written counter (`dfs 20 ..`) made the per-program check run out of memory: comparing the function with its tree's meaning, the kernel unfolded the user's function first, and a function applied to a written counter is worked out round by round (`tw 20`, two calls a round: 4.7 s, 1.2 GB); the compiler's meaning functions set to unfold first did not help (2026-10-31, `CF813F`) | `kitc.py` sets the program's functions to be unfolded last (`Strategy opaque`) in each theorem file — the order only; `tw 20` 0.002 s, pinned in `KQR.v` |
+| F51 | The verified compiler's C for `CF868F` was 1.48x slower than the translator's: two calls of the function itself at the end of a test were a jump (the translator merges them into one call with chosen arguments), and with that fixed still 1.22x: temporaries reused across the arms of a test (the same KQL with every variable bound once ran at the translator's speed; 85 register moves against 67 in the loop) (2026-10-31) | `compile` merges such calls (equal arguments once) and numbers every variable once (`after`); all 16 programs on the verified path timed within the spread |
 | F38 | MetaRocq's formal evaluation (`EWcbvEval.eval`, `PCUICWcbvEval`) has rules for primitive values only, none for primitive operations: `PrimInt63.add` has no body, `eval_delta` cannot fire, every program here is stuck in it | the verified compiler is built by reflection over our own syntax instead (D26, §1.12) (read in the image's MetaRocq sources, 2026-10-30) |
 | F37 | CakeML's architecture is ours: a proof-producing translator from the logic's functions on top, one verified compiler below; Pancake is verified through a proof-producing decompiler.  The difference is that CakeML builds each proof by construction while ours searches | D25, §1.11 (read in the CakeML repository, 2026-10-30) |
 
@@ -2005,6 +2005,50 @@ the end memory hidden: `runx` (`exists M', runk .. M'`).
   tests; and a read or a call whose memory is made in place (`rd h i (f .. s)`) is read as `let s2 := f .. s in rd h i s2` —
   the same term up to `let` (zeta), so the check is unchanged; the numbers of that read must not name the older memory (dead).
 
+**Step 6 done (2026-10-31): number functions that write the memory — and two more of the translator's code-shape rules.**
+- *Built as designed*: `sig.sw`; the sort `sx` with `denote_x` and `endx`, `ctailx` and its lemma `ctailx_ok` (the KQL gives the
+  number and ends with exactly `endx`'s memory — no determinism lemma needed); `callee_ok` gives a writing function's statement
+  as `runx` (some end memory); `SCall` / `MCall` of a writing function refused by `wf`, and the old proof cases take the new
+  conjunct.  The reifier reads such a function when the number reader does not, a read or call whose memory is made in place
+  as a memory `let`.  Tests: `mafter` (memory lets, a call, a test, `rd 0 2 (bump 2 s3)`), its theorem in 0.003 s; a call of
+  it from a number refused by `wf`.
+- *Timing found two more rules the verified compiler lacked* (F51; the six moved programs timed against the translator's
+  build, as F49 asks): `CF868F` was 1.48x slower.  (1) **Merging two calls of the function itself**: `if v <? best then scan ..
+  v p s else scan .. best opt s` is one loop step in the translator's C, the differing arguments chosen by conditional moves
+  (§1.5's second rewrite, D17); `compile` made it a jump.  Now `ctail` / `ctailm` merge a test whose two ends are calls of the
+  function itself on the newest memory, with arguments of plain arithmetic: equal arguments (`same_e`, structural) worked out
+  once, the others chosen (`cmerge_s` / `cmerge_c`, their lemmas `cmerge_s_ok` / `cmerge_c_ok`, the loop lemmas
+  `loop_call_ok` / `loopm_call_ok`); as for if-conversion, which calls are merged is a speed decision, the proof needs only
+  that both argument lists evaluate.  Test: `argmin` (the shape of `CF868F`'s loop).  This brought `CF868F` to 1.22x, and a
+  first version that also moved equal arguments (`p + 1` on both sides) left the next round waiting on the test.  (2) **Each
+  variable bound once per function**: with the C now the translator's construct for construct, `CF868F` was still 1.22x
+  slower; the two C files differed only in the numbering of temporaries — `compile` reused numbers across the arms of a test
+  (both arms start from the same next variable), the translator numbers every variable once.  Measured apart: the same KQL
+  renamed to unique numbers (a throwaway script) ran at the translator's speed (112.7 ms against 114.0; reversing the
+  declarations or reordering the functions changed nothing); the reused numbers give the C compiler worse register choices
+  (85 register moves against 67 in the loop).  Now the second arm of every test starts after the first arm's variables
+  (`after n e`, `maxv`) — twelve places in the compiler; the proof needs only that the second arm starts at some later
+  variable, which the invariant already allows (`after_le`, `agree_mono`).
+- *Timed (best of 7 ms, the translator's / the verified compiler's), all 16 corpus programs on the verified path*: `CF1167C`
+  8.9 / 9.3, `CF165E` 101.7 / 101.5, `CF165Ev2` 83.6 / 79.6, `CF235C` 61.3 / 57.9, `CF235Cv2` 68.2 / 66.1, `CF295B` 96.1 / 98.0,
+  `CF295Bv2` 91.1 / 98.1, `CF339D` 180.7 / 183.7, `CF380C` 62.1 / 66.0, `CF380Cp` 47.9 / 47.7, `CF813F` 45.2 / 46.5, `CF813Fv2`
+  46.1 / 43.4, `CF20C` 7.4 / 6.9, `CF163A` 24.6 / 25.0, `CF868F` 107.3 / 107.3, `CF868Fv2` 64.3 / 63.9 — within the spread.
+- *Through the verified compiler: 24 of the gate's 70 programs* (was 17 of 69): `helper_write`, `rmw_chain`, `CF20C`, `CF163A`,
+  `CF868F`, `CF868Fv2` and the new example `reflect_writes` (a write, a call that fills, a number let, a branch reading a memory
+  made in place; answer 64, worked out by hand; the translator gives 64 too).
+- *The gate with `KQ_REFLECT=1`, on the fork, on the final tree (2026-10-31): everything passes* — `make.sh` `core-ok`; examples
+  26 / 26; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (37 / 37 / 39 / 55 / 42 s); **24
+  programs through the verified compiler, 0 read but refused by the check**.
+- *Not yet read*: a call of a writing function (the caller's memory must then be dropped — the translator's `runx` caller
+  rule), a loop that writes and gives back a number (its end memory, from the recursion, is hidden by its statement), and a
+  memory made in place inside a larger expression (`rd .. (f s) + 1`: only at the head of the last number today).
+- *The tally after the step* (over the 69 of the tally run): `KQRun.v`'s helpers 21, number functions that write in places not
+  read yet 16, narrow memory 15, machine operations 10, functions given to functions 8, loops that write and give a number 5,
+  a `let` of a counter 4, records 4, tests on calls giving back a boolean 4, boolean parameters 3, `u64` 2, negation 2, the
+  rest 3.  **The order that completes the most now**: narrow memory (+5, 28 of 69), `KQRun.v`'s helpers (+4, 32), calls of
+  writing functions and reads in place inside expressions (+3, 35), machine operations (+8, 43: the kernels), functions given
+  to functions (+4, 47), loops that write and give a number (+5, 52), then the rest.  **Next: narrow memory.**
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -2177,11 +2221,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `913445c` (2026-10-31); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `a947eeb` (2026-10-31); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 5 done (booleans): its tests, the tally (17 of 69), the timing, F50, the gate |
+| (this commit) | §12.V: step 6 done (number functions that write the memory; merging calls; one number per variable): F51, the timing of all 16 programs, the tally (24 of 70), the gate |
+| `345077b` | `proved/KQR.v` + `KQRReify.v` step 6; `compile`'s call merging and numbering; `kitc.py`; `proved/examples/reflect_writes` |
+| `13b80d2` | §12.V: step 6's design |
+| `a947eeb` | §12.V: step 5 done (booleans): its tests, the tally (17 of 69), the timing, F50, the gate |
 | `82ef78f` | `kitc.py --reflect`: the program's functions unfolded last in the check (F50), pinned in `KQR.v`; `reflect_bools`' expected answer corrected |
 | `2c93d56` | `proved/KQR.v` + `KQRReify.v` step 5: booleans; `proved/examples/reflect_bools` |
 | `110913d` | §12.V: the if-conversion and its timing (F49); step 5's design (booleans) |
