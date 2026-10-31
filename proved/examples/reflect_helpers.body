@@ -1,0 +1,19 @@
+(* through the verified compiler (kitc.py --reflect): helpers written out where they are used -- the kit's zdiv and zmod
+   (Z's rounding: the quotient down, the remainder with the divisor's sign), zabs, zmax, zmin; a helper of the file given a
+   function; a test on a helper giving back a boolean that starts with lets.  On the cells 7 -7 15 -15 4 -3 9 2 with n = 8,
+   q = zdiv x 4 + zmod x 3 is 2 0 3 -4 2 -1 2 2; small i i holds (2i < 20 and cell i < 2i) except at i = 0 and 2, where
+   r = zmax (zabs q) (zmin acc 5) is 2 and 4, elsewhere r = q + 2; the sum is 19 *)
+Definition twice (f : int -> int) (x : int) : int := f (f x).
+Definition small (a b : int) (s : mem) : bool := let t := a * 2 in let u := rd 0 b s in (t <? 20) && (u <? t).
+Fixpoint go (n : nat) (i acc : int) (s : mem) : int :=
+  match n with
+  | O => acc
+  | S m => let x := rd 0 i s in
+           let q := zdiv x 4 + zmod x 3 in
+           let r := if small i i s then twice (fun z => z + 1) q else zmax (zabs q) (zmin acc 5) in
+           go m (i + 1) (acc + r) s
+  end.
+Definition solve (n : nat) (s : mem) : int := go n 0 0 s.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_input 0).
