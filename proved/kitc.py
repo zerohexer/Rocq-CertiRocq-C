@@ -372,10 +372,13 @@ def reflect(name, entry, prog, no_proof):
     f0 = os.path.join(GEN, f"{name}_r.v")
     open(f0, "w").write(HDR + "From KQC Require KQR KQRReify.\n" + prog
         + f"\nDefinition {name}_res := ltac:(run_template_program (tmQuoteRec {entry})\n"
-        + "  (fun q => let r := eval vm_compute in (KQRReify.reify_prog q, KQRReify.reify_why q) in exact r)).\n"
-        + f"Definition {name}_src := fst {name}_res.\n"
+        + "  (fun q => let r := eval vm_compute in (KQRReify.reify_prog2 q, KQRReify.reify_why q) in exact r)).\n"
+        + f"Definition {name}_src := option_map fst (fst {name}_res).\n"
+        + f"Definition {name}_mts := match fst {name}_res with Some x => snd x | None => [] end.\n"
         + f'Redirect "{name}_rinfo" Eval vm_compute in (option_map KQRReify.info_of {name}_src).\n'
-        + f'Redirect "{name}_rwhy" Eval vm_compute in (snd {name}_res).\n')
+        + f'Redirect "{name}_rwhy" Eval vm_compute in (snd {name}_res).\n'
+        # a copy of a recursive function for the functions it is given: its meaning, the function applied to them (step 10)
+        + f"MetaRocq Run (monad_iter (fun p => tmMkDefinition (fst p) (snd p)) {name}_mts).\n")
     rc, out = coqc(f0)
     info = open(os.path.join(GEN, f"{name}_rinfo.out")).read() if rc == 0 and os.path.exists(os.path.join(GEN, f"{name}_rinfo.out")) else ""
     fs = re.findall(r'\("([^"]+)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*(\d+)(?:%nat)?,\s*(true|false),\s*(true|false),\s*(true|false)\)', info)
@@ -393,14 +396,23 @@ def reflect(name, entry, prog, no_proof):
     # the program's functions are unfolded last when the kernel compares a function with the meaning of its syntax tree: a
     # function applied to a written counter (f 20 ..) would otherwise be worked out round by round (F50).  The order of
     # unfolding only: nothing that converts stops converting
-    t += "Strategy opaque [" + " ".join(f[0] for f in fs) + "].\n"
+    tmpls = sorted({f[0].split("__c")[0] for f in fs if "__c" in f[0]})   # the templates the copies come from (step 10)
+    t += "Strategy opaque [" + " ".join([f[0] for f in fs if "__c" not in f[0]] + tmpls) + "].\n"   # a copy is unfolded first
     if not no_proof:
         for j, f in enumerate(fs):
             cs = "[" + "; ".join(f"existT KQR.ftype {sig(g)} {g[0]}" for g in fs[:j]) + "]"
             oks = "".join(f"(conj {name}_rok{i} " for i in range(j)) + "Logic.I" + ")" * j
-            t += (f"Lemma {name}_rok{j} : KQR.callee_ok {name}_prog (KQR.gid1 {j}) (KQR.cbz {j}) {sig(f)} {f[0]}.\n"
-                  f"Proof. exact_no_check (KQR.compile_f_ok {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j})"
-                  f" eq_refl eq_refl (KQR.all_ok_callees {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl). Qed.\n")
+            t += f"Lemma {name}_rok{j} : KQR.callee_ok {name}_prog (KQR.gid1 {j}) (KQR.cbz {j}) {sig(f)} {f[0]}.\n"
+            if "__c" in f[0]:
+                # a copy: not a fix over its counter, so its statement comes from its two equations, each by conversion
+                thm, p0, p1 = ("compile_f_okrm", "KQR.fm0", "KQR.fm1") if f[4] == "true" else ("compile_f_okr", "KQR.fr0", "KQR.fr1")
+                b = f"(KQRReify.body_at {name}_funs {j})"
+                t += (f"Proof. exact_no_check (KQR.{thm} {name}_prog {cs} KQR.gid1 {j} {int(f[1]) - 1} {f[2]} {f[3]} ({p0} {b}) ({p1} {b})"
+                      f" {f[0]} eq_refl eq_refl (KQR.all_ok_callees {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl eq_refl"
+                      f" (fun n => eq_refl)). Qed.\n")
+            else:
+                t += (f"Proof. exact_no_check (KQR.compile_f_ok {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j})"
+                      f" eq_refl eq_refl (KQR.all_ok_callees {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl). Qed.\n")
     t += c_print(name)
     f1 = os.path.join(GEN, f"{name}_rp.v")
     open(f1, "w").write(t)

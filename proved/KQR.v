@@ -273,6 +273,12 @@ Fixpoint endx (cs : list callee) (rec : list nat -> list i63 -> mem -> i63) (rec
     the same; or a number made after memories *)
 Inductive fbody := FRec (e0 e1 : sexp) | FPlain (e : sexp) | FRecM (m0 m1 : smem) | FPlainM (m : smem) | FPlainX (x : sx).
 
+(** the parts of a recursive body (for the statement of a function given as a term, [compile_f_okr]) *)
+Definition fr0 (b : fbody) : sexp := match b with FRec e0 _ => e0 | _ => SInt 0%uint63 end.
+Definition fr1 (b : fbody) : sexp := match b with FRec _ e1 => e1 | _ => SInt 0%uint63 end.
+Definition fm0 (b : fbody) : smem := match b with FRecM m0 _ => m0 | _ => MCur end.
+Definition fm1 (b : fbody) : smem := match b with FRecM _ m1 => m1 | _ => MCur end.
+
 Definition dnum : list nat -> list i63 -> mem -> i63 := fun _ _ _ => 0%uint63.
 Definition dmem : list nat -> list i63 -> mem -> mem := fun _ _ s => s.
 
@@ -1033,6 +1039,120 @@ Proof.
   - intros x IHx y IHy cs rec cenv benv env s s' r nx k Hr W. simpl in *. apply andb_true_iff in W as [Wx Wy].
     rewrite (IHx _ _ _ _ _ s s' _ _ _ Hr Wx), (IHy _ _ _ _ _ s s' _ _ _ Hr Wy). reflexivity.
   - intros x IHx cs rec cenv benv env s s' r nx k Hr W. simpl in *. rewrite (IHx _ _ _ _ _ s s' _ _ _ Hr W). reflexivity.
+Qed.
+
+(** the meaning depends on the recursive call only through its values on the arguments it is given -- counters and numbers
+    as many as the recursion takes ([wf]) *)
+Lemma denote_rec_ext :
+  (forall e cs rec1 rec2 cenv benv env s r mok nx k,
+     (forall cvs l s', length cvs = nx -> length l = k -> rec1 cvs l s' = rec2 cvs l s') ->
+     wf (map (@projT1 _ _) cs) r mok nx k e = true -> denote_e cs rec1 cenv benv env s e = denote_e cs rec2 cenv benv env s e)
+  /\
+  (forall es cs rec1 rec2 cenv benv env s r mok nx k,
+     (forall cvs l s', length cvs = nx -> length l = k -> rec1 cvs l s' = rec2 cvs l s') ->
+     wfs (map (@projT1 _ _) cs) r mok nx k es = true -> denote_es cs rec1 cenv benv env s es = denote_es cs rec2 cenv benv env s es)
+  /\
+  (forall c cs rec1 rec2 cenv benv env s r mok nx k,
+     (forall cvs l s', length cvs = nx -> length l = k -> rec1 cvs l s' = rec2 cvs l s') ->
+     wfc (map (@projT1 _ _) cs) r mok nx k c = true -> denote_c cs rec1 cenv benv env s c = denote_c cs rec2 cenv benv env s c)
+  /\
+  (forall ccs cs rec1 rec2 cenv benv env s r mok nx k,
+     (forall cvs l s', length cvs = nx -> length l = k -> rec1 cvs l s' = rec2 cvs l s') ->
+     wfcs (map (@projT1 _ _) cs) r mok nx k ccs = true -> denote_cs cs rec1 cenv benv env s ccs = denote_cs cs rec2 cenv benv env s ccs)
+  /\
+  (forall b cs rec1 rec2 cenv benv env s r mok nx k,
+     (forall cvs l s', length cvs = nx -> length l = k -> rec1 cvs l s' = rec2 cvs l s') ->
+     wfb (map (@projT1 _ _) cs) r mok nx k b = true -> denote_b cs rec1 cenv benv env s b = denote_b cs rec2 cenv benv env s b).
+Proof.
+  apply sexp_comb.
+  - intros; reflexivity.
+  - intros; reflexivity.
+  - intros o a IHa b IHb cs rec1 rec2 cenv benv env s r mok nx k Hr W. cbn [wf denote_e] in *. apply andb_true_iff in W as [Wa Wb].
+    rewrite (IHa _ _ _ _ _ _ _ _ _ _ _ Hr Wa), (IHb _ _ _ _ _ _ _ _ _ _ _ Hr Wb). reflexivity.
+  - intros c a IHa b IHb t IHt e IHe cs rec1 rec2 cenv benv env s r mok nx k Hr W. cbn [wf denote_e] in *.
+    apply andb_true_iff in W as [W Wf]. apply andb_true_iff in W as [W Wt]. apply andb_true_iff in W as [Wa Wb].
+    rewrite (IHa _ _ _ _ _ _ _ _ _ _ _ Hr Wa), (IHb _ _ _ _ _ _ _ _ _ _ _ Hr Wb), (IHt _ _ _ _ _ _ _ _ _ _ _ Hr Wt),
+            (IHe _ _ _ _ _ _ _ _ _ _ _ Hr Wf). reflexivity.
+  - intros e1 IH1 e2 IH2 cs rec1 rec2 cenv benv env s r mok nx k Hr W. cbn [wf denote_e] in *. apply andb_true_iff in W as [W1 W2].
+    rewrite (IH1 _ _ _ _ _ _ _ _ _ _ _ Hr W1). apply (IH2 _ _ _ _ _ _ _ _ _ _ _ Hr W2).
+  - intros h IHh i IHi cs rec1 rec2 cenv benv env s r mok nx k Hr W. cbn [wf denote_e] in *.
+    apply andb_true_iff in W as [W Wi]. apply andb_true_iff in W as [_ Wh].
+    rewrite (IHh _ _ _ _ _ _ _ _ _ _ _ Hr Wh), (IHi _ _ _ _ _ _ _ _ _ _ _ Hr Wi). reflexivity.
+  - intros ccs IHc args IHs cs rec1 rec2 cenv benv env s r mok nx k Hr W. cbn [wf denote_e] in *.
+    apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [W Wc]. apply andb_true_iff in W as [W Wfl].
+    apply andb_true_iff in W as [W Wk]. apply andb_true_iff in W as [_ Wn]. apply Nat.eqb_eq in Wn, Wk.
+    rewrite (IHc _ _ _ _ _ _ _ _ _ _ _ Hr Wc), (IHs _ _ _ _ _ _ _ _ _ _ _ Hr Ws).
+    apply Hr; [rewrite len_denote_cs; exact Wn | rewrite len_denote_es; exact Wk].
+  - intros fi ccs IHc args IHs cs rec1 rec2 cenv benv env s r mok nx k Hr W. cbn [wf] in W. rewrite nth_sigs in W. cbn [denote_e].
+    unfold callee in *. destruct (nth_error cs fi) as [[gs h]|] eqn:E; simpl in W; [|discriminate].
+    apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [W Wc].
+    rewrite (IHc _ _ _ _ _ _ _ _ _ _ _ Hr Wc), (IHs _ _ _ _ _ _ _ _ _ _ _ Hr Ws). reflexivity.
+  - intros c e0 IH0 e1 IH1 cs rec1 rec2 cenv benv env s r mok nx k Hr W. cbn [wf denote_e] in *. apply andb_true_iff in W as [W0 W1].
+    destruct (nth c cenv O); [apply (IH0 _ _ _ _ _ _ _ _ _ _ _ Hr W0) | apply (IH1 _ _ _ _ _ _ _ _ _ _ _ Hr W1)].
+  - intros b IHb t IHt e IHe cs rec1 rec2 cenv benv env s r mok nx k Hr W. cbn [wf denote_e] in *.
+    apply andb_true_iff in W as [W We]. apply andb_true_iff in W as [Wb Wt].
+    rewrite (IHb _ _ _ _ _ _ _ _ _ _ _ Hr Wb), (IHt _ _ _ _ _ _ _ _ _ _ _ Hr Wt), (IHe _ _ _ _ _ _ _ _ _ _ _ Hr We). reflexivity.
+  - intros b IHb e IHe cs rec1 rec2 cenv benv env s r mok nx k Hr W. cbn [wf denote_e] in *. apply andb_true_iff in W as [Wb We].
+    rewrite (IHb _ _ _ _ _ _ _ _ _ _ _ Hr Wb). apply (IHe _ _ _ _ _ _ _ _ _ _ _ Hr We).
+  - intros h IHh i IHi cs rec1 rec2 cenv benv env s r mok nx k Hr W. cbn [wf denote_e] in *.
+    apply andb_true_iff in W as [W Wi]. apply andb_true_iff in W as [_ Wh].
+    rewrite (IHh _ _ _ _ _ _ _ _ _ _ _ Hr Wh), (IHi _ _ _ _ _ _ _ _ _ _ _ Hr Wi). reflexivity.
+  - intros c IHc e IHe cs rec1 rec2 cenv benv env s r mok nx k Hr W. cbn [wf denote_e] in *.
+    apply andb_true_iff in W as [W We]. apply andb_true_iff in W as [Wc _].
+    rewrite (IHc _ _ _ _ _ _ _ _ _ _ _ Hr Wc). apply (IHe _ _ _ _ _ _ _ _ _ _ _ Hr We).
+  - intros; reflexivity.
+  - intros e IHe es IHes cs rec1 rec2 cenv benv env s r mok nx k Hr W. cbn [wfs denote_es] in *. apply andb_true_iff in W as [We Wes].
+    rewrite (IHe _ _ _ _ _ _ _ _ _ _ _ Hr We), (IHes _ _ _ _ _ _ _ _ _ _ _ Hr Wes). reflexivity.
+  - intros; reflexivity.
+  - intros; reflexivity.
+  - intros c IH cs rec1 rec2 cenv benv env s r mok nx k Hr W. cbn [wfc denote_c] in *. rewrite (IH _ _ _ _ _ _ _ _ _ _ _ Hr W). reflexivity.
+  - intros e IH cs rec1 rec2 cenv benv env s r mok nx k Hr W. cbn [wfc denote_c] in *. rewrite (IH _ _ _ _ _ _ _ _ _ _ _ Hr W). reflexivity.
+  - intros; reflexivity.
+  - intros c IHc ccs IHs cs rec1 rec2 cenv benv env s r mok nx k Hr W. cbn [wfcs denote_cs] in *. apply andb_true_iff in W as [Wc Ws].
+    rewrite (IHc _ _ _ _ _ _ _ _ _ _ _ Hr Wc), (IHs _ _ _ _ _ _ _ _ _ _ _ Hr Ws). reflexivity.
+  - intros c x IHx y IHy cs rec1 rec2 cenv benv env s r mok nx k Hr W. cbn [wfb denote_b] in *. apply andb_true_iff in W as [Wx Wy].
+    rewrite (IHx _ _ _ _ _ _ _ _ _ _ _ Hr Wx), (IHy _ _ _ _ _ _ _ _ _ _ _ Hr Wy). reflexivity.
+  - intros; reflexivity.
+  - intros; reflexivity.
+  - intros; reflexivity.
+  - intros x IHx y IHy cs rec1 rec2 cenv benv env s r mok nx k Hr W. cbn [wfb denote_b] in *. apply andb_true_iff in W as [Wx Wy].
+    rewrite (IHx _ _ _ _ _ _ _ _ _ _ _ Hr Wx), (IHy _ _ _ _ _ _ _ _ _ _ _ Hr Wy). reflexivity.
+  - intros x IHx y IHy cs rec1 rec2 cenv benv env s r mok nx k Hr W. cbn [wfb denote_b] in *. apply andb_true_iff in W as [Wx Wy].
+    rewrite (IHx _ _ _ _ _ _ _ _ _ _ _ Hr Wx), (IHy _ _ _ _ _ _ _ _ _ _ _ Hr Wy). reflexivity.
+  - intros x IHx cs rec1 rec2 cenv benv env s r mok nx k Hr W. cbn [wfb denote_b] in *. rewrite (IHx _ _ _ _ _ _ _ _ _ _ _ Hr W). reflexivity.
+Qed.
+
+(** the same for a memory and its recursive call *)
+Lemma denote_m_recm_ext : forall m cs rec recm1 recm2 cenv benv env s r rm mok nx k,
+  (forall cvs l s', length cvs = nx -> length l = k -> recm1 cvs l s' = recm2 cvs l s') ->
+  wfm (map (@projT1 _ _) cs) r rm mok nx k m = true ->
+  denote_m cs rec recm1 cenv benv env s m = denote_m cs rec recm2 cenv benv env s m.
+Proof.
+  induction m as [| h i x m IH | e m IH | m1 IH1 m2 IH2 | c a b m1 IH1 m2 IH2 | ccs args m IH | fi ccs args m IH | c m0 IH0 m1 IH1
+                 | b m1 IH1 m2 IH2 | b m IH | h i x m IH | c m IH]; intros cs rec recm1 recm2 cenv benv env s r rm mok nx k Hr W;
+    cbn [denote_m wfm] in *.
+  - reflexivity.
+  - apply andb_true_iff in W as [_ Wm]. rewrite (IH cs rec recm1 recm2 cenv benv env s r rm mok nx k Hr Wm). reflexivity.
+  - apply andb_true_iff in W as [_ Wm]. apply (IH cs rec recm1 recm2 cenv benv _ s r rm mok nx k Hr Wm).
+  - apply andb_true_iff in W as [W1 W2]. rewrite (IH1 cs rec recm1 recm2 cenv benv env s r rm mok nx k Hr W1).
+    apply (IH2 cs rec recm1 recm2 cenv benv env _ r rm mok nx k Hr W2).
+  - apply andb_true_iff in W as [W W2]. apply andb_true_iff in W as [_ W1].
+    rewrite (IH1 cs rec recm1 recm2 cenv benv env s r rm mok nx k Hr W1), (IH2 cs rec recm1 recm2 cenv benv env s r rm mok nx k Hr W2).
+    reflexivity.
+  - apply andb_true_iff in W as [W Wm]. apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [W Wc].
+    apply andb_true_iff in W as [W Wfl]. apply andb_true_iff in W as [W Wk]. apply andb_true_iff in W as [_ Wn].
+    apply Nat.eqb_eq in Wn, Wk. rewrite (IH cs rec recm1 recm2 cenv benv env s r rm mok nx k Hr Wm).
+    apply Hr; [rewrite len_denote_cs; exact Wn | rewrite len_denote_es; exact Wk].
+  - rewrite nth_sigs in W. unfold callee in *. destruct (nth_error cs fi) as [[gs h]|]; simpl in W; [|reflexivity].
+    apply andb_true_iff in W as [_ Wm]. rewrite (IH cs rec recm1 recm2 cenv benv env s r rm mok nx k Hr Wm). reflexivity.
+  - apply andb_true_iff in W as [W0 W1]. destruct (nth c cenv O);
+      [apply (IH0 cs rec recm1 recm2 cenv benv env s r rm mok nx k Hr W0) | apply (IH1 cs rec recm1 recm2 _ benv env s r rm mok nx k Hr W1)].
+  - apply andb_true_iff in W as [W W2]. apply andb_true_iff in W as [_ W1].
+    rewrite (IH1 cs rec recm1 recm2 cenv benv env s r rm mok nx k Hr W1), (IH2 cs rec recm1 recm2 cenv benv env s r rm mok nx k Hr W2).
+    reflexivity.
+  - apply andb_true_iff in W as [_ Wm]. apply (IH cs rec recm1 recm2 cenv _ env s r rm mok nx k Hr Wm).
+  - apply andb_true_iff in W as [_ Wm]. rewrite (IH cs rec recm1 recm2 cenv benv env s r rm mok nx k Hr Wm). reflexivity.
+  - apply andb_true_iff in W as [_ Wm]. apply (IH cs rec recm1 recm2 _ benv env s r rm mok nx k Hr Wm).
 Qed.
 
 (** the counter of a number, as the two conditional moves of [ccnt] make it *)
@@ -2893,6 +3013,72 @@ Fixpoint all_ok (P : prog) (gidf : nat -> ident) (cs : list callee) (k : nat) : 
   | c :: r => (let '(existT _ gs h) := c in callee_ok P (gidf k) (cbz k) gs h) /\ all_ok P gidf r (S k)
   end.
 
+(** a function given as a term -- a recursive function applied to the functions it was given (Rocq-C-solution.md §12.V, step
+    10) -- is not a [fix] over the counter, so it is not convertible to the meaning of its tree; it has the statement when it
+    satisfies the tree's two equations: at 0 the tree's meaning, at [S n] the tree's recursive body with [h n] as its recursive
+    call.  Each equation is checked by conversion, per program *)
+Theorem compile_f_okr : forall P cs gidf j x k m e0 e1 (h : nat -> ctype x (ntype k m false)),
+  find P (gidf j) = Some (compile_f gidf j (mksig (S x) k m false false) (FRec e0 e1)) ->
+  wf_f (map (@projT1 _ _) cs) (mksig (S x) k m false false) (FRec e0 e1) = true -> callees_ok P gidf cs ->
+  Nat.leb (length cs) j = true -> (Z.of_nat j <? 1099511627776)%Z = true ->
+  h 0 = denote_f cs (mksig (S x) k m false false) (FRec e0 e1) 0 ->
+  (forall n, h (S n) = absc x _ (fun cenv => absn k m false (fun env s =>
+     denote_e cs (fun cvs args s' => appn k m false (appc x _ (h n) cvs) args s') (n :: cenv ++ [S n]) [] env s e1))) ->
+  callee_ok P (gidf j) (cbz j) (mksig (S x) k m false false) h.
+Proof.
+  intros P cs gidf j x k m e0 e1 h Hf W Hcs Hlen Hj H0 HS.
+  pose proof (compile_f_ok P cs gidf j _ _ Hf W Hcs Hlen Hj) as OK.
+  set (D := denote_f cs (mksig (S x) k m false false) (FRec e0 e1)) in *.
+  cbn [wf_f sn sr sw sm sk] in W. apply andb_true_iff in W as [_ W1]. cbn [Nat.pred] in W1.
+  assert (EQ : forall n rest vs M, length rest = x -> length vs = k ->
+            appn k m false (appc x _ (h n) rest) vs M = appn k m false (appc x _ (D n) rest) vs M).
+  { induction n as [|n IH]; intros rest vs M Lr Lv.
+    - rewrite H0. reflexivity.
+    - rewrite HS.
+      change (D (S n)) with (absc x _ (fun cenv => absn k m false (fun env s =>
+          denote_e cs (fun cvs args s' => appn k m false (appc x _ (D n) cvs) args s') (n :: cenv ++ [S n]) [] env s e1))).
+      rewrite !appc_absc by exact Lr. rewrite !appn_absn by exact Lv.
+      eapply (proj1 denote_rec_ext); [| exact W1].
+      intros cvs l s' Lc Ll. apply IH; assumption. }
+  unfold callee_ok in *. simpl sn in *. simpl sk in *. simpl sr in *. simpl sw in *.
+  intros cvs vs M Lc Lv Bd. specialize (OK cvs vs M Lc Lv Bd).
+  destruct cvs as [|n rest]; [discriminate|]. cbn [length] in Lc. injection Lc as Lc.
+  replace (calln (mksig (S x) k m false false) h (n :: rest) vs M) with (calln (mksig (S x) k m false false) D (n :: rest) vs M);
+    [exact OK|].
+  unfold calln, callf. cbn [sr appc]. symmetry. apply EQ; assumption.
+Qed.
+
+Theorem compile_f_okrm : forall P cs gidf j x k m m0 m1 (h : nat -> ctype x (ntype k m true)),
+  find P (gidf j) = Some (compile_f gidf j (mksig (S x) k m true false) (FRecM m0 m1)) ->
+  wf_f (map (@projT1 _ _) cs) (mksig (S x) k m true false) (FRecM m0 m1) = true -> callees_ok P gidf cs ->
+  Nat.leb (length cs) j = true -> (Z.of_nat j <? 1099511627776)%Z = true ->
+  h 0 = denote_f cs (mksig (S x) k m true false) (FRecM m0 m1) 0 ->
+  (forall n, h (S n) = absc x _ (fun cenv => absn k m true (fun env s =>
+     denote_m cs dnum (fun cvs args s' => appn k m true (appc x _ (h n) cvs) args s') (n :: cenv ++ [S n]) [] env s m1))) ->
+  callee_ok P (gidf j) (cbz j) (mksig (S x) k m true false) h.
+Proof.
+  intros P cs gidf j x k m m0 m1 h Hf W Hcs Hlen Hj H0 HS.
+  pose proof (compile_f_ok P cs gidf j _ _ Hf W Hcs Hlen Hj) as OK.
+  set (D := denote_f cs (mksig (S x) k m true false) (FRecM m0 m1)) in *.
+  cbn [wf_f sn sr sw sm sk] in W. apply andb_true_iff in W as [_ W1]. cbn [Nat.pred] in W1.
+  assert (EQ : forall n rest vs M, length rest = x -> length vs = k ->
+            appn k m true (appc x _ (h n) rest) vs M = appn k m true (appc x _ (D n) rest) vs M).
+  { induction n as [|n IH]; intros rest vs M Lr Lv.
+    - rewrite H0. reflexivity.
+    - rewrite HS.
+      change (D (S n)) with (absc x _ (fun cenv => absn k m true (fun env s =>
+          denote_m cs dnum (fun cvs args s' => appn k m true (appc x _ (D n) cvs) args s') (n :: cenv ++ [S n]) [] env s m1))).
+      rewrite !appc_absc by exact Lr. rewrite !appn_absn by exact Lv.
+      eapply denote_m_recm_ext; [| exact W1].
+      intros cvs l s' Lc Ll. apply IH; assumption. }
+  unfold callee_ok in *. simpl sn in *. simpl sk in *. simpl sr in *. simpl sw in *.
+  intros cvs vs M Lc Lv Bd. specialize (OK cvs vs M Lc Lv Bd).
+  destruct cvs as [|n rest]; [discriminate|]. cbn [length] in Lc. injection Lc as Lc.
+  replace (callm (mksig (S x) k m true false) h (n :: rest) vs M) with (callm (mksig (S x) k m true false) D (n :: rest) vs M);
+    [exact OK|].
+  unfold callm, callf. cbn [sr appc]. symmetry. apply EQ; assumption.
+Qed.
+
 Lemma all_ok_nth : forall P gidf cs k, all_ok P gidf cs k ->
   forall f, match nth_error cs f with Some (existT _ gs h) => callee_ok P (gidf (k + f)%nat) (cbz (k + f)) gs h | None => True end.
 Proof.
@@ -3583,3 +3769,21 @@ Proof. Time exact_no_check (compile_f_ok nar_P [] gid1 0 acc32_g acc32_b eq_refl
 Time Lemma sum32_ok : callee_ok nar_P (gid1 1) (cbz 1) sum32_g sum32.
 Proof. Time exact_no_check (compile_f_ok nar_P [] gid1 1 sum32_g sum32_b eq_refl eq_refl (no_callees nar_P gid1) eq_refl eq_refl). Time Qed.
 Print Assumptions acc32_ok.
+
+(* ---------------------------------------------------------------- a function given as a term *)
+(* a recursive function that takes a function, applied to one: its meaning is not a fix over the counter, so it is not
+   convertible to its tree's meaning; its statement comes from its two equations ([compile_f_okr]), each checked by
+   conversion (the template unfolds one round on 0 or on S n) *)
+Fixpoint tapply (n : nat) (f : i63 -> i63) (x : i63) : i63 := match n with O => x | S m => tapply m f (f x) end.
+Definition tadd3 (x : i63) : i63 := PrimInt63.add x 3.
+Definition tcopy : nat -> i63 -> i63 := fun n x => tapply n tadd3 x.
+Definition tcopy_g := mksig 1 1 false false false.
+Definition tcopy_b := FRec (SVar 0) (SRec CNil (SCons (SOp Badd (SVar 0) (SInt 3)) SNil)).
+Definition tcopy_P := mkprog [(gid1 0, compile_f gid1 0 tcopy_g tcopy_b)] [].
+Time Lemma tcopy_ok : callee_ok tcopy_P (gid1 0) (cbz 0) tcopy_g tcopy.
+Proof.
+  Time exact_no_check (compile_f_okr tcopy_P [] gid1 0 0 1 false (SVar 0) (SRec CNil (SCons (SOp Badd (SVar 0) (SInt 3)) SNil)) tcopy
+    eq_refl eq_refl (no_callees tcopy_P gid1) eq_refl eq_refl eq_refl (fun n => eq_refl)).
+Time Qed.
+Time Fail Definition tcopy_plain : tcopy = denote_f [] tcopy_g tcopy_b := eq_refl.
+Print Assumptions tcopy_ok.
