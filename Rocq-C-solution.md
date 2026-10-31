@@ -1986,6 +1986,25 @@ checks answers, not speed.
   a counter (+3, 55), then records, tests on calls, boolean parameters, `u64`, negation, the rest.  **Next: number functions
   that write the memory.**
 
+**Step 6, number functions that write the memory — the design (2026-10-31).**  The six programs this step completes
+(`helper_write`, `rmw_chain`, `CF20C`, `CF163A`, `CF868F`, `CF868Fv2`) have one shape: a root `solve` that makes memories —
+`let`s, calls of functions giving back a memory, writes — and then gives a number read from the last memory, often written
+inline (`rd rST 0 (rows .. s)`), possibly under a test.  Such a function is stated as the translator states it (§1.6), with
+the end memory hidden: `runx` (`exists M', runk .. M'`).
+- *Signature*: `sig` gains `sw` — a number function that writes; `callee_ok` says, for such a function, that its KQL gives the
+  number with some end memory.  Calls of it (`SCall`, `MCall`) are refused by `wf` for now: after such a call the caller's KQL
+  memory is not the Rocq text's (it would have to be dropped, the translator's `runx` caller rule) — the next step.
+- *Syntax*: a sort `sx` over `smem` and `sexp`: `XRet e` (a number from the newest memory), `XLetM m x` (`let s2 := m in x`),
+  `XLet`, `XLetB`, `XIf`, `XIfB`, `XMatch`; a body `FPlainX x`.
+- *Meaning*: `denote_x` (the number) and `endx` (the memory KQL ends with: the last one made) — the proof states the end memory
+  exactly, so the continuations of the existing lemmas, which fix the result and the end memory up front, need no change and no
+  determinism lemma; `callee_ok`'s `exists` is given by `endx`.  (A writing function calling a writing function, and loops that
+  write and give a number, need the callee's end memory, which its statement hides: done with the caller rule.)
+- *KQL*: `ctailx` — the memories by `cmem`, the tests as branches, the end `Eret` of the number.
+- *Reifier*: a number function the number reader does not read is tried as `sx`: `let` of a memory, of a number, of a boolean;
+  tests; and a read or a call whose memory is made in place (`rd h i (f .. s)`) is read as `let s2 := f .. s in rd h i s2` —
+  the same term up to `let` (zeta), so the check is unchanged; the numbers of that read must not name the older memory (dead).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
