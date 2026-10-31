@@ -378,7 +378,7 @@ def reflect(name, entry, prog, no_proof):
         + f'Redirect "{name}_rwhy" Eval vm_compute in (snd {name}_res).\n')
     rc, out = coqc(f0)
     info = open(os.path.join(GEN, f"{name}_rinfo.out")).read() if rc == 0 and os.path.exists(os.path.join(GEN, f"{name}_rinfo.out")) else ""
-    fs = re.findall(r'\("([^"]+)"(?:%bs)?,\s*(true|false),\s*(\d+)(?:%nat)?,\s*(true|false),\s*(true|false)\)', info)
+    fs = re.findall(r'\("([^"]+)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*(\d+)(?:%nat)?,\s*(true|false),\s*(true|false)\)', info)
     if rc != 0 or not fs or "= None" in info:
         wp = os.path.join(GEN, f"{name}_rwhy.out")
         why = open(wp).read() if os.path.exists(wp) else ""
@@ -394,9 +394,9 @@ def reflect(name, entry, prog, no_proof):
         for j, f in enumerate(fs):
             cs = "[" + "; ".join(f"existT KQR.ftype {sig(g)} {g[0]}" for g in fs[:j]) + "]"
             oks = "".join(f"(conj {name}_rok{i} " for i in range(j)) + "Logic.I" + ")" * j
-            t += (f"Lemma {name}_rok{j} : KQR.callee_ok {name}_prog (KQR.gid1 {j}) {sig(f)} {f[0]}.\n"
+            t += (f"Lemma {name}_rok{j} : KQR.callee_ok {name}_prog (KQR.gid1 {j}) (KQR.cbz {j}) {sig(f)} {f[0]}.\n"
                   f"Proof. exact_no_check (KQR.compile_f_ok {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j})"
-                  f" eq_refl eq_refl (KQR.all_ok_callees {name}_prog KQR.gid1 {cs} {oks})). Qed.\n")
+                  f" eq_refl eq_refl (KQR.all_ok_callees {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl). Qed.\n")
     t += c_print(name)
     f1 = os.path.join(GEN, f"{name}_rp.v")
     open(f1, "w").write(t)
@@ -406,7 +406,7 @@ def reflect(name, entry, prog, no_proof):
         return None
     idx = [f[0] for f in fs].index(entry) if entry in [f[0] for f in fs] else len(fs) - 1
     e = fs[idx]
-    kinds = ("N" if e[1] == "true" else "") + "I" * int(e[2]) + ("M" if e[3] == "true" else "")
+    kinds = "N" * int(e[1]) + "I" * int(e[2]) + ("M" if e[3] == "true" else "")
     return 1000 + idx, kinds, "M" if e[4] == "true" else "I", len(fs)
 
 def main():

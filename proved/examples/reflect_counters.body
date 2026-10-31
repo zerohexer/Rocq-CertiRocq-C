@@ -1,0 +1,15 @@
+(* through the verified compiler (kitc.py --reflect): counters as values -- two counters, the second given on to a callee and
+   to the recursive call; a budget made from a number; a match on a counter inside a body; S, O and numerals as counters.
+   With r = 3, x = 4 on the cells 36 24 100 35 17 ..: each round adds the first four cells, 195, so rounds gives 585;
+   twice 1 adds the first two cells, 60; twice O gives its number, 7: 585 + 60 + 7 = 652 *)
+Fixpoint sum_from (n : nat) (i acc : int) (s : mem) : int :=
+  match n with O => acc | S m => sum_from m (i + 1) (acc + rd 0 i s) s end.
+Fixpoint rounds (r n : nat) (acc : int) (s : mem) : int :=
+  match r with O => acc | S m => rounds m n (sum_from n 0 acc s) s end.
+Definition twice (n : nat) (a : int) (s : mem) : int :=
+  match n with O => a | S p => sum_from (S (S p)) 0 a s end.
+Definition solve (r : nat) (x : int) (s : mem) : int :=
+  rounds r (kq_nat x) 0 s + twice 1 0 s + twice O 7 s.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_arg 1) (kq_input 0).
