@@ -2245,6 +2245,39 @@ known functions gets a copy of its own, and the template itself is no function o
   the kernels), records (+2, 64), then bytes, `u64`, tests on calls giving back a boolean, the rest.  **Next: loops that write
   and give a number.**
 
+**Step 11, loops that write and give a number — the design (2026-11-01).**  Seven programs of the gate have a recursive
+function that writes the memory and gives back a number (`CF7D`'s `scan`, `CF460C`'s `search`, `CF61E`'s `rights`, `CF833B`'s
+`layers`, `hof_cells`' `rounds`, `hw_mmio`'s `go`); in each the recursive call is the last step, given a memory made from the
+newest one (`scan f (i + 1) .. (upd rDEG i d s)`, `let s1 := check .. s in .. search f .. s1`), and its caller calls it as its
+last step too (`solve n nz s := scan n 1 nz 0 0 1 0 s`; `CF61E`: `rights n nz nz 0 (clear (S n) 0 (lefts n 1 nz s))`, the
+memory it is given made by calls).  The tally counts three completed by this (`CF7D`, `CF460C`, `hof_cells`); `CF61E`, `CF61En`
+and `CF833B` are expected as well, because the other reason it gives them ("a number function that writes the memory where it
+is not read yet", on their `solve`) is this same last call; `hw_mmio` waits on machine operations.
+- *Syntax*: two nodes of `sx`, both at the end only: `XRec cs args m` (the function itself, its counters after the first, its
+  numbers, the memory `m`) and `XCall f cs args m` (a number function that writes, the same arguments); a body `FRecX x0 x1`
+  (recursive on the first counter, a number, writing).  The numbers are worked out on the memory before `m`'s writes, as for
+  `MRec` / `MCall` (what the text means when an argument reads `s` and the memory argument writes it).
+- *Meaning*: `denote_x` gains the recursive call's meaning `recx` (`rec` and `recm` stay for the numbers and memories inside,
+  which may not call it); `denote_f`'s `FRecX` is the `fix` over the counter, as for `FRec`, with `denote_x`.
+- *KQL*: `XRec` the counters, numbers and memory, then `Eloop`; `XCall` the same, then `Ecall` and `Eret` of its result.
+- *The statement*: a writing function's KQL gives the number with some end memory (`runx`, as now).  The end memory of a loop is
+  its recursive call's, which that call's statement hides, so `endx` (the exact end memory) cannot be written any more.  But
+  which end memory is reached depends only on the values the call is given — numbers, counters, the memory — never on the rest
+  of KQL's variables: so `ctailx_ok` becomes **"there is an end memory such that, for every KQL environment the invariant
+  holds of, the code gives the number and that memory"** — the existential outside the environment.  Then every case uses the
+  lemmas as they are (`cexp_all`, `cmem_ok`, ... fix the result and the end memory before the continuation): a test's end
+  memory is the one of the branch its test takes, a let's is its body's, `XRec`'s is the recursive call's (from the induction
+  on the counter, `Hrecx`), `XCall`'s the callee's (from its statement).  No determinism lemma is needed.  `compile_f_ok`
+  gains `FRecX` by the counter's induction, as `FRec`; `compile_f_okrx` (a copy of a writing template, from its two
+  equations) as `compile_f_okr`, over `denote_x_recx_ext`.
+- *Reifier*: a recursive function the number reader does not read is tried as `sx` in both branches (`FRecX`), the
+  recursive call at the end read as `XRec`; a call of a writing function at the end as `XCall`; the number reader no longer
+  reads a call of a writing function (it was refused by `wf` anyway), so the end of a body is tried by the `sx` reader.  The same
+  in a template's copy.
+- *`kitc.py`*: a writing copy's theorem is `compile_f_okrx`.
+- *Not in this step*: a call of a writing function, or the recursive call, inside an expression (`rd .. (f s) + 1`,
+  `acc + rec ..`): the caller's memory must then be dropped after the call — the next step.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
