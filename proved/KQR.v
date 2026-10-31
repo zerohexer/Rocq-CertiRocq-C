@@ -242,6 +242,25 @@ Definition denote_f (cs : list callee) (g : sig) (b : fbody) : ftype g :=
 (* ================================================================ compile *)
 Definition cap60 : i63 := 1152921504606846976%uint63.
 
+(** a choice between two numbers that are both worked out and one taken with a conditional move, no jump (the
+    translator's [choice_ok], D17): arithmetic, variables, reads of the memory and such choices, at most three reads in the
+    two numbers.  A choice with a call, a let or a match stays a jump; so does the end of a function (a loop's tests) *)
+Fixpoint spec (e : sexp) : bool :=
+  match e with
+  | SVar _ | SInt _ => true
+  | SOp _ a b | SRd a b => spec a && spec b
+  | SIf _ a b t f => spec a && spec b && spec t && spec f
+  | _ => false
+  end.
+Fixpoint nrd (e : sexp) : nat :=
+  match e with
+  | SRd a b => S (nrd a + nrd b)
+  | SOp _ a b => nrd a + nrd b
+  | SIf _ a b t f => nrd a + nrd b + nrd t + nrd f
+  | _ => O
+  end.
+Definition choice_ok (t f : sexp) : bool := spec t && spec f && Nat.leb (nrd t + nrd f) 3.
+
 Section C.
 Variable gidf : nat -> ident.   (* the KQL name of the program's function i *)
 Variable g : ident.             (* the function's own name *)
@@ -254,7 +273,10 @@ Fixpoint cexp (e : sexp) (cenv env : list atom) (nxt : ident) (K : atom -> ident
   | SInt n => K (Aint n) nxt
   | SOp o a b => cexp a cenv env nxt (fun A n1 => cexp b cenv env n1 (fun B n2 => Eop n2 o A B (K (Avar n2) (Pos.succ n2))))
   | SIf c a b t f => cexp a cenv env nxt (fun A n1 => cexp b cenv env n1 (fun B n2 =>
-                       Eif c A B (cexp t cenv env n2 K) (cexp f cenv env n2 K)))
+                       if choice_ok t f then
+                         cexp t cenv env n2 (fun T n3 => cexp f cenv env n3 (fun F n4 =>
+                           Esel n4 c A B T F (K (Avar n4) (Pos.succ n4))))
+                       else Eif c A B (cexp t cenv env n2 K) (cexp f cenv env n2 K)))
   | SLet e1 e2 => cexp e1 cenv env nxt (fun A n1 => cexp e2 cenv (A :: env) n1 K)
   | SRd h i => cexp h cenv env nxt (fun H n1 => cexp i cenv env n1 (fun I n2 => Ekld n2 H I (K (Avar n2) (Pos.succ n2))))
   | SRec ccs args => ccnts ccs cenv env nxt (fun Cs n1 => cexps args cenv env n1 (fun As n2 =>
@@ -775,11 +797,31 @@ Proof.
     apply IHa with (cenv := cenv) (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
     apply IHb with (cenv := cenv) (denv := denv); auto. { eapply inv_step; eauto. }
     intros rho2 n2 B A2 Le2 LB VB.
+    assert (I2 : inv rho2 cenvA envA cenv denv n2). { eapply inv_step; [eapply inv_step; eauto | eauto | auto]. }
+    destruct (choice_ok t e) eqn:CH.
+    { (* both numbers worked out, one taken by a conditional move *)
+      apply IHt with (cenv := cenv) (denv := denv); auto. intros rho3 n3 T A3 Le3 LT VT.
+      apply IHe with (cenv := cenv) (denv := denv); auto. { eapply inv_step; eauto. }
+      intros rho4 n4 F A4 Le4 LF VF.
+      assert (LA2 : atom_lt A n2) by (eapply atom_lt_mono; [exact LA | lia]).
+      assert (LA3 : atom_lt A n3) by (eapply atom_lt_mono; [exact LA | lia]).
+      assert (LB3 : atom_lt B n3) by (eapply atom_lt_mono; [exact LB | lia]).
+      eapply K_sel.
+      - rewrite (aval_agree rho3 rho4 n3 A A4 LA3), (aval_agree rho2 rho3 n2 A A3 LA2), (aval_agree rho1 rho2 n1 A A2 LA).
+        exact VA.
+      - rewrite (aval_agree rho3 rho4 n3 B A4 LB3), (aval_agree rho2 rho3 n2 B A3 LB). exact VB.
+      - rewrite (aval_agree rho3 rho4 n3 T A4 LT). exact VT.
+      - exact VF.
+      - apply HK.
+        + apply (agree_set2 rho rho3 rho4 n4 _ nxt n3); [eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); eauto; lia | exact A4 | lia | lia].
+        + lia.
+        + simpl. lia.
+        + simpl. rewrite PTree.gss.
+          destruct (cmp_sem c (denote_e cs rec cenv denv M a) (denote_e cs rec cenv denv M b)); reflexivity. }
     eapply K_if.
     + rewrite (aval_agree rho1 rho2 n1); eauto.
     + eauto.
-    + assert (I2 : inv rho2 cenvA envA cenv denv n2). { eapply inv_step; [eapply inv_step; eauto | eauto | auto]. }
-      destruct (cmp_sem c (denote_e cs rec cenv denv M a) (denote_e cs rec cenv denv M b)) eqn:C.
+    + destruct (cmp_sem c (denote_e cs rec cenv denv M a) (denote_e cs rec cenv denv M b)) eqn:C.
       * apply IHt with (cenv := cenv) (denv := denv); auto. intros rho3 n3 a3 A3 Le3 L3 V3.
         apply HK; [| lia | exact L3 | exact V3].
         eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); eauto; lia.
@@ -2017,3 +2059,29 @@ Print Assumptions bud_ok.
 Fixpoint grow (r n : nat) (acc : i63) : i63 := match r with O => acc | S m => grow m (S n) acc end.
 Time Fail Definition grow_wf : wf_f [] (mksig 2 1 false false) (FRec (SVar 0) (SRec (CCons (CS (CVar 1)) CNil) (SCons (SVar 0) SNil))) = true
   := eq_refl.
+
+(* ---------------------------------------------------------------- a choice between two numbers: a conditional move *)
+(* the smaller of two numbers written into a cell (CF295B's inner loop): both worked out, one taken, no jump (D17) *)
+Fixpoint relax (n : nat) (j d : i63) (s : mem) : mem :=
+  match n with
+  | O => s
+  | S m => let a := KQ.KQRun.rd 0 j s in let b := PrimInt63.add d (KQ.KQRun.rd 1 j s) in
+           relax m (PrimInt63.add j 1) d (KQ.KQRun.upd 0 j (if PrimInt63.ltb b a then b else a) s)
+  end.
+Definition relax_g := mksig 1 2 true true.
+Definition relax_b := FRecM MCur (MLet (SRd (SInt 0) (SVar 1)) (MLet (SOp Badd (SVar 1) (SRd (SInt 1) (SVar 2)))
+  (MRec CNil (SCons (SOp Badd (SVar 3) (SInt 1)) (SCons (SVar 2) SNil))
+        (MUpd (SInt 0) (SVar 3) (SIf Clt (SVar 0) (SVar 1) (SVar 0) (SVar 1)) MCur)))).
+Check (eq_refl : choice_ok (SVar 0) (SVar 1) = true).
+Definition relax_P := mkprog [(gid1 0, compile_f gid1 0 relax_g relax_b)] [].
+Time Lemma relax_ok : callee_ok relax_P (gid1 0) (cbz 0) relax_g relax.
+Proof. Time exact_no_check (compile_f_ok relax_P [] gid1 0 relax_g relax_b eq_refl eq_refl (no_callees relax_P gid1) eq_refl eq_refl). Time Qed.
+(* the KQL has the conditional move *)
+Fixpoint has_sel (e : exp) : bool :=
+  match e with
+  | Esel _ _ _ _ _ _ _ => true
+  | Eop _ _ _ _ k | Ecall _ _ _ k | Ekld _ _ _ k | Ekst _ _ _ k => has_sel k
+  | Eif _ _ _ t e => has_sel t || has_sel e
+  | _ => false
+  end.
+Check (eq_refl : has_sel (kbody (compile_f gid1 0 relax_g relax_b)) = true).
