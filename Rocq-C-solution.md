@@ -1575,6 +1575,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F46 | The per-program check `denote s = f` is exponential in the number of steps of a straight-line body that reads a memory and then writes it (`let s1 := upd 0 1 (rd 0 0 s + 1) s in ..`, each memory used twice): 10 steps 0.003 s, 20 steps 0.7–1.0 s, 30 steps over 120 s (`KQR.v`, `chain10`/`chain20`, 2026-10-31).  It is Rocq's conversion: after the `let`s are substituted the kernel compares the two sides path by path, with no memory of what it has already compared, and a memory used twice per step doubles the paths per step.  Measured apart from `S`: the same chain against a verbatim copy of its own text, 16/18/20 steps, 0.09/0.24/0.73 s by the elaborator's conversion and 0.015/0.065/0.25 s by the VM's (`vm_cast`), the same growth.  The walk met the same wall (F11).  Not affected: memories used once per step (`x86_setup`'s chain of `hw_store`s), lets of numbers (the 300-let body: 0.001 s), and the same steps in a helper or a loop, because a call or the recursive call is a constant on both sides and the comparison stops there | open.  **Not fixed in Rocq** (measured 2026-10-31, the kernel alone, `exact_no_check` then `Qed`, a standalone file with `mem`/`rd`/`upd` as axioms, 16/18/20/22 steps): Rocq 9.1.1 (ours) 0.17/0.46/1.53/5.35 s; `rocq/rocq-prover:dev` = 9.4+alpha of 2026-10-29 (commit `a533ceb`, newer than the latest release 9.3.0 of 2026-09-19, includes the merged #22299, a pointer-equality shortcut) 0.13/0.30/0.98/3.24 s — the same growth.  **The fix is proposed upstream, not merged**: rocq-prover/rocq #22309 "kernel: cache conversion results within a session" (open; a table of pairs of closure cells already found convertible, for one conversion — its description is this finding: "the cost of the check then scales with how many times a shared subterm occurs, not with how large it is"), with #22319 (the cache as flat arrays) and #22401 (draft, further experiments) on top.  **Lean has it**: Lean 4.32 (the `kernelq-lean` image), the same chain checked against the meaning of a syntax tree (`den`, by `M.rec`, the `MLetM` shape), kernel 0.38/0.44/0.51/2.4/12.9 ms at 20/30/40/200/1000 steps, the elaborator's `rfl` ~130 ms at 1000 — its definitional-equality check remembers pairs already found equal.  CakeML (HOL4) has no conversion in its kernel: its translator proves each construct with a lemma and never compares a function with a separately built term (by design, not measured here).  **The cache removes it (measured 2026-10-31, on the work laptop):** #22309 built on its own base: the chain against `den`, cache off 0.15/0.25/1.0/3.8 s at 16/18/20/22, cache on 0.000–0.003 s up to 1000 steps (the whole file with the 1000-step chains 0.53 s, 376 MB).  **Backported to our Rocq 9.1.1** (`rocq-fork/conv-memo-v9.1.1.patch`: the PR's three files, two of its call sites rewritten for 9.1.1, `fid = 0` in every cell literal — the compiler refuses a literal without it): standalone the same (cache off 3.3 s at 22, on 0.003 s at 1000); **our own `KQR.v` chains** (the 9.1.1 image, only `rocq-runtime` replaced so the compiled libraries stay valid — replacing `rocq-core` rebuilds Corelib and every library compiled against it is then refused as inconsistent): `chain20` `denote = f` 1.15 s → 0.003 s, `chain30` (over 120 s before) 0.000 s / 0.002 s, `chain100` 0.001 s / 0.003 s (the equation / `compile_f_ok`'s theorem), `Print Assumptions` unchanged.  The elaborator's own check (`exact`) does not use the cache (it is unification, where the PR keeps it off), so the per-program step is `exact_no_check` and the kernel checks at `Qed` — the trust is the same.  Adopted as our fork: D28.  The other ways out, not taken: skip the check for such a function (trusts the reifier); a style rule (D13, D22) |
 | F47 | Rebuilding the image on the fork filled the heavy-run machine's disk to 0 bytes (2026-10-31): `opam reinstall --keep-build-dir` kept the build folder of every package (MetaRocq's alone is many GB, against 3.8 GB for the whole installed switch), and `docker commit` then wrote the container's changes a second time as a layer; the free-space guard ran only when a job started, and — found after the recovery — it read the free space wrongly (the directory count printed before the number was glued onto it, so it refused only near 0 bytes): how much was free when the build started is not known.  The container runtime went down, the data disk gave I/O errors, the machine's other containers stopped at the engine's restart.  Recovered by deleting the job's own objects through Docker after the engine came back, then `fstrim` (0 → 31 GB free) | an image build keeps only the build folder it needs (CertiRocq's, for the kq2 patch), deletes sources and caches before the commit, and checks free space during the build (stop under 20 GB), not only at the start; expect the commit to need the container's growth again.  The guard's reading is fixed and was checked both ways (it passes at the real 45.6 GB, refuses at a higher threshold).  The rebuild done that way: 69 minutes, the container grew 4.09 GB, free space never under 45 GB |
 | F48 | The proof cache's key did not include Rocq itself: the tactic libraries, `KQRun.v`, the header and the printed functions only.  A tree that kept its cache across a change of kernel (an upgrade, our fork, D28) would have reused proofs the old kernel checked without checking them again (found 2026-10-31 when the kernel changed) | the key includes the content of the `coqc` / `rocq` executables (the kernel is linked into them) and `ROCQ_CONV_CACHE` (`rocq_id` in `kitc.py`); every cached proof is missed once after the change |
+| F49 | Moving a program from the translator to the verified compiler changes its C, and the gate checks answers, not speed: two corpus programs became 1.45x slower in step 4 (`CF295B`, `CF295Bv2`: a minimum written into a cell, a conditional move in the translator's C, a jump in `compile`'s), unseen by the gate (2026-10-31) | if-conversion in `compile` (§12.V), timed again: within the spread; a program moved to the verified path is timed against the translator's build before the move is reported |
 | F38 | MetaRocq's formal evaluation (`EWcbvEval.eval`, `PCUICWcbvEval`) has rules for primitive values only, none for primitive operations: `PrimInt63.add` has no body, `eval_delta` cannot fire, every program here is stuck in it | the verified compiler is built by reflection over our own syntax instead (D26, §1.12) (read in the image's MetaRocq sources, 2026-10-30) |
 | F37 | CakeML's architecture is ours: a proof-producing translator from the logic's functions on top, one verified compiler below; Pancake is verified through a proof-producing decompiler.  The difference is that CakeML builds each proof by construction while ours searches | D25, §1.11 (read in the CakeML repository, 2026-10-30) |
 
@@ -1898,6 +1899,50 @@ reason of place behind it; the gate counts after each step.  **Next: counters as
   `KQRun.v`'s helpers read as functions (+8, 31), narrow memory (+8, 39), machine operations (+9, 48: the kernels), functions
   given to functions (+7, 55), a `let` of a counter (+4, 59), then records, `u64`, negation, the rest (68).  **Next: booleans.**
 
+**If-conversion in `compile` (2026-10-31; F49).**  Timing the six corpus programs that moved to the verified path in step 4
+against the translator's build of the same text (same machine, same run, one pinned core, best of 7) found two of them 1.45x
+slower: `CF295B` 94.8 → 139.2 ms, `CF295Bv2` 84.8 → 122.2 ms (the other four within the spread).  Their inner loop writes the
+smaller of two numbers (`upd rD (bi + j) (if b <? a then b else a) s`); the translator makes that choice a conditional move
+(`choice_ok`, D17) and `compile` made it a jump, with the rest of the loop written out on both sides.  Now `compile` does what
+the translator does: a choice whose two numbers are arithmetic, variables, reads of the memory and such choices, with at most
+three reads in the two, is worked out both ways and taken with `Esel` (`choice_ok` on the syntax, the case of `cexp`); a choice
+with a call, a `let` or a match, and a test at the end of a function (a loop's tests), stays a jump.  The proof case needs no
+condition: both numbers evaluate (the lemma for numbers says so for every well-formed one), so which choices are converted is
+a speed decision only.  Test: `relax` (the loop of `CF295B`), its KQL has the conditional move, its theorem in milliseconds.
+Measured again (same conditions): `CF295B` 98.5 / 94.9 ms, `CF295Bv2` 91.8 / 91.9, `CF339D` 167.8 / 176.1, `CF165E` 98.5 /
+101.0, `CF165Ev2` 79.8 / 81.3, `CF1167C` 9.0 / 8.7 (the translator's build / the verified compiler's) — within the run-to-run
+spread (§6.1: about 15%; `CF339D` was equal in the first run); the C of `CF295B` is now the translator's, line for line.
+The gate with `KQ_REFLECT=1` on the fork, on this tree: `make.sh` `core-ok`; examples 24 / 24; corpus 36 / 36 equal to the C++
+answers; the five kernels proved and built (36 / 36 / 38 / 54 / 41 s); the same 9 programs through the verified compiler, 0
+refused by the check.
+**Rule kept from it:** a program moved from the translator to the verified compiler is timed against the translator's build of
+the same text before the move is reported (`rtime` in the session's tools: both builds, one run, one pinned core) — the gate
+checks answers, not speed.
+
+**Step 5, booleans — the design (2026-10-31).**
+- *Syntax*: a fifth mutual sort `sbool` — `BCmp c a b` (a comparison of two numbers), `BVar i` (the `i`-th boolean variable,
+  nearest first), `BTrue`, `BFalse`, `BAnd x y`, `BOr x y`, `BNot x`.  Numbers gain `SIfB b t e` (a test on a boolean that is
+  not one comparison) and `SLetB b e` (`let x := b in e`); memories gain `MIfB b m1 m2` and `MLetB b m`.  A test on one
+  comparison stays `SIf` / `MIf`, so the C of the programs already on the verified path does not change.
+- *Meaning*: `denote_b` gives `cmp_sem`, `andb`, `orb`, `negb`, `true`, `false`, and `nth i benv false` — the user's `&&`, `||`
+  and `negb` are those constants, so the per-program check stays a conversion; a boolean environment `benv` is threaded through
+  the meanings as the counters' is.
+- *KQL*: a test on a boolean is jumps (`ccond`, a continuation for each outcome): `a && b` tests `a`, then `b` where `a` held
+  (C's short-circuit, the translator's choices on the parts); `negb` swaps the outcomes; a boolean variable is its atom tested
+  against 0.  A boolean value (a `let`) is held as 1 or 0: a comparison by a conditional move (`Esel .. 1 0`), `&&` / `||` /
+  `negb` by `land` / `lor` / `lxor 1` of the parts' values — no jump; both parts are worked out, which changes only the cost of
+  the part not needed (every part is pure and total).  A choice between two cheap numbers on a boolean is a conditional move on
+  its value, as for a comparison.
+- *Proof*: the invariant gains `benv_ok` (each boolean atom holds 1 or 0 for its value) with its `lt_all`; two new cases of the
+  mutual lemma — the test ("if the code for the outcome that holds evaluates to `v` from every extension of the environment,
+  the test does") and the value (`land (b2i x) (b2i y) = b2i (andb x y)`, and the same for `lor` and `lxor`).
+- *Reifier*: a boolean entry in the context; `andb`, `orb`, `negb`, `true`, `false`, comparisons and boolean variables as
+  boolean expressions; a `let` of type `bool`; a test whose subject is not one comparison.
+- *Not in this step*: boolean parameters and results of functions (`put (isnew : bool) ..`, a function giving back a boolean).
+  They change the signature from "`k` numbers" to a list of kinds of value, which records and pairs need as well; that is done
+  once, for both, as the step on values across calls.  So `CF35C` (its helper `put` takes a boolean) waits; the other seven
+  programs the tally gives booleans are expected.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -2070,11 +2115,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `11cba9e` (2026-10-31); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `913445c` (2026-10-31); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 4 done, its gate with `KQ_REFLECT=1` (9 of 68 programs through the verified compiler), the tally after it; this ledger brought up to date |
+| (this commit) | §12.V: the if-conversion and its timing (F49); step 5's design (booleans) |
+| `145a9ba` | `proved/KQR.v`: if-conversion in `compile` (`choice_ok`, the conditional move), its proof case, the `relax` test |
+| `913445c` | §12.V: step 4 done, its gate with `KQ_REFLECT=1` (9 of 68 programs through the verified compiler), the tally after it; this ledger brought up to date |
 | `3ecf3d9` | `proved/KQR.v` + `KQRReify.v` step 4: counters as values; `kitc.py`, `KQRChain.v` follow; `proved/examples/reflect_counters` |
 | `9a384b3` | §12.V: step 4's design |
 | `11cba9e` | `KQRReify.reify_why`: why a program is not read, printed by `kitc.py --reflect`; the tally over the gate's 67 programs and the order of constructs |
