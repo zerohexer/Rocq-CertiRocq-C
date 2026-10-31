@@ -45,9 +45,11 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
 2. **A verified compiler by reflection** (§1.12, D26, §12.V): a syntax `S` of the fragment, its meaning `denote`, a compiler
    `compile : S -> KQL` proved once; the user's function is reified into `S` (untrusted) and per program only `denote s = f` is
    checked by conversion — zero proof search, nothing added to the trust, for other people's programs.  Built so far
-   (`proved/KQR.v`, `KQRReify.v`): numbers, tests, lets, reads, calls, recursion on a counter, memory writes — each
-   per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`);
-   next `kitc.py --reflect`.  Emit-then-prove is the interim.
+   (`proved/KQR.v`, `KQRReify.v`): numbers, tests, lets, reads, calls, recursion on a counter, memory writes, counters as
+   values (several counters, `S`/`O`, budgets, a match on a counter inside a body) — each per-program step in milliseconds,
+   long read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`); `kitc.py --reflect` compiles a
+   program through it when every function is read (9 of the gate's 68 programs today), the translator otherwise; next
+   booleans, in the order of §12.V's tally.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -1856,6 +1858,46 @@ reason of place behind it; the gate counts after each step.  **Next: counters as
 - *Not in this step*: a `let` of a counter, arithmetic and comparisons on counters (`Nat.eqb`, `n + n`), counters after a number
   parameter (§3.7).
 
+**Step 4 done (2026-10-31): counters as values.**  Built as designed, in `proved/KQR.v` and `proved/KQRReify.v`:
+- *Syntax and meaning*: `sig.sn` counters first; the counter sort `scnt` (`CVar`, `CO`, `CS`, `CNat`) mutual with `sexp`;
+  `SRec cs args` / `MRec cs args m` (the recursive call's counters after the first, the first being the predecessor),
+  `SCall f cs args` / `MCall f cs args m`, `SMatch c e0 e1` / `MMatch c m0 m1`; `denote_*` take the counter environment;
+  `ctype` / `absc` / `appc` bind and apply counters as `ntype` / `absn` / `appn` do numbers.
+- *KQL*: the counters in variables `1 .. sn`, then the numbers; `CS` an addition, `CO` the atom 0, `CNat` the translator's
+  clamp (two conditional moves), `SMatch` an `Eif` against 0 and a subtraction into a fresh variable.
+- *Bounds*: `callee_ok P id B gs h` takes the bound; function `j` is proved for counters below `cbz j = 2^62 - j·2^20`, and a
+  callee's theorem is used at its own bound; `compile_f_ok` gained two decided conditions (`length cs <= j`, `j < 2^40`), closed
+  by `eq_refl`; `wf` checks that a callee's counters nest `S` at most 2^20 deep (`shallow`) and that the recursive call's have
+  none (`flat`); the invariant gained the counter environment (`cenv_ok`: each atom holds `ofn` of its counter; `cbound`: every
+  counter below `cbz j`).  `kq_nat` stays opaque: the proof uses `KQMAuto`'s facts about it (`kq_nat_val`, the clamp).
+- *Reifier*: counter entries in the context — a `nat` parameter, the predecessor a match on a counter binds, and the
+  predecessor of the first counter, which the recursive call is given first; `O`, `S`, `kq_nat` as counter expressions,
+  numerals included; a call's counters split off its arguments by the callee's `sn`; the signature's leading `nat`s.  A function
+  is kept only when it is well formed (`wf_f`), so a program the reifier reads is a program `compile` takes; one read but not
+  well formed — a counter grown at every round of a recursion (`grow`) — is refused with that reason.
+- *Measured* (stock kernel, one machine): `inner`, `rounds` (two counters, the second given on to a callee and to the
+  recursive call), `twice` (a match on a counter inside a body, `S (S p)` given to a callee), `bud` (`kq_nat` of a number), and
+  from the text a program calling them with numerals as counters (`cnt_all`): the reifier gives exactly the hand-written trees;
+  every theorem 0.001–0.023 s; `KQR.v` compiles in 3.7 s, `KQRReify.v` in 2.5 s.  `Print Assumptions`: Rocq's integer axioms —
+  now with three of the signed ones (`Sint63Axioms.asr_spec`, `leb_spec`, `ltb_spec`, through `kq_nat`'s facts) — and the kit
+  memory's declared operations; no memory law, no admit.
+- *The gate with `KQ_REFLECT=1`, on the fork (2026-10-31): everything passes* — `make.sh` `core-ok` (32 s); examples 24 / 24
+  (the new `reflect_counters` included: answer 652, worked out by hand); corpus 36 / 36 equal to the C++ answers; the five
+  kernels proved and built (36 / 37 / 41 / 57 / 44 s); and **9 of the gate's 68 programs through the verified compiler** (was
+  1 of 67): `reflect_calls`, `reflect_counters`, `sdiv`, and the corpus programs `CF1167C`, `CF165E`, `CF165Ev2`, `CF295B`,
+  `CF295Bv2`, `CF339D`; **0 read but refused by the check**; the other 59 read by the translator, all passing.  The new example
+  through the translator (the default gate's path): proved, 652.  (The gate script's count of programs not read misses the five
+  main kernel programs, whose long reason lines the kernel build cuts at 700 characters; the tally below counts them.)
+- *The tally after the step* (the reasons per program, as before, over the 68): booleans 27, number functions that write the
+  memory 26, `KQRun.v`'s helpers 21, narrow memory 15, machine operations 10, functions given to functions 8, a `let` of a
+  counter 4 (`CF1100F` and its two variants, `heap`), records and pairs 4, `u64` 2, negation 2, mutual recursion 1, records of
+  other types 2.  One program the tally of step 3 counted as needing counters only, `CF163A`, needed more: its `solve` reads the
+  memory a call gives back (`rd rST 0 (rows .. s)`) — a number function that writes the memory — which the reason scan did not
+  see and reported as "not classified"; the scan now names it (`rd_in_place`).  So the step completed every program it could.
+  **The order that completes the most now**: booleans (+8, 17 of 68), number functions that write the memory (+6, 23),
+  `KQRun.v`'s helpers read as functions (+8, 31), narrow memory (+8, 39), machine operations (+9, 48: the kernels), functions
+  given to functions (+7, 55), a `let` of a counter (+4, 59), then records, `u64`, negation, the rest (68).  **Next: booleans.**
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -2028,11 +2070,25 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `0beefec` (2026-10-30); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `11cba9e` (2026-10-31); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | `proved/KQR.v` + `KQRReify.v` step 3: memory writes (`smem`, `cmem_ok`, `ctailm_ok`, the memory cases of `compile_f_ok`; the reifier reads memory bodies, linearity by dead memories); F46 |
+| (this commit) | §12.V: step 4 done, its gate with `KQ_REFLECT=1` (9 of 68 programs through the verified compiler), the tally after it; this ledger brought up to date |
+| `3ecf3d9` | `proved/KQR.v` + `KQRReify.v` step 4: counters as values; `kitc.py`, `KQRChain.v` follow; `proved/examples/reflect_counters` |
+| `9a384b3` | §12.V: step 4's design |
+| `11cba9e` | `KQRReify.reify_why`: why a program is not read, printed by `kitc.py --reflect`; the tally over the gate's 67 programs and the order of constructs |
+| `d82eea3` | §12.V: the gate with `KQ_REFLECT=1` on the fork passes; baseline 1 of 67 through the verified compiler |
+| `eaedf81` | `kitc.py --reflect` (`KQ_REFLECT=1`): a program the reifier reads is compiled by the verified compiler; `proved/examples/reflect_calls` |
+| `781ae61` | the per-program step by `exact_no_check`; `proved/KQRChain.v` (chains of 30, 100, 300 steps); §12.R done |
+| `80d5a07`, `44ef5c4`, `9aced05` | §12.R (3): Rocq's test suite on the fork, memo on and off; the fork image and the cold gate on it; `images.sh`'s third image, `rocq-fork/rebuild.sh` |
+| `0e2fd25`, `2771744` | F47: the image build that filled the heavy-run machine's disk; the guard's reading corrected |
+| `4c3c22d` | F48: the proof cache's key names the Rocq executables and the memo's setting |
+| `3afd777` | `rocq-fork/ConvMemo.v` (the memo proved over a model), `check_patch.py` |
+| `19cf113` | `rocq-fork/conv-memo-v9.1.1.patch` (D28) |
+| `1c6e0a0` | F46: the exponential check, not fixed upstream, the memo proposed there |
+| `8b7304c` | `proved/KQR.v` + `KQRReify.v` step 3: memory writes (`smem`, `cmem_ok`, `ctailm_ok`, the memory cases of `compile_f_ok`; the reifier reads memory bodies, linearity by dead memories); F46 |
+| `f342a3b`, `d598904`, `c1635c4` | §12.V: step 3's design; how `S` grows; the verified compiler's KQL is the translator's |
 | `a8206b2` | `proved/KQRReify.v`: programs (`reach`, plain functions, calls); per-program theorems from the text |
 | `08304f4` | `proved/KQR.v` step 1: signatures, plain functions, calls; the modular theorem `compile_f_ok` |
 | `52b0012` | `proved/KQRReify.v`: the reifier (the user's text to the syntax); the per-program theorem from the text in 0.003 s |
