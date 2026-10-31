@@ -91,6 +91,7 @@ Fixpoint bool_index (ctx : list cent) (i : nat) : option nat :=
   | [], _ => None
   end.
 
+Definition is_nat (t : term) : bool := match t with tInd i _ => Kername.eqb (inductive_mind i) (inductive_mind ind_nat) | _ => false end.
 Definition is_ty (kn : kername) (t : term) : bool := match t with tConst k _ => Kername.eqb k kn | _ => false end.
 Definition is_bool (t : term) : bool := match t with tInd i _ => Kername.eqb (inductive_mind i) (inductive_mind ind_bool) | _ => false end.
 
@@ -299,6 +300,8 @@ Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option 
   | tLetIn _ b ty body =>
       if is_bool ty then
         match reify_b fuel ctx b, reify fuel (CBool :: ctx) body with Some x, Some y => Some (SLetB x y) | _, _ => None end
+      else if is_nat ty then
+        match reify_c fuel ctx b, reify fuel (CCnt :: ctx) body with Some x, Some y => Some (SLetC x y) | _, _ => None end
       else None
   | _ => None
   end
@@ -437,6 +440,8 @@ Fixpoint reify_m (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
   | tLetIn _ b ty body =>
       if is_bool ty then
         match reify_b fuel ctx b, reify_m fuel (CBool :: ctx) body with Some x, Some y => Some (MLetB x y) | _, _ => None end
+      else if is_nat ty then
+        match reify_c fuel ctx b, reify_m fuel (CCnt :: ctx) body with Some x, Some y => Some (MLetC x y) | _, _ => None end
       else None
   | _ => None
   end
@@ -462,6 +467,8 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
         match reify fuel ctx b, reify_x fuel (CNum :: ctx) body with Some e, Some x => Some (XLet e x) | _, _ => None end
       else if is_bool ty then
         match reify_b fuel ctx b, reify_x fuel (CBool :: ctx) body with Some e, Some x => Some (XLetB e x) | _, _ => None end
+      else if is_nat ty then
+        match reify_c fuel ctx b, reify_x fuel (CCnt :: ctx) body with Some c, Some x => Some (XLetC c x) | _, _ => None end
       else None
   | tApp (tLambda _ _ _ as f) args => reify_x fuel ctx (wout f args)
   | tCase ci p c0 [b0; b1] =>
@@ -527,7 +534,6 @@ End R.
 Fixpoint lams (t : term) : list term * term :=
   match t with tLambda _ ty b => let '(l, r) := lams b in (ty :: l, r) | _ => ([], t) end.
 
-Definition is_nat (t : term) : bool := match t with tInd i _ => Kername.eqb (inductive_mind i) (inductive_mind ind_nat) | _ => false end.
 
 (** the result type of a function type *)
 Fixpoint ret_ty (t : term) : term := match t with tProd _ _ b => ret_ty b | _ => t end.
@@ -748,7 +754,7 @@ Fixpoint blockers (fuel : nat) (fns : list kername) (hb : kername -> option term
       | tApp f args => fold_left (fun a x => blockers fuel fns hb x a) args (blockers fuel fns hb f acc)
       | tLambda _ _ b => blockers fuel fns hb b acc
       | tLetIn _ b ty body =>
-          let acc := if is_ty kn_int ty || is_ty kn_mem ty || is_bool ty then acc else add_s ("a let of " ^ head_name ty) acc in
+          let acc := if is_ty kn_int ty || is_ty kn_mem ty || is_bool ty || is_nat ty then acc else add_s ("a let of " ^ head_name ty) acc in
           blockers fuel fns hb body (blockers fuel fns hb b acc)
       | tCase ci _ c brs =>
           let i := ci_ind ci in
@@ -844,8 +850,9 @@ Definition why_fun (Σ : global_env) (hb : kername -> option term) (fns bad : li
   (kn : kername) : list string :=
   if match read_fun Σ hb callees kn with Some _ => true | None => false end then
     ["read, but not well formed: a recursive call given a counter grown by S (it would have no bound), a call given fewer"
-     ^ " arguments than its function takes, a counter more than 2^20 successors deep, or a call of a number function that"
-     ^ " writes the memory (not yet: the caller's memory would not be the text's)"]
+     ^ " arguments than its function takes, a counter more than 2^20 successors deep, a let of a counter grown by S over a"
+     ^ " variable (above the function's bound), or a call of a number function that writes the memory (not yet: the"
+     ^ " caller's memory would not be the text's)"]
   else
   match lookup_env Σ kn with
   | Some (ConstantDecl cb) =>
@@ -1124,6 +1131,87 @@ Definition hb8_src := ltac:(run_template_program (tmQuoteRec hb8)
   (fun q => let r := eval vm_compute in (reify_prog q) in exact r)).
 Check (eq_refl : hb8_src = None).
 Eval vm_compute in ltac:(run_template_program (tmQuoteRec hb8) (fun q => let r := eval vm_compute in (reify_why q) in exact r)).
+
+(* ---------------------------------------------------------------- a let of a counter, from the user's text *)
+(* a counter written as a number and a budget bound by lets in a memory function, a counter variable bound in a number
+   function, a counter let in a number made after memories; a let of [S n] (above the function's bound) refused *)
+Fixpoint lc_fill (n : nat) (k : i63) (s : mem) : mem :=
+  match n with O => s | S m => lc_fill m (PrimInt63.add k 1) (KQ.KQRun.upd 0 k k s) end.
+Definition lc (n : nat) (a : i63) (s : mem) : mem := let w := 3%nat in let v := KQ.KQRun.kq_nat a in lc_fill w a (lc_fill v 1 s).
+Definition lc_b := FPlainM (MLetC (CS (CS (CS CO))) (MLetC (CNat (SVar 0))
+  (MCall 0 (CCons (CVar 1) CNil) (SCons (SVar 0) SNil) (MCall 0 (CCons (CVar 0) CNil) (SCons (SInt 1) SNil) MCur)))).
+Definition lc_src := ltac:(run_template_program (tmQuoteRec lc)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : (length lc_src, body_at lc_src 1) = (2%nat, lc_b)).
+Definition lc_Pr := mkprog (funs_of 0 lc_src) [].
+Time Lemma lc_fill_ok : callee_ok lc_Pr (gid1 0) (cbz 0) (sig_at lc_src 0) lc_fill.
+Proof. Time exact_no_check (compile_f_ok lc_Pr [] gid1 0 (sig_at lc_src 0) (body_at lc_src 0) eq_refl eq_refl (no_callees lc_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma lc_ok : callee_ok lc_Pr (gid1 1) (cbz 1) (sig_at lc_src 1) lc.
+Proof.
+  Time exact_no_check (compile_f_ok lc_Pr [existT ftype (sig_at lc_src 0) lc_fill] gid1 1 (sig_at lc_src 1) (body_at lc_src 1)
+    eq_refl eq_refl (all_ok_callees lc_Pr gid1 [existT ftype (sig_at lc_src 0) lc_fill] (conj lc_fill_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
+Definition lcn (n : nat) (a : i63) : i63 := let w := n in c_inner w a.
+Definition lcn_src := ltac:(run_template_program (tmQuoteRec lcn)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : body_at lcn_src 1 = FPlain (SLetC (CVar 0) (SCall 0 (CCons (CVar 0) CNil) (SCons (SVar 0) SNil)))).
+Definition lcx (a : i63) (s : mem) : i63 := let w := 2%nat in let s2 := lc_fill w a s in KQ.KQRun.rd 0 a s2.
+Definition lcx_src := ltac:(run_template_program (tmQuoteRec lcx)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : body_at lcx_src 1 = FPlainX (XLetC (CS (CS CO)) (XLetM (MCall 0 (CCons (CVar 0) CNil) (SCons (SVar 0) SNil) MCur) (XRet (SRd (SInt 0) (SVar 0)))))).
+Definition lcx_Pr := mkprog (funs_of 0 lcx_src) [].
+Time Lemma lc_fill_okx : callee_ok lcx_Pr (gid1 0) (cbz 0) (sig_at lcx_src 0) lc_fill.
+Proof. Time exact_no_check (compile_f_ok lcx_Pr [] gid1 0 (sig_at lcx_src 0) (body_at lcx_src 0) eq_refl eq_refl (no_callees lcx_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma lcx_ok : callee_ok lcx_Pr (gid1 1) (cbz 1) (sig_at lcx_src 1) lcx.
+Proof.
+  Time exact_no_check (compile_f_ok lcx_Pr [existT ftype (sig_at lcx_src 0) lc_fill] gid1 1 (sig_at lcx_src 1) (body_at lcx_src 1)
+    eq_refl eq_refl (all_ok_callees lcx_Pr gid1 [existT ftype (sig_at lcx_src 0) lc_fill] (conj lc_fill_okx Logic.I)) eq_refl eq_refl).
+Time Qed.
+Definition lcbad (n : nat) (a : i63) : i63 := let w := S n in c_inner w a.
+Definition lcbad_src := ltac:(run_template_program (tmQuoteRec lcbad)
+  (fun q => let r := eval vm_compute in (reify_prog q) in exact r)).
+Check (eq_refl : lcbad_src = None).
+
+(* ---------------------------------------------------------------- a chain of tests whose every end is a call of the function itself *)
+(* one call, the arguments chosen by conditional moves along the tests and the cells written once with the values chosen
+   (the translator's merge, §1.5): the KQL's only jump is the counter's test *)
+Fixpoint mrow (n : nat) (b x p : i63) (s : mem) : mem :=
+  match n with
+  | O => s
+  | S m => let cur := KQ.KQRun.rd 0 b s in
+           if PrimInt63.eqb (PrimInt63.land x 1) 0 then mrow m (PrimInt63.sub b 1) x p (KQ.KQRun.upd 1 b p (KQ.KQRun.upd 0 b cur s))
+           else if PrimInt63.eqb cur 0 then mrow m (PrimInt63.sub b 1) 0 p (KQ.KQRun.upd 1 b x (KQ.KQRun.upd 0 b x s))
+           else mrow m (PrimInt63.sub b 1) (PrimInt63.lxor x cur) p (KQ.KQRun.upd 1 b cur (KQ.KQRun.upd 0 b p s))
+  end.
+Fixpoint mqry (n : nat) (b l res : i63) (s : mem) : i63 :=
+  match n with
+  | O => res
+  | S m => let cur := KQ.KQRun.rd 0 b s in
+           if andb (PrimInt63.leb l (KQ.KQRun.rd 1 b s)) (PrimInt63.ltb res (PrimInt63.lxor res cur))
+           then mqry m (PrimInt63.sub b 1) l (PrimInt63.lxor res cur) s else mqry m (PrimInt63.sub b 1) l res s
+  end.
+Fixpoint sel_if (e : exp) : nat * nat :=
+  match e with
+  | Esel _ _ _ _ _ _ k => let '(a, b) := sel_if k in (S a, b)
+  | Eop _ _ _ _ k | Ecall _ _ _ k | Ekld _ _ _ k | Ekst _ _ _ k => sel_if k
+  | Eif _ _ _ t e => let '(a, b) := sel_if t in let '(c, d) := sel_if e in (a + c, S (b + d))
+  | _ => (0, 0)
+  end%nat.
+Definition mrow_src := ltac:(run_template_program (tmQuoteRec mrow)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Definition mrow_Pr := mkprog (funs_of 0 mrow_src) [].
+Check (eq_refl : snd (sel_if (kbody (compile_f gid1 0 (sig_at mrow_src 0) (body_at mrow_src 0)))) = 1%nat).
+Eval vm_compute in sel_if (kbody (compile_f gid1 0 (sig_at mrow_src 0) (body_at mrow_src 0))).
+Time Lemma mrow_ok : callee_ok mrow_Pr (gid1 0) (cbz 0) (sig_at mrow_src 0) mrow.
+Proof. Time exact_no_check (compile_f_ok mrow_Pr [] gid1 0 (sig_at mrow_src 0) (body_at mrow_src 0) eq_refl eq_refl (no_callees mrow_Pr gid1) eq_refl eq_refl). Time Qed.
+Definition mqry_src := ltac:(run_template_program (tmQuoteRec mqry)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Definition mqry_Pr := mkprog (funs_of 0 mqry_src) [].
+Check (eq_refl : snd (sel_if (kbody (compile_f gid1 0 (sig_at mqry_src 0) (body_at mqry_src 0)))) = 1%nat).
+Eval vm_compute in sel_if (kbody (compile_f gid1 0 (sig_at mqry_src 0) (body_at mqry_src 0))).
+Time Lemma mqry_ok : callee_ok mqry_Pr (gid1 0) (cbz 0) (sig_at mqry_src 0) mqry.
+Proof. Time exact_no_check (compile_f_ok mqry_Pr [] gid1 0 (sig_at mqry_src 0) (body_at mqry_src 0) eq_refl eq_refl (no_callees mqry_Pr gid1) eq_refl eq_refl). Time Qed.
+Print Assumptions mrow_ok.
 
 (* linearity: a memory used after a newer one was made has no tree *)
 Definition dup (s : mem) : mem := let s2 := KQ.KQRun.upd 0 0 1 s in KQ.KQRun.upd 0 1 (KQ.KQRun.rd 0 0 s) s2.
