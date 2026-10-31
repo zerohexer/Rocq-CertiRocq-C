@@ -49,11 +49,11 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    values (several counters, `S`/`O`, budgets, a match on a counter inside a body), booleans (tests made of `&&`, `||`,
    `negb`, boolean lets), choices between numbers as conditional moves, number functions that write the memory, cells of 4
    bytes, helpers written out where they are used, a `let` of a counter, chains of tail calls merged into one call,
-   functions given to recursive functions (a copy per function given) — each per-program step in milliseconds, long
-   read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program
-   through it when every function is read (46 of the gate's 71 programs today, each corpus program timed against the
-   translator's build), the translator otherwise; next loops that write and give a number, in the order of §12.V's tally.
-   Emit-then-prove is the interim.
+   functions given to recursive functions (a copy per function given), loops that write and give a number — each
+   per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`);
+   `kitc.py --reflect` compiles a program through it when every function is read (52 of the gate's 71 programs today,
+   each corpus program timed against the translator's build), the translator otherwise; next records and pairs, in the order of
+   §12.V's tally.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -2278,6 +2278,46 @@ is not read yet", on their `solve`) is this same last call; `hw_mmio` waits on m
 - *Not in this step*: a call of a writing function, or the recursive call, inside an expression (`rd .. (f s) + 1`,
   `acc + rec ..`): the caller's memory must then be dropped after the call — the next step.
 
+**Step 11 done (2026-11-01): loops that write and give a number.**  Built as designed:
+- *`KQR.v`*: `XRec`, `XCall`, `FRecX`; `denote_x` with `recx`; `ctailx` (`XRec`: the arguments, the memory, `Eloop`;
+  `XCall`: the same, `Ecall`, `Eret`); `wfx` with the flag `rx`; **`ctailx_ok` restated: "there is an end memory such that,
+  for every KQL environment the invariant holds of, the code gives the number and that memory"** — each case picks the end
+  memory from the meaning alone (a test's branch, a let's body, the recursive call's from `Hrecx`, the callee's from its
+  statement) and then uses `cexp_all`, `cmem_ok`, ... as they are; `endx` is gone.  `loopx_call_ok` (the loop step with the
+  end memory its call reaches); `compile_f_ok`'s `FRecX` case by the counter's induction; `denote_x_recx_ext`;
+  `compile_f_okrx` (a copy of a writing template from its two equations).  No determinism lemma, no new hypothesis; `KQR.v`
+  compiles in 9 s.  Tests: `deg` (a loop reading a cell, writing the next, adding to a total) and `deg_top` (its caller, the
+  last call `XCall`), the shape of their KQL (`Eloop`; `Ecall` then `Eret`), the recursive call inside an expression and in a
+  plain body refused, `tdcopy` (`compile_f_okrx`); each theorem 0.002–0.003 s; `Print Assumptions` the same base.
+- *The reifier*: a call of a writing function is no longer read as a number (it was refused by `wf`), so the end of a body
+  goes to the `sx` reader: there a call of a writing function at the end is `XCall`, the recursive call at the end `XRec`; a
+  recursive function whose branches the number reader does not read is read as `FRecX`, in a template's copy too.  The
+  reason "a recursive function that writes the memory and gives back a number" is gone; a function that writes in a place not
+  read yet gives "a number function that writes the memory where it is not read yet".  Tests (`KQRReify.v`): `rdeg` /
+  `rdeg_top` (the trees of `deg` / `deg_top`), `rsearch` (a memory made by a call, a boolean let on it, the recursive call
+  given that memory and a number chosen on the boolean: `CF460C`'s shape), `rtuse` (a copy of a writing template, read as a
+  loop that writes, `compile_f_okrx`).
+- *`kitc.py`*: a writing copy's theorem is `compile_f_okrx`.
+- *The C*: of the 63 examples and corpus programs compared with step 10's, 57 have byte-identical C; the 6 that differ are the
+  moved ones.  One difference from the translator's C, kept: a counter written as a number in a call (`search 64 ..` in
+  `CF460C`'s `solve`, `query 21 ..` and `add 21 ..` inside `CF61E`'s loop) is a chain of additions (`CS` is one addition)
+  where the translator writes the constant; clang folds them, as the timing shows.
+- *Timed (best of 7 ms, the translator's / the verified compiler's)*: `CF7D` 21.80 / 21.55, `CF460C` 35.84 / 35.50, `CF61E`
+  83.66 / 82.17, `CF61En` 52.24 / 52.39, `CF833B` 313.95 / 315.68 — the same.
+- *Through the verified compiler: 52 of the gate's 71 programs* (was 46): `CF7D`, `CF460C`, `CF61E`, `CF61En`, `CF833B`,
+  `hof_cells` — the six expected (the tally had counted three; the other reason it gave `CF61E`, `CF61En` and `CF833B` was the
+  same last call).
+- *The tally after the step* (over the gate's 71 programs): calls of writing functions and reads in place inside expressions
+  13 (`loops`, `bytes`, `views`, `heap`, `hw_mmio` and the kernels' eight programs, most of them with machine operations as
+  well), machine operations 10, records and pairs 6, bytes 2, tests on a call giving back a boolean 2, `u64` 2, records of
+  other types 2, mutual recursion 1.  **The order that completes the most now**: records and pairs (+2, 54 of 71:
+  `pair_ret`, `rec_pair`), calls of writing functions and reads in place inside expressions (+1, 55: `loops`), machine
+  operations (+9, 64: the kernels and `hw_mmio`), then tests on calls giving back a boolean, `u64`, bytes, records of other
+  types, mutual recursion.  **Next: records and pairs.**
+- *The gate with `KQ_REFLECT=1`, on the fork, on the final tree (2026-11-01): everything passes* — `make.sh` `core-ok`; examples
+  27 / 27; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (37 / 38 / 39 / 56 / 43 s); **52
+  programs through the verified compiler, 0 read but refused by the check**.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -2450,11 +2490,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `55eeb6d` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `f755ecc` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 10 done (functions given to functions: 46 of 71), F54, the gate |
+| (this commit) | §12.V: step 11 done (loops that write and give a number: 52 of 71), the C, the timing, the gate, the tally |
+| `00462c7` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 11: `XRec`, `XCall`, `FRecX`; `ctailx_ok` with the end memory chosen before the environment; `compile_f_okrx` |
+| `4adbee1` | §12.V: step 11's design |
+| `f755ecc` | §12.V: step 10 done (functions given to functions: 46 of 71), F54, the gate |
 | `813404f` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 10: copies per functions given; `compile_f_okr`, `compile_f_okrm`, `denote_rec_ext` |
 | `8a9dd12` | §12.V: step 10's design |
 | `55eeb6d` | §12.V: step 9 done (a `let` of a counter; the merge of tail calls in full: 42 of 71), F53, the timing, the gate |
