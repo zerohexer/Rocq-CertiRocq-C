@@ -48,11 +48,12 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    (`proved/KQR.v`, `KQRReify.v`): numbers, tests, lets, reads, calls, recursion on a counter, memory writes, counters as
    values (several counters, `S`/`O`, budgets, a match on a counter inside a body), booleans (tests made of `&&`, `||`,
    `negb`, boolean lets), choices between numbers as conditional moves, number functions that write the memory, cells of 4
-   bytes, helpers written out where they are used, a `let` of a counter, chains of tail calls merged into one call — each
-   per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`);
-   `kitc.py --reflect` compiles a program through it when every function is read (42 of the gate's 71 programs today, each
-   timed against the translator's build), the translator otherwise; next functions given to functions, in the order of
-   §12.V's tally.  Emit-then-prove is the interim.
+   bytes, helpers written out where they are used, a `let` of a counter, chains of tail calls merged into one call,
+   functions given to recursive functions (a copy per function given) — each per-program step in milliseconds, long
+   read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program
+   through it when every function is read (46 of the gate's 71 programs today, each corpus program timed against the
+   translator's build), the translator otherwise; next loops that write and give a number, in the order of §12.V's tally.
+   Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -1583,6 +1584,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F51 | The verified compiler's C for `CF868F` was 1.48x slower than the translator's: two calls of the function itself at the end of a test were a jump (the translator merges them into one call with chosen arguments), and with that fixed still 1.22x: temporaries reused across the arms of a test (the same KQL with every variable bound once ran at the translator's speed; 85 register moves against 67 in the loop) (2026-10-31) | `compile` merges such calls (equal arguments once) and numbers every variable once (`after`); all 16 programs on the verified path timed within the spread |
 | F52 | Moving `CF453B` to the verified compiler made it 1.34x slower: a choice on `a && b` between two numbers was compiled as the boolean's value (moves to 1 / 0 and a `land`) and one move, where the translator chooses on the parts (two moves); measured apart on variants of the C (2026-11-01) | `compile`'s `csel` (choices on the parts), its lemma in `cexp_all`; what is left (1.11x) is `zabs` as a conditional move against the translator's jump, which comes from its `choice_ok` not looking through `Uint63.opp` — kept, the general rule (D17) |
 | F53 | Moving `CF1100F` to the verified compiler made it 1.52x slower: a chain of three tests whose four ends call the loop itself on the same cells written was jumps, where the translator merges it into one call (its differing arguments and the written values chosen by conditional moves); step 6's merge took only two ends on the newest memory (2026-11-01) | `compile` merges any such chain (`mrg_e`, `mrg_m`, proved once; tests on comparisons or booleans; writes of the same cells), the two-call case giving the same code as before; `CF1100F` 109.1 / 108.5 ms |
+| F54 | A copy of a recursive function for the functions it is given (step 10) set to be unfolded last, like the program's functions: comparing a caller's text (`wfix2_go (kq_nat (..)) F a b`) with the copy's call, the kernel unfolded the template on `kq_nat (..)` rather than the copy, and the check did not end in 10 minutes (2026-11-01, `wfix`) | the templates are unfolded last, the copies first (a copy is a definition that unfolds to its caller's text in one step) |
 | F38 | MetaRocq's formal evaluation (`EWcbvEval.eval`, `PCUICWcbvEval`) has rules for primitive values only, none for primitive operations: `PrimInt63.add` has no body, `eval_delta` cannot fire, every program here is stuck in it | the verified compiler is built by reflection over our own syntax instead (D26, §1.12) (read in the image's MetaRocq sources, 2026-10-30) |
 | F37 | CakeML's architecture is ours: a proof-producing translator from the logic's functions on top, one verified compiler below; Pancake is verified through a proof-producing decompiler.  The difference is that CakeML builds each proof by construction while ours searches | D25, §1.11 (read in the CakeML repository, 2026-10-30) |
 
@@ -2206,6 +2208,43 @@ known functions gets a copy of its own, and the template itself is no function o
 - *`kitc.py`*: a copy's meaning is defined from the term the reifier gives (`tmMkDefinition`), and its theorem is
   `compile_f_okr` with the two equations; the templates are unfolded last, like the program's functions (F50).
 
+**Step 10 done (2026-11-01): functions given to functions.**  Built as designed:
+- *`KQR.v`*: `denote_rec_ext` (over the five sorts: the meaning depends on the recursive call only through its values on
+  well-formed arguments) and `denote_m_recm_ext` (the same for a memory); `compile_f_okr` / `compile_f_okrm` — a function
+  given by its two equations has the statement — proved once from `compile_f_ok` by induction on the counter; `fr0` / `fr1` /
+  `fm0` / `fm1` (the parts of a recursive body, for the per-program call).  Test: `tcopy` (`tapply n tadd3`, a template given a
+  function), its statement from its equations in 0.002 s, the comparison with its tree's meaning refused.
+- *The reifier*: function parameters bound to the functions given (`CFn`), dropped from the recursive call (`drop_fns`);
+  templates (`tmpl_tys`), the call sites in a text with its helpers written out (`sites`), the copies made before the functions
+  that call them and the copies their functions need before them (`ensure`), compared as terms by a structural comparison
+  (`teq`), named `T__cK`, read as recursive functions (`read_tmpl`), their meaning terms (`copy_meaning`) given with the
+  program (`reify_prog2`); a copy that is not read gives its template's reasons.  Looking for the call sites writes out only
+  the helpers that reach a template (`tmpl_helpers`: a template call inside a helper is seen with the helper's arguments put
+  in), and a program with no template looks for none: a first version wrote every helper out at every call, and the
+  reifier's step on the kernels' programs went from 15.9 to 24.3 s (`HWP_kernel`); now 16.7 against step 9's 15.9 s, the
+  others within half a second.  Tests: `ruse` (two copies of `rapply`,
+  given `radd3` and `rmix`), `rw` (the shape of `wfix1_go`: the function given is applied to the template's own partial
+  application, and written out the recursion is a call of the copy) — the trees exactly the hand-written ones, each copy
+  defined from its meaning term by `tmMkDefinition` and checked by `compile_f_okr`, the callers by `compile_f_ok`.
+- *`kitc.py`*: the copies' meanings defined in `NAME_r.v`, each copy's theorem `compile_f_okr` (or `compile_f_okrm`) with
+  `eq_refl` and `fun n => eq_refl`; the templates unfolded last, the copies first (F54: with the copies set to be unfolded
+  last as well, the kernel unfolded the template applied to `kq_nat (..)` rather than the copy, and `wfix`'s check did not end
+  in 10 minutes; a copy unfolds to its caller's text in one step).
+- *Through the verified compiler: 46 of the gate's 71 programs* (was 42): `hof_rec` (3267906294), `wfix` (76), `loop_while`,
+  `wfix_mem` — `loop_while` and `wfix_mem` as well because their other blocker lay inside the template (a test on a call of the
+  function parameter), which is now written out.  All four are examples: no corpus program moved, so none to time.
+- *Not in this step*: functions given that name the caller's variables (closures, §5.2) — no program of the gate needs them
+  now (`loops` and `hof_cells` wait on functions that write).
+- *The gate with `KQ_REFLECT=1`, on the fork, on the final tree (2026-11-01): everything passes* — `make.sh` `core-ok`; examples
+  27 / 27; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (38 / 38 / 40 / 57 / 42 s); **46
+  programs through the verified compiler, 0 read but refused by the check**.
+- *The tally after the step* (over the gate's 71 programs): calls of writing functions and reads in place inside expressions
+  15, machine operations 10, loops that write and give a number 7, records and pairs 6, bytes 2, tests on a call giving back a
+  boolean 2, `u64` 2, mutual recursion 1, the rest 2.  **The order that completes the most now**: loops that write and give a
+  number (+3, 49 of 71), calls of writing functions and reads in place inside expressions (+4, 53), machine operations (+9, 62:
+  the kernels), records (+2, 64), then bytes, `u64`, tests on calls giving back a boolean, the rest.  **Next: loops that write
+  and give a number.**
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -2378,11 +2417,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `e48afca` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `55eeb6d` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 9 done (a `let` of a counter; the merge of tail calls in full: 42 of 71), F53, the timing, the gate |
+| (this commit) | §12.V: step 10 done (functions given to functions: 46 of 71), F54, the gate |
+| `813404f` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 10: copies per functions given; `compile_f_okr`, `compile_f_okrm`, `denote_rec_ext` |
+| `8a9dd12` | §12.V: step 10's design |
+| `55eeb6d` | §12.V: step 9 done (a `let` of a counter; the merge of tail calls in full: 42 of 71), F53, the timing, the gate |
 | `d93a3d0` | `proved/KQR.v` + `KQRReify.v` step 9: `SLetC` / `MLetC` / `XLetC`; the general merge (`mt_e`, `mt_m`, `ctests`, `cposs`, `mrg_e_ok`, `mrg_m_ok`) |
 | `e48afca` | §12.V: step 8 done (helpers written out: 39 of the gate's 71), F52, the timing, the gate, the tally |
 | `7193406` | `proved/KQR.v` + `KQRReify.v` step 8: helpers written out; `csel`; `proved/examples/reflect_helpers` |
