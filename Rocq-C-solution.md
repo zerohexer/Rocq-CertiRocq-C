@@ -46,10 +46,12 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    `compile : S -> KQL` proved once; the user's function is reified into `S` (untrusted) and per program only `denote s = f` is
    checked by conversion — zero proof search, nothing added to the trust, for other people's programs.  Built so far
    (`proved/KQR.v`, `KQRReify.v`): numbers, tests, lets, reads, calls, recursion on a counter, memory writes, counters as
-   values (several counters, `S`/`O`, budgets, a match on a counter inside a body) — each per-program step in milliseconds,
-   long read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`); `kitc.py --reflect` compiles a
-   program through it when every function is read (9 of the gate's 68 programs today), the translator otherwise; next
-   booleans, in the order of §12.V's tally.  Emit-then-prove is the interim.
+   values (several counters, `S`/`O`, budgets, a match on a counter inside a body), booleans (tests made of `&&`, `||`,
+   `negb`, boolean lets), choices between numbers as conditional moves — each per-program step in milliseconds, long
+   read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program
+   through it when every function is read (17 of the gate's 69 programs today, each timed against the translator's build), the
+   translator otherwise; next number functions that write the memory, in the order of §12.V's tally.  Emit-then-prove is the
+   interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -1576,6 +1578,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F47 | Rebuilding the image on the fork filled the heavy-run machine's disk to 0 bytes (2026-10-31): `opam reinstall --keep-build-dir` kept the build folder of every package (MetaRocq's alone is many GB, against 3.8 GB for the whole installed switch), and `docker commit` then wrote the container's changes a second time as a layer; the free-space guard ran only when a job started, and — found after the recovery — it read the free space wrongly (the directory count printed before the number was glued onto it, so it refused only near 0 bytes): how much was free when the build started is not known.  The container runtime went down, the data disk gave I/O errors, the machine's other containers stopped at the engine's restart.  Recovered by deleting the job's own objects through Docker after the engine came back, then `fstrim` (0 → 31 GB free) | an image build keeps only the build folder it needs (CertiRocq's, for the kq2 patch), deletes sources and caches before the commit, and checks free space during the build (stop under 20 GB), not only at the start; expect the commit to need the container's growth again.  The guard's reading is fixed and was checked both ways (it passes at the real 45.6 GB, refuses at a higher threshold).  The rebuild done that way: 69 minutes, the container grew 4.09 GB, free space never under 45 GB |
 | F48 | The proof cache's key did not include Rocq itself: the tactic libraries, `KQRun.v`, the header and the printed functions only.  A tree that kept its cache across a change of kernel (an upgrade, our fork, D28) would have reused proofs the old kernel checked without checking them again (found 2026-10-31 when the kernel changed) | the key includes the content of the `coqc` / `rocq` executables (the kernel is linked into them) and `ROCQ_CONV_CACHE` (`rocq_id` in `kitc.py`); every cached proof is missed once after the change |
 | F49 | Moving a program from the translator to the verified compiler changes its C, and the gate checks answers, not speed: two corpus programs became 1.45x slower in step 4 (`CF295B`, `CF295Bv2`: a minimum written into a cell, a conditional move in the translator's C, a jump in `compile`'s), unseen by the gate (2026-10-31) | if-conversion in `compile` (§12.V), timed again: within the spread; a program moved to the verified path is timed against the translator's build before the move is reported |
+| F50 | A call given a written counter (`dfs 20 ..`) made the per-program check run out of memory: comparing the function with its tree's meaning, the kernel unfolded the user's function first, and a function applied to a written counter is worked out round by round (`tw 20`, two calls a round: 4.7 s, 1.2 GB); the compiler's meaning functions set to unfold first did not help (2026-10-31, `CF813F`) | `kitc.py` sets the program's functions to be unfolded last (`Strategy opaque`) in each theorem file — the order only; `tw 20` 0.002 s, pinned in `KQR.v` |
 | F38 | MetaRocq's formal evaluation (`EWcbvEval.eval`, `PCUICWcbvEval`) has rules for primitive values only, none for primitive operations: `PrimInt63.add` has no body, `eval_delta` cannot fire, every program here is stuck in it | the verified compiler is built by reflection over our own syntax instead (D26, §1.12) (read in the image's MetaRocq sources, 2026-10-30) |
 | F37 | CakeML's architecture is ours: a proof-producing translator from the logic's functions on top, one verified compiler below; Pancake is verified through a proof-producing decompiler.  The difference is that CakeML builds each proof by construction while ours searches | D25, §1.11 (read in the CakeML repository, 2026-10-30) |
 
@@ -1943,6 +1946,46 @@ checks answers, not speed.
   once, for both, as the step on values across calls.  So `CF35C` (its helper `put` takes a boolean) waits; the other seven
   programs the tally gives booleans are expected.
 
+**Step 5 done (2026-10-31): booleans.**  Built as designed, in `proved/KQR.v` and `proved/KQRReify.v`:
+- *The proof*: every meaning, compiler and lemma of `KQR.v` gained the boolean environment (`benv`, and `benvA`, its atoms);
+  the invariant has nine parts (`benv_ok`, its `lt_all`); the mutual lemma's fifth part, for a boolean, is the conjunction of
+  the test (`ccond`) and the value (`cbval`) — one sort, two lemmas; `b2i_land` / `b2i_lor` / `b2i_lxor` / `b2i_eq0` carry the
+  values.  The memory and tail lemmas gained the four cases (`SIfB`, `SLetB`, `MIfB`, `MLetB`), `compile_f_ok` starts with no
+  booleans.  Proved as designed, no new hypothesis.
+- *Tests*: `chk` (three tests made of `&&`, `||`, `negb`, each choosing between two numbers: conditional moves on the
+  booleans' values, its KQL has `Esel`), `cnt_in` (a boolean `let` tested at the end of a loop: jumps), `mark` (a memory chosen
+  by `a && negb b`); a tree with `||` where the text has `&&` is refused by the check; every theorem 0.001–0.004 s; `KQR.v`
+  compiles in 3.9 s; `Print Assumptions` the same base as step 4.  The reifier gives exactly the hand-written trees for the
+  three; a test on one comparison stays `SIf`, so the C of the programs already on the verified path is unchanged.
+- *Through the verified compiler: 17 of the gate's 69 programs* (was 9 of 68): `ifs_chain`, the new `reflect_bools` (answer
+  4095, worked out by hand; the first expected value, 4084, was mine and wrong — the eighth cell is 7, read as 77 from the
+  memory file — and both builds, the translator's and the verified compiler's, gave 4095), `CF380C`, `CF380Cp`, `CF235C`, `CF235Cv2`, `CF813F`, `CF813Fv2` added — the seven the tally
+  expected.  **Timed against the translator's build** (F49's rule; best of 7 ms, the translator's / the verified compiler's):
+  `CF380C` 62.1 / 62.4, `CF380Cp` 49.6 / 47.9, `CF235C` 55.5 / 52.7, `CF235Cv2` 66.7 / 67.8, `CF813F` 44.6 / 44.4, `CF813Fv2`
+  38.9 / 40.2 — within the spread.  (A first run of `CF380C` and `CF235Cv2` gave the same wrong answer with both builds: the
+  timing script had dropped `hand.tsv`'s memory column; with it, both right.)
+- *A check that ran out of memory (F50).*  The first gate of this step had `CF813F` and `CF813Fv2` read and then refused by the
+  check: the theorem of their `solve` exhausted the memory (over 2 GB in 6 s locally).  `solve` calls its callees with written
+  counters (`dfs 20 q ..`, `msort 20 ..`).  Comparing the function with its tree's meaning, the kernel chose to unfold the user's
+  `dfs` before the meaning side had reduced to the same call — and a function applied to a written counter is worked out round
+  by round (pinned in `KQR.v` with `tw 20`, two calls a round: 4.7 s and 1.2 GB for one theorem).  With a counter variable, as
+  in every earlier test, the user's function is stuck after one step, so this never showed.  Setting the compiler's meaning
+  functions to be unfolded first (`Strategy expand`) did not change it; setting the program's own functions to be unfolded last
+  (`Strategy opaque`, written by `kitc.py` into each program's theorem file) did: `tw 20` 0.002 s, `CF813F`'s whole theorem file
+  2.7 s.  It changes the order of unfolding only — nothing that converts stops converting, as for `kq_nat` (§1.6).
+- *The gate with `KQ_REFLECT=1`, on the fork, on the final tree (2026-10-31): everything passes* — `make.sh` `core-ok`; examples
+  25 / 25; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (36 / 37 / 39 / 55 / 43 s); **17
+  programs through the verified compiler** (the 9 before, `ifs_chain`, `reflect_bools`, `CF380C`, `CF380Cp`, `CF235C`,
+  `CF235Cv2`, `CF813F`, `CF813Fv2`), **0 read but refused by the check**.
+- *The tally after the step* (over the 69): number functions that write the memory 26, `KQRun.v`'s helpers 21, narrow memory
+  15, machine operations 10, functions given to functions 8, a `let` of a counter 4, records and pairs 4, a test on a call
+  giving back a boolean 4 (the loop library's function parameters, `u64` comparisons, the heap), boolean parameters and results
+  3 (`CF35C`, `CF35Cn`, `heap`: the step on values across calls), `u64` 2, negation 2, mutual recursion 1, records of other types
+  2.  **The order that completes the most now**: number functions that write the memory (+6, 23 of 69), `KQRun.v`'s helpers
+  (+8, 31), narrow memory (+7, 38), machine operations (+9, 47: the kernels), functions given to functions (+5, 52), a `let` of
+  a counter (+3, 55), then records, tests on calls, boolean parameters, `u64`, negation, the rest.  **Next: number functions
+  that write the memory.**
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -2119,7 +2162,10 @@ Pushed to the public repository up to `913445c` (2026-10-31); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: the if-conversion and its timing (F49); step 5's design (booleans) |
+| (this commit) | §12.V: step 5 done (booleans): its tests, the tally (17 of 69), the timing, F50, the gate |
+| `82ef78f` | `kitc.py --reflect`: the program's functions unfolded last in the check (F50), pinned in `KQR.v`; `reflect_bools`' expected answer corrected |
+| `2c93d56` | `proved/KQR.v` + `KQRReify.v` step 5: booleans; `proved/examples/reflect_bools` |
+| `110913d` | §12.V: the if-conversion and its timing (F49); step 5's design (booleans) |
 | `145a9ba` | `proved/KQR.v`: if-conversion in `compile` (`choice_ok`, the conditional move), its proof case, the `relax` test |
 | `913445c` | §12.V: step 4 done, its gate with `KQ_REFLECT=1` (9 of 68 programs through the verified compiler), the tally after it; this ledger brought up to date |
 | `3ecf3d9` | `proved/KQR.v` + `KQRReify.v` step 4: counters as values; `kitc.py`, `KQRChain.v` follow; `proved/examples/reflect_counters` |
