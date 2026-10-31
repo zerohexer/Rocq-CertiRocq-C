@@ -1,0 +1,14 @@
+(* through the verified compiler (kitc.py --reflect): a number made after memories -- a write, a call that fills cells,
+   a number let, and a test whose branch reads a memory made in place (rd 0 8 (fill_sq n 6 s2)).  On the cells
+   36 24 100 35 17 5 7 7 63 49 18 9 with n = 4: cell 0 := 5; fill_sq 4 1 puts 1 4 9 16 in cells 1 .. 4, so cell 3 is 9 and
+   the test holds; fill_sq 4 6 puts 36 49 64 81 in cells 6 .. 9, and cell 8 is 64 *)
+Fixpoint fill_sq (n : nat) (i : int) (s : mem) : mem :=
+  match n with O => s | S m => fill_sq m (i + 1) (upd 0 i (i * i) s) end.
+Definition solve (n : nat) (s : mem) : int :=
+  let s1 := upd 0 0 5 s in
+  let s2 := fill_sq n 1 s1 in
+  let base := rd 0 0 s2 in
+  if rd 0 3 s2 =? 9 then rd 0 8 (fill_sq n 6 s2) else base.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_input 0).

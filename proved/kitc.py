@@ -378,7 +378,7 @@ def reflect(name, entry, prog, no_proof):
         + f'Redirect "{name}_rwhy" Eval vm_compute in (snd {name}_res).\n')
     rc, out = coqc(f0)
     info = open(os.path.join(GEN, f"{name}_rinfo.out")).read() if rc == 0 and os.path.exists(os.path.join(GEN, f"{name}_rinfo.out")) else ""
-    fs = re.findall(r'\("([^"]+)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*(\d+)(?:%nat)?,\s*(true|false),\s*(true|false)\)', info)
+    fs = re.findall(r'\("([^"]+)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*(\d+)(?:%nat)?,\s*(true|false),\s*(true|false),\s*(true|false)\)', info)
     if rc != 0 or not fs or "= None" in info:
         wp = os.path.join(GEN, f"{name}_rwhy.out")
         why = open(wp).read() if os.path.exists(wp) else ""
@@ -386,7 +386,7 @@ def reflect(name, entry, prog, no_proof):
         print(name, "reflect: not read by the verified compiler's reifier (" + ("; ".join(rs) if rs else "the reifier did not run")
               + "); the translator follows", flush=True)
         return None
-    sig = lambda f: f"(KQR.mksig {f[1]} {f[2]} {f[3]} {f[4]})"
+    sig = lambda f: f"(KQR.mksig {f[1]} {f[2]} {f[3]} {f[4]} {f[5]})"
     t = HDR + "From KQC Require KQR KQRReify.\nImport ListNotations.\n" + f"From KQG Require Import {name}_r.\n"
     t += f"Definition {name}_funs := match {name}_src with Some l => l | None => [] end.\n"
     t += f"Definition {name}_prog := KQL.mkprog (KQRReify.funs_of 0 {name}_funs) [].\n"

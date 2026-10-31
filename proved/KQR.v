@@ -80,8 +80,9 @@ Inductive smem : Type :=
 | MIfB (b : sbool) (m1 m2 : smem)    (* if b then m1 else m2, a test that is not one comparison *)
 | MLetB (b : sbool) (m : smem).      (* let x := b in m, x a boolean *)
 
-(** a function's signature: [sn] counters first, [sk] numbers, a memory last or not, a memory as the result or a number *)
-Record sig := mksig { sn : nat; sk : nat; sm : bool; sr : bool }.
+(** a function's signature: [sn] counters first, [sk] numbers, a memory last or not, a memory as the result or a number,
+    and for a number: whether the function writes the memory ([sw]: its KQL ends with some memory, not the one it was given) *)
+Record sig := mksig { sn : nat; sk : nat; sm : bool; sr : bool; sw : bool }.
 
 Definition rty (r : bool) : Type := if r then mem else i63.
 
@@ -125,7 +126,7 @@ Fixpoint appc (x : nat) (T : Type) {struct x} : ctype x T -> list nat -> T :=
 (** a call of a function of signature [g] on its counters, its numbers, the memory *)
 Definition callf (g : sig) : ftype g -> list nat -> list i63 -> mem -> rty (sr g) :=
   match g as g0 return ftype g0 -> list nat -> list i63 -> mem -> rty (sr g0) with
-  | mksig x k m r => fun h cvs vs s => appn k m r (appc x (ntype k m r) h cvs) vs s
+  | mksig x k m r _ => fun h cvs vs s => appn k m r (appc x (ntype k m r) h cvs) vs s
   end.
 
 (** a call's number (0 for a function giving back a memory, as its KQL returns) and the memory after it *)
@@ -218,18 +219,56 @@ Fixpoint denote_m (cs : list callee) (rec : list nat -> list i63 -> mem -> i63) 
   | MLetB b m => let x := denote_b cs rec cenv benv env s b in denote_m cs rec recm cenv (x :: benv) env s m
   end.
 
+(** a number made after memories: the memories first ([let s2 := m in ..], each the newest in what follows), then the number
+    read from the newest one; lets of numbers and booleans and tests on the way *)
+Inductive sx : Type :=
+| XRet (e : sexp)                    (* the number, from the newest memory *)
+| XLetM (m : smem) (x : sx)          (* let s2 := m in x *)
+| XLet (e : sexp) (x : sx)           (* let v := e in x *)
+| XLetB (b : sbool) (x : sx)         (* let v := b in x, v a boolean *)
+| XIf (c : cmpop) (a b : sexp) (x1 x2 : sx)
+| XIfB (b : sbool) (x1 x2 : sx)
+| XMatch (c : nat) (x0 x1 : sx).
+
+Fixpoint denote_x (cs : list callee) (rec : list nat -> list i63 -> mem -> i63) (recm : list nat -> list i63 -> mem -> mem)
+  (cenv : list nat) (benv : list bool) (env : list i63) (s : mem) (x : sx) {struct x} : i63 :=
+  match x with
+  | XRet e => denote_e cs rec cenv benv env s e
+  | XLetM m x => let s2 := denote_m cs rec recm cenv benv env s m in denote_x cs rec recm cenv benv env s2 x
+  | XLet e x => let v := denote_e cs rec cenv benv env s e in denote_x cs rec recm cenv benv (v :: env) s x
+  | XLetB b x => let v := denote_b cs rec cenv benv env s b in denote_x cs rec recm cenv (v :: benv) env s x
+  | XIf c a b x1 x2 => if cmp_sem c (denote_e cs rec cenv benv env s a) (denote_e cs rec cenv benv env s b)
+                       then denote_x cs rec recm cenv benv env s x1 else denote_x cs rec recm cenv benv env s x2
+  | XIfB b x1 x2 => if denote_b cs rec cenv benv env s b then denote_x cs rec recm cenv benv env s x1 else denote_x cs rec recm cenv benv env s x2
+  | XMatch c x0 x1 => match nth c cenv O with O => denote_x cs rec recm cenv benv env s x0 | S p => denote_x cs rec recm (p :: cenv) benv env s x1 end
+  end.
+
+(** the memory the KQL of [x] ends with: the last one made *)
+Fixpoint endx (cs : list callee) (rec : list nat -> list i63 -> mem -> i63) (recm : list nat -> list i63 -> mem -> mem)
+  (cenv : list nat) (benv : list bool) (env : list i63) (s : mem) (x : sx) {struct x} : mem :=
+  match x with
+  | XRet _ => s
+  | XLetM m x => endx cs rec recm cenv benv env (denote_m cs rec recm cenv benv env s m) x
+  | XLet e x => endx cs rec recm cenv benv (denote_e cs rec cenv benv env s e :: env) s x
+  | XLetB b x => endx cs rec recm cenv (denote_b cs rec cenv benv env s b :: benv) env s x
+  | XIf c a b x1 x2 => if cmp_sem c (denote_e cs rec cenv benv env s a) (denote_e cs rec cenv benv env s b)
+                       then endx cs rec recm cenv benv env s x1 else endx cs rec recm cenv benv env s x2
+  | XIfB b x1 x2 => if denote_b cs rec cenv benv env s b then endx cs rec recm cenv benv env s x1 else endx cs rec recm cenv benv env s x2
+  | XMatch c x0 x1 => match nth c cenv O with O => endx cs rec recm cenv benv env s x0 | S p => endx cs rec recm (p :: cenv) benv env s x1 end
+  end.
+
 (** a function's body: a number, recursive on the first counter ([e0] when it is 0, [e1] otherwise) or plain; or a memory,
-    the same *)
-Inductive fbody := FRec (e0 e1 : sexp) | FPlain (e : sexp) | FRecM (m0 m1 : smem) | FPlainM (m : smem).
+    the same; or a number made after memories *)
+Inductive fbody := FRec (e0 e1 : sexp) | FPlain (e : sexp) | FRecM (m0 m1 : smem) | FPlainM (m : smem) | FPlainX (x : sx).
 
 Definition dnum : list nat -> list i63 -> mem -> i63 := fun _ _ _ => 0%uint63.
 Definition dmem : list nat -> list i63 -> mem -> mem := fun _ _ s => s.
 
 Definition denote_f (cs : list callee) (g : sig) (b : fbody) : ftype g :=
   match g as g0 return ftype g0 with
-  | mksig x k m r =>
-      if r as r0 return ftype (mksig x k m r0) then
-        match x as x0 return ftype (mksig x0 k m true) with
+  | mksig x k m r w =>
+      if r as r0 return ftype (mksig x k m r0 w) then
+        match x as x0 return ftype (mksig x0 k m true w) with
         | O => match b with
                | FPlainM e => absn k m true (fun env s => denote_m cs dnum dmem [] [] env s e)
                | _ => absn k m true (fun _ s => s)
@@ -249,9 +288,10 @@ Definition denote_f (cs : list callee) (g : sig) (b : fbody) : ftype g :=
             end
         end
       else
-        match x as x0 return ftype (mksig x0 k m false) with
+        match x as x0 return ftype (mksig x0 k m false w) with
         | O => match b with
                | FPlain e => absn k m false (fun env s => denote_e cs dnum [] [] env s e)
+               | FPlainX xx => absn k m false (fun env s => denote_x cs dnum dmem [] [] env s xx)
                | _ => absn k m false (fun _ _ => 0%uint63)
                end
         | S x' =>
@@ -265,6 +305,7 @@ Definition denote_f (cs : list callee) (g : sig) (b : fbody) : ftype g :=
                                        (n' :: cenv ++ [n]) [] env s e1
                     end))
             | FPlain e => fun n => absc x' _ (fun cenv => absn k m false (fun env s => denote_e cs dnum (cenv ++ [n]) [] env s e))
+            | FPlainX xx => fun n => absc x' _ (fun cenv => absn k m false (fun env s => denote_x cs dnum dmem (cenv ++ [n]) [] env s xx))
             | _ => fun _ => absc x' _ (fun _ => absn k m false (fun _ _ => 0%uint63))
             end
         end
@@ -308,6 +349,60 @@ with nrdb (b : sbool) : nat :=
   end.
 Definition choice_ok (t f : sexp) : bool := spec t && spec f && Nat.leb (nrd t + nrd f) 3.
 
+Fixpoint len_s (es : sexps) : nat := match es with SNil => O | SCons _ es => S (len_s es) end.
+Fixpoint len_c (cs : scnts) : nat := match cs with CNil => O | CCons _ cs => S (len_c cs) end.
+Fixpoint cdepth (c : scnt) : nat := match c with CS c => S (cdepth c) | _ => O end.
+Fixpoint all_c (p : scnt -> bool) (cs : scnts) : bool := match cs with CNil => true | CCons c r => p c && all_c p r end.
+Fixpoint all_s (p : sexp -> bool) (es : sexps) : bool := match es with SNil => true | SCons e r => p e && all_s p r end.
+
+(** [if c then f a.. else f b..] at the end of [f], both calls on the newest memory, becomes one call whose arguments are
+    chosen by conditional moves (the translator's merging of calls, D17): arguments that are plain arithmetic (no read, no
+    call), each chosen when the two differ ([same_e]: the same variable or the same number) *)
+Definition simple (e : sexp) : bool := spec e && Nat.eqb (nrd e) 0.
+Definition simple_c (c : scnt) : bool := match c with CVar _ | CO => true | CNat e => simple e | CS _ => false end.
+Definition binop_eqb (o1 o2 : binop) : bool :=
+  match o1, o2 with
+  | Badd, Badd | Bsub, Bsub | Bmul, Bmul | Bland, Bland | Blor, Blor | Blxor, Blxor | Bdiv, Bdiv | Bmod, Bmod
+  | Blsl, Blsl | Blsr, Blsr | Basr, Basr | Bmods, Bmods | Bdivs, Bdivs => true
+  | _, _ => false
+  end.
+(** the same arithmetic on both sides: worked out once (a conditional move between two equal values would make the next
+    round of a loop wait for the test) *)
+Fixpoint same_e (x y : sexp) : bool :=
+  match x, y with
+  | SVar i, SVar j => Nat.eqb i j
+  | SInt n, SInt m => PrimInt63.eqb n m
+  | SOp o a b, SOp o' a' b' => binop_eqb o o' && same_e a a' && same_e b b'
+  | _, _ => false
+  end.
+Definition same_c (x y : scnt) : bool := match x, y with CVar i, CVar j => Nat.eqb i j | CO, CO => true | _, _ => false end.
+Definition merge_ok (cs1 cs2 : scnts) (as1 as2 : sexps) : bool :=
+  all_c simple_c cs1 && all_c simple_c cs2 && all_s simple as1 && all_s simple as2.
+Definition mergeable_e (e1 e2 : sexp) : option (scnts * sexps * scnts * sexps) :=
+  match e1, e2 with
+  | SRec cs1 as1, SRec cs2 as2 => if merge_ok cs1 cs2 as1 as2 then Some (cs1, as1, cs2, as2) else None
+  | _, _ => None
+  end.
+Definition mergeable_m (m1 m2 : smem) : option (scnts * sexps * scnts * sexps) :=
+  match m1, m2 with
+  | MRec cs1 as1 MCur, MRec cs2 as2 MCur => if merge_ok cs1 cs2 as1 as2 then Some (cs1, as1, cs2, as2) else None
+  | _, _ => None
+  end.
+
+(** the largest variable a piece of KQL binds, and the first one after it: the second arm of a test starts there, so that
+    no variable is bound twice in a function, as in the translator's numbering (measured: the same KQL with variables reused
+    across the arms of tests compiled 1.2x slower, the C compiler's registers chosen worse, CF868F) *)
+Fixpoint maxv (e : exp) : ident :=
+  match e with
+  | Eret _ | Eloop _ => 1%positive
+  | Eop x _ _ _ k | Esel x _ _ _ _ _ k | Ecall x _ _ k | Eload x _ _ k | Ekld x _ _ k | Ekld32 x _ _ k | Ekld8 x _ _ k
+  | Eksize x _ k | Ehwf _ x _ k => Pos.max x (maxv k)
+  | Ew64 _ xl xh _ _ _ _ k => Pos.max xl (Pos.max xh (maxv k))
+  | Eif _ _ _ t f => Pos.max (maxv t) (maxv f)
+  | Estore _ _ _ k | Ekst _ _ _ k | Ekst32 _ _ _ k | Ekst8 _ _ _ k | Ehw _ _ k => maxv k
+  end.
+Definition after (n : ident) (e : exp) : ident := Pos.succ (Pos.max n (maxv e)).
+
 Section C.
 Variable gidf : nat -> ident.   (* the KQL name of the program's function i *)
 Variable g : ident.             (* the function's own name *)
@@ -324,16 +419,17 @@ Fixpoint cexp (e : sexp) (cenv benv env : list atom) (nxt : ident) (K : atom -> 
                        if choice_ok t f then
                          cexp t cenv benv env n2 (fun T n3 => cexp f cenv benv env n3 (fun F n4 =>
                            Esel n4 c A B T F (K (Avar n4) (Pos.succ n4))))
-                       else Eif c A B (cexp t cenv benv env n2 K) (cexp f cenv benv env n2 K)))
+                       else let tc := cexp t cenv benv env n2 K in Eif c A B tc (cexp f cenv benv env (after n2 tc) K)))
   | SLet e1 e2 => cexp e1 cenv benv env nxt (fun A n1 => cexp e2 cenv benv (A :: env) n1 K)
   | SRd h i => cexp h cenv benv env nxt (fun H n1 => cexp i cenv benv env n1 (fun I n2 => Ekld n2 H I (K (Avar n2) (Pos.succ n2))))
   | SRec ccs args => ccnts ccs cenv benv env nxt (fun Cs n1 => cexps args cenv benv env n1 (fun As n2 =>
                        Ecall n2 g (Avar mv :: Cs ++ As) (K (Avar n2) (Pos.succ n2))))
   | SCall f ccs args => ccnts ccs cenv benv env nxt (fun Cs n1 => cexps args cenv benv env n1 (fun As n2 =>
                           Ecall n2 (gidf f) (Cs ++ As) (K (Avar n2) (Pos.succ n2))))
-  | SMatch c e0 e1 => Eif Ceq (nth c cenv (Aint 0%uint63)) (Aint 0%uint63) (cexp e0 cenv benv env nxt K)
-                        (Eop nxt Bsub (nth c cenv (Aint 0%uint63)) (Aint 1%uint63)
-                             (cexp e1 (Avar nxt :: cenv) benv env (Pos.succ nxt) K))
+  | SMatch c e0 e1 => let t0 := cexp e0 cenv benv env nxt K in
+                      Eif Ceq (nth c cenv (Aint 0%uint63)) (Aint 0%uint63) t0
+                        (Eop (after nxt t0) Bsub (nth c cenv (Aint 0%uint63)) (Aint 1%uint63)
+                             (cexp e1 (Avar (after nxt t0) :: cenv) benv env (Pos.succ (after nxt t0)) K))
   | SIfB b t f => if choice_ok t f then
                     cbval b cenv benv env nxt (fun C n1 => cexp t cenv benv env n1 (fun T n2 => cexp f cenv benv env n2 (fun F n3 =>
                       Esel n3 Ceq C (Aint 0%uint63) F T (K (Avar n3) (Pos.succ n3)))))
@@ -364,8 +460,8 @@ with ccnts (ccs : scnts) (cenv benv env : list atom) (nxt : ident) (K : list ato
     tests [b] only where [a] held (C's short-circuit) *)
 with ccond (b : sbool) (cenv benv env : list atom) (nxt : ident) (KT KF : ident -> exp) {struct b} : exp :=
   match b with
-  | BCmp c x y => cexp x cenv benv env nxt (fun A n1 => cexp y cenv benv env n1 (fun B n2 => Eif c A B (KT n2) (KF n2)))
-  | BVar i => Eif Ceq (nth i benv (Aint 0%uint63)) (Aint 0%uint63) (KF nxt) (KT nxt)
+  | BCmp c x y => cexp x cenv benv env nxt (fun A n1 => cexp y cenv benv env n1 (fun B n2 => Eif c A B (KT n2) (KF (after n2 (KT n2)))))
+  | BVar i => Eif Ceq (nth i benv (Aint 0%uint63)) (Aint 0%uint63) (KF nxt) (KT (after nxt (KF nxt)))
   | BTrue => KT nxt
   | BFalse => KF nxt
   | BAnd x y => ccond x cenv benv env nxt (fun n => ccond y cenv benv env n KT KF) KF
@@ -388,15 +484,42 @@ with cbval (b : sbool) (cenv benv env : list atom) (nxt : ident) (K : atom -> id
   | BNot x => cbval x cenv benv env nxt (fun A n1 => Eop n1 Blxor A (Aint 1%uint63) (K (Avar n1) (Pos.succ n1)))
   end.
 
+(** the arguments of two calls, chosen by the test [A c B]: an argument the same in both worked out once *)
+Fixpoint cmerge_s (c : cmpop) (A B : atom) (es1 es2 : sexps) (cenv benv env : list atom) (nxt : ident) (K : list atom -> ident -> exp)
+  {struct es1} : exp :=
+  match es1, es2 with
+  | SCons e1 r1, SCons e2 r2 =>
+      if same_e e1 e2 then cexp e1 cenv benv env nxt (fun X n1 => cmerge_s c A B r1 r2 cenv benv env n1 (fun Xs n2 => K (X :: Xs) n2))
+      else cexp e1 cenv benv env nxt (fun X n1 => cexp e2 cenv benv env n1 (fun Y n2 =>
+             Esel n2 c A B X Y (cmerge_s c A B r1 r2 cenv benv env (Pos.succ n2) (fun Xs n3 => K (Avar n2 :: Xs) n3))))
+  | _, _ => K [] nxt
+  end.
+Fixpoint cmerge_c (c : cmpop) (A B : atom) (cs1 cs2 : scnts) (cenv benv env : list atom) (nxt : ident) (K : list atom -> ident -> exp)
+  {struct cs1} : exp :=
+  match cs1, cs2 with
+  | CCons c1 r1, CCons c2 r2 =>
+      if same_c c1 c2 then ccnt c1 cenv benv env nxt (fun X n1 => cmerge_c c A B r1 r2 cenv benv env n1 (fun Xs n2 => K (X :: Xs) n2))
+      else ccnt c1 cenv benv env nxt (fun X n1 => ccnt c2 cenv benv env n1 (fun Y n2 =>
+             Esel n2 c A B X Y (cmerge_c c A B r1 r2 cenv benv env (Pos.succ n2) (fun Xs n3 => K (Avar n2 :: Xs) n3))))
+  | _, _ => K [] nxt
+  end.
+
 (** the body in tail position: a test is a branch, the recursive call a loop *)
 Fixpoint ctail (e : sexp) (cenv benv env : list atom) (nxt : ident) {struct e} : exp :=
   match e with
   | SIf c a b t f => cexp a cenv benv env nxt (fun A n1 => cexp b cenv benv env n1 (fun B n2 =>
-                       Eif c A B (ctail t cenv benv env n2) (ctail f cenv benv env n2)))
+                       match mergeable_e t f with
+                       | Some (cs1, as1, cs2, as2) =>
+                           cmerge_c c A B cs1 cs2 cenv benv env n2 (fun Cs n3 => cmerge_s c A B as1 as2 cenv benv env n3 (fun As _ =>
+                             Eloop (Avar mv :: Cs ++ As)))
+                       | None => let tc := ctail t cenv benv env n2 in Eif c A B tc (ctail f cenv benv env (after n2 tc))
+                       end))
   | SLet e1 e2 => cexp e1 cenv benv env nxt (fun A n1 => ctail e2 cenv benv (A :: env) n1)
   | SRec ccs args => ccnts ccs cenv benv env nxt (fun Cs n1 => cexps args cenv benv env n1 (fun As _ => Eloop (Avar mv :: Cs ++ As)))
-  | SMatch c e0 e1 => Eif Ceq (nth c cenv (Aint 0%uint63)) (Aint 0%uint63) (ctail e0 cenv benv env nxt)
-                        (Eop nxt Bsub (nth c cenv (Aint 0%uint63)) (Aint 1%uint63) (ctail e1 (Avar nxt :: cenv) benv env (Pos.succ nxt)))
+  | SMatch c e0 e1 => let t0 := ctail e0 cenv benv env nxt in
+                      Eif Ceq (nth c cenv (Aint 0%uint63)) (Aint 0%uint63) t0
+                        (Eop (after nxt t0) Bsub (nth c cenv (Aint 0%uint63)) (Aint 1%uint63)
+                             (ctail e1 (Avar (after nxt t0) :: cenv) benv env (Pos.succ (after nxt t0))))
   | SIfB b t f => ccond b cenv benv env nxt (fun n => ctail t cenv benv env n) (fun n => ctail f cenv benv env n)
   | SLetB b e => cbval b cenv benv env nxt (fun A n1 => ctail e cenv (A :: benv) env n1)
   | _ => cexp e cenv benv env nxt (fun A _ => Eret A)
@@ -412,13 +535,15 @@ Fixpoint cmem (m : smem) (cenv benv env : list atom) (nxt : ident) (K : ident ->
   | MLet e m => cexp e cenv benv env nxt (fun A n1 => cmem m cenv benv (A :: env) n1 K)
   | MLetM m1 m2 => cmem m1 cenv benv env nxt (fun n1 => cmem m2 cenv benv env n1 K)
   | MIf c a b m1 m2 => cexp a cenv benv env nxt (fun A n1 => cexp b cenv benv env n1 (fun B n2 =>
-                         Eif c A B (cmem m1 cenv benv env n2 K) (cmem m2 cenv benv env n2 K)))
+                         let tc := cmem m1 cenv benv env n2 K in Eif c A B tc (cmem m2 cenv benv env (after n2 tc) K)))
   | MRec ccs args m => ccnts ccs cenv benv env nxt (fun Cs n1 => cexps args cenv benv env n1 (fun As n2 => cmem m cenv benv env n2 (fun n3 =>
                          Ecall n3 g (Avar mv :: Cs ++ As) (K (Pos.succ n3)))))
   | MCall f ccs args m => ccnts ccs cenv benv env nxt (fun Cs n1 => cexps args cenv benv env n1 (fun As n2 => cmem m cenv benv env n2 (fun n3 =>
                             Ecall n3 (gidf f) (Cs ++ As) (K (Pos.succ n3)))))
-  | MMatch c m0 m1 => Eif Ceq (nth c cenv (Aint 0%uint63)) (Aint 0%uint63) (cmem m0 cenv benv env nxt K)
-                        (Eop nxt Bsub (nth c cenv (Aint 0%uint63)) (Aint 1%uint63) (cmem m1 (Avar nxt :: cenv) benv env (Pos.succ nxt) K))
+  | MMatch c m0 m1 => let t0 := cmem m0 cenv benv env nxt K in
+                      Eif Ceq (nth c cenv (Aint 0%uint63)) (Aint 0%uint63) t0
+                        (Eop (after nxt t0) Bsub (nth c cenv (Aint 0%uint63)) (Aint 1%uint63)
+                             (cmem m1 (Avar (after nxt t0) :: cenv) benv env (Pos.succ (after nxt t0)) K))
   | MIfB b m1 m2 => ccond b cenv benv env nxt (fun n => cmem m1 cenv benv env n K) (fun n => cmem m2 cenv benv env n K)
   | MLetB b m => cbval b cenv benv env nxt (fun A n1 => cmem m cenv (A :: benv) env n1 K)
   end.
@@ -427,23 +552,42 @@ Fixpoint cmem (m : smem) (cenv benv env : list atom) (nxt : ident) (K : ident ->
 Fixpoint ctailm (m : smem) (cenv benv env : list atom) (nxt : ident) {struct m} : exp :=
   match m with
   | MIf c a b m1 m2 => cexp a cenv benv env nxt (fun A n1 => cexp b cenv benv env n1 (fun B n2 =>
-                         Eif c A B (ctailm m1 cenv benv env n2) (ctailm m2 cenv benv env n2)))
+                         match mergeable_m m1 m2 with
+                         | Some (cs1, as1, cs2, as2) =>
+                             cmerge_c c A B cs1 cs2 cenv benv env n2 (fun Cs n3 => cmerge_s c A B as1 as2 cenv benv env n3 (fun As _ =>
+                               Eloop (Avar mv :: Cs ++ As)))
+                         | None => let tc := ctailm m1 cenv benv env n2 in Eif c A B tc (ctailm m2 cenv benv env (after n2 tc))
+                         end))
   | MLet e m => cexp e cenv benv env nxt (fun A n1 => ctailm m cenv benv (A :: env) n1)
   | MLetM m1 m2 => cmem m1 cenv benv env nxt (fun n1 => ctailm m2 cenv benv env n1)
   | MRec ccs args m => ccnts ccs cenv benv env nxt (fun Cs n1 => cexps args cenv benv env n1 (fun As n2 =>
                          cmem m cenv benv env n2 (fun _ => Eloop (Avar mv :: Cs ++ As))))
-  | MMatch c m0 m1 => Eif Ceq (nth c cenv (Aint 0%uint63)) (Aint 0%uint63) (ctailm m0 cenv benv env nxt)
-                        (Eop nxt Bsub (nth c cenv (Aint 0%uint63)) (Aint 1%uint63) (ctailm m1 (Avar nxt :: cenv) benv env (Pos.succ nxt)))
+  | MMatch c m0 m1 => let t0 := ctailm m0 cenv benv env nxt in
+                      Eif Ceq (nth c cenv (Aint 0%uint63)) (Aint 0%uint63) t0
+                        (Eop (after nxt t0) Bsub (nth c cenv (Aint 0%uint63)) (Aint 1%uint63)
+                             (ctailm m1 (Avar (after nxt t0) :: cenv) benv env (Pos.succ (after nxt t0))))
   | MIfB b m1 m2 => ccond b cenv benv env nxt (fun n => ctailm m1 cenv benv env n) (fun n => ctailm m2 cenv benv env n)
   | MLetB b m => cbval b cenv benv env nxt (fun A n1 => ctailm m cenv (A :: benv) env n1)
   | _ => cmem m cenv benv env nxt (fun _ => Eret (Aint 0%uint63))
   end.
+
+(** a number made after memories, in tail position: the memories by [cmem], the tests as branches, the end returns the number *)
+Fixpoint ctailx (x : sx) (cenv benv env : list atom) (nxt : ident) {struct x} : exp :=
+  match x with
+  | XRet e => cexp e cenv benv env nxt (fun A _ => Eret A)
+  | XLetM m x => cmem m cenv benv env nxt (fun n1 => ctailx x cenv benv env n1)
+  | XLet e x => cexp e cenv benv env nxt (fun A n1 => ctailx x cenv benv (A :: env) n1)
+  | XLetB b x => cbval b cenv benv env nxt (fun A n1 => ctailx x cenv (A :: benv) env n1)
+  | XIf c a b x1 x2 => cexp a cenv benv env nxt (fun A n1 => cexp b cenv benv env n1 (fun B n2 =>
+                         let tc := ctailx x1 cenv benv env n2 in Eif c A B tc (ctailx x2 cenv benv env (after n2 tc))))
+  | XIfB b x1 x2 => ccond b cenv benv env nxt (fun n => ctailx x1 cenv benv env n) (fun n => ctailx x2 cenv benv env n)
+  | XMatch c x0 x1 => let t0 := ctailx x0 cenv benv env nxt in
+                      Eif Ceq (nth c cenv (Aint 0%uint63)) (Aint 0%uint63) t0
+                        (Eop (after nxt t0) Bsub (nth c cenv (Aint 0%uint63)) (Aint 1%uint63)
+                             (ctailx x1 (Avar (after nxt t0) :: cenv) benv env (Pos.succ (after nxt t0))))
+  end.
 End C.
 
-Fixpoint len_s (es : sexps) : nat := match es with SNil => O | SCons _ es => S (len_s es) end.
-Fixpoint len_c (cs : scnts) : nat := match cs with CNil => O | CCons _ cs => S (len_c cs) end.
-Fixpoint cdepth (c : scnt) : nat := match c with CS c => S (cdepth c) | _ => O end.
-Fixpoint all_c (p : scnt -> bool) (cs : scnts) : bool := match cs with CNil => true | CCons c r => p c && all_c p r end.
 (** a callee's counters nest S at most 2^20 deep; the recursive call's counters after the first are not grown *)
 Definition shallow (c : scnt) : bool := (Z.of_nat (cdepth c) <=? 1048576)%Z.
 Definition flat (c : scnt) : bool := Nat.eqb (cdepth c) 0.
@@ -462,7 +606,7 @@ Fixpoint wf (sigs : list sig) (r mok : bool) (nx k : nat) (e : sexp) {struct e} 
   | SCall f ccs args =>
       match nth_error sigs f with
       | Some gs => Nat.eqb (len_c ccs) (sn gs) && Nat.eqb (len_s args) (sk gs) && implb (sm gs) mok && negb (sr gs)
-                   && all_c shallow ccs && wfcs sigs r mok nx k ccs && wfs sigs r mok nx k args
+                   && negb (sw gs) && all_c shallow ccs && wfcs sigs r mok nx k ccs && wfs sigs r mok nx k args
       | None => false
       end
   | SMatch _ e0 e1 => wf sigs r mok nx k e0 && wf sigs r mok nx k e1
@@ -496,7 +640,7 @@ Fixpoint wfm (sigs : list sig) (r rm mok : bool) (nx k : nat) (m : smem) {struct
                        && wfcs sigs r mok nx k ccs && wfs sigs r mok nx k args && wfm sigs r rm mok nx k m
   | MCall f ccs args m =>
       match nth_error sigs f with
-      | Some gs => Nat.eqb (len_c ccs) (sn gs) && Nat.eqb (len_s args) (sk gs) && sm gs && sr gs && all_c shallow ccs
+      | Some gs => Nat.eqb (len_c ccs) (sn gs) && Nat.eqb (len_s args) (sk gs) && sm gs && sr gs && negb (sw gs) && all_c shallow ccs
                    && wfcs sigs r mok nx k ccs && wfs sigs r mok nx k args && wfm sigs r rm mok nx k m
       | None => false
       end
@@ -505,14 +649,27 @@ Fixpoint wfm (sigs : list sig) (r rm mok : bool) (nx k : nat) (m : smem) {struct
   | MLetB b m => wfb sigs r mok nx k b && wfm sigs r rm mok nx k m
   end.
 
+(** a number made after memories: its numbers and memories as above, with no recursive call *)
+Fixpoint wfx (sigs : list sig) (nx k : nat) (x : sx) {struct x} : bool :=
+  match x with
+  | XRet e => wf sigs false true nx k e
+  | XLetM m x => wfm sigs false false true nx k m && wfx sigs nx k x
+  | XLet e x => wf sigs false true nx k e && wfx sigs nx k x
+  | XLetB b x => wfb sigs false true nx k b && wfx sigs nx k x
+  | XIf _ a b x1 x2 => wf sigs false true nx k a && wf sigs false true nx k b && wfx sigs nx k x1 && wfx sigs nx k x2
+  | XIfB b x1 x2 => wfb sigs false true nx k b && wfx sigs nx k x1 && wfx sigs nx k x2
+  | XMatch _ x0 x1 => wfx sigs nx k x0 && wfx sigs nx k x1
+  end.
+
 Definition wf_f (sigs : list sig) (gs : sig) (b : fbody) : bool :=
   match b with
-  | FRec e0 e1 => negb (Nat.eqb (sn gs) 0) && negb (sr gs) && wf sigs false (sm gs) (Nat.pred (sn gs)) (sk gs) e0
+  | FRec e0 e1 => negb (Nat.eqb (sn gs) 0) && negb (sr gs) && negb (sw gs) && wf sigs false (sm gs) (Nat.pred (sn gs)) (sk gs) e0
                   && wf sigs true (sm gs) (Nat.pred (sn gs)) (sk gs) e1
-  | FPlain e => negb (sr gs) && wf sigs false (sm gs) 0 (sk gs) e
-  | FRecM m0 m1 => negb (Nat.eqb (sn gs) 0) && sr gs && sm gs && wfm sigs false false true (Nat.pred (sn gs)) (sk gs) m0
+  | FPlain e => negb (sr gs) && negb (sw gs) && wf sigs false (sm gs) 0 (sk gs) e
+  | FRecM m0 m1 => negb (Nat.eqb (sn gs) 0) && sr gs && negb (sw gs) && sm gs && wfm sigs false false true (Nat.pred (sn gs)) (sk gs) m0
                    && wfm sigs false true true (Nat.pred (sn gs)) (sk gs) m1
-  | FPlainM m => sr gs && sm gs && wfm sigs false false true 0 (sk gs) m
+  | FPlainM m => sr gs && negb (sw gs) && sm gs && wfm sigs false false true 0 (sk gs) m
+  | FPlainX x => negb (sr gs) && sw gs && sm gs && wfx sigs 0 (sk gs) x
   end.
 
 (** the function: the counters in 1 .. sn, then the numbers; the next variable holds the first counter's predecessor *)
@@ -537,16 +694,19 @@ Definition compile_f (gidf : nat -> ident) (j : nat) (gs : sig) (b : fbody) : fn
                (Eop mv Bsub (Avar 1%positive) (Aint 1%uint63)
                     (ctailm gidf (gidf j) mv m1 (Avar mv :: cenv0 (sn gs)) [] (env0 (sn gs) (sk gs)) (Pos.succ mv)))
        | FPlainM m => ctailm gidf (gidf j) mv m (cenv0 (sn gs)) [] (env0 (sn gs) (sk gs)) (Pos.succ mv)
+       | FPlainX x => ctailx gidf (gidf j) mv x (cenv0 (sn gs)) [] (env0 (sn gs) (sk gs)) (Pos.succ mv)
        end.
 
 (** the bound on the counters of function [j] of a program *)
 Definition cbz (j : nat) : Z := (4611686018427387904 - Z.of_nat j * 1048576)%Z.
 
 (** what a function's theorem says, and what a caller assumes of a callee: on counters below its bound, a function giving
-    back a number keeps the memory; a function giving back a memory returns 0 and leaves that memory *)
+    back a number keeps the memory; a function giving back a memory returns 0 and leaves that memory; a function giving back a
+    number that writes the memory gives it with some end memory ([runx]) *)
 Definition callee_ok (P : prog) (id : ident) (B : Z) (gs : sig) (h : ftype gs) : Prop :=
   forall cvs vs M, length cvs = sn gs -> length vs = sk gs -> Forall (fun c => (Z.of_nat c < B)%Z) cvs ->
-    runk P id (map ofn cvs ++ vs) M (calln gs h cvs vs M) (if sr gs then callm gs h cvs vs M else M).
+    if sw gs then exists M', runk P id (map ofn cvs ++ vs) M (calln gs h cvs vs M) M'
+    else runk P id (map ofn cvs ++ vs) M (calln gs h cvs vs M) (if sr gs then callm gs h cvs vs M else M).
 
 Definition callees_ok (P : prog) (gidf : nat -> ident) (cs : list callee) : Prop :=
   forall f, match nth_error cs f with Some (existT _ gs h) => callee_ok P (gidf f) (cbz f) gs h | None => True end.
@@ -672,6 +832,51 @@ Proof. intros cs rec cenv benv denv s es. induction es; simpl; auto. Qed.
 Lemma len_denote_cs : forall cs rec cenv benv denv s ccs, length (denote_cs cs rec cenv benv denv s ccs) = len_c ccs.
 Proof. intros cs rec cenv benv denv s ccs. induction ccs; simpl; auto. Qed.
 
+(** the second arm of a test starts after the first arm's variables *)
+Lemma after_le : forall n e, Pos.le n (after n e).
+Proof. intros n e. unfold after. lia. Qed.
+Lemma after_lt : forall n e, Pos.lt n (after n e).
+Proof. intros n e. unfold after. lia. Qed.
+
+Lemma agree_mono : forall rho rho' n n', agree rho rho' n' -> Pos.le n n' -> agree rho rho' n.
+Proof. intros rho rho' n n' A L x Lx. apply A. lia. Qed.
+
+(** [n <= after n e] for every [after] in sight, then [lia] *)
+Ltac add_after :=
+  repeat match goal with
+  | H : context [after ?n ?e] |- _ => lazymatch goal with _ : Pos.le n (after n e) |- _ => fail | _ => pose proof (after_le n e) end
+  | |- context [after ?n ?e] => lazymatch goal with _ : Pos.le n (after n e) |- _ => fail | _ => pose proof (after_le n e) end
+  end.
+Ltac lia_a := first [add_after; lia | unfold after in *; lia].
+Ltac afterle := first [apply after_le | lia_a].
+
+(** the tests the merging of calls makes *)
+Lemma binop_eqb_eq : forall o1 o2, binop_eqb o1 o2 = true -> o1 = o2.
+Proof. intros [] []; simpl; intro H; try discriminate; reflexivity. Qed.
+Lemma same_e_eq : forall x y, same_e x y = true -> x = y.
+Proof.
+  induction x; intros y H; destruct y; simpl in H; try discriminate.
+  - apply Nat.eqb_eq in H. subst. reflexivity.
+  - apply eqb_correct in H. subst. reflexivity.
+  - apply andb_true_iff in H as [H Hb]. apply andb_true_iff in H as [Ho Ha].
+    apply binop_eqb_eq in Ho. subst. rewrite (IHx1 _ Ha), (IHx2 _ Hb). reflexivity.
+Qed.
+Lemma same_c_eq : forall x y, same_c x y = true -> x = y.
+Proof. intros x y H. destruct x; destruct y; simpl in H; try discriminate; try reflexivity. apply Nat.eqb_eq in H. subst. reflexivity. Qed.
+Lemma mergeable_e_spec : forall e1 e2 cs1 as1 cs2 as2, mergeable_e e1 e2 = Some (cs1, as1, cs2, as2) ->
+  e1 = SRec cs1 as1 /\ e2 = SRec cs2 as2.
+Proof.
+  intros e1 e2 cs1 as1 cs2 as2 H. destruct e1; simpl in H; try discriminate; destruct e2; simpl in H; try discriminate.
+  destruct (merge_ok _ _ _ _); [injection H as <- <- <- <-; auto | discriminate].
+Qed.
+Lemma mergeable_m_spec : forall m1 m2 cs1 as1 cs2 as2, mergeable_m m1 m2 = Some (cs1, as1, cs2, as2) ->
+  m1 = MRec cs1 as1 MCur /\ m2 = MRec cs2 as2 MCur.
+Proof.
+  intros m1 m2 cs1 as1 cs2 as2 H. destruct m1; simpl in H; try discriminate. destruct m1; simpl in H; try discriminate.
+  destruct m2; simpl in H; try discriminate. destruct m2; simpl in H; try discriminate.
+  destruct (merge_ok _ _ _ _); [injection H as <- <- <- <-; auto | discriminate].
+Qed.
+
 (** a function without a memory never reads one: its meaning is the same for any memory *)
 Lemma appn_false : forall k r (x : ntype k false r) vs s s', appn k false r x vs s = appn k false r x vs s'.
 Proof. induction k as [|k IH]; intros r x vs s s'; simpl; auto. destruct vs; apply IH. Qed.
@@ -717,7 +922,7 @@ Proof.
   - intros fi ccs IHc args IHs cs rec cenv benv env s s' r nx k Hr W. cbn [wf] in W. rewrite nth_sigs in W. cbn [denote_e].
     unfold callee in *. destruct (nth_error cs fi) as [[gs h]|] eqn:E; simpl in W; [|discriminate].
     apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [W Wc]. apply andb_true_iff in W as [W Wsh].
-    apply andb_true_iff in W as [W Wr]. apply andb_true_iff in W as [W Wm].
+    apply andb_true_iff in W as [W Wsw]. apply andb_true_iff in W as [W Wr]. apply andb_true_iff in W as [W Wm].
     rewrite (IHc _ _ _ _ _ s s' _ _ _ Hr Wc), (IHs _ _ _ _ _ s s' _ _ _ Hr Ws). apply calln_nomem.
     destruct (sm gs); [discriminate | reflexivity].
   - intros c e0 IH0 e1 IH1 cs rec cenv benv env s s' r nx k Hr W. simpl in *. apply andb_true_iff in W as [W0 W1].
@@ -992,9 +1197,11 @@ Proof.
       * apply IHt with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho3 n3 a3 A3 Le3 L3 V3.
         apply HK; [| lia | exact L3 | exact V3].
         eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); eauto; lia.
-      * apply IHe with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho3 n3 a3 A3 Le3 L3 V3.
-        apply HK; [| lia | exact L3 | exact V3].
-        eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); eauto; lia.
+      * apply IHe with (cenv := cenv) (benv := benv) (denv := denv); auto.
+        { eapply inv_step; [exact I2 | apply agree_refl | afterle]. }
+        intros rho3 n3 a3 A3 Le3 L3 V3.
+        apply HK; [| lia_a | exact L3 | exact V3].
+        eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); [eauto | eauto | eapply agree_mono; [exact A3 | afterle] | lia | lia].
   - (* SLet *) intros e1 IH1 e2 IH2 cenvA benvA envA cenv benv denv nxt K rho M v M' W Iv HK. simpl in *.
     apply andb_true_iff in W as [W1 W2].
     apply IH1 with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
@@ -1041,13 +1248,17 @@ Proof.
     assert (Hfi : (fi < j)%nat).
     { assert (fi < length cs)%nat by (apply nth_error_Some; rewrite E; discriminate). lia. }
     apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [W Wc]. apply andb_true_iff in W as [W Wsh].
+    apply andb_true_iff in W as [W Wsw].
     apply andb_true_iff in W as [W Wr]. apply andb_true_iff in W as [W Wm]. apply andb_true_iff in W as [Wn Wk].
+    assert (Hc2 : forall cvs0 vs0 M0, length cvs0 = sn gs -> length vs0 = sk gs -> Forall (fun c => (Z.of_nat c < cbz fi)%Z) cvs0 ->
+              runk P (gidf fi) (map ofn cvs0 ++ vs0) M0 (calln gs h cvs0 vs0 M0) (if sr gs then callm gs h cvs0 vs0 M0 else M0)).
+    { intros cvs0 vs0 M0 L1 L2 L3. pose proof (Hc cvs0 vs0 M0 L1 L2 L3) as H0. destruct (sw gs); [discriminate Wsw | exact H0]. }
     apply IHc with (cenv := cenv) (benv := benv) (denv := denv); auto.
     intros rho1 n1 Cs A1 Le1 LCs VCs.
     pose proof (inv_step rho rho1 cenvA benvA envA cenv benv denv nxt n1 Iv A1 Le1) as I1.
     apply IHs with (cenv := cenv) (benv := benv) (denv := denv); auto.
     intros rho2 n2 As A2 Le2 LAs VAs.
-    destruct (Hc (denote_cs cs rec cenv benv denv M ccs) (denote_es cs rec cenv benv denv M args) M) as (fg & rho' & F & B & EV).
+    destruct (Hc2 (denote_cs cs rec cenv benv denv M ccs) (denote_es cs rec cenv benv denv M args) M) as (fg & rho' & F & B & EV).
     { rewrite len_denote_cs. apply Nat.eqb_eq; auto. }
     { rewrite len_denote_es. apply Nat.eqb_eq; auto. }
     { destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). apply cs_shallow_bound; auto. }
@@ -1072,9 +1283,9 @@ Proof.
       eapply K_if; [exact CC | reflexivity | ]. rewrite ofn_S_ne0 by lia. simpl.
       eapply K_op; [exact CC | reflexivity | ]. simpl binop_sem. rewrite ofn_pred by lia.
       apply IH1 with (cenv := p :: cenv) (benv := benv) (denv := denv); auto.
-      * apply inv_cpush; auto. lia.
-      * intros rho3 n3 a3 A3 Le3 L3 V3. apply HK; [ | lia | exact L3 | exact V3 ].
-        apply (agree_trans rho (PTree.set nxt (ofn p) rho) rho3 nxt (Pos.succ nxt)); [apply agree_set; lia | exact A3 | lia].
+      * apply inv_cpush; [eapply inv_step; [exact Iv | apply agree_refl | afterle] | lia].
+      * intros rho3 n3 a3 A3 Le3 L3 V3. apply HK; [ | lia_a | exact L3 | exact V3 ].
+        refine (agree_trans rho _ rho3 nxt _ _ A3 _); [apply agree_set; afterle | lia_a].
   - (* SIfB *) intros b IHb t IHt e IHe cenvA benvA envA cenv benv denv nxt K rho M v M' W Iv HK. simpl in *.
     apply andb_true_iff in W as [W We]. apply andb_true_iff in W as [Wb Wt]. destruct IHb as [IHc IHv].
     destruct (choice_ok t e) eqn:CH.
@@ -1168,7 +1379,7 @@ Proof.
       * eauto.
       * destruct (cmp_sem c (denote_e cs rec cenv benv denv M x) (denote_e cs rec cenv benv denv M y)) eqn:C.
         -- apply HT; [exact C | eapply (agree_trans rho rho1 rho2 nxt n1); eauto | lia].
-        -- apply HF; [exact C | eapply (agree_trans rho rho1 rho2 nxt n1); eauto | lia].
+        -- apply HF; [exact C | eapply (agree_trans rho rho1 rho2 nxt n1); eauto | lia_a].
     + intros cenvA benvA envA cenv benv denv nxt K rho M v M' W Iv HK. cbn [cbval]. cbn [wfb] in W.
       apply andb_true_iff in W as [Wx Wy].
       apply IHx with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
@@ -1189,7 +1400,7 @@ Proof.
       pose proof Iv as (_ & _ & _ & _ & Bv & _).
       eapply K_if; [apply Bv | reflexivity | ]. rewrite b2i_eq0.
       destruct (nth i benv false) eqn:Eb; simpl.
-      * apply HT; [exact Eb | apply agree_refl | lia].
+      * apply HT; [exact Eb | apply agree_refl | lia_a].
       * apply HF; [exact Eb | apply agree_refl | lia].
     + intros cenvA benvA envA cenv benv denv nxt K rho M v M' W Iv HK. cbn [cbval].
       pose proof Iv as (_ & _ & _ & _ & Bv & LBv & _).
@@ -1272,6 +1483,121 @@ Definition cexps_ok := proj1 (proj2 cexp_all).
 Definition ccnts_ok := proj1 (proj2 (proj2 (proj2 cexp_all))).
 Definition ccond_ok := fun b => proj1 (proj2 (proj2 (proj2 (proj2 cexp_all))) b).
 Definition cbval_ok := fun b => proj2 (proj2 (proj2 (proj2 (proj2 cexp_all))) b).
+Definition ccnt_ok := proj1 (proj2 (proj2 cexp_all)).
+
+(** the arguments of two calls chosen by the test [A c B]: each pair worked out, a pair the same worked out once *)
+Lemma cmerge_s_ok : forall es1 es2 c A B va vb cenvA benvA envA cenv benv denv nxt K rho M v M',
+  wfs sigs r mok nx k es1 = true -> wfs sigs r mok nx k es2 = true -> len_s es1 = len_s es2 ->
+  inv rho cenvA benvA envA cenv benv denv nxt -> aval rho A = Some va -> aval rho B = Some vb -> atom_lt A nxt -> atom_lt B nxt ->
+  (forall rho' n' Xs, agree rho rho' nxt -> Pos.le nxt n' -> Forall (fun a => atom_lt a n') Xs ->
+     avals rho' Xs = Some (if cmp_sem c va vb then denote_es cs rec cenv benv denv M es1 else denote_es cs rec cenv benv denv M es2) ->
+     evalk P f rho' M (K Xs n') v M') ->
+  evalk P f rho M (cmerge_s gidf g mv c A B es1 es2 cenvA benvA envA nxt K) v M'.
+Proof.
+  induction es1 as [|e1 r1 IH]; intros es2 c A B va vb cenvA benvA envA cenv benv denv nxt K rho M v M' W1 W2 L Iv VA VB LA LB HK;
+    destruct es2 as [|e2 r2]; simpl in L; try discriminate; cbn [cmerge_s].
+  - apply HK; [apply agree_refl | lia | constructor | destruct (cmp_sem c va vb); reflexivity].
+  - injection L as L. cbn [wfs] in W1, W2. apply andb_true_iff in W1 as [We1 Wr1]. apply andb_true_iff in W2 as [We2 Wr2].
+    destruct (same_e e1 e2) eqn:SE.
+    + apply same_e_eq in SE. subst e2.
+      apply cexp_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho1 n1 X A1 Le1 LX VX.
+      apply (IH r2 c A B va vb cenvA benvA envA cenv benv denv n1 _ rho1 M v M' Wr1 Wr2 L).
+      * eapply inv_step; eauto.
+      * rewrite (aval_agree rho rho1 nxt A A1 LA). exact VA.
+      * rewrite (aval_agree rho rho1 nxt B A1 LB). exact VB.
+      * eapply atom_lt_mono; eauto.
+      * eapply atom_lt_mono; eauto.
+      * intros rho2 n2 Xs A2 Le2 LXs VXs. apply HK.
+        -- eapply (agree_trans rho rho1 rho2 nxt n1); eauto.
+        -- lia.
+        -- constructor; [eapply atom_lt_mono; [exact LX | lia] | exact LXs].
+        -- cbn [avals denote_es]. rewrite (aval_agree rho1 rho2 n1 X A2 LX), VX, VXs.
+           destruct (cmp_sem c va vb); reflexivity.
+    + apply cexp_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho1 n1 X A1 Le1 LX VX.
+      apply cexp_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. { eapply inv_step; eauto. }
+      intros rho2 n2 Y A2 Le2 LY VY.
+      assert (A12 : agree rho rho2 nxt) by (eapply (agree_trans rho rho1 rho2 nxt n1); eauto).
+      eapply K_sel.
+      * rewrite (aval_agree rho rho2 nxt A A12 LA). exact VA.
+      * rewrite (aval_agree rho rho2 nxt B A12 LB). exact VB.
+      * rewrite (aval_agree rho1 rho2 n1 X A2 LX). exact VX.
+      * exact VY.
+      * assert (A3 : agree rho (PTree.set n2 (if cmp_sem c va vb then denote_e cs rec cenv benv denv M e1
+                                                 else denote_e cs rec cenv benv denv M e2) rho2) nxt)
+          by (apply agree_set1; [exact A12 | lia]).
+        apply (IH r2 c A B va vb cenvA benvA envA cenv benv denv (Pos.succ n2) _ _ M v M' Wr1 Wr2 L).
+        -- eapply inv_step; [exact Iv | exact A3 | lia].
+        -- rewrite (aval_agree rho _ nxt A A3 LA). exact VA.
+        -- rewrite (aval_agree rho _ nxt B A3 LB). exact VB.
+        -- eapply atom_lt_mono; [exact LA | lia].
+        -- eapply atom_lt_mono; [exact LB | lia].
+        -- intros rho4 n4 Xs A4 Le4 LXs VXs. apply HK.
+           ++ eapply (agree_trans rho _ rho4 nxt (Pos.succ n2)); [exact A3 | exact A4 | lia].
+           ++ lia.
+           ++ constructor; [simpl; lia | exact LXs].
+           ++ cbn [avals aval denote_es]. rewrite (A4 n2) by lia. rewrite PTree.gss, VXs.
+              destruct (cmp_sem c va vb); reflexivity.
+Qed.
+
+(** the same for counters (the recursive call's: no successor in them) *)
+Lemma cmerge_c_ok : forall cs1 cs2 c A B va vb cenvA benvA envA cenv benv denv nxt K rho M v M',
+  wfcs sigs r mok nx k cs1 = true -> wfcs sigs r mok nx k cs2 = true -> all_c flat cs1 = true -> all_c flat cs2 = true ->
+  len_c cs1 = len_c cs2 ->
+  inv rho cenvA benvA envA cenv benv denv nxt -> aval rho A = Some va -> aval rho B = Some vb -> atom_lt A nxt -> atom_lt B nxt ->
+  (forall rho' n' Xs, agree rho rho' nxt -> Pos.le nxt n' -> Forall (fun a => atom_lt a n') Xs ->
+     avals rho' Xs = Some (map ofn (if cmp_sem c va vb then denote_cs cs rec cenv benv denv M cs1 else denote_cs cs rec cenv benv denv M cs2)) ->
+     evalk P f rho' M (K Xs n') v M') ->
+  evalk P f rho M (cmerge_c gidf g mv c A B cs1 cs2 cenvA benvA envA nxt K) v M'.
+Proof.
+  induction cs1 as [|c1 r1 IH]; intros cs2 c A B va vb cenvA benvA envA cenv benv denv nxt K rho M v M' W1 W2 F1 F2 L Iv VA VB LA LB HK;
+    destruct cs2 as [|c2 r2]; simpl in L; try discriminate; cbn [cmerge_c].
+  - apply HK; [apply agree_refl | lia | constructor | destruct (cmp_sem c va vb); reflexivity].
+  - injection L as L. cbn [wfcs all_c] in W1, W2, F1, F2.
+    apply andb_true_iff in W1 as [Wc1 Wr1]. apply andb_true_iff in W2 as [Wc2 Wr2].
+    apply andb_true_iff in F1 as [Fc1 Fr1]. apply andb_true_iff in F2 as [Fc2 Fr2].
+    unfold flat in Fc1, Fc2. apply Nat.eqb_eq in Fc1, Fc2.
+    assert (D1 : (Z.of_nat (cdepth c1) <= 1048576)%Z) by (rewrite Fc1; simpl; lia).
+    assert (D2 : (Z.of_nat (cdepth c2) <= 1048576)%Z) by (rewrite Fc2; simpl; lia).
+    destruct (same_c c1 c2) eqn:SE.
+    + apply same_c_eq in SE. subst c2.
+      apply ccnt_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho1 n1 X A1 Le1 LX VX.
+      apply (IH r2 c A B va vb cenvA benvA envA cenv benv denv n1 _ rho1 M v M' Wr1 Wr2 Fr1 Fr2 L).
+      * eapply inv_step; eauto.
+      * rewrite (aval_agree rho rho1 nxt A A1 LA). exact VA.
+      * rewrite (aval_agree rho rho1 nxt B A1 LB). exact VB.
+      * eapply atom_lt_mono; eauto.
+      * eapply atom_lt_mono; eauto.
+      * intros rho2 n2 Xs A2 Le2 LXs VXs. apply HK.
+        -- eapply (agree_trans rho rho1 rho2 nxt n1); eauto.
+        -- lia.
+        -- constructor; [eapply atom_lt_mono; [exact LX | lia] | exact LXs].
+        -- cbn [avals denote_cs map]. rewrite (aval_agree rho1 rho2 n1 X A2 LX), VX, VXs.
+           destruct (cmp_sem c va vb); reflexivity.
+    + apply ccnt_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho1 n1 X A1 Le1 LX VX.
+      apply ccnt_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. { eapply inv_step; eauto. }
+      intros rho2 n2 Y A2 Le2 LY VY.
+      assert (A12 : agree rho rho2 nxt) by (eapply (agree_trans rho rho1 rho2 nxt n1); eauto).
+      eapply K_sel.
+      * rewrite (aval_agree rho rho2 nxt A A12 LA). exact VA.
+      * rewrite (aval_agree rho rho2 nxt B A12 LB). exact VB.
+      * rewrite (aval_agree rho1 rho2 n1 X A2 LX). exact VX.
+      * exact VY.
+      * assert (A3 : agree rho (PTree.set n2 (if cmp_sem c va vb then ofn (denote_c cs rec cenv benv denv M c1)
+                                                 else ofn (denote_c cs rec cenv benv denv M c2)) rho2) nxt)
+          by (apply agree_set1; [exact A12 | lia]).
+        apply (IH r2 c A B va vb cenvA benvA envA cenv benv denv (Pos.succ n2) _ _ M v M' Wr1 Wr2 Fr1 Fr2 L).
+        -- eapply inv_step; [exact Iv | exact A3 | lia].
+        -- rewrite (aval_agree rho _ nxt A A3 LA). exact VA.
+        -- rewrite (aval_agree rho _ nxt B A3 LB). exact VB.
+        -- eapply atom_lt_mono; [exact LA | lia].
+        -- eapply atom_lt_mono; [exact LB | lia].
+        -- intros rho4 n4 Xs A4 Le4 LXs VXs. apply HK.
+           ++ eapply (agree_trans rho _ rho4 nxt (Pos.succ n2)); [exact A3 | exact A4 | lia].
+           ++ lia.
+           ++ constructor; [simpl; lia | exact LXs].
+           ++ cbn [avals aval denote_cs map]. rewrite (A4 n2) by lia. rewrite PTree.gss, VXs.
+              destruct (cmp_sem c va vb); reflexivity.
+Qed.
 
 (** a memory: KQL's memory after it is the memory the Rocq text makes *)
 Lemma cmem_ok : forall m cenvA benvA envA cenv benv denv nxt K rho M v M', wfm sigs r rm mok nx k m = true ->
@@ -1319,8 +1645,10 @@ Proof.
       destruct (cmp_sem c (denote_e cs rec cenv benv denv M a) (denote_e cs rec cenv benv denv M b)) eqn:C.
       * apply IH1 with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho3 n3 A3 Le3.
         apply HK; [| lia]. eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); eauto; lia.
-      * apply IH2 with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho3 n3 A3 Le3.
-        apply HK; [| lia]. eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); eauto; lia.
+      * apply IH2 with (cenv := cenv) (benv := benv) (denv := denv); auto.
+        { eapply inv_step; [exact I2 | apply agree_refl | afterle]. }
+        intros rho3 n3 A3 Le3.
+        apply HK; [| lia_a]. eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); [eauto | eauto | eapply agree_mono; [exact A3 | afterle] | lia | lia].
   - (* MRec *) apply andb_true_iff in W as [W Wm]. apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [W Wc].
     apply andb_true_iff in W as [W Wfl]. apply andb_true_iff in W as [W Wk]. apply andb_true_iff in W as [Wr Wn].
     apply ccnts_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. { apply flat_shallow; auto. }
@@ -1351,8 +1679,11 @@ Proof.
     assert (Hfi : (fi < j)%nat).
     { assert (fi < length cs)%nat by (apply nth_error_Some; rewrite E; discriminate). lia. }
     apply andb_true_iff in W as [W Wm]. apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [W Wc].
-    apply andb_true_iff in W as [W Wsh]. apply andb_true_iff in W as [W Wr]. apply andb_true_iff in W as [W Wsm].
-    apply andb_true_iff in W as [Wn Wk].
+    apply andb_true_iff in W as [W Wsh]. apply andb_true_iff in W as [W Wsw]. apply andb_true_iff in W as [W Wr].
+    apply andb_true_iff in W as [W Wsm]. apply andb_true_iff in W as [Wn Wk].
+    assert (Hc2 : forall cvs0 vs0 M0, length cvs0 = sn gs -> length vs0 = sk gs -> Forall (fun c => (Z.of_nat c < cbz fi)%Z) cvs0 ->
+              runk P (gidf fi) (map ofn cvs0 ++ vs0) M0 (calln gs h cvs0 vs0 M0) (if sr gs then callm gs h cvs0 vs0 M0 else M0)).
+    { intros cvs0 vs0 M0 L1 L2 L3. pose proof (Hc cvs0 vs0 M0 L1 L2 L3) as H0. destruct (sw gs); [discriminate Wsw | exact H0]. }
     apply ccnts_ok with (cenv := cenv) (benv := benv) (denv := denv); auto.
     intros rho1 n1 Cs A1 Le1 LCs VCs.
     pose proof (inv_step rho rho1 cenvA benvA envA cenv benv denv nxt n1 Iv A1 Le1) as I1.
@@ -1360,7 +1691,7 @@ Proof.
     intros rho2 n2 As A2 Le2 LAs VAs.
     pose proof (inv_step rho1 rho2 cenvA benvA envA cenv benv denv n1 n2 I1 A2 Le2) as I2.
     apply IH with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho3 n3 A3 Le3.
-    destruct (Hc (denote_cs cs rec cenv benv denv M ccs) (denote_es cs rec cenv benv denv M args) (denote_m cs rec recm cenv benv denv M m))
+    destruct (Hc2 (denote_cs cs rec cenv benv denv M ccs) (denote_es cs rec cenv benv denv M args) (denote_m cs rec recm cenv benv denv M m))
       as (fg & rho' & F & B & EV).
     { rewrite len_denote_cs. apply Nat.eqb_eq; auto. }
     { rewrite len_denote_es. apply Nat.eqb_eq; auto. }
@@ -1389,9 +1720,9 @@ Proof.
       eapply K_if; [exact CC | reflexivity | ]. rewrite ofn_S_ne0 by lia. simpl.
       eapply K_op; [exact CC | reflexivity | ]. simpl binop_sem. rewrite ofn_pred by lia.
       apply IH1 with (cenv := p :: cenv) (benv := benv) (denv := denv); auto.
-      * apply inv_cpush; auto. lia.
-      * intros rho3 n3 A3 Le3. apply HK; [ | lia ].
-        apply (agree_trans rho (PTree.set nxt (ofn p) rho) rho3 nxt (Pos.succ nxt)); [apply agree_set; lia | exact A3 | lia].
+      * apply inv_cpush; [eapply inv_step; [exact Iv | apply agree_refl | afterle] | lia].
+      * intros rho3 n3 A3 Le3. apply HK; [ | lia_a ].
+        refine (agree_trans rho _ rho3 nxt _ _ A3 _); [apply agree_set; afterle | lia_a].
   - (* MIfB *) apply andb_true_iff in W as [W Wm2]. apply andb_true_iff in W as [Wb Wm1].
     cbn [denote_m] in HK.
     apply (ccond_ok b) with (cenv := cenv) (benv := benv) (denv := denv); auto.
@@ -1411,6 +1742,28 @@ Qed.
 (** in tail position: the function's body ends with the value of [e] and the memory it started with *)
 Hypothesis Hf : find P g = Some f.
 
+(** the loop: the function itself again, on counters and numbers held by atoms *)
+Lemma loop_call_ok : forall rho Cs As cvs vs M, r = true -> length cvs = nx -> length vs = k ->
+  Forall (fun c => (Z.of_nat c < cbz j)%Z) cvs -> rho ! mv = Some (ofn cm) ->
+  avals rho Cs = Some (map ofn cvs) -> avals rho As = Some vs ->
+  evalk P f rho M (Eloop (Avar mv :: Cs ++ As)) (rec cvs vs M) M.
+Proof.
+  intros rho Cs As cvs vs M Wr Lc Lv Bd Rm VC VA.
+  destruct (Hrec Wr cvs vs M Lc Lv Bd) as (fg & rho' & F & B & EV).
+  rewrite Hf in F. injection F as <-.
+  eapply K_loop; eauto. simpl. rewrite Rm, (avals_app rho Cs As _ _ VC VA). reflexivity.
+Qed.
+Lemma loopm_call_ok : forall rho Cs As cvs vs M, rm = true -> length cvs = nx -> length vs = k ->
+  Forall (fun c => (Z.of_nat c < cbz j)%Z) cvs -> rho ! mv = Some (ofn cm) ->
+  avals rho Cs = Some (map ofn cvs) -> avals rho As = Some vs ->
+  evalk P f rho M (Eloop (Avar mv :: Cs ++ As)) 0%uint63 (recm cvs vs M).
+Proof.
+  intros rho Cs As cvs vs M Wr Lc Lv Bd Rm VC VA.
+  destruct (Hrecm Wr cvs vs M Lc Lv Bd) as (fg & rho' & F & B & EV).
+  rewrite Hf in F. injection F as <-.
+  eapply K_loop; eauto. simpl. rewrite Rm, (avals_app rho Cs As _ _ VC VA). reflexivity.
+Qed.
+
 Lemma ctail_ok : forall e cenvA benvA envA cenv benv denv nxt rho M, wf sigs r mok nx k e = true -> inv rho cenvA benvA envA cenv benv denv nxt ->
   evalk P f rho M (ctail gidf g mv e cenvA benvA envA nxt) (denote_e cs rec cenv benv denv M e) M.
 Proof.
@@ -1425,11 +1778,41 @@ Proof.
     apply cexp_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
     apply cexp_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. { eapply inv_step; eauto. }
     intros rho2 n2 B A2 Le2 LB VB.
+    assert (I2 : inv rho2 cenvA benvA envA cenv benv denv n2). { eapply inv_step; [eapply inv_step; eauto | eauto | auto]. }
+    assert (VA2 : aval rho2 A = Some (denote_e cs rec cenv benv denv M a)) by (rewrite (aval_agree rho1 rho2 n1); eauto).
+    destruct (mergeable_e t u) as [[[[cs1 as1] cs2] as2]|] eqn:MG.
+    { (* both ends a call of the function itself: one call, its arguments chosen *)
+      apply mergeable_e_spec in MG as [-> ->].
+      cbn [wf] in Wt, Wf.
+      apply andb_true_iff in Wt as [Wt Ws1]. apply andb_true_iff in Wt as [Wt Wc1]. apply andb_true_iff in Wt as [Wt Wfl1].
+      apply andb_true_iff in Wt as [Wt Wk1]. apply andb_true_iff in Wt as [Wr Wn1].
+      apply andb_true_iff in Wf as [Wf Ws2]. apply andb_true_iff in Wf as [Wf Wc2]. apply andb_true_iff in Wf as [Wf Wfl2].
+      apply andb_true_iff in Wf as [Wf Wk2]. apply andb_true_iff in Wf as [_ Wn2].
+      apply Nat.eqb_eq in Wn1, Wn2, Wk1, Wk2.
+      assert (LA2 : atom_lt A n2) by (eapply atom_lt_mono; [exact LA | lia]).
+      eapply (cmerge_c_ok cs1 cs2 c A B _ _ cenvA benvA envA cenv benv denv n2 _ rho2 M _ _ Wc1 Wc2 Wfl1 Wfl2 ltac:(lia) I2 VA2 VB LA2 LB).
+      intros rho3 n3 Cs A3 Le3 LCs VCs.
+      pose proof (inv_step rho2 rho3 cenvA benvA envA cenv benv denv n2 n3 I2 A3 Le3) as I3.
+      eapply (cmerge_s_ok as1 as2 c A B _ _ cenvA benvA envA cenv benv denv n3 _ rho3 M _ _ Ws1 Ws2 ltac:(lia) I3).
+      { rewrite (aval_agree rho2 rho3 n2 A A3 LA2). exact VA2. }
+      { rewrite (aval_agree rho2 rho3 n2 B A3 LB). exact VB. }
+      { eapply atom_lt_mono; [exact LA2 | lia]. }
+      { eapply atom_lt_mono; [exact LB | lia]. }
+      intros rho4 n4 As A4 Le4 LAs VAs.
+      destruct I2 as (_ & _ & _ & _ & _ & _ & Cb2 & Mv2 & H2). destruct (H2 (Hrhp Wr)) as [Rm _].
+      assert (Rm4 : rho4 ! mv = Some (ofn cm)) by (rewrite (A4 mv) by lia; rewrite (A3 mv) by lia; exact Rm).
+      assert (VC4 : avals rho4 Cs = Some (map ofn (if cmp_sem c (denote_e cs rec cenv benv denv M a) (denote_e cs rec cenv benv denv M b)
+                                                   then denote_cs cs rec cenv benv denv M cs1 else denote_cs cs rec cenv benv denv M cs2)))
+        by (rewrite (avals_agree rho3 rho4 n3 Cs A4 LCs); exact VCs).
+      cbn [denote_e]. revert VC4 VAs.
+      destruct (cmp_sem c (denote_e cs rec cenv benv denv M a) (denote_e cs rec cenv benv denv M b)); intros VC4 VAs;
+        (apply loop_call_ok; [exact Wr | rewrite len_denote_cs; lia | rewrite len_denote_es; lia | apply cs_flat_bound; auto
+                      | exact Rm4 | exact VC4 | exact VAs]). }
     eapply K_if.
-    + rewrite (aval_agree rho1 rho2 n1); eauto.
+    + exact VA2.
     + eauto.
-    + assert (I2 : inv rho2 cenvA benvA envA cenv benv denv n2). { eapply inv_step; [eapply inv_step; eauto | eauto | auto]. }
-      cbn [denote_e]. destruct (cmp_sem c (denote_e cs rec cenv benv denv M a) (denote_e cs rec cenv benv denv M b)); auto.
+    + cbn [denote_e]. assert (I2' : forall n', Pos.le n2 n' -> inv rho2 cenvA benvA envA cenv benv denv n') by (intros n' L'; eapply inv_step; [exact I2 | apply agree_refl | exact L']).
+      destruct (cmp_sem c (denote_e cs rec cenv benv denv M a) (denote_e cs rec cenv benv denv M b)); eauto using after_le.
   - (* SLet *) cbn [wf] in W. apply andb_true_iff in W as [W1 W2].
     apply cexp_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
     cbn [denote_e]. apply IH2; auto. apply inv_let; auto. eapply inv_step; eauto.
@@ -1461,7 +1844,7 @@ Proof.
       pose proof cbz_small as Sm.
       eapply K_if; [exact CC | reflexivity | ]. rewrite ofn_S_ne0 by lia. simpl.
       eapply K_op; [exact CC | reflexivity | ]. simpl binop_sem. rewrite ofn_pred by lia.
-      apply IH1; auto. apply inv_cpush; auto. lia.
+      apply IH1; auto. apply inv_cpush; [eapply inv_step; [exact Iv | apply agree_refl | afterle] | lia].
   - (* SIfB *) cbn [wf] in W. apply andb_true_iff in W as [W We]. apply andb_true_iff in W as [Wb Wt].
     apply (ccond_ok b) with (cenv := cenv) (benv := benv) (denv := denv); auto.
     + intros Hb rho1 n1 A1 Le1. cbv beta. cbn [denote_e]. rewrite Hb. apply IHt; auto. eapply inv_step; eauto.
@@ -1491,11 +1874,41 @@ Proof.
     apply cexp_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
     apply cexp_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. { eapply inv_step; eauto. }
     intros rho2 n2 B A2 Le2 LB VB.
+    assert (I2 : inv rho2 cenvA benvA envA cenv benv denv n2). { eapply inv_step; [eapply inv_step; eauto | eauto | auto]. }
+    assert (VA2 : aval rho2 A = Some (denote_e cs rec cenv benv denv M a)) by (rewrite (aval_agree rho1 rho2 n1); eauto).
+    destruct (mergeable_m m1 m2) as [[[[cs1 as1] cs2] as2]|] eqn:MG.
+    { (* both ends a call of the function itself: one call, its arguments chosen *)
+      apply mergeable_m_spec in MG as [-> ->].
+      cbn [wfm] in Wm1, Wm2.
+      apply andb_true_iff in Wm1 as [Wm1 Wm1']. apply andb_true_iff in Wm1 as [Wm1 Ws1]. apply andb_true_iff in Wm1 as [Wm1 Wc1].
+      apply andb_true_iff in Wm1 as [Wm1 Wfl1]. apply andb_true_iff in Wm1 as [Wm1 Wk1]. apply andb_true_iff in Wm1 as [Wr Wn1].
+      apply andb_true_iff in Wm2 as [Wm2 Wm2']. apply andb_true_iff in Wm2 as [Wm2 Ws2]. apply andb_true_iff in Wm2 as [Wm2 Wc2].
+      apply andb_true_iff in Wm2 as [Wm2 Wfl2]. apply andb_true_iff in Wm2 as [Wm2 Wk2]. apply andb_true_iff in Wm2 as [_ Wn2].
+      apply Nat.eqb_eq in Wn1, Wn2, Wk1, Wk2.
+      assert (LA2 : atom_lt A n2) by (eapply atom_lt_mono; [exact LA | lia]).
+      eapply (cmerge_c_ok cs1 cs2 c A B _ _ cenvA benvA envA cenv benv denv n2 _ rho2 M _ _ Wc1 Wc2 Wfl1 Wfl2 ltac:(lia) I2 VA2 VB LA2 LB).
+      intros rho3 n3 Cs A3 Le3 LCs VCs.
+      pose proof (inv_step rho2 rho3 cenvA benvA envA cenv benv denv n2 n3 I2 A3 Le3) as I3.
+      eapply (cmerge_s_ok as1 as2 c A B _ _ cenvA benvA envA cenv benv denv n3 _ rho3 M _ _ Ws1 Ws2 ltac:(lia) I3).
+      { rewrite (aval_agree rho2 rho3 n2 A A3 LA2). exact VA2. }
+      { rewrite (aval_agree rho2 rho3 n2 B A3 LB). exact VB. }
+      { eapply atom_lt_mono; [exact LA2 | lia]. }
+      { eapply atom_lt_mono; [exact LB | lia]. }
+      intros rho4 n4 As A4 Le4 LAs VAs.
+      destruct I2 as (_ & _ & _ & _ & _ & _ & Cb2 & Mv2 & H2). destruct (H2 (Hrmhp Wr)) as [Rm _].
+      assert (Rm4 : rho4 ! mv = Some (ofn cm)) by (rewrite (A4 mv) by lia; rewrite (A3 mv) by lia; exact Rm).
+      assert (VC4 : avals rho4 Cs = Some (map ofn (if cmp_sem c (denote_e cs rec cenv benv denv M a) (denote_e cs rec cenv benv denv M b)
+                                                   then denote_cs cs rec cenv benv denv M cs1 else denote_cs cs rec cenv benv denv M cs2)))
+        by (rewrite (avals_agree rho3 rho4 n3 Cs A4 LCs); exact VCs).
+      cbn [denote_m]. revert VC4 VAs.
+      destruct (cmp_sem c (denote_e cs rec cenv benv denv M a) (denote_e cs rec cenv benv denv M b)); intros VC4 VAs;
+        (apply loopm_call_ok; [exact Wr | rewrite len_denote_cs; lia | rewrite len_denote_es; lia | apply cs_flat_bound; auto
+                      | exact Rm4 | exact VC4 | exact VAs]). }
     eapply K_if.
-    + rewrite (aval_agree rho1 rho2 n1); eauto.
+    + exact VA2.
     + eauto.
-    + assert (I2 : inv rho2 cenvA benvA envA cenv benv denv n2). { eapply inv_step; [eapply inv_step; eauto | eauto | auto]. }
-      cbn [denote_m]. destruct (cmp_sem c (denote_e cs rec cenv benv denv M a) (denote_e cs rec cenv benv denv M b)); auto.
+    + cbn [denote_m]. assert (I2' : forall n', Pos.le n2 n' -> inv rho2 cenvA benvA envA cenv benv denv n') by (intros n' L'; eapply inv_step; [exact I2 | apply agree_refl | exact L']).
+      destruct (cmp_sem c (denote_e cs rec cenv benv denv M a) (denote_e cs rec cenv benv denv M b)); eauto using after_le.
   - (* MRec *) cbn [wfm] in W. apply andb_true_iff in W as [W Wm]. apply andb_true_iff in W as [W Ws].
     apply andb_true_iff in W as [W Wc]. apply andb_true_iff in W as [W Wfl]. apply andb_true_iff in W as [W Wk].
     apply andb_true_iff in W as [Wr Wn].
@@ -1531,7 +1944,7 @@ Proof.
       pose proof cbz_small as Sm.
       eapply K_if; [exact CC | reflexivity | ]. rewrite ofn_S_ne0 by lia. simpl.
       eapply K_op; [exact CC | reflexivity | ]. simpl binop_sem. rewrite ofn_pred by lia.
-      apply IH1; auto. apply inv_cpush; auto. lia.
+      apply IH1; auto. apply inv_cpush; [eapply inv_step; [exact Iv | apply agree_refl | afterle] | lia].
   - (* MIfB *) cbn [wfm] in W. apply andb_true_iff in W as [W Wm2]. apply andb_true_iff in W as [Wb Wm1].
     apply (ccond_ok b) with (cenv := cenv) (benv := benv) (denv := denv); auto.
     + intros Hb rho1 n1 A1 Le1. cbv beta. cbn [denote_m]. rewrite Hb. apply IH1; auto. eapply inv_step; eauto.
@@ -1539,6 +1952,58 @@ Proof.
   - (* MLetB *) cbn [wfm] in W. apply andb_true_iff in W as [Wb Wm].
     apply (cbval_ok b) with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
     cbn [denote_m]. apply IH; auto. apply inv_blet; auto. eapply inv_step; eauto.
+Qed.
+(** a number made after memories, in tail position: the body ends with its number and the last memory made (no recursive
+    call is in it: [r], [rm] false; the memory is there: [mok]) *)
+Lemma ctailx_ok : forall x cenvA benvA envA cenv benv denv nxt rho M, r = false -> rm = false -> mok = true ->
+  wfx sigs nx k x = true -> inv rho cenvA benvA envA cenv benv denv nxt ->
+  evalk P f rho M (ctailx gidf g mv x cenvA benvA envA nxt) (denote_x cs rec recm cenv benv denv M x)
+        (endx cs rec recm cenv benv denv M x).
+Proof.
+  induction x as [e | m x IH | e x IH | b x IH | c a b x1 IH1 x2 IH2 | b x1 IH1 x2 IH2 | c x0 IH0 x1 IH1];
+    intros cenvA benvA envA cenv benv denv nxt rho M Hr0 Hrm0 Hm1 W Iv; cbn [ctailx wfx denote_x endx] in *.
+  - (* XRet *) assert (We : wf sigs r mok nx k e = true) by (rewrite Hr0, Hm1; exact W).
+    apply cexp_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho' n' a A' Le' La Va. apply K_ret. exact Va.
+  - (* XLetM *) apply andb_true_iff in W as [Wm Wx].
+    assert (Wm' : wfm sigs r rm mok nx k m = true) by (rewrite Hr0, Hrm0, Hm1; exact Wm).
+    apply cmem_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho1 n1 A1 Le1. cbv beta.
+    apply IH; auto. eapply inv_step; eauto.
+  - (* XLet *) apply andb_true_iff in W as [We Wx].
+    assert (We' : wf sigs r mok nx k e = true) by (rewrite Hr0, Hm1; exact We).
+    apply cexp_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
+    apply IH; auto. apply inv_let; auto. eapply inv_step; eauto.
+  - (* XLetB *) apply andb_true_iff in W as [Wb Wx].
+    assert (Wb' : wfb sigs r mok nx k b = true) by (rewrite Hr0, Hm1; exact Wb).
+    apply (cbval_ok b) with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
+    apply IH; auto. apply inv_blet; auto. eapply inv_step; eauto.
+  - (* XIf *) apply andb_true_iff in W as [W W2]. apply andb_true_iff in W as [W W1]. apply andb_true_iff in W as [Wa Wb].
+    assert (Wa' : wf sigs r mok nx k a = true) by (rewrite Hr0, Hm1; exact Wa).
+    assert (Wb' : wf sigs r mok nx k b = true) by (rewrite Hr0, Hm1; exact Wb).
+    apply cexp_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. intros rho1 n1 A A1 Le1 LA VA.
+    apply cexp_ok with (cenv := cenv) (benv := benv) (denv := denv); auto. { eapply inv_step; eauto. }
+    intros rho2 n2 B A2 Le2 LB VB.
+    eapply K_if.
+    + rewrite (aval_agree rho1 rho2 n1); eauto.
+    + eauto.
+    + assert (I2 : inv rho2 cenvA benvA envA cenv benv denv n2). { eapply inv_step; [eapply inv_step; eauto | eauto | auto]. }
+      assert (I2' : forall n', Pos.le n2 n' -> inv rho2 cenvA benvA envA cenv benv denv n') by (intros n' L'; eapply inv_step; [exact I2 | apply agree_refl | exact L']).
+      destruct (cmp_sem c (denote_e cs rec cenv benv denv M a) (denote_e cs rec cenv benv denv M b)); eauto using after_le.
+  - (* XIfB *) apply andb_true_iff in W as [W W2]. apply andb_true_iff in W as [Wb W1].
+    assert (Wb' : wfb sigs r mok nx k b = true) by (rewrite Hr0, Hm1; exact Wb).
+    apply (ccond_ok b) with (cenv := cenv) (benv := benv) (denv := denv); auto.
+    + intros Hb rho1 n1 A1 Le1. cbv beta. rewrite Hb. apply IH1; auto. eapply inv_step; eauto.
+    + intros Hb rho1 n1 A1 Le1. cbv beta. rewrite Hb. apply IH2; auto. eapply inv_step; eauto.
+  - (* XMatch *) apply andb_true_iff in W as [W0 W1].
+    pose proof Iv as (E & L & C & LC & Bv & LBv & Cb & Mv & H).
+    destruct (nth c cenv O) as [|p] eqn:Ec.
+    + assert (CC : aval rho (nth c cenvA (Aint 0%uint63)) = Some (ofn 0)) by (rewrite <- Ec; apply C).
+      eapply K_if; [exact CC | reflexivity | ]. rewrite ofn_0. simpl. apply IH0; auto.
+    + assert (CC : aval rho (nth c cenvA (Aint 0%uint63)) = Some (ofn (S p))) by (rewrite <- Ec; apply C).
+      assert (Bp : (Z.of_nat (S p) < cbz j)%Z) by (specialize (Cb c); rewrite Ec in Cb; exact Cb).
+      pose proof cbz_small as Sm.
+      eapply K_if; [exact CC | reflexivity | ]. rewrite ofn_S_ne0 by lia. simpl.
+      eapply K_op; [exact CC | reflexivity | ]. simpl binop_sem. rewrite ofn_pred by lia.
+      apply IH1; auto. apply inv_cpush; [eapply inv_step; [exact Iv | apply agree_refl | afterle] | lia].
 Qed.
 End Sim.
 
@@ -1677,16 +2142,17 @@ Theorem compile_f_ok : forall P cs gidf j gs b,
   Nat.leb (length cs) j = true -> (Z.of_nat j <? 1099511627776)%Z = true ->
   callee_ok P (gidf j) (cbz j) gs (denote_f cs gs b).
 Proof.
-  intros P cs gidf j [x k m r] b Hf W Hcs Hlen Hj. apply Nat.leb_le in Hlen. apply Z.ltb_lt in Hj.
-  unfold callee_ok. simpl sn. simpl sk. simpl sm. simpl sr.
-  set (mv := pmv (mksig x k m r)).
-  assert (Lmv : lt_all (env0 x k) mv) by apply (env0_lt (mksig x k m r)).
-  assert (LCmv : lt_all (cenv0 x) mv) by apply (cenv0_lt (mksig x k m r)).
+  intros P cs gidf j [x k m r w] b Hf W Hcs Hlen Hj. apply Nat.leb_le in Hlen. apply Z.ltb_lt in Hj.
+  unfold callee_ok. simpl sn. simpl sk. simpl sm. simpl sr. simpl sw.
+  set (mv := pmv (mksig x k m r w)).
+  assert (Lmv : lt_all (env0 x k) mv) by apply (env0_lt (mksig x k m r w)).
+  assert (LCmv : lt_all (cenv0 x) mv) by apply (cenv0_lt (mksig x k m r w)).
   assert (Bpos : (0 < cbz j)%Z) by (unfold cbz; lia).
   assert (BwB : (cbz j < wB)%Z) by (rewrite KQMAuto.wB_num; unfold cbz; lia).
-  destruct b as [e0 e1 | e | m0 m1 | e]; simpl in W.
+  destruct b as [e0 e1 | e | m0 m1 | e | xx]; simpl in W.
   - (* a number, recursive on the first counter *)
     destruct x as [|x']; simpl in W; [discriminate|]. destruct r; simpl in W; [discriminate|].
+    destruct w; simpl in W; [discriminate|].
     apply andb_true_iff in W as [W0 W1]. cbv beta iota.
     assert (Mvgt : Pos.lt 1 mv).
     { unfold mv, pmv. simpl. apply Pos2Nat.inj_lt. rewrite SuccNat2Pos.id_succ. simpl. lia. }
@@ -1694,8 +2160,8 @@ Proof.
     simpl in Lc. injection Lc as Lc.
     revert rest vs M Lc Lv Bd. induction n as [|n' IH]; intros rest vs M Lc Lv Bd.
     + destruct (bind_params (S x') k (0 :: rest) vs) as (rho0 & Bd0 & C0 & E0); [simpl; lia | auto |].
-      exists (compile_f gidf j (mksig (S x') k m false) (FRec e0 e1)), rho0. split; [exact Hf|]. split; [exact Bd0|].
-      change (calln (mksig (S x') k m false) (denote_f cs (mksig (S x') k m false) (FRec e0 e1)) (0 :: rest) vs M)
+      exists (compile_f gidf j (mksig (S x') k m false false) (FRec e0 e1)), rho0. split; [exact Hf|]. split; [exact Bd0|].
+      change (calln (mksig (S x') k m false false) (denote_f cs (mksig (S x') k m false false) (FRec e0 e1)) (0 :: rest) vs M)
         with (appn k m false (appc x' _ (absc x' _ (fun cenv => absn k m false (fun env s =>
                 denote_e cs dnum (cenv ++ [0]) [] env s e0))) rest) vs M).
       rewrite appc_absc by auto. rewrite appn_absn by auto. simpl kbody.
@@ -1719,9 +2185,9 @@ Proof.
         -- lia.
         -- intros Habs; discriminate Habs.
     + destruct (bind_params (S x') k (S n' :: rest) vs) as (rho0 & Bd0 & C0 & E0); [simpl; lia | auto |].
-      exists (compile_f gidf j (mksig (S x') k m false) (FRec e0 e1)), rho0. split; [exact Hf|]. split; [exact Bd0|].
-      set (dfn := denote_f cs (mksig (S x') k m false) (FRec e0 e1)).
-      change (calln (mksig (S x') k m false) dfn (S n' :: rest) vs M)
+      exists (compile_f gidf j (mksig (S x') k m false false) (FRec e0 e1)), rho0. split; [exact Hf|]. split; [exact Bd0|].
+      set (dfn := denote_f cs (mksig (S x') k m false false) (FRec e0 e1)).
+      change (calln (mksig (S x') k m false false) dfn (S n' :: rest) vs M)
         with (appn k m false (appc x' _ (absc x' _ (fun cenv => absn k m false (fun env s =>
                 denote_e cs (fun cvs args s' => appn k m false (appc x' _ (dfn n') cvs) args s') (n' :: cenv ++ [S n']) [] env s e1)))
               rest) vs M).
@@ -1754,19 +2220,19 @@ Proof.
         -- lia.
         -- intros _. split; [apply PTree.gss | lia].
   - (* a number, plain *)
-    destruct r; simpl in W; [discriminate|]. cbv beta iota.
+    destruct r; simpl in W; [discriminate|]. destruct w; simpl in W; [discriminate|]. cbv beta iota.
     intros cvs vs M Lc Lv Bd.
     destruct (bind_params x k cvs vs Lc Lv) as (rho0 & Bd0 & C0 & E0).
-    exists (compile_f gidf j (mksig x k m false) (FPlain e)), rho0. split; [exact Hf|]. split; [exact Bd0|].
-    assert (V : calln (mksig x k m false) (denote_f cs (mksig x k m false) (FPlain e)) cvs vs M
+    exists (compile_f gidf j (mksig x k m false false) (FPlain e)), rho0. split; [exact Hf|]. split; [exact Bd0|].
+    assert (V : calln (mksig x k m false false) (denote_f cs (mksig x k m false false) (FPlain e)) cvs vs M
                 = denote_e cs dnum (rev cvs) [] (rev vs) M e).
     { destruct x as [|x'].
       - destruct cvs; [|discriminate].
-        change (calln (mksig 0 k m false) (denote_f cs (mksig 0 k m false) (FPlain e)) [] vs M)
+        change (calln (mksig 0 k m false false) (denote_f cs (mksig 0 k m false false) (FPlain e)) [] vs M)
           with (appn k m false (absn k m false (fun env s => denote_e cs dnum [] [] env s e)) vs M).
         rewrite appn_absn by auto. destruct m; [reflexivity|]. eapply (proj1 denote_nomem); [intros; reflexivity | eauto].
       - destruct cvs as [|n rest]; [discriminate|]. simpl in Lc. injection Lc as Lc.
-        change (calln (mksig (S x') k m false) (denote_f cs (mksig (S x') k m false) (FPlain e)) (n :: rest) vs M)
+        change (calln (mksig (S x') k m false false) (denote_f cs (mksig (S x') k m false false) (FPlain e)) (n :: rest) vs M)
           with (appn k m false (appc x' _ (absc x' _ (fun cenv => absn k m false (fun env s =>
                   denote_e cs dnum (cenv ++ [n]) [] env s e))) rest) vs M).
         rewrite appc_absc by auto. rewrite appn_absn by auto. destruct m; [reflexivity|].
@@ -1787,6 +2253,7 @@ Proof.
       * intros Habs; discriminate Habs.
   - (* a memory, recursive on the first counter *)
     destruct x as [|x']; simpl in W; [discriminate|]. destruct r; simpl in W; [|discriminate].
+    destruct w; simpl in W; [discriminate|].
     destruct m; simpl in W; [|discriminate].
     apply andb_true_iff in W as [W0 W1]. cbv beta iota.
     assert (Mvgt : Pos.lt 1 mv).
@@ -1795,10 +2262,10 @@ Proof.
     simpl in Lc. injection Lc as Lc.
     revert rest vs M Lc Lv Bd. induction n as [|n' IH]; intros rest vs M Lc Lv Bd.
     + destruct (bind_params (S x') k (0 :: rest) vs) as (rho0 & Bd0 & C0 & E0); [simpl; lia | auto |].
-      exists (compile_f gidf j (mksig (S x') k true true) (FRecM m0 m1)), rho0. split; [exact Hf|]. split; [exact Bd0|].
-      change (calln (mksig (S x') k true true) (denote_f cs (mksig (S x') k true true) (FRecM m0 m1)) (0 :: rest) vs M)
+      exists (compile_f gidf j (mksig (S x') k true true false) (FRecM m0 m1)), rho0. split; [exact Hf|]. split; [exact Bd0|].
+      change (calln (mksig (S x') k true true false) (denote_f cs (mksig (S x') k true true false) (FRecM m0 m1)) (0 :: rest) vs M)
         with 0%uint63.
-      change (callm (mksig (S x') k true true) (denote_f cs (mksig (S x') k true true) (FRecM m0 m1)) (0 :: rest) vs M)
+      change (callm (mksig (S x') k true true false) (denote_f cs (mksig (S x') k true true false) (FRecM m0 m1)) (0 :: rest) vs M)
         with (appn k true true (appc x' _ (absc x' _ (fun cenv => absn k true true (fun env s =>
                 denote_m cs dnum dmem (cenv ++ [0]) [] env s m0))) rest) vs M).
       rewrite appc_absc by auto. rewrite appn_absn by auto. simpl kbody.
@@ -1821,10 +2288,10 @@ Proof.
         -- lia.
         -- intros Habs; discriminate Habs.
     + destruct (bind_params (S x') k (S n' :: rest) vs) as (rho0 & Bd0 & C0 & E0); [simpl; lia | auto |].
-      exists (compile_f gidf j (mksig (S x') k true true) (FRecM m0 m1)), rho0. split; [exact Hf|]. split; [exact Bd0|].
-      set (dfn := denote_f cs (mksig (S x') k true true) (FRecM m0 m1)).
-      change (calln (mksig (S x') k true true) dfn (S n' :: rest) vs M) with 0%uint63.
-      change (callm (mksig (S x') k true true) dfn (S n' :: rest) vs M)
+      exists (compile_f gidf j (mksig (S x') k true true false) (FRecM m0 m1)), rho0. split; [exact Hf|]. split; [exact Bd0|].
+      set (dfn := denote_f cs (mksig (S x') k true true false) (FRecM m0 m1)).
+      change (calln (mksig (S x') k true true false) dfn (S n' :: rest) vs M) with 0%uint63.
+      change (callm (mksig (S x') k true true false) dfn (S n' :: rest) vs M)
         with (appn k true true (appc x' _ (absc x' _ (fun cenv => absn k true true (fun env s =>
                 denote_m cs dnum (fun cvs args s' => appn k true true (appc x' _ (dfn n') cvs) args s')
                          (n' :: cenv ++ [S n']) [] env s m1))) rest) vs M).
@@ -1853,26 +2320,64 @@ Proof.
         -- lia.
         -- intros _. split; [apply PTree.gss | lia].
   - (* a memory, plain *)
-    destruct r; simpl in W; [|discriminate]. destruct m; simpl in W; [|discriminate]. cbv beta iota.
+    destruct r; simpl in W; [|discriminate]. destruct w; simpl in W; [discriminate|]. destruct m; simpl in W; [|discriminate].
+    cbv beta iota.
     intros cvs vs M Lc Lv Bd.
     destruct (bind_params x k cvs vs Lc Lv) as (rho0 & Bd0 & C0 & E0).
-    exists (compile_f gidf j (mksig x k true true) (FPlainM e)), rho0. split; [exact Hf|]. split; [exact Bd0|].
-    change (calln (mksig x k true true) (denote_f cs (mksig x k true true) (FPlainM e)) cvs vs M) with 0%uint63.
-    assert (V : callm (mksig x k true true) (denote_f cs (mksig x k true true) (FPlainM e)) cvs vs M
+    exists (compile_f gidf j (mksig x k true true false) (FPlainM e)), rho0. split; [exact Hf|]. split; [exact Bd0|].
+    change (calln (mksig x k true true false) (denote_f cs (mksig x k true true false) (FPlainM e)) cvs vs M) with 0%uint63.
+    assert (V : callm (mksig x k true true false) (denote_f cs (mksig x k true true false) (FPlainM e)) cvs vs M
                 = denote_m cs dnum dmem (rev cvs) [] (rev vs) M e).
     { destruct x as [|x'].
       - destruct cvs; [|discriminate].
-        change (callm (mksig 0 k true true) (denote_f cs (mksig 0 k true true) (FPlainM e)) [] vs M)
+        change (callm (mksig 0 k true true false) (denote_f cs (mksig 0 k true true false) (FPlainM e)) [] vs M)
           with (appn k true true (absn k true true (fun env s => denote_m cs dnum dmem [] [] env s e)) vs M).
         rewrite appn_absn by auto. reflexivity.
       - destruct cvs as [|n rest]; [discriminate|]. simpl in Lc. injection Lc as Lc.
-        change (callm (mksig (S x') k true true) (denote_f cs (mksig (S x') k true true) (FPlainM e)) (n :: rest) vs M)
+        change (callm (mksig (S x') k true true false) (denote_f cs (mksig (S x') k true true false) (FPlainM e)) (n :: rest) vs M)
           with (appn k true true (appc x' _ (absc x' _ (fun cenv => absn k true true (fun env s =>
                   denote_m cs dnum dmem (cenv ++ [n]) [] env s e))) rest) vs M).
         rewrite appc_absc by auto. rewrite appn_absn by auto. reflexivity. }
     rewrite V. simpl kbody.
     refine (ctailm_ok P _ gidf (gidf j) mv cs false false false true 0 k j dnum dmem 0 _ _ _ _ Hcs Hlen Hj Hf e
                       _ _ _ _ _ _ _ _ M W _).
+    + intros Habs; discriminate Habs.
+    + intros Habs; discriminate Habs.
+    + intros Habs; discriminate Habs.
+    + intros Habs; discriminate Habs.
+    + split; [|split; [|split; [|split; [|split; [|split; [|split; [|split]]]]]]].
+      * exact E0.
+      * eapply lt_all_mono; eauto. lia.
+      * exact C0.
+      * eapply lt_all_mono; [exact LCmv | lia].
+      * apply benv_ok_nil.
+      * apply lt_all_nil.
+      * exact (Forall_rev_cbound _ cvs Bpos Bd).
+      * lia.
+      * intros Habs; discriminate Habs.
+  - (* a number made after memories *)
+    destruct r; simpl in W; [discriminate|]. destruct w; simpl in W; [|discriminate]. destruct m; simpl in W; [|discriminate].
+    cbv beta iota.
+    intros cvs vs M Lc Lv Bd.
+    destruct (bind_params x k cvs vs Lc Lv) as (rho0 & Bd0 & C0 & E0).
+    assert (V : calln (mksig x k true false true) (denote_f cs (mksig x k true false true) (FPlainX xx)) cvs vs M
+                = denote_x cs dnum dmem (rev cvs) [] (rev vs) M xx).
+    { destruct x as [|x'].
+      - destruct cvs; [|discriminate].
+        change (calln (mksig 0 k true false true) (denote_f cs (mksig 0 k true false true) (FPlainX xx)) [] vs M)
+          with (appn k true false (absn k true false (fun env s => denote_x cs dnum dmem [] [] env s xx)) vs M).
+        rewrite appn_absn by auto. reflexivity.
+      - destruct cvs as [|n rest]; [discriminate|]. simpl in Lc. injection Lc as Lc.
+        change (calln (mksig (S x') k true false true) (denote_f cs (mksig (S x') k true false true) (FPlainX xx)) (n :: rest) vs M)
+          with (appn k true false (appc x' _ (absc x' _ (fun cenv => absn k true false (fun env s =>
+                  denote_x cs dnum dmem (cenv ++ [n]) [] env s xx))) rest) vs M).
+        rewrite appc_absc by auto. rewrite appn_absn by auto. reflexivity. }
+    rewrite V.
+    exists (endx cs dnum dmem (rev cvs) [] (rev vs) M xx).
+    exists (compile_f gidf j (mksig x k true false true) (FPlainX xx)), rho0. split; [exact Hf|]. split; [exact Bd0|].
+    simpl kbody.
+    refine (ctailx_ok P _ gidf (gidf j) mv cs false false false true 0 k j dnum dmem 0 _ _ _ _ Hcs Hlen Hj xx
+                      _ _ _ _ _ _ _ _ M eq_refl eq_refl eq_refl W _).
     + intros Habs; discriminate Habs.
     + intros Habs; discriminate Habs.
     + intros Habs; discriminate Habs.
@@ -1923,7 +2428,7 @@ Fixpoint sum (n : nat) (i acc : i63) (s : mem) : i63 :=
   end.
 
 (* its syntax: the numbers nearest first -- acc is SVar 0, i is SVar 1 *)
-Definition sum_g := mksig 1 2 true false.
+Definition sum_g := mksig 1 2 true false false.
 Definition sum_s0 := SVar 0.
 Definition sum_s1 := SRec CNil (SCons (SOp Badd (SVar 1) (SInt 1)) (SCons (SOp Badd (SVar 0) (SRd (SInt 0) (SVar 1))) SNil)).
 Definition sum_b := FRec sum_s0 sum_s1.
@@ -1942,11 +2447,11 @@ Time Fail Definition sum_wrong : sum = denote_f [] sum_g (FRec sum_s0 (SRec CNil
 
 (* calls: a helper without memory, and a loop calling it; the helper's theorem is the callee assumption of the loop's *)
 Definition h (a b : i63) : i63 := PrimInt63.add (PrimInt63.mul a 2) b.
-Definition h_g := mksig 0 2 false false.
+Definition h_g := mksig 0 2 false false false.
 Definition h_b := FPlain (SOp Badd (SOp Bmul (SVar 1) (SInt 2)) (SVar 0)).
 Fixpoint loop (n : nat) (i acc : i63) (s : mem) : i63 :=
   match n with O => acc | S m => loop m (PrimInt63.add i 1) (h acc (KQ.KQRun.rd 0 i s)) s end.
-Definition loop_g := mksig 1 2 true false.
+Definition loop_g := mksig 1 2 true false false.
 Definition loop_b := FRec (SVar 0) (SRec CNil (SCons (SOp Badd (SVar 1) (SInt 1))
                                   (SCons (SCall 0 CNil (SCons (SVar 0) (SCons (SRd (SInt 0) (SVar 1)) SNil))) SNil))).
 Definition hl_P := mkprog [(gid1 0, compile_f gid1 0 h_g h_b); (gid1 1, compile_f gid1 1 loop_g loop_b)] [].
@@ -2267,7 +2772,7 @@ Fixpoint long (n : nat) (a : i63) (s : mem) : i63 :=
   end.
 
 Definition long_s1 := (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 1))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 2))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 3))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 4))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 5))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 6))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 7))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 8))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 9))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 10))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 11))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 12))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 13))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 14))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 15))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 16))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 17))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 18))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 19))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 20))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 21))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 22))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 23))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 24))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 25))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 26))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 27))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 28))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 29))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 30))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 31))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 32))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 33))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 34))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 35))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 36))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 37))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 38))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 39))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 40))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 41))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 42))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 43))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 44))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 45))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 46))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 47))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 48))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 49))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 50))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 51))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 52))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 53))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 54))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 55))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 56))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 57))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 58))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 59))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 60))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 61))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 62))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 63))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 64))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 65))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 66))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 67))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 68))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 69))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 70))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 71))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 72))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 73))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 74))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 75))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 76))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 77))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 78))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 79))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 80))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 81))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 82))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 83))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 84))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 85))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 86))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 87))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 88))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 89))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 90))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 91))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 92))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 93))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 94))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 95))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 96))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 97))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 98))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 99))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 100))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 101))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 102))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 103))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 104))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 105))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 106))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 107))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 108))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 109))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 110))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 111))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 112))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 113))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 114))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 115))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 116))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 117))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 118))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 119))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 120))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 121))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 122))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 123))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 124))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 125))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 126))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 127))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 128))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 129))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 130))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 131))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 132))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 133))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 134))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 135))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 136))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 137))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 138))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 139))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 140))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 141))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 142))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 143))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 144))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 145))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 146))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 147))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 148))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 149))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 150))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 151))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 152))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 153))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 154))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 155))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 156))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 157))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 158))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 159))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 160))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 161))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 162))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 163))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 164))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 165))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 166))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 167))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 168))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 169))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 170))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 171))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 172))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 173))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 174))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 175))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 176))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 177))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 178))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 179))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 180))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 181))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 182))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 183))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 184))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 185))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 186))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 187))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 188))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 189))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 190))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 191))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 192))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 193))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 194))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 195))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 196))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 197))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 198))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 199))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 200))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 201))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 202))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 203))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 204))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 205))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 206))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 207))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 208))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 209))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 210))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 211))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 212))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 213))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 214))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 215))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 216))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 217))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 218))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 219))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 220))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 221))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 222))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 223))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 224))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 225))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 226))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 227))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 228))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 229))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 230))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 231))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 232))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 233))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 234))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 235))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 236))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 237))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 238))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 239))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 240))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 241))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 242))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 243))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 244))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 245))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 246))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 247))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 248))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 249))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 250))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 251))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 252))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 253))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 254))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 255))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 256))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 257))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 258))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 259))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 260))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 261))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 262))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 263))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 264))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 265))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 266))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 267))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 268))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 269))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 270))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 271))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 272))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 273))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 274))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 275))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 276))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 277))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 278))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 279))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 280))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 281))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 282))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 283))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 284))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 285))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 286))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 287))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 288))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 289))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 290))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 291))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 292))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 293))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 294))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 295))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 296))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 297))) (SLet (SOp Bmul (SVar 0) (SRd (SInt 0) (SInt 298))) (SLet (SOp Blxor (SVar 0) (SRd (SInt 0) (SInt 299))) (SLet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 300))) (SRec CNil (SCons (SVar 0) SNil)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))).
-Definition long_g := mksig 1 1 true false.
+Definition long_g := mksig 1 1 true false false.
 Definition long_b := FRec (SVar 0) long_s1.
 Time Lemma long_is : long = denote_f [] long_g long_b.
 Proof. Time exact_no_check (eq_refl long). Time Qed.
@@ -2279,7 +2784,7 @@ Proof. Time exact_no_check (compile_f_ok long_P [] gid1 0 long_g long_b eq_refl 
 (* a loop filling the memory: cell i of block 0 gets 2 i, for n cells *)
 Fixpoint fill (n : nat) (i : i63) (s : mem) : mem :=
   match n with O => s | S m => fill m (PrimInt63.add i 1) (KQ.KQRun.upd 0 i (PrimInt63.mul i 2) s) end.
-Definition fill_g := mksig 1 1 true true.
+Definition fill_g := mksig 1 1 true true false.
 Definition fill_b := FRecM MCur (MRec CNil (SCons (SOp Badd (SVar 0) (SInt 1)) SNil) (MUpd (SInt 0) (SVar 0) (SOp Bmul (SVar 0) (SInt 2)) MCur)).
 Time Lemma fill_is : fill = denote_f [] fill_g fill_b.
 Proof. Time exact_no_check (eq_refl fill). Time Qed.
@@ -2291,14 +2796,14 @@ Fixpoint suffix (n : nat) (i : i63) (s : mem) : mem :=
   | S m => let s2 := suffix m (PrimInt63.add i 1) s in
            KQ.KQRun.upd 0 i (PrimInt63.add (KQ.KQRun.rd 0 i s2) (KQ.KQRun.rd 0 (PrimInt63.add i 1) s2)) s2
   end.
-Definition suffix_g := mksig 1 1 true true.
+Definition suffix_g := mksig 1 1 true true false.
 Definition suffix_b := FRecM MCur (MLetM (MRec CNil (SCons (SOp Badd (SVar 0) (SInt 1)) SNil) MCur)
   (MUpd (SInt 0) (SVar 0) (SOp Badd (SRd (SInt 0) (SVar 0)) (SRd (SInt 0) (SOp Badd (SVar 0) (SInt 1)))) MCur)).
 
 (* a plain function giving back a memory: a test, a write, a call of [fill] on the written memory *)
 Definition init (n : nat) (k : i63) (s : mem) : mem :=
   if PrimInt63.ltb k 10 then fill n k (KQ.KQRun.upd 1 0 k s) else KQ.KQRun.upd 1 0 0 s.
-Definition init_g := mksig 1 1 true true.
+Definition init_g := mksig 1 1 true true false.
 Definition init_b := FPlainM (MIf Clt (SVar 0) (SInt 10)
   (MCall 0 (CCons (CVar 0) CNil) (SCons (SVar 0) SNil) (MUpd (SInt 1) (SInt 0) (SVar 0) MCur))
   (MUpd (SInt 1) (SInt 0) (SInt 0) MCur)).
@@ -2322,7 +2827,7 @@ Time Fail Definition fill_wrong : fill = denote_f [] fill_g (FRecM MCur (MRec CN
   (MUpd (SInt 0) (SVar 0) (SOp Bmul (SVar 0) (SInt 3)) MCur))) := eq_refl.
 
 (* straight-line read-modify-writes: each memory is read and then written *)
-Definition chain_g := mksig 0 0 true true.
+Definition chain_g := mksig 0 0 true true false.
 Definition chain10 (s : mem) : mem :=
   let s1 := KQ.KQRun.upd 0 1 (PrimInt63.add (KQ.KQRun.rd 0 0 s) 1) s in
   let s2 := KQ.KQRun.upd 0 2 (PrimInt63.add (KQ.KQRun.rd 0 1 s1) 1) s1 in
@@ -2375,17 +2880,17 @@ Proof. Time exact_no_check (compile_f_ok chain20_P [] gid1 0 chain_g chain20_b e
 (* two counters: [rounds] recurses on r and gives n on, to [inner] and to itself *)
 Fixpoint inner (n : nat) (acc : i63) : i63 := match n with O => acc | S m => inner m (PrimInt63.add acc 1) end.
 Fixpoint rounds (r n : nat) (acc : i63) : i63 := match r with O => acc | S m => rounds m n (inner n acc) end.
-Definition inner_g := mksig 1 1 false false.
+Definition inner_g := mksig 1 1 false false false.
 Definition inner_b := FRec (SVar 0) (SRec CNil (SCons (SOp Badd (SVar 0) (SInt 1)) SNil)).
-Definition rounds_g := mksig 2 1 false false.
+Definition rounds_g := mksig 2 1 false false false.
 Definition rounds_b := FRec (SVar 0) (SRec (CCons (CVar 1) CNil) (SCons (SCall 0 (CCons (CVar 1) CNil) (SCons (SVar 0) SNil)) SNil)).
 (* a match on a counter inside a body, a successor of a successor given to a callee *)
 Definition twice (n : nat) (a : i63) : i63 := match n with O => a | S p => inner (S (S p)) a end.
-Definition twice_g := mksig 1 1 false false.
+Definition twice_g := mksig 1 1 false false false.
 Definition twice_b := FPlain (SMatch 0 (SVar 0) (SCall 0 (CCons (CS (CS (CVar 0))) CNil) (SCons (SVar 0) SNil))).
 (* a budget made from a number *)
 Definition bud (x : i63) : i63 := inner (KQ.KQRun.kq_nat x) 0.
-Definition bud_g := mksig 0 1 false false.
+Definition bud_g := mksig 0 1 false false false.
 Definition bud_b := FPlain (SCall 0 (CCons (CNat (SVar 0)) CNil) (SCons (SInt 0) SNil)).
 Definition cnt_P := mkprog [(gid1 0, compile_f gid1 0 inner_g inner_b); (gid1 1, compile_f gid1 1 rounds_g rounds_b);
                             (gid1 2, compile_f gid1 2 twice_g twice_b); (gid1 3, compile_f gid1 3 bud_g bud_b)] [].
@@ -2412,7 +2917,7 @@ Time Qed.
 Print Assumptions bud_ok.
 (* a counter grown at every round of a recursion has no bound: refused by wf *)
 Fixpoint grow (r n : nat) (acc : i63) : i63 := match r with O => acc | S m => grow m (S n) acc end.
-Time Fail Definition grow_wf : wf_f [] (mksig 2 1 false false) (FRec (SVar 0) (SRec (CCons (CS (CVar 1)) CNil) (SCons (SVar 0) SNil))) = true
+Time Fail Definition grow_wf : wf_f [] (mksig 2 1 false false false) (FRec (SVar 0) (SRec (CCons (CS (CVar 1)) CNil) (SCons (SVar 0) SNil))) = true
   := eq_refl.
 
 (* ---------------------------------------------------------------- a choice between two numbers: a conditional move *)
@@ -2423,7 +2928,7 @@ Fixpoint relax (n : nat) (j d : i63) (s : mem) : mem :=
   | S m => let a := KQ.KQRun.rd 0 j s in let b := PrimInt63.add d (KQ.KQRun.rd 1 j s) in
            relax m (PrimInt63.add j 1) d (KQ.KQRun.upd 0 j (if PrimInt63.ltb b a then b else a) s)
   end.
-Definition relax_g := mksig 1 2 true true.
+Definition relax_g := mksig 1 2 true true false.
 Definition relax_b := FRecM MCur (MLet (SRd (SInt 0) (SVar 1)) (MLet (SOp Badd (SVar 1) (SRd (SInt 1) (SVar 2)))
   (MRec CNil (SCons (SOp Badd (SVar 3) (SInt 1)) (SCons (SVar 2) SNil))
         (MUpd (SInt 0) (SVar 3) (SIf Clt (SVar 0) (SVar 1) (SVar 0) (SVar 1)) MCur)))).
@@ -2447,7 +2952,7 @@ Definition chk (s : mem) : i63 :=
   PrimInt63.add (if andb (PrimInt63.ltb (KQ.KQRun.rd 0 0 s) 500) (PrimInt63.ltb (KQ.KQRun.rd 0 1 s) 500) then 0 else 1)
     (PrimInt63.add (if orb (PrimInt63.ltb (KQ.KQRun.rd 0 5 s) 500) (PrimInt63.ltb (KQ.KQRun.rd 0 6 s) 500) then 0 else 7)
        (if negb (PrimInt63.ltb (KQ.KQRun.rd 0 11 s) 500) then 0 else 31)).
-Definition chk_g := mksig 0 0 true false.
+Definition chk_g := mksig 0 0 true false false.
 Definition chk_b := FPlain (SOp Badd
   (SIfB (BAnd (BCmp Clt (SRd (SInt 0) (SInt 0)) (SInt 500)) (BCmp Clt (SRd (SInt 0) (SInt 1)) (SInt 500))) (SInt 0) (SInt 1))
   (SOp Badd (SIfB (BOr (BCmp Clt (SRd (SInt 0) (SInt 5)) (SInt 500)) (BCmp Clt (SRd (SInt 0) (SInt 6)) (SInt 500))) (SInt 0) (SInt 7))
@@ -2461,14 +2966,14 @@ Fixpoint cnt_in (n : nat) (i lo hi acc : i63) (s : mem) : i63 :=
            if ok then cnt_in m (PrimInt63.add i 1) lo hi (PrimInt63.add acc 1) s
            else cnt_in m (PrimInt63.add i 1) lo hi acc s
   end.
-Definition cnt_in_g := mksig 1 4 true false.
+Definition cnt_in_g := mksig 1 4 true false false.
 Definition cnt_in_b := FRec (SVar 0) (SLet (SRd (SInt 0) (SVar 3)) (SLetB (BAnd (BCmp Cle (SVar 3) (SVar 0)) (BCmp Clt (SVar 0) (SVar 2)))
   (SIfB (BVar 0) (SRec CNil (SCons (SOp Badd (SVar 4) (SInt 1)) (SCons (SVar 3) (SCons (SVar 2) (SCons (SOp Badd (SVar 1) (SInt 1)) SNil)))))
                  (SRec CNil (SCons (SOp Badd (SVar 4) (SInt 1)) (SCons (SVar 3) (SCons (SVar 2) (SCons (SVar 1) SNil)))))))).
 (* a memory chosen by [a && negb b]: jumps *)
 Definition mark (v q m l : i63) (s : mem) : mem :=
   if andb (PrimInt63.leb m l) (negb (PrimInt63.eqb (KQ.KQRun.rd 1 v s) q)) then KQ.KQRun.upd 1 v q s else s.
-Definition mark_g := mksig 0 4 true true.
+Definition mark_g := mksig 0 4 true true false.
 Definition mark_b := FPlainM (MIfB (BAnd (BCmp Cle (SVar 1) (SVar 0)) (BNot (BCmp Ceq (SRd (SInt 1) (SVar 3)) (SVar 2))))
   (MUpd (SInt 1) (SVar 3) (SVar 2) MCur) MCur).
 Definition bool_P := mkprog [(gid1 0, compile_f gid1 0 chk_g chk_b); (gid1 1, compile_f gid1 1 cnt_in_g cnt_in_b);
@@ -2493,9 +2998,9 @@ Print Assumptions cnt_in_ok.
    unfolded last ([Strategy opaque], the order of unfolding only), and the check takes no time *)
 Fixpoint tw (n : nat) (a : i63) : i63 := match n with O => a | S m => PrimInt63.add (tw m a) (tw m (PrimInt63.add a 1)) end.
 Definition big (x : i63) : i63 := tw 20 x.
-Definition tw_g := mksig 1 1 false false.
+Definition tw_g := mksig 1 1 false false false.
 Definition tw_b := FRec (SVar 0) (SOp Badd (SRec CNil (SCons (SVar 0) SNil)) (SRec CNil (SCons (SOp Badd (SVar 0) (SInt 1)) SNil))).
-Definition big_g := mksig 0 1 false false.
+Definition big_g := mksig 0 1 false false false.
 Definition big_b := FPlain (SCall 0 (CCons (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS (CS CO))))))))))))))))))))
   CNil) (SCons (SVar 0) SNil)).
 Definition lit_P := mkprog [(gid1 0, compile_f gid1 0 tw_g tw_b); (gid1 1, compile_f gid1 1 big_g big_b)] [].
@@ -2507,3 +3012,52 @@ Proof.
   Time exact_no_check (compile_f_ok lit_P [existT ftype tw_g tw] gid1 1 big_g big_b eq_refl eq_refl
     (all_ok_callees lit_P gid1 [existT ftype tw_g tw] (conj tw_ok Logic.I)) eq_refl eq_refl).
 Time Qed.
+
+
+(* ---------------------------------------------------------------- a number made after memories *)
+(* [mafter]: memories made by calls and lets, a test, and a number read from a memory made in place ([rd 0 2 (bump 2 s3)], which is
+   [let s4 := bump 2 s3 in rd 0 2 s4] up to [let]): the KQL ends with the last memory made, the theorem says some memory *)
+Definition bump (i : i63) (s : mem) : mem := KQ.KQRun.upd 0 i (PrimInt63.add (KQ.KQRun.rd 0 (PrimInt63.sub i 1) s) i) s.
+Definition mafter (n : nat) (k : i63) (s : mem) : i63 :=
+  let s2 := bump 1 s in
+  let s3 := fill n k s2 in
+  if PrimInt63.ltb (KQ.KQRun.rd 0 1 s3) 10 then KQ.KQRun.rd 0 2 (bump 2 s3) else PrimInt63.add k 1.
+Definition bump_g := mksig 0 1 true true false.
+Definition bump_b := FPlainM (MUpd (SInt 0) (SVar 0) (SOp Badd (SRd (SInt 0) (SOp Bsub (SVar 0) (SInt 1))) (SVar 0)) MCur).
+Definition after_g := mksig 1 1 true false true.
+Definition after_b := FPlainX (XLetM (MCall 0 CNil (SCons (SInt 1) SNil) MCur)
+  (XLetM (MCall 1 (CCons (CVar 0) CNil) (SCons (SVar 0) SNil) MCur)
+    (XIf Clt (SRd (SInt 0) (SInt 1)) (SInt 10) (XLetM (MCall 0 CNil (SCons (SInt 2) SNil) MCur) (XRet (SRd (SInt 0) (SInt 2))))
+         (XRet (SOp Badd (SVar 0) (SInt 1)))))).
+Definition wr_P := mkprog [(gid1 0, compile_f gid1 0 bump_g bump_b); (gid1 1, compile_f gid1 1 fill_g fill_b);
+                           (gid1 2, compile_f gid1 2 after_g after_b)] [].
+Time Lemma bump_ok : callee_ok wr_P (gid1 0) (cbz 0) bump_g bump.
+Proof. Time exact_no_check (compile_f_ok wr_P [] gid1 0 bump_g bump_b eq_refl eq_refl (no_callees wr_P gid1) eq_refl eq_refl). Time Qed.
+Time Lemma fill_ok2 : callee_ok wr_P (gid1 1) (cbz 1) fill_g fill.
+Proof. Time exact_no_check (compile_f_ok wr_P [] gid1 1 fill_g fill_b eq_refl eq_refl (no_callees wr_P gid1) eq_refl eq_refl). Time Qed.
+Time Lemma after_ok : callee_ok wr_P (gid1 2) (cbz 2) after_g mafter.
+Proof.
+  Time exact_no_check (compile_f_ok wr_P [existT ftype bump_g bump; existT ftype fill_g fill] gid1 2 after_g after_b eq_refl eq_refl
+    (all_ok_callees wr_P gid1 [existT ftype bump_g bump; existT ftype fill_g fill] (conj bump_ok (conj fill_ok2 Logic.I))) eq_refl eq_refl).
+Time Qed.
+Print Assumptions after_ok.
+(* a call of a function that writes, from a number, is refused for now: the caller's memory would not be the text's *)
+Check (eq_refl : wf_f [after_g] (mksig 1 1 true false false) (FPlain (SCall 0 (CCons (CVar 0) CNil) (SCons (SVar 0) SNil))) = false).
+
+(* ---------------------------------------------------------------- two calls of the function itself merged into one *)
+(* the smallest of the cells and where it is (CF868F's loop): [if v <? best then f .. v i s else f .. best opt s] is one
+   loop step whose two differing arguments are chosen by conditional moves (D17), no jump *)
+Fixpoint argmin (n : nat) (i best opt : i63) (s : mem) : i63 :=
+  match n with
+  | O => opt
+  | S m => let v := KQ.KQRun.rd 0 i s in
+           if PrimInt63.ltb v best then argmin m (PrimInt63.add i 1) v i s else argmin m (PrimInt63.add i 1) best opt s
+  end.
+Definition argmin_g := mksig 1 3 true false false.
+Definition argmin_b := FRec (SVar 0) (SLet (SRd (SInt 0) (SVar 2))
+  (SIf Clt (SVar 0) (SVar 2) (SRec CNil (SCons (SOp Badd (SVar 3) (SInt 1)) (SCons (SVar 0) (SCons (SVar 3) SNil))))
+                             (SRec CNil (SCons (SOp Badd (SVar 3) (SInt 1)) (SCons (SVar 2) (SCons (SVar 1) SNil)))))).
+Definition argmin_P := mkprog [(gid1 0, compile_f gid1 0 argmin_g argmin_b)] [].
+Time Lemma argmin_ok : callee_ok argmin_P (gid1 0) (cbz 0) argmin_g argmin.
+Proof. Time exact_no_check (compile_f_ok argmin_P [] gid1 0 argmin_g argmin_b eq_refl eq_refl (no_callees argmin_P gid1) eq_refl eq_refl). Time Qed.
+Check (eq_refl : has_sel (kbody (compile_f gid1 0 argmin_g argmin_b)) = true).

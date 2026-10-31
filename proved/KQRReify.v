@@ -82,6 +82,7 @@ Fixpoint bool_index (ctx : list cent) (i : nat) : option nat :=
   | [], _ => None
   end.
 
+Definition is_ty (kn : kername) (t : term) : bool := match t with tConst k _ => Kername.eqb k kn | _ => false end.
 Definition is_bool (t : term) : bool := match t with tInd i _ => Kername.eqb (inductive_mind i) (inductive_mind ind_bool) | _ => false end.
 
 Definition is_ent (e : cent) (ctx : list cent) (i : nat) : bool :=
@@ -312,12 +313,86 @@ Fixpoint reify_m (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
   | _ => None
   end
   end.
+
+Definition is_rel (t : term) : bool := match t with tRel _ => true | _ => false end.
+
+(** a number made after memories: lets of memories, numbers and booleans, tests, and at the end a number from the newest
+    memory.  A read or a call whose memory is made in place ([rd h i (f .. s)]) is read as [let s2 := f .. s in rd h i s2] --
+    the same term up to [let]; its numbers are read with the older memories dead, so they may not name one *)
+Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sx :=
+  match fuel with
+  | O => None
+  | S fuel =>
+  let fallback := option_map XRet (reify fuel ctx t) in
+  let reify_args (c : list cent) (l : list term) : option sexps := option_map to_sexps (opt_all (map (reify fuel c) l)) in
+  let reify_cs (c : list cent) (l : list term) : option scnts := option_map to_scnts (opt_all (map (reify_c fuel c) l)) in
+  match t with
+  | tLetIn _ b ty body =>
+      if is_ty kn_mem ty then
+        match reify_m fuel ctx b, reify_x fuel (CMem :: kill_mem ctx) body with Some m, Some x => Some (XLetM m x) | _, _ => None end
+      else if is_ty kn_int ty then
+        match reify fuel ctx b, reify_x fuel (CNum :: ctx) body with Some e, Some x => Some (XLet e x) | _, _ => None end
+      else if is_bool ty then
+        match reify_b fuel ctx b, reify_x fuel (CBool :: ctx) body with Some e, Some x => Some (XLetB e x) | _, _ => None end
+      else None
+  | tCase ci _ c [b0; b1] =>
+      if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_bool) then
+        match (match c with
+               | tApp (tConst kn _) [a; b] => if eq_mp (fst kn) prim_mp then option_map (fun x => (x, a, b)) (cmp_v (snd kn)) else None
+               | _ => None
+               end) with
+        | Some (cmp, a, b) =>
+            match reify fuel ctx a, reify fuel ctx b, reify_x fuel ctx (bbody b0), reify_x fuel ctx (bbody b1) with
+            | Some x, Some y, Some t1, Some t2 => Some (XIf cmp x y t1 t2)
+            | _, _, _, _ => None
+            end
+        | None =>
+            match reify_b fuel ctx c, reify_x fuel ctx (bbody b0), reify_x fuel ctx (bbody b1) with
+            | Some x, Some t1, Some t2 => Some (XIfB x t1 t2)
+            | _, _, _ => None
+            end
+        end
+      else if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_nat) then
+        match c with
+        | tRel i =>
+            match cnt_index ctx i, reify_x fuel ctx (bbody b0), reify_x fuel (CCnt :: ctx) (bbody b1) with
+            | Some x, Some t0, Some t1 => Some (XMatch x t0 t1)
+            | _, _, _ => None
+            end
+        | _ => None
+        end
+      else None
+  | tApp (tConst kn _) args =>
+      if Kername.eqb kn kn_rd then
+        match args with
+        | [h; i; m] =>
+            if is_rel m then fallback else
+            match reify_m fuel ctx m, reify fuel (kill_mem ctx) h, reify fuel (kill_mem ctx) i with
+            | Some mm, Some x, Some y => Some (XLetM mm (XRet (SRd x y)))
+            | _, _, _ => None
+            end
+        | _ => None
+        end
+      else
+        match find_callee kn callees 0, rev args with
+        | Some (f, gs), m :: rnums =>
+            if negb (sr gs) && negb (sw gs) && sm gs && negb (is_rel m) && Nat.leb (sn gs) (length (rev rnums)) then
+              let rest := rev rnums in
+              match reify_m fuel ctx m, reify_cs (kill_mem ctx) (firstn (sn gs) rest), reify_args (kill_mem ctx) (skipn (sn gs) rest) with
+              | Some mm, Some cs, Some As => Some (XLetM mm (XRet (SCall f cs As)))
+              | _, _, _ => None
+              end
+            else fallback
+        | _, _ => fallback
+        end
+  | _ => fallback
+  end
+  end.
 End R.
 
 Fixpoint lams (t : term) : list term * term :=
   match t with tLambda _ ty b => let '(l, r) := lams b in (ty :: l, r) | _ => ([], t) end.
 
-Definition is_ty (kn : kername) (t : term) : bool := match t with tConst k _ => Kername.eqb k kn | _ => false end.
 Definition is_nat (t : term) : bool := match t with tInd i _ => Kername.eqb (inductive_mind i) (inductive_mind ind_nat) | _ => false end.
 
 (** the result type of a function type *)
@@ -337,7 +412,7 @@ Definition read_sig (tys : list term) (ret : term) : option sig :=
   let m := match rev rest with t :: _ => is_ty kn_mem t | [] => false end in
   let nums := if m then removelast rest else rest in
   let r := is_ty kn_mem ret in
-  if forallb (is_ty kn_int) nums && (r || is_ty kn_int ret) then Some (mksig c (length nums) m r) else None.
+  if forallb (is_ty kn_int) nums && (r || is_ty kn_int ret) then Some (mksig c (length nums) m r false) else None.
 
 Definition fun_ctx (gs : sig) : list cent := (if sm gs then [CMem] else []) ++ repeat CNum (sk gs) ++ repeat CCnt (sn gs).
 
@@ -376,7 +451,13 @@ Definition read_fun (Σ : global_env) (callees : list (kername * sig)) (kn : ker
           | Some gs =>
               let nx := Nat.pred (sn gs) in
               if sr gs then option_map (fun m => (gs, FPlainM m)) (reify_m callees (sm gs) nx 100000 (fun_ctx gs) body)
-              else option_map (fun e => (gs, FPlain e)) (reify callees (sm gs) nx 100000 (fun_ctx gs) body)
+              else match reify callees (sm gs) nx 100000 (fun_ctx gs) body with
+                   | Some e => Some (gs, FPlain e)
+                   | None => if sm gs then
+                               option_map (fun x => (mksig (sn gs) (sk gs) true false true, FPlainX x))
+                                          (reify_x callees (sm gs) nx 100000 (fun_ctx gs) body)
+                             else None
+                   end
           | None => None
           end
       | None => None
@@ -557,7 +638,8 @@ Fixpoint bool_test (fuel : nat) (t : term) : bool :=
 Definition why_fun (Σ : global_env) (fns bad : list kername) (callees : list (kername * sig)) (kn : kername) : list string :=
   if match read_fun Σ callees kn with Some _ => true | None => false end then
     ["read, but not well formed: a recursive call given a counter grown by S (it would have no bound), a call given fewer"
-     ^ " arguments than its function takes, or a counter more than 2^20 successors deep"]
+     ^ " arguments than its function takes, a counter more than 2^20 successors deep, or a call of a number function that"
+     ^ " writes the memory (not yet: the caller's memory would not be the text's)"]
   else
   match lookup_env Σ kn with
   | Some (ConstantDecl cb) =>
@@ -580,7 +662,11 @@ Definition why_fun (Σ : global_env) (fns bad : list kername) (callees : list (k
           let r0 := if rec == "" then sigr else rec :: sigr in
           let r1 := blockers 100000 fns inner r0 in
           let numfn := negb (is_ty kn_mem (ret_ty ty)) in
-          let r2 := if numfn && writes 100000 inner then add_s "a number function that writes the memory" r1 else r1 in
+          let isfix := match b with tFix _ _ => true | _ => false end in
+          let r2 := if numfn && writes 100000 inner
+                    then add_s (if isfix then "a recursive function that writes the memory and gives back a number"
+                                else "a number function that writes the memory where it is not read yet") r1
+                    else r1 in
           let r3 := if nat_match_value 100000 inner then add_s "a match on a counter that is not a variable" r2 else r2 in
           let r4 := if bool_test 100000 inner then add_s "a test on a boolean that is not read (a call giving back a boolean)" r3 else r3 in
           let r4 := fold_left (fun a k => if existsb (Kername.eqb k) bad then add_s ("calls " ^ snd k ^ ", not read") a else a)
@@ -607,7 +693,7 @@ Definition reify_why (p : program) : list (string * list string) :=
 
 (** what [kitc.py --reflect] reads of a program: each function's name and signature, in order *)
 Definition info_of (l : list (kername * sig * fbody)) :=
-  map (fun x : kername * sig * fbody => let '(kn, g, _) := x in (snd kn, sn g, sk g, sm g, sr g)) l.
+  map (fun x : kername * sig * fbody => let '(kn, g, _) := x in (snd kn, sn g, sk g, sm g, sr g, sw g)) l.
 
 (** compatibility: one recursive function *)
 Definition reify_top (p : program) : option (sig * fbody) :=
@@ -642,7 +728,7 @@ Check (eq_refl : map (fun x => (snd (fst x), snd x)) hl_src = [(h_g, h_b); (loop
 Fixpoint funs_of (i : nat) (l : list (kername * sig * fbody)) : list (positive * fn) :=
   match l with [] => [] | (_, gs, b) :: r => (gid1 i, compile_f gid1 i gs b) :: funs_of (S i) r end.
 Definition sig_at (l : list (kername * sig * fbody)) (i : nat) : sig :=
-  match nth_error l i with Some (_, gs, _) => gs | None => mksig 0 0 false false end.
+  match nth_error l i with Some (_, gs, _) => gs | None => mksig 0 0 false false false end.
 Definition body_at (l : list (kername * sig * fbody)) (i : nat) : fbody :=
   match nth_error l i with Some (_, _, b) => b | None => FPlain (SInt 0%uint63) end.
 Definition hl_Pr := mkprog (funs_of 0 hl_src) [].
@@ -693,7 +779,7 @@ Fixpoint c_rounds (r n : nat) (acc : i63) : i63 := match r with O => acc | S m =
 Definition c_twice (n : nat) (a : i63) : i63 := match n with O => a | S p => c_inner (S (S p)) a end.
 Definition c_bud (x : i63) : i63 := c_inner (KQ.KQRun.kq_nat x) 0.
 Definition cnt_all (x : i63) : i63 := PrimInt63.add (c_rounds 3 4 x) (PrimInt63.add (c_twice 2 x) (c_bud x)).
-Definition cnt_all_g := mksig 0 1 false false.
+Definition cnt_all_g := mksig 0 1 false false false.
 Definition cnt_all_b := FPlain (SOp Badd (SCall 1 (CCons (CS (CS (CS CO))) (CCons (CS (CS (CS (CS CO)))) CNil)) (SCons (SVar 0) SNil))
                                  (SOp Badd (SCall 2 (CCons (CS (CS CO)) CNil) (SCons (SVar 0) SNil)) (SCall 3 CNil (SCons (SVar 0) SNil)))).
 Definition cnt_src := ltac:(run_template_program (tmQuoteRec cnt_all)
@@ -753,6 +839,13 @@ Check (eq_refl : cnt_in_src = (cnt_in_g, cnt_in_b)).
 Definition mark_src := ltac:(run_template_program (tmQuoteRec mark)
   (fun q => let r := eval vm_compute in (reify_top q) in match r with Some ?x => exact x end)).
 Check (eq_refl : mark_src = (mark_g, mark_b)).
+
+(* ---------------------------------------------------------------- a number made after memories, from the user's text *)
+(* [mafter] makes memories by lets and calls, tests, and reads a memory made in place ([rd 0 2 (bump 2 s3)]): read as a number
+   made after memories, the read in place as a memory let; its callees found and ordered first *)
+Definition after_src := ltac:(run_template_program (tmQuoteRec mafter)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : map (fun x => (snd (fst x), snd x)) after_src = [(bump_g, bump_b); (fill_g, fill_b); (after_g, after_b)]).
 
 (* linearity: a memory used after a newer one was made has no tree *)
 Definition dup (s : mem) : mem := let s2 := KQ.KQRun.upd 0 0 1 s in KQ.KQRun.upd 0 1 (KQ.KQRun.rd 0 0 s) s2.
