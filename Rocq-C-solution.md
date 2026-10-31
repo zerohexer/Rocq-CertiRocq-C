@@ -48,11 +48,10 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    (`proved/KQR.v`, `KQRReify.v`): numbers, tests, lets, reads, calls, recursion on a counter, memory writes, counters as
    values (several counters, `S`/`O`, budgets, a match on a counter inside a body), booleans (tests made of `&&`, `||`,
    `negb`, boolean lets), choices between numbers as conditional moves, number functions that write the memory, cells of 4
-   bytes — each per-program step in milliseconds, long
+   bytes, helpers written out where they are used — each per-program step in milliseconds, long
    read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program
-   through it when every function is read (29 of the gate's 70 programs today, each timed against the translator's build), the
-   translator otherwise; next helpers written out where they are used, in the order of §12.V's tally.  Emit-then-prove is the
-   interim.
+   through it when every function is read (39 of the gate's 71 programs today, each timed against the translator's build), the
+   translator otherwise; next a `let` of a counter, in the order of §12.V's tally.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -1581,6 +1580,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F49 | Moving a program from the translator to the verified compiler changes its C, and the gate checks answers, not speed: two corpus programs became 1.45x slower in step 4 (`CF295B`, `CF295Bv2`: a minimum written into a cell, a conditional move in the translator's C, a jump in `compile`'s), unseen by the gate (2026-10-31) | if-conversion in `compile` (§12.V), timed again: within the spread; a program moved to the verified path is timed against the translator's build before the move is reported |
 | F50 | A call given a written counter (`dfs 20 ..`) made the per-program check run out of memory: comparing the function with its tree's meaning, the kernel unfolded the user's function first, and a function applied to a written counter is worked out round by round (`tw 20`, two calls a round: 4.7 s, 1.2 GB); the compiler's meaning functions set to unfold first did not help (2026-10-31, `CF813F`) | `kitc.py` sets the program's functions to be unfolded last (`Strategy opaque`) in each theorem file — the order only; `tw 20` 0.002 s, pinned in `KQR.v` |
 | F51 | The verified compiler's C for `CF868F` was 1.48x slower than the translator's: two calls of the function itself at the end of a test were a jump (the translator merges them into one call with chosen arguments), and with that fixed still 1.22x: temporaries reused across the arms of a test (the same KQL with every variable bound once ran at the translator's speed; 85 register moves against 67 in the loop) (2026-10-31) | `compile` merges such calls (equal arguments once) and numbers every variable once (`after`); all 16 programs on the verified path timed within the spread |
+| F52 | Moving `CF453B` to the verified compiler made it 1.34x slower: a choice on `a && b` between two numbers was compiled as the boolean's value (moves to 1 / 0 and a `land`) and one move, where the translator chooses on the parts (two moves); measured apart on variants of the C (2026-11-01) | `compile`'s `csel` (choices on the parts), its lemma in `cexp_all`; what is left (1.11x) is `zabs` as a conditional move against the translator's jump, which comes from its `choice_ok` not looking through `Uint63.opp` — kept, the general rule (D17) |
 | F38 | MetaRocq's formal evaluation (`EWcbvEval.eval`, `PCUICWcbvEval`) has rules for primitive values only, none for primitive operations: `PrimInt63.add` has no body, `eval_delta` cannot fire, every program here is stuck in it | the verified compiler is built by reflection over our own syntax instead (D26, §1.12) (read in the image's MetaRocq sources, 2026-10-30) |
 | F37 | CakeML's architecture is ours: a proof-producing translator from the logic's functions on top, one verified compiler below; Pancake is verified through a proof-producing decompiler.  The difference is that CakeML builds each proof by construction while ours searches | D25, §1.11 (read in the CakeML repository, 2026-10-30) |
 
@@ -2080,6 +2080,65 @@ and the program's functions set to be unfolded last (F50) are only the ones that
 costs nothing in KQL (a `let` binds the argument's atom, a written number stays a number).  Helpers met in a boolean position
 (a test on a helper giving back a boolean) are not read yet (a boolean `let` is not in the boolean sort).
 
+**Step 8 done (2026-11-01): helpers written out where they are used — and one more of the translator's code-shape rules.**
+- *Built as designed, in the reifier* (`KQRReify.v`; nothing in the proved compiler for the reading): `helper_of` — a
+  definition of the program's file, of `KQRun.v` or of `Uint63` with no fixpoint that is not one of the program's functions;
+  the functions are the root, the definitions of the file that are a fixpoint, and those larger than 40 nodes whose parameters
+  are numbers, counters, booleans or a memory and whose result is a number or a memory (`is_fn`, `big_def`: the translator's
+  `is_fun` / `big_fun`).  Left out on purpose: `rd8` / `upd8` (and so `rd16` / `upd16` over them), which must become one byte
+  access each, as the translator makes them, not shifts of a 4-byte cell (§6.1: 74 against 136 ms); `w64_op`; `kq_nat`.  At a
+  call the helper's body is read with its parameters given their arguments (`wout`, the translator's `beta_lets`): put in when
+  the argument is a variable, a number, a constant, a constructor or a written counter, or when the parameter is a function or a
+  type; bound by a `let` otherwise, so each argument is worked out once and in the order of the call.  `reach` walks helper
+  bodies for the functions they call.  The kernel's check unfolds the helper itself (delta, beta, zeta, iota); only the
+  functions that stay functions are unfolded last (F50).  `reach` and the reasons of a program not read look at each helper
+  once: a first version re-read a helper's body at each call and made the reifier's step on the kernels' programs slower than
+  step 7's (`HWP_kernel` 16.7 → 22.1 s, `HWP_own` 18.7 → 22.2 s, the first gate's kernels 3–6 s slower); now the same as step
+  7's (17.0 / 16.5 s, 18.5 / 18.6 s).
+- *Three rules writing out needs, each the translator's* (`knorm`, `app_norm`, §1.5): a match on a counter written as `O` /
+  `S ..` takes its branch (`c_twice 2 x` is a call of `c_inner` with `S (S (S O))`); a function applied to its arguments is
+  written out the same way (`twice (fun z => z - 1) i`); and the lets a test's subject starts with come first — a match on a let
+  is put inside it, the same term up to zeta — for the first operand of `&&`, `||`, `negb` only, so the work is done where the
+  translator does it (`slab_live b h s && ..` in the heap's `slab_get`).  The design above had left a test on a helper giving
+  back a boolean unread; with this rule it is read (a let in a later operand of `&&` / `||` still is not).
+- *Tests* (`KQRReify.v`): `hz` (the kit's `zdiv`, `zmod`, `zeven` in a test, `zmax`, `zabs`, `zopp`, `zmin`: one function),
+  `hbig` (more than 40 nodes: stays a function, called twice), `hb8` (`rd8`: not read, its reason "rd8"), `hho` (a helper given a
+  lambda and a partial application), `hlt` (a test on a helper whose boolean starts with two lets); `loop`, `cnt_all`,
+  `mafter` read with their helpers written out — each tree checked against the hand-written one, each theorem in milliseconds,
+  `Print Assumptions` the same base.  New example `reflect_helpers` (answer 19, worked out by hand: Z's rounding on negative
+  cells, a helper given a function, a boolean helper with lets; the translator gives 19 too).
+- *The C of the programs read before*: the helpers of the program's file were functions in the verified compiler's C and are
+  written out now, as in the translator's: of the 29 programs read before, 23 have byte-identical C, 6 changed (`CF20C` and the
+  examples `helper_write`, `reflect_bools`, `reflect_calls`, `reflect_counters`, `rmw_chain`).
+- *Timing found one more rule* (F52, the F49 rule): `CF453B` was 1.34x slower (346 → 465 ms).  Its inner loop writes `if (m
+  land mb =? 0) && (cost <? old) then cost else old`; `compile` made the boolean's value (two conditional moves to 1 / 0, a
+  `land`) and then one move, the translator chooses on the parts (`if a then (if b then T else F) else F`, two moves — §1.5).
+  Measured apart, the verified compiler's C with only that choice replaced by the translator's two moves: 457 → 376–381 ms
+  (the translator's 343).  Now `compile` has `csel b T F` — on a comparison or a boolean variable one conditional move, on
+  `&&`, `||`, `negb` choices on the parts — used by a choice on a boolean (`SIfB`); its lemma `csel_ok` is the third part of the
+  boolean case of `cexp_all`; test: `chk`'s three choices are five moves on the comparisons and no bit operation (`shape`).
+  **What is left on `CF453B` (1.11x) is kept, and why**: `cost := cur + zabs (ai - b)` is a conditional move in the verified
+  compiler (the general rule, D17; C's `abs` compiles without a jump too) and a jump in the translator's C, because the
+  translator's `choice_ok` does not look through `- a` (a call of `Uint63.opp`, a helper, is not a "simple term" to it) — an
+  accident of the translator's rule, which this data favours: the sign of `ai - b` changes once per inner loop.  Measured: the
+  translator's C with that jump made a conditional move runs at 376 ms, the verified compiler's speed.
+- *Timed (best of 7 ms, the translator's / the verified compiler's), the 8 corpus programs whose C changed or that moved*:
+  `CF20C` 8.84 / 8.78, `CF35C` 36.78 / 38.09, `CF35Cn` 27.21 / 27.42, `CF385C` 214.76 / 207.65, `CF385Cn` 148.27 / 147.95,
+  `CF453B` 355.88 / 394.07 (above), `CF547B` 32.17 / 31.42, `CF622F` 84.53 / 85.85.
+- *Through the verified compiler: 39 of the gate's 71 programs* (was 29 of 70): `CF35C`, `CF35Cn` (their helper `put`, which
+  takes a boolean, is written out), `CF385C`, `CF385Cn`, `CF453B`, `CF547B`, `CF622F`, the examples `dispatch`, `hof_inline`
+  and the new `reflect_helpers`.
+- *The gate with `KQ_REFLECT=1`, on the fork, on the final tree (2026-11-01): everything passes* — `make.sh` `core-ok`; examples
+  27 / 27; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (37 / 37 / 39 / 55 / 43 s); **39
+  programs through the verified compiler, 0 read but refused by the check**.
+- *The tally after the step* (over the gate's 71 programs): calls of writing functions and reads in place inside expressions
+  16, machine operations 10, functions given to functions (recursive functions that take functions: the loop library,
+  `wfix`) 7, loops that write and give a number 7, records and pairs 6, a `let` of a counter 4, tests on a call giving back a
+  boolean 4, bytes 2, `u64` 2, the rest 3.  **The order that completes the most now**: a `let` of a counter (+3, 42 of 71),
+  loops that write and give a number (+2, 44), calls of writing functions and reads in place inside expressions (+3, 47),
+  machine operations (+9, 56: the kernels), functions given to functions (+4, 60), tests on calls giving back a boolean (+3,
+  63), records (+2, 65), then bytes, `u64`, the rest.  **Next: a `let` of a counter.**
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -2256,7 +2315,9 @@ Pushed to the public repository up to `f0f06ae` (2026-10-31); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 7 done (narrow memory: 29 of 70), its timing and gate; step 8's design (helpers written out) |
+| (this commit) | §12.V: step 8 done (helpers written out: 39 of the gate's 71), F52, the timing, the gate, the tally |
+| `7193406` | `proved/KQR.v` + `KQRReify.v` step 8: helpers written out; `csel`; `proved/examples/reflect_helpers` |
+| `9be78c9` | §12.V: step 7 done (narrow memory: 29 of 70), its timing and gate; step 8's design (helpers written out) |
 | `5881c07` | `proved/KQR.v` + `KQRReify.v` step 7: 4-byte cells |
 | `f0f06ae` | §12.V: step 6 done (number functions that write the memory; merging calls; one number per variable): F51, the timing of all 16 programs, the tally (24 of 70), the gate |
 | `345077b` | `proved/KQR.v` + `KQRReify.v` step 6; `compile`'s call merging and numbering; `kitc.py`; `proved/examples/reflect_writes` |
