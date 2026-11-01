@@ -54,6 +54,10 @@ def classify(name, line):
         return "invalid", ""
     if name in BY_NAME:
         return "gap", BY_NAME[name]
+    # refused by the verified compiler (step 29: the walk retired): the reifier's reasons
+    m = re.search(r"not read by the verified compiler's reifier \((.*?)\); refused", line)
+    if m:
+        return "gap", "not read by the verified compiler: " + m.group(1)[:120]
     for rx, cat in GAP:
         if re.search(rx, line):
             return "gap", cat

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""kitc.py [--no-build] NAME...   (inside the image, in the repo's directory)
+"""kitc.py [--no-build] [--walk] NAME...   (inside the image, in the repo's directory)
 
-A kit program (hand/NAME.body, or a path to a .body file) through the proved route (with --reflect, first through the
-verified compiler: see reflect(); a program it does not read takes the steps below):
+A kit program (hand/NAME.body, or a path to a .body file) through the proved route: the verified compiler (see reflect():
+the reifier reads each function into the syntax of proved/KQR.v, compile_f_ok gives its theorem, the kernel checks by
+conversion that the tree means the function); a program it does not read is refused with the reifier's reasons.  With --walk
+(or KQ_WALK=1) the retired route instead, kept as the yardstick a moved program is timed against (Rocq-C-solution.md, F49):
   1. the translator reads the function `main` applies and every function of the file it uses (proved/KQMTrans.v)
      and the kernel checks, for each, that the KQL function computes it (proved/KQMAuto.v);
   2. the generated Clight is printed as C (proved/KQLPrint.v);
@@ -363,6 +365,9 @@ value {entry_name}(struct thread_info *ti) {{
 def run(cmd, **kw):
     return subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT, **kw)
 
+# what follows a program the verified compiler does not take: a refusal, or with --walk the retired route
+FOLLOW = "; refused"
+
 def reflect(name, entry, prog, no_proof):
     """--reflect: the verified compiler (proved/KQR.v, Rocq-C-solution.md §1.12).  The reifier reads the entry `main`
     applies and every function it reaches (proved/KQRReify.v); each function is compiled by KQR.compile_f, and gets its
@@ -396,7 +401,7 @@ def reflect(name, entry, prog, no_proof):
         why = open(wp).read() if os.path.exists(wp) else ""
         rs = [f + ": " + ", ".join(re.findall(r'"([^"]*)"', r)) for f, r in re.findall(r'\("([^"]+)",\s*\[(.*?)\]\)', why, re.S)]
         print(name, "reflect: not read by the verified compiler's reifier (" + ("; ".join(rs) if rs else "the reifier did not run")
-              + "); the translator follows", flush=True)
+              + ")" + FOLLOW, flush=True)
         return None
     if shared:
         shp = os.path.join(GEN, f"{name}_rsh.out")
@@ -404,7 +409,7 @@ def reflect(name, entry, prog, no_proof):
         if bad:
             print(name, "reflect: not read by the verified compiler's reifier (" + "; ".join(
                   f + ": a block that another processor can change is read or written by a plain access, or its number is not written"
-                  " where it is used" for f in bad) + "); the translator follows", flush=True)
+                  " where it is used" for f in bad) + ")" + FOLLOW, flush=True)
             return None
     # the kinds of the parameters after the counters: I a number, B a boolean, a .. h a record of the program's type 0 .. 7
     kc = lambda c: "KQR.KNum" if c == "I" else "KQR.KBool" if c == "B" else f"(KQR.KRec {ord(c) - ord('a')})"
@@ -493,12 +498,12 @@ def reflect(name, entry, prog, no_proof):
     open(f1, "w").write(t)
     rc, out = coqc(f1)
     if rc != 0:
-        print(name, "REFLECT CHECK FAILED (the translator follows):", out[-400:].replace("\n", " "), flush=True)
+        print(name, "REFLECT CHECK FAILED" + FOLLOW + ":", out[-400:].replace("\n", " "), flush=True)
         return None
     idx = [f[0] for f in fs].index(entry) if entry in [f[0] for f in fs] else len(fs) - 1
     e = fs[idx]
     if any(c not in "IB" for c in e[2]) or e[6] not in ("", "B"):   # an entry taking or giving back a record: main gives and takes numbers
-        print(name, "reflect: the entry takes or gives back a record; the translator follows", flush=True)
+        print(name, "reflect: the entry takes or gives back a record" + FOLLOW, flush=True)
         return None
     kinds = "N" * int(e[1]) + "I" * len(e[2]) + ("M" if e[3] == "true" else "")   # a boolean is passed as a number, 1 or 0
     # the slot block: room for the fields after the first of each record type of the program ([KQR.slot_room], which every
@@ -518,10 +523,14 @@ def main():
     # proofs run after it; --no-proof: the C without the proofs (with --no-build: only the translation, a check of what is read)
     emit_first = False
     no_proof = False
-    reflect_mode = bool(os.environ.get("KQ_REFLECT"))   # KQ_REFLECT=1: as --reflect (for the scripts that call kitc.py)
+    # the verified compiler is the route (step 29: the walk retired); --walk (or KQ_WALK=1) the translator and the walk
+    # alone, the yardstick a moved program is timed against; --reflect and KQ_REFLECT are accepted and change nothing
+    walk_mode = bool(os.environ.get("KQ_WALK"))
     for a in sys.argv[1:]:
         if a == "--reflect":
-            reflect_mode = True
+            pass
+        elif a == "--walk":
+            walk_mode = True
         elif a == "--emit-first":
             emit_first = True
         elif a == "--no-proof":
@@ -554,8 +563,11 @@ def main():
             entry, args, wrap = parse_main(mt)
         except SystemExit as ex:
             print(name, "NOT READ:", ex); continue
-        if reflect_mode:
+        if not walk_mode:
             r = reflect(name, entry, prog, no_proof)
+            if not r:
+                print(name, "REFUSED: not compiled by the verified compiler (the reasons above)", flush=True)
+                continue
             if r:
                 eid, kinds, res, n, slots = r
                 print(name, ("NOT PROVED (proofs skipped)" if no_proof else "PROVED"), n, "functions by the verified compiler; entry",

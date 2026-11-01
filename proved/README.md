@@ -3,8 +3,11 @@
 The goal, and what is proved against what is assumed: `GOAL.md`.
 
 A plain Rocq program (the programs of `hand/`: counters, 63-bit integers, loops, calls, the kit's memory blocks) is
-translated to a small first-order language, KQL.  For every function the kernel checks the statement "the KQL function
-computes this Rocq function".  KQL goes to CompCert's Clight by a generator that is proved once for all programs.  The
+compiled to a small first-order language, KQL, by a verified compiler (`KQR.v`, its theorem `compile_f_ok` proved once): an
+untrusted reifier (`KQRReify.v`) reads each function into the compiler's syntax, and the kernel checks by conversion that the
+tree means the function — no proof search per program.  A program the reifier does not read is refused with its reasons.  The
+translator and its per-function proof search described below (the route until 2026-11-02, `Rocq-C-solution.md` §12.V) are
+kept behind `kitc.py --walk`, as the yardstick a program is timed against.  KQL goes to CompCert's Clight by a generator that is proved once for all programs.  The
 Clight is printed as C and built with clang next to the kit's support code; it takes about as long as the kit's own build
 of the same program (table below).
 
@@ -14,7 +17,8 @@ Definition main : int := kq_sum (solve (kq_nat (kq_arg 0)) (kq_nat (kq_arg 1)) (
 ```
 
 ```
-python3 proved/kitc.py CF1100F        # translate, prove every function, print the C, build bin/P_CF1100F
+python3 proved/kitc.py CF1100F          # the verified compiler: read, check, print the C, build bin/P_CF1100F
+python3 proved/kitc.py --walk CF1100F   # the retired route: translate, prove every function by the walk
 ```
 
 ## The steps
