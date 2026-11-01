@@ -3082,6 +3082,23 @@ comparisons on counters; `P_int_local_fix`: a local `fix` naming the caller's va
 back by recursion) and `A_par_nat_arith`, not Rocq.  The C: 63 of 63 byte-identical.  **§12.V is done**: every program is compiled
 through the verified `compile`, with only the conversion check per program.
 
+**Step 30, comparisons of counters and the predecessor — the design (2026-11-02).**  Three of the six gaps compare counters or
+take a predecessor: `if Nat.eqb n 3 then a else b` (`A_par_nat_eqb`), `if Nat.ltb n 10 ..` (`A_par_nat_ltb`), `k (Nat.pred n) a`
+(`A_par_nat_pred`).  A counter is held as its machine number (`ofn`), so:
+- *Syntax and meaning*: `BCmpC c a b` among the booleans, `c` one of `Ceq`, `Clt`, `Cle`, meaning `Nat.eqb` / `Nat.ltb` /
+  `Nat.leb` of the two counters — the user's own functions, so the check stays a conversion; `CPred a` among the counters,
+  meaning `Nat.pred`.
+- *KQL*: `BCmpC` as `BCmp` is compiled, on the counters' atoms (a test, a value, a choice of two atoms); `CPred` a subtraction of
+  1 and a conditional move keeping 0.
+- *Proof*: one case each in the counter and boolean parts of `cexp_all` (and the lemmas over the syntax): the machine numbers
+  compare as the counters do, and `ofn (Nat.pred n)` is the subtraction or 0, for counters below `2^62` — which every counter of
+  a function is, by `denote_c_bound` and the depth `wf` already bounds; `CPred` adds no depth (it does not grow) and keeps a
+  counter flat.
+- *The reifier*: `Nat.eqb`, `Nat.ltb`, `Nat.leb` of two counters in `reify_b`; `Nat.pred` in `reify_c`.
+- *Expected*: the three cells.  Not in this step: `n + n` given to a callee (`A_par_nat_mul`) — a callee's theorem asks its
+  counters below its own bound, which the sum of two of the caller's can pass; it needs bounds per function computed and checked
+  for the program instead of `cbz j`, a step of its own; a local `fix` naming the caller's variables; a pair of pairs given back.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3255,11 +3272,12 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `d819c8d` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `283540d` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 29 done (the walk retired: the gate and the construct table with the walk switched off, 773 of 780), the C |
+| (this commit) | §12.V: step 30's design (comparisons of counters and the predecessor) |
+| `283540d` | §12.V: step 29 done (the walk retired: the gate and the construct table with the walk switched off, 773 of 780), the C |
 | `8b406b3` | `proved/kitc.py`: a program Rocq refuses is refused with Rocq's error (not Rocq in the table, as before) |
 | `eadb665` | `proved/kitc.py` + `matrix/classify.py` + `README.md` step 29: the verified compiler is the route, `--walk` the retired one |
 | `7b4fd2f` | §12.V: step 29's design (the walk retired) |
