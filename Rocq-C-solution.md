@@ -51,11 +51,11 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    bytes, helpers written out where they are used, a `let` of a counter, chains of tail calls merged into one call,
    functions given to recursive functions (a copy per function given), loops that write and give a number, booleans and
    records as parameters (a record a value in the meaning, its fields in KQL), records given back (the fields after the first
-   through the slot block), functions given that name the caller's variables — each per-program step in milliseconds, long
-   read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program
-   through it when every function is read (57 of the gate's 71 programs today, each corpus program timed against the
-   translator's build), the translator otherwise; next machine operations, in the order of §12.V's tally.  Emit-then-prove is the
-   interim.
+   through the slot block), functions given that name the caller's variables, machine operations — each per-program step in
+   milliseconds, long read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`); `kitc.py --reflect`
+   compiles a program through it when every function is read (67 of the gate's 71 programs today, the five test kernels
+   included; each corpus program timed against the translator's build), the translator otherwise; next bytes, then `u64` and
+   mutual recursion, in the order of §12.V's tally.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -2533,6 +2533,38 @@ are assumed by `hw_law` / `hwf_law` (§1.10).  So `S` takes them as KQL does:
 - *Expected*: the kernels and `hw_mmio`, if their remaining reason ("a number function that writes the memory where it is
   not read yet") is the scan's (F56) — read part by part once the operations are read.
 
+**Step 14 done (2026-11-01): machine operations.**  Built as designed:
+- *`KQR.v`*: `MHw`, `SHwf`, `SSize`, their meanings (`hw_sem`, `hwf_sem`, `kq_size`), their KQL (`Ehw`, `Ehwf`, `Eksize`), well
+  formed when the operation gets its number of arguments and a size has a memory; one proof case each, in `cexp_all` and
+  `cmem_ok` (by `K_hwf`, `K_size`, `K_hw`), the others in the lemmas over the syntax.  No new hypothesis; `Print Assumptions`
+  the same base (the machine's operations were in it already: KQL's meaning names them).  Tests: `mmio` (`hw_mmio`'s loop: a
+  store to a device, a fence, a load into a cell, the cell read), `hsz` (a machine number and a block's size), `hgrow`
+  (`kq_grow`); an operation given too few arguments and a size without a memory refused; each theorem 0.001–0.006 s; `KQR.v`
+  compiles in 9.0 s.
+- *The reifier*: the translator's two tables and `kq_size`; the reasons scan no longer names them.  Test `rhw` (`hw_mmio`'s
+  loop, and a caller passing a machine number and a block size and a grown block, its helpers written out): the trees
+  exactly the hand-written ones, the theorems in milliseconds.
+- *`kitc.py`*: a program with `kq_shared` stays with the translator (`lock`, outside the gate).
+- *The kernels*: their eight programs are read in full — the scan's "a number function that writes the memory where it is
+  not read yet" was its own again, for them and for `heap` (and `heap`'s "a test on a boolean that is not read" too): F56's
+  rule held.  Each kernel was built by the verified compiler and started in QEMU on this machine apart from the gate (which
+  builds them): all five pass every check (the answer 0; `irqnow` 10 interrupts handled by Rocq at once, `fault` its page
+  mapped by Rocq, `smp` two processors), under QEMU's processor and under KVM.  **The kernels' build, proofs included, is now
+  10 / 10 / 10 / 12 / 11 s** (irqnow, fault, smp, own, kernel), against 37 / 38 / 40 / 56 / 43 s with the walk the step
+  before — the verified compiler's per-program step in place of the search (§7.3's numbers were the walk's).
+- *The C*: of the 63 examples and corpus programs compared with step 13's, 61 have byte-identical C (compared on this
+  machine: the heavy-run machine was off the network for a while); `heap` and `hw_mmio` are the moved ones.
+- *Through the verified compiler: 67 of the gate's 71 programs* (was 57): `heap`, `hw_mmio` and the kernels' eight (examples
+  and kernels: nothing to time).
+- *The tally after the step* (the four not read): bytes 2 (`bytes`, `views`: `rd8` / `upd8`), `u64` 2 (`views`, `w64` —
+  `w64`'s "test on a call giving back a boolean" is `u64_ltb` / `u64_eqb`), mutual recursion 1 (`mutual`, with a local
+  `fix`), and the scan's flag on `bytes` and `views`.  **The order that completes the most now**: bytes (+1, 68 of 71:
+  `bytes`), `u64` (+2, 70: `w64`, `views`), mutual recursion (+1, 71).  **Next: bytes.**  (The tally script's greedy order
+  loops when no category completes a program; read off by hand this time.)
+- *The gate with `KQ_REFLECT=1`, on the fork, on `6241ac9` (2026-11-01): everything passes* — `make.sh` `core-ok`; examples
+  27 / 27; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (10 / 10 / 10 / 12 / 11 s); **67
+  programs through the verified compiler, 0 read but refused by the check**.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -2705,11 +2737,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `25cd09b` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `4e2504c` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 13 done (functions given that name the caller's variables: 57 of 71), the C, the gate, the tally |
+| (this commit) | §12.V: step 14 done (machine operations: 67 of 71, the kernels included, built in 10–12 s), the C, the boots, the gate, the tally |
+| `6241ac9` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 14: machine operations (`MHw`, `SHwf`, `SSize`); the reifier reads the translator's tables; `kq_shared` programs stay with the translator |
+| `8587156` | §12.V: step 14's design (machine operations) |
+| `4e2504c` | §12.V: step 13 done (functions given that name the caller's variables: 57 of 71), the C, the gate, the tally |
 | `b4899ef` | `proved/KQRReify.v` step 13: captures -- a copy takes the variables of the caller its functions given name as parameters, the call passes them |
 | `3eb1143` | §12.V: step 13's design (captures); F56 |
 | `25cd09b` | §12.V: step 12, part 3 done (records given back: 56 of 71), the C, the gate, the tally |
