@@ -56,8 +56,8 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector) — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program through it when every function is read (**all 71 of the gate's
    programs today**, the five test kernels included, and `lock` on two processors; each corpus program timed against the
-   translator's build), the translator otherwise; of the construct table's 780 cells 512 (253 more by the walk alone); next
-   record types from the bodies and the rest of the table's fallbacks, then the walk retired.  Emit-then-prove is the interim.
+   translator's build), the translator otherwise; of the construct table's 780 cells 729 (39 more by the walk alone); next
+   the rest of the table's fallbacks, then the walk retired.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -2743,6 +2743,20 @@ parameters the predicate's), of a `let`, of a primitive projection — in the fu
 built and taken apart is `RMk` and `SMatchR`, its fields atoms of KQL (no memory, no call).  *Expected*: the 224 cells, and
 `P_int_w64` (a `u64` built inside a body); the C of every gate program unchanged.
 
+**Step 19 done (2026-11-02): record types from the bodies.**  Built as designed, in the reifier only (`KQR.v` and `kitc.py`
+unchanged): `body_rtys` collects the types a body names — a constructor applied (`ctor_ty`, its parameters the first arguments),
+a match (the predicate's parameters), a `let`, a primitive projection — through the helpers it writes out (each once), and
+`rtab_of` adds them after the signatures'.  Test: `rbp` (a pair built and taken apart inside a body, the construct table's
+`N_nest` shape): the record table finds `prod int int`, the tree is `SMatchR` over `RMk`, the theorem 0.002 s.  The C: 63 of
+63 byte-identical.  **The construct table through the verified compiler (on `d61befd`, 14 min): of 780 cells 729 through the
+verified compiler** (was 512), 39 more proved only by the walk (was 253), 12 gaps on both routes (was 15: three cells gaps
+before are proved now) — 768 proved, 0 read but refused by the check.  The 39: a pair of a number and a memory (the
+number-and-memory results, 11), functions giving back a boolean (8), pairs still not read (nested, holding a function,
+chosen by a test: 7), a function bound by a `let` (5), a record chosen by a test or a match (2), `option` / `sum` / `list` /
+records of other fields (5), a capture (1).  **Next: these, by the tally.**  The gate with `KQ_REFLECT=1`, on the fork, on
+`d61befd`: everything passes — `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels proved and built
+(10 / 10 / 10 / 13 / 12 s); **71 programs through the verified compiler, 0 refused, 0 not read**.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -2915,11 +2929,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `beff230` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `9b7eac3` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 18 done (blocks shared with another processor: `lock` through the verified compiler), the C, the gate |
+| (this commit) | §12.V: step 19 done (record types from the bodies: the construct table 729 of 780 through the verified compiler), the C, the gate |
+| `d61befd` | `proved/KQRReify.v` step 19: record types from the bodies (`body_rtys`, `rtab_of` after the signatures') |
+| `6e4a59c` | §12.V: step 19's design (record types from the bodies) |
+| `9b7eac3` | §12.V: step 18 done (blocks shared with another processor: `lock` through the verified compiler), the C, the gate |
 | `8642551` | `proved/KQR.v` + `kitc.py` step 18: `sh_ok`, the shared-block rule over the syntax tree, proved by the kernel beside each function's theorem; `kq_shared` programs read by the verified compiler |
 | `30c1981` | §12.V: step 18's design (blocks shared with another processor) |
 | `beff230` | §12.V: step 17 done (mutual recursion: 71 of 71), the C, the gate |
