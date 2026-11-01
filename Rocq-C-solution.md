@@ -50,11 +50,12 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    `negb`, boolean lets), choices between numbers as conditional moves, number functions that write the memory, cells of 4
    bytes, helpers written out where they are used, a `let` of a counter, chains of tail calls merged into one call,
    functions given to recursive functions (a copy per function given), loops that write and give a number, booleans and
-   records as parameters (a record a value in the meaning, its fields in KQL) — each
-   per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`);
-   `kitc.py --reflect` compiles a program through it when every function is read (54 of the gate's 71 programs today,
-   each corpus program timed against the translator's build), the translator otherwise; next records and pairs, in the order of
-   §12.V's tally.  Emit-then-prove is the interim.
+   records as parameters (a record a value in the meaning, its fields in KQL), records given back (the fields after the first
+   through the slot block) — each per-program step in milliseconds, long read-then-write bodies included on our fork of
+   Rocq's kernel (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program through it when every function is read
+   (56 of the gate's 71 programs today, each corpus program timed against the translator's build), the translator
+   otherwise; next calls of writing functions and reads in place inside expressions, in the order of §12.V's tally.
+   Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -1586,6 +1587,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F52 | Moving `CF453B` to the verified compiler made it 1.34x slower: a choice on `a && b` between two numbers was compiled as the boolean's value (moves to 1 / 0 and a `land`) and one move, where the translator chooses on the parts (two moves); measured apart on variants of the C (2026-11-01) | `compile`'s `csel` (choices on the parts), its lemma in `cexp_all`; what is left (1.11x) is `zabs` as a conditional move against the translator's jump, which comes from its `choice_ok` not looking through `Uint63.opp` — kept, the general rule (D17) |
 | F53 | Moving `CF1100F` to the verified compiler made it 1.52x slower: a chain of three tests whose four ends call the loop itself on the same cells written was jumps, where the translator merges it into one call (its differing arguments and the written values chosen by conditional moves); step 6's merge took only two ends on the newest memory (2026-11-01) | `compile` merges any such chain (`mrg_e`, `mrg_m`, proved once; tests on comparisons or booleans; writes of the same cells), the two-call case giving the same code as before; `CF1100F` 109.1 / 108.5 ms |
 | F54 | A copy of a recursive function for the functions it is given (step 10) set to be unfolded last, like the program's functions: comparing a caller's text (`wfix2_go (kq_nat (..)) F a b`) with the copy's call, the kernel unfolded the template on `kq_nat (..)` rather than the copy, and the check did not end in 10 minutes (2026-11-01, `wfix`) | the templates are unfolded last, the copies first (a copy is a definition that unfolds to its caller's text in one step) |
+| F55 | A bound written as a `nat` literal (`1048576` in `nat`, in the first version of step 12 part 3's `wfr`) is elaborated as a computation (`Nat.of_num_uint ..`), not a numeral: `lia` treats it as an unknown and fails ("Cannot find witness") (2026-11-01) | bounds in `Z` (`Z.of_nat x <= 1048576`), as the rest of `KQR.v` writes them |
 | F38 | MetaRocq's formal evaluation (`EWcbvEval.eval`, `PCUICWcbvEval`) has rules for primitive values only, none for primitive operations: `PrimInt63.add` has no body, `eval_delta` cannot fire, every program here is stuck in it | the verified compiler is built by reflection over our own syntax instead (D26, §1.12) (read in the image's MetaRocq sources, 2026-10-30) |
 | F37 | CakeML's architecture is ours: a proof-producing translator from the logic's functions on top, one verified compiler below; Pancake is verified through a proof-producing decompiler.  The difference is that CakeML builds each proof by construction while ours searches | D25, §1.11 (read in the CakeML repository, 2026-10-30) |
 
@@ -2420,6 +2422,49 @@ bound by a `let` and used through its fields (`let w := scan .. in .. hi w ..`).
 - *Reifier*: the result type read into `sq`; a function whose result is a record read as `FRecR` / `FPlainR`; `let '(a, b)
   := f ..`, `let w := f ..` and a record argument made by a call read as `RCall`; `kitc.py` prints the signature's sixth part.
 
+**Step 12, part 3 done (2026-11-01): records given back.**  Built as designed:
+- *`KQR.v`*: `sig.sq`; `RCall`; the sort `sbr` (`BRet`, `BRec`, `BMatchRec`, `BLetRec`, `BLet`, `BLetB`, `BLetC`, `BLetR`,
+  `BMatchR`, `BIf`, `BIfB`, `BMatch`), `denote_br` (the record value itself, `RT ri`), `ctailr` (`cput`: the fields after the
+  first into cells `0 .. rn-2`, the last first, then `Eret` of the first), a call giving back a record compiled by `ccallr`
+  (the cells saved, the call, the cells read, `cback` writing the saved values back cell 0 first); `wfbr` (at the end a
+  record built or given by a call, of the type the function gives back); `FRecR` / `FPlainR`.  Proved once:
+  `ccallr_ok` (after the call the caller's memory is the one before and its continuation gets the fields) over `wback`,
+  `rd_wslot_seq`, `rd_wslot_lt` (the laws `upd_upd`, `upd_rd_id`, `rd_upd_ne`, `rd_upd_eq`, the cells told apart by
+  `ofn_inj`, the room by `size_ge_len` and `slot_room`), the `RCall` case of `cexp_all`, `ctailr_ok`, `compile_f_ok_rec`;
+  `slot_room` is the first premise of `callee_ok`, so every theorem of a program takes it and passes it to its callees.  No
+  new law: the order of writing back makes the commuting law (D27) unnecessary for records of any number of fields.
+  **What every theorem now rests on**: `compile_f_ok` uses the memory laws in its `RCall` case, so `Print Assumptions` of every
+  program's theorem lists `KQSpec.real_laws` — one theorem for all programs, so programs without records too.  It was already
+  in the route's trusted base (§1.10: `kit_function_correct` rests on it), so the end-to-end trust is unchanged; the
+  records of steps 1–11 that say "no memory law" describe the theorems before this step.  Tests: `minmax` (a pair at the end
+  of a loop), `fibp` (the function itself taken apart before the end), `prounds` (a loop taking both apart, a counter written
+  as a budget), `plast` (a pair bound by a let, read through its fields, the fields given to a second call), a record
+  variable given back refused, a tree with its fields the other way round refused; each theorem 0.002–0.005 s; `KQR.v`
+  compiles in 8.7 s.
+- *The reifier*: `read_sig` reads a record of the program's types as the result; `reify_br` reads a body giving back a
+  record (the function itself at the end `BRec`, taken apart or bound before the end `BMatchRec` / `BLetRec`); `reify_r`
+  reads a call of a function giving back a record (`RCall`) and writes a helper giving one back out; the number reader no
+  longer reads such a call as a number.  A template giving back a record is not read yet.  Tests: `pair_ret`'s text (the trees
+  exactly the hand-written ones) and `rec_ret`'s (a record of the program's own type, its projections written out), every
+  theorem in milliseconds.
+- *`kitc.py`*: the signature's sixth part (`None`, or `Some i` for a record of type `i`, printed as a letter `a .. h`); an
+  entry giving back a record falls back to the translator (`main` takes numbers); **the driver provides the slot block for
+  every program with record types** (`max(8, rn - 1)` cells of its largest record), which the theorems' `slot_room` premise
+  needs — `rec_pair` and `rec_state` therefore gain the slot block's two lines in their driver.
+- *The C*: of the 63 examples and corpus programs compared with part 2's, 59 have byte-identical C; `pair_ret` and `rec_ret`
+  are the moved ones; `rec_pair` and `rec_state` differ only by the two lines of the slot block in their driver.
+- *Through the verified compiler: 56 of the gate's 71 programs* (was 54): `pair_ret`, `rec_ret` (examples: nothing to time).
+- *The tally after the step* (over the gate's 71 programs): calls of writing functions and reads in place inside expressions
+  13 (`loops`, `bytes`, `views`, `heap`, `hw_mmio` and the kernels' eight programs), machine operations 10, bytes 2, `u64` 2
+  (`views`, `w64`: the `u64` record and its constructors are what is left of "records"), tests on a call giving back a boolean
+  2, mutual recursion 1 (with a local `fix`).  **The order that completes the most now**: calls of writing functions and reads
+  in place inside expressions (+1, 57 of 71: `loops`), machine operations (+9, 66: the kernels and `hw_mmio`), bytes (+1,
+  67), tests on calls giving back a boolean (+1, 68: `heap`), then `u64` (+2, 70), mutual recursion with a local `fix` (+1,
+  71).  **Next: calls of writing functions and reads in place inside expressions.**
+- *The gate with `KQ_REFLECT=1`, on the fork, on `6fda012` (2026-11-01): everything passes* — `make.sh` `core-ok`; examples
+  27 / 27; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (37 / 38 / 40 / 56 / 44 s); **56
+  programs through the verified compiler, 0 read but refused by the check**.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -2592,11 +2637,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `c6cffe6` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `536603c` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 12, parts 1 and 2 done (kinds in signatures; records and pairs as values: 54 of 71), the gate |
+| (this commit) | §12.V: step 12, part 3 done (records given back: 56 of 71), the C, the gate, the tally |
+| `6fda012` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 12 part 3: records given back through the slot block (`RCall`, `sbr`, `ccallr_ok`, `compile_f_ok_rec`, `slot_room`); the reifier reads them, `kitc.py` the sixth part of a signature and the slot block |
+| `d9216ac` | §12.V: step 12, part 3 in detail |
+| `536603c` | §12.V: step 12, parts 1 and 2 done (kinds in signatures; records and pairs as values: 54 of 71), the gate |
 | `a084907` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 12 part 2: records as values (`RecTypes`, `RecLaws`, `VRec`, `srec`, `rmatch`); the reifier reads them, `kitc.py` writes the instance |
 | `d84bfe0` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 12 part 1: kinds in signatures and argument lists (numbers, booleans) |
 | `79ae741` | §12.V: step 12's design (records and pairs) |
