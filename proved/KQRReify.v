@@ -35,6 +35,9 @@ Definition kn_kq_nat := kn_of <% KQ.KQRun.kq_nat %>.
 Definition kn_andb := kn_of <% andb %>.
 Definition kn_orb := kn_of <% orb %>.
 Definition kn_negb := kn_of <% negb %>.
+(* a local [fix] applied is read as a call of this name with the fixpoint first; the call look-up gives the fixpoint's copy
+   (step 31).  Not a constant of any program: a call of it that has no copy is refused *)
+Definition kn_lfix : kername := (MPfile ["kqlfix"%bs], "kqlfix"%bs).
 (* the comparisons and the predecessor of counters (step 30) *)
 Definition kn_nat_eqb := kn_of <% Nat.eqb %>.
 Definition kn_nat_ltb := kn_of <% Nat.ltb %>.
@@ -179,6 +182,22 @@ Definition read_mem (ctx : list cent) (smg : bool) (args : list term) : option (
   else Some args.
 
 (** does a term contain a fixpoint (the translator's [has_fix]) *)
+Fixpoint has_lfix (fuel : nat) (t : term) : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      match t with
+      | tFix _ _ => true
+      | tApp f args => has_lfix fuel f || existsb (has_lfix fuel) args
+      | tLambda _ ty b | tProd _ ty b => has_lfix fuel b
+      | tLetIn _ b ty body => has_lfix fuel b || has_lfix fuel body
+      | tCase _ p c brs => has_lfix fuel c || existsb (fun br => has_lfix fuel (bbody br)) brs
+      | _ => false
+      end
+  end.
+(** a definition's body has a local fixpoint: inside a lambda, a let, a match -- or inside a fixpoint's own bodies *)
+Definition lfix_body (b : term) : bool :=
+  match b with tFix mfix _ => existsb (fun d => has_lfix 100000 (dbody d)) mfix | _ => has_lfix 100000 b end.
 Fixpoint has_fix (fuel : nat) (t : term) : bool :=
   match fuel with
   | O => true
@@ -317,6 +336,11 @@ Fixpoint teq (fuel : nat) (t u : term) : bool :=
       | tLetIn _ a ty b, tLetIn _ a' ty' b' => teq fuel a a' && teq fuel ty ty' && teq fuel b b'
       | tCase _ _ c brs, tCase _ _ c' brs' =>
           teq fuel c c' && Nat.eqb (length brs) (length brs') && forallb (fun q => teq fuel (bbody (fst q)) (bbody (snd q))) (combine brs brs')
+      (* a fixpoint (step 31: a local fixpoint is the key of its copy) *)
+      | tFix m k, tFix m' k' =>
+          Nat.eqb k k' && Nat.eqb (length m) (length m')
+          && forallb (fun q => Nat.eqb (rarg (fst q)) (rarg (snd q)) && teq fuel (dtype (fst q)) (dtype (snd q))
+                               && teq fuel (dbody (fst q)) (dbody (snd q))) (combine m m')
       | tSort _, tSort _ => true
       | _, _ => false
       end
@@ -564,6 +588,7 @@ Definition head_r (t : term) : option term :=
           match t with
           | tCase ci _ c brs => if generic_ind (ci_ind ci) then iota_go ci (hnf_con 50 c) brs else None
           | tApp (tCase ci _ c brs) args => option_map (fun t' => mkApps t' args) (iota_go ci (hnf_con 50 c) brs)
+          | tApp (tFix [_] 0 as fx) args => Some (tApp (tConst kn_lfix []) (fx :: args))
           | _ => None
           end
       end
@@ -1857,7 +1882,10 @@ Definition helper_of (Σ : global_env) (mp : modpath) (fns : list kername) (kn :
   if Kername.eqb kn kn_fst || Kername.eqb kn kn_snd then body_of Σ kn else
   if Kername.eqb kn kn_rd8 || Kername.eqb kn kn_upd8 || Kername.eqb kn kn_w64_op || Kername.eqb kn kn_kq_nat
      || existsb (Kername.eqb kn) fns then None
-  else if eq_mp (fst kn) mp || eq_mp (fst kn) kit_mp || eq_mp (fst kn) uint63_mp then
+  else if eq_mp (fst kn) mp then
+    (* its fixpoints local ones (step 31): each read as a copy where it is applied *)
+    match body_of Σ kn with Some (tFix _ _) => None | Some b => if lfix_body b || negb (has_fix 1000 b) then Some b else None | None => None end
+  else if eq_mp (fst kn) kit_mp || eq_mp (fst kn) uint63_mp then
     match body_of Σ kn with Some b => if has_fix 1000 b then None else Some b | None => None end
   else None.
 
@@ -1888,8 +1916,26 @@ Definition find_copy (T : kername) (fargs : list term) (capk : list cent) (tbl :
                                                          && capk_eqb capk (snd (snd (fst (fst e))))) tbl).
 (** a call of a template: the copy for its functions given, and its arguments -- the template's counters, the captured
     numbers and booleans, its other arguments, the captured memory (step 13) *)
+(** a local fixpoint's key: the fixpoint with its captured variables numbered the last first, so that read with them after
+    the copy's own parameters ([rev capk], as a template's copy is read) each is the parameter of its kind (step 31) *)
+Definition lfix_key (fx : term) : list nat * term := let fv := fvs 1000 0 fx [] in (fv, abs_caps (rev fv) fx).
 Definition tc_of (Σ : global_env) (mp : modpath) (tbl : copytab) (kn : kername) (args : list term) : option (kername * list term) :=
   if existsb (fun e => Kername.eqb kn (fst (fst (fst e)))) tbl then   (* a template with a copy: no look-up otherwise *)
+    if Kername.eqb kn kn_lfix then
+      match args with
+      | (tFix [d] 0 as fx) :: rest =>
+          let '(fv, key) := lfix_key fx in
+          match List.find (fun e => Kername.eqb kn_lfix (fst (fst (fst e))) && teqs [key] (fst (snd (fst (fst e))))) tbl with
+          | Some (_, (_, capk), ckn, _) =>
+              let nc := fst (lead_nats (fst (lams (dbody d)))) in
+              let cs := combine capk (map tRel fv) in
+              Some (ckn, firstn nc rest ++ map snd (filter (fun p => negb (is_memc (fst p))) cs) ++ skipn nc rest
+                         ++ map snd (filter (fun p => is_memc (fst p)) cs))
+          | None => None
+          end
+      | _ => None
+      end
+    else
     match tmpl_tys Σ kn with
     | Some tys => if Nat.eqb (length args) (length tys) then
                     let fa := fn_args tys args in
@@ -1913,7 +1959,7 @@ Definition tc_of (Σ : global_env) (mp : modpath) (tbl : copytab) (kn : kername)
     (step 13) [fun c1 .. b1 .. x1 .. s => T .. f ..]: the template's counters, the captured numbers and booleans, the
     template's other parameters, the captured memory *)
 Definition cap_ty (c : cent) : term := match c with CBool => tInd ind_bool [] | CMem | CDead => tConst kn_mem [] | _ => tConst kn_int [] end.
-Definition copy_meaning (T : kername) (tys fargs : list term) (capk : list cent) : term :=
+Definition copy_meaning_h (hd : list term -> term) (tys fargs : list term) (capk : list cent) : term :=
   let nonfn := filter (fun t => negb (is_prod t)) tys in
   let nc := fst (lead_nats nonfn) in
   let cn := filter (fun c => negb (is_memc c)) capk in
@@ -1930,8 +1976,14 @@ Definition copy_meaning (T : kername) (tys fargs : list term) (capk : list cent)
                 else tRel (n - 1 - pos i) :: args r fa (S i)
     end in
   fold_right (fun ty b => tLambda {| binder_name := nAnon; binder_relevance := Relevant |} ty b)
-             (tApp (tConst T []) (args tys fargs 0))
+             (tApp (hd sb) (args tys fargs 0))
              (firstn nc nonfn ++ map cap_ty cn ++ skipn nc nonfn ++ (if Nat.eqb cm 1 then [tConst kn_mem []] else [])).
+Definition copy_meaning (T : kername) (tys fargs : list term) (capk : list cent) : term :=
+  copy_meaning_h (fun _ => tConst T []) tys fargs capk.
+(** a local fixpoint's copy (step 31): [fun c1 .. b1 .. x1 .. s => (fix g .. := ..) c1 .. x1 .. s], the fixpoint's captured
+    variables (numbered the last first, [lfix_key]) the copy's parameters *)
+Definition lfix_meaning (fx : term) (tys : list term) (capk : list cent) : term :=
+  copy_meaning_h (fun sb => subst (rev sb) 0 fx) tys [] capk.
 
 (** the helpers that reach a template (through their own text or the helpers they write out): only these are written out
     when the call sites are looked for -- a template call in a helper is seen with the helper's arguments put in, and a
@@ -1952,7 +2004,7 @@ Definition tmpl_helpers (Σ : global_env) (hb : kername -> option term) (tms kns
       let hs := fold_left (fun a kn => match body_of Σ kn with Some b => helpers_of 50 hb b a | None => a end) kns [] in
       let step (th : list kername) : list kername :=
         filter (fun h => match hb h with
-                         | Some b => existsb (fun k => existsb (Kername.eqb k) tms || existsb (Kername.eqb k) th) (consts 10000 b [])
+                         | Some b => has_lfix 100000 b || existsb (fun k => existsb (Kername.eqb k) tms || existsb (Kername.eqb k) th) (consts 10000 b [])
                          | None => false
                          end) hs in
       Nat.iter (length hs) step []
@@ -1991,11 +2043,26 @@ Fixpoint sites (fuel : nat) (Σ : global_env) (tms : list kername) (hb : kername
           | None => wr kn args acc
           end
       | tApp (tLambda _ _ _ as f) args => sites fuel Σ tms hb th kctx (wout f args) acc
+      | tApp (tFix [d] 0 as fx) args =>
+          (* a local fixpoint applied (step 31): a copy whose parameters are its captured variables, if it takes no function *)
+          let acc := fold_left (fun a x => sites fuel Σ tms hb th kctx x a) args acc in
+          let '(fv, key) := lfix_key fx in
+          let tys := fst (lams (dbody d)) in
+          match opt_all (map (fun r => nth r kctx None) fv) with
+          | Some capk =>
+              if Nat.eqb (rarg d) 0 && Nat.eqb (length args) (length tys) && negb (existsb is_prod tys)
+                 && forallb cap_ok capk && Nat.leb (length (filter is_memc capk)) 1
+                 && negb (existsb (is_ty kn_mem) tys && existsb is_memc capk)
+              then (kn_lfix, [key], capk) :: acc else acc
+          | None => acc
+          end
       | tApp f args => fold_left (fun a x => sites fuel Σ tms hb th kctx x a) args (sites fuel Σ tms hb th kctx f acc)
       | tConst kn _ => wr kn [] acc
       | tLambda _ ty b => sites fuel Σ tms hb th (ty_cent ty :: kctx) b acc
       | tProd _ _ b => sites fuel Σ tms hb th (None :: kctx) b acc
-      | tLetIn _ b ty body => sites fuel Σ tms hb th (ty_cent ty :: kctx) body (sites fuel Σ tms hb th kctx b acc)
+      | tLetIn _ b ty body =>
+          if fun_or_type ty then sites fuel Σ tms hb th kctx (subst [b] 0 body) acc
+          else sites fuel Σ tms hb th (ty_cent ty :: kctx) body (sites fuel Σ tms hb th kctx b acc)
       | tCase _ _ c brs => fold_left (fun a br => sites fuel Σ tms hb th (repeat None (length (bcontext br)) ++ kctx) (bbody br) a) brs
                                      (sites fuel Σ tms hb th kctx c acc)
       | tFix mfix _ => fold_left (fun a d => sites fuel Σ tms hb th (repeat None (length mfix) ++ kctx) (dbody d) a) mfix acc
@@ -2015,12 +2082,8 @@ Fixpoint tdrop (tys : list term) (p : nat) : list (option nat) :=
 
 (** a template's copy, read as a recursive function: its signature without the function parameters; the recursive call
     passes them on, and they are dropped *)
-Definition read_tmpl (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
-  (callees : list (kername * sig)) (kn : kername) (fargs : list term) (capk : list cent) : option (sig * fbody) :=
-  match lookup_env Σ kn with
-  | Some (ConstantDecl cb) =>
-      match cst_body cb with
-      | Some (tFix [d] 0) =>
+Definition read_def (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
+  (callees : list (kername * sig)) (d : def term) (fargs : list term) (capk : list cent) : option (sig * fbody) :=
           let '(tys, body) := lams (dbody d) in
           match read_sig rt (filter (fun t => negb (is_prod t)) tys) (ret_ty (dtype d)), body with
           | Some gs0, tCase ci _ (tRel cnt) [b0; b1] =>
@@ -2054,9 +2117,11 @@ Definition read_tmpl (Σ : global_env) (hb : kername -> option term) (tc : kerna
                   end
               else None
           | _, _ => None
-          end
-      | _ => None
-      end
+          end.
+Definition read_tmpl (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
+  (callees : list (kername * sig)) (kn : kername) (fargs : list term) (capk : list cent) : option (sig * fbody) :=
+  match lookup_env Σ kn with
+  | Some (ConstantDecl cb) => match cst_body cb with Some (tFix [d] 0) => read_def hb tc rt callees d fargs capk | _ => None end
   | _ => None
   end.
 
@@ -2073,6 +2138,25 @@ Fixpoint ensure (fuel : nat) (Σ : global_env) (mp : modpath) (hb : kername -> o
       match find_copy T fargs capk tbl with
       | Some _ => st
       | None =>
+          if Kername.eqb T kn_lfix then
+            match fargs with
+            | [tFix [d] 0 as fx] =>
+                let '(tys, body) := lams (dbody d) in
+                let nested := sites 1000 Σ tms hb th (map Some (rev (tkinds tys [] 0) ++ [CSelf] ++ rev capk)) body [] in
+                match fold_left (fun st s => ensure fuel Σ mp hb rt th tms s st) (rev nested) st with
+                | Some (es, tbl) =>
+                    let ckn := (MPfile ["kqcopy"%bs], snd T ^ "__c" ^ string_of_nat (length tbl)) in
+                    match read_def hb (tc_of Σ mp tbl) rt (callees_of es) d [] capk with
+                    | Some (gs, b) => if wf_f (map snd (callees_of es)) gs b
+                                      then Some (es ++ [(ckn, gs, b)], tbl ++ [(T, (fargs, capk), ckn, lfix_meaning fx tys capk)])
+                                      else None
+                    | None => None
+                    end
+                | None => None
+                end
+            | _ => None
+            end
+          else
           match tmpl_tys Σ T with
           | None => None
           | Some tys =>
@@ -2175,7 +2259,11 @@ Definition reify_prog2 (p : program) : option (list (kername * sig * fbody) * li
       let kns := reach 1000 Σ mp root root [] in
       let hb := helper_of Σ mp kns in
       let rt := rtab_of Σ hb kns in
-      let tms := filter (is_tmpl Σ mp) kns in
+      (* a local fixpoint in a definition of the program's file: its copies are looked for as a template's are (step 31) *)
+      let lf := existsb (fun e => eq_mp (fst (fst e)) mp && match snd e with
+                                                           | ConstantDecl cb => match cst_body cb with Some b => lfix_body b | None => false end
+                                                           | _ => false end) (declarations Σ) in
+      let tms := (if lf then [kn_lfix] else []) ++ filter (is_tmpl Σ mp) kns in
       let th := tmpl_helpers Σ hb tms kns in
       let st := fold_left (fun st kn =>
                   match st with
@@ -2416,7 +2504,11 @@ Definition reify_why (p : program) : list (string * list string) :=
       let kns := reach 1000 Σ mp root root [] in
       let hb := helper_of Σ mp kns in
       let rt := rtab_of Σ hb kns in
-      let tms := filter (is_tmpl Σ mp) kns in
+      (* a local fixpoint in a definition of the program's file: its copies are looked for as a template's are (step 31) *)
+      let lf := existsb (fun e => eq_mp (fst (fst e)) mp && match snd e with
+                                                           | ConstantDecl cb => match cst_body cb with Some b => lfix_body b | None => false end
+                                                           | _ => false end) (declarations Σ) in
+      let tms := (if lf then [kn_lfix] else []) ++ filter (is_tmpl Σ mp) kns in
       let th := tmpl_helpers Σ hb tms kns in
       let '(_, _, _, out) :=
         fold_left (fun '(es, tbl, bad, out) kn =>
@@ -3709,3 +3801,58 @@ Proof.
     eq_refl eq_refl (all_ok_callees w30go_Pr gid1 [existT ftype (sig_at w30go_src 0) w30k] (conj w30k_ok' Logic.I)) eq_refl eq_refl).
 Time Qed.
 Print Assumptions w30go_ok.
+
+(* ---- a local fixpoint naming the caller's variables (step 31): [lf_f]'s [let fix g] names [b] -- the construct table's
+   P_int_local_fix, through a helper written out, called twice with different variables captured (one copy); [lf_m]'s names
+   a number and the memory.  Each is read as a copy whose parameters are its captured variables (the numbers before its own,
+   the memory last), its meaning the fixpoint itself; the caller passes them *)
+Definition lf_f (n : nat) (a b : i63) (s : mem) : i63 :=
+  let fix g (m : nat) (x : i63) : i63 := match m with O => x | S k => g k (PrimInt63.add x b) end in g n a.
+Definition lf_go (n : nat) (a b : i63) (s : mem) : i63 := PrimInt63.add (lf_f n a b s) (lf_f n b a s).
+Definition lf_m (n : nat) (a b : i63) (s : mem) : i63 :=
+  let fix g (m : nat) (i acc : i63) : i63 :=
+    match m with O => acc | S k => g k (PrimInt63.add i 1) (PrimInt63.add acc (PrimInt63.mul (KQ.KQRun.rd 0 i s) b)) end in
+  g n 0%uint63 a.
+Definition lf_go_res := ltac:(run_template_program (tmQuoteRec lf_go)
+  (fun q => let r := eval vm_compute in (reify_prog2 q) in match r with Some ?x => exact x end)).
+Definition lf_go_src := fst lf_go_res.
+Definition lf_m_res := ltac:(run_template_program (tmQuoteRec lf_m)
+  (fun q => let r := eval vm_compute in (reify_prog2 q) in match r with Some ?x => exact x end)).
+Definition lf_m_src := fst lf_m_res.
+(* the copy: the captured [b] before its own [x], passed on by its recursive call; [lf_go]'s two calls, one copy *)
+Check (eq_refl : map snd lf_go_src =
+  [FRec (SVar 0) (SRec CNil (SCons (SVar 1) (SCons (SOp Badd (SVar 0) (SVar 1)) SNil)));
+   FPlain (SOp Badd (SCall 0 (CCons (CVar 0) CNil) (SCons (SVar 0) (SCons (SVar 1) SNil)))
+                    (SCall 0 (CCons (CVar 0) CNil) (SCons (SVar 1) (SCons (SVar 0) SNil))))]).
+Check (eq_refl : map (fun x => snd (fst x)) lf_m_src = [mksig 1 [KNum; KNum; KNum] true false false None; mksig 1 [KNum; KNum] true false false None]).
+Check (eq_refl : map snd lf_m_src =
+  [FRec (SVar 0) (SRec CNil (SCons (SVar 2) (SCons (SOp Badd (SVar 1) (SInt 1))
+                                            (SCons (SOp Badd (SVar 0) (SOp Bmul (SRd (SInt 0) (SVar 1)) (SVar 2))) SNil))));
+   FPlain (SCall 0 (CCons (CVar 0) CNil) (SCons (SVar 0) (SCons (SInt 0) (SCons (SVar 1) SNil))))]).
+MetaRocq Run (tmMkDefinition "lf_c0"%bs (meaning_of (snd lf_go_res) "kqlfix__c0"%bs)).
+MetaRocq Run (tmMkDefinition "lf_m_c0"%bs (meaning_of (snd lf_m_res) "kqlfix__c0"%bs)).
+Print lf_c0.
+Print lf_m_c0.
+Definition lf_go_Pr := mkprog (funs_of 0 lf_go_src) [].
+Time Lemma lf_ok0 : callee_ok lf_go_Pr (gid1 0) (cbz 0) (sig_at lf_go_src 0) lf_c0.
+Proof.
+  Time exact_no_check (compile_f_okr lf_go_Pr [] gid1 0 0 [KNum; KNum] false (fr0 (body_at lf_go_src 0)) (fr1 (body_at lf_go_src 0)) lf_c0
+    eq_refl eq_refl (no_callees lf_go_Pr gid1) eq_refl eq_refl eq_refl (fun n => eq_refl)).
+Time Qed.
+Time Lemma lf_ok1 : callee_ok lf_go_Pr (gid1 1) (cbz 1) (sig_at lf_go_src 1) lf_go.
+Proof.
+  Time exact_no_check (compile_f_ok lf_go_Pr [existT ftype (sig_at lf_go_src 0) lf_c0] gid1 1 (sig_at lf_go_src 1) (body_at lf_go_src 1)
+    eq_refl eq_refl (all_ok_callees lf_go_Pr gid1 [existT ftype (sig_at lf_go_src 0) lf_c0] (conj lf_ok0 Logic.I)) eq_refl eq_refl).
+Time Qed.
+Definition lf_m_Pr := mkprog (funs_of 0 lf_m_src) [].
+Time Lemma lf_m_ok0 : callee_ok lf_m_Pr (gid1 0) (cbz 0) (sig_at lf_m_src 0) lf_m_c0.
+Proof.
+  Time exact_no_check (compile_f_okr lf_m_Pr [] gid1 0 0 [KNum; KNum; KNum] true (fr0 (body_at lf_m_src 0)) (fr1 (body_at lf_m_src 0)) lf_m_c0
+    eq_refl eq_refl (no_callees lf_m_Pr gid1) eq_refl eq_refl eq_refl (fun n => eq_refl)).
+Time Qed.
+Time Lemma lf_m_ok1 : callee_ok lf_m_Pr (gid1 1) (cbz 1) (sig_at lf_m_src 1) lf_m.
+Proof.
+  Time exact_no_check (compile_f_ok lf_m_Pr [existT ftype (sig_at lf_m_src 0) lf_m_c0] gid1 1 (sig_at lf_m_src 1) (body_at lf_m_src 1)
+    eq_refl eq_refl (all_ok_callees lf_m_Pr gid1 [existT ftype (sig_at lf_m_src 0) lf_m_c0] (conj lf_m_ok0 Logic.I)) eq_refl eq_refl).
+Time Qed.
+Print Assumptions lf_m_ok1.

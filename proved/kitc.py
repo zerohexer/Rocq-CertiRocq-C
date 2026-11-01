@@ -476,7 +476,8 @@ def reflect(name, entry, prog, no_proof):
     # the program's functions are unfolded last when the kernel compares a function with the meaning of its syntax tree: a
     # function applied to a written counter (f 20 ..) would otherwise be worked out round by round (F50).  The order of
     # unfolding only: nothing that converts stops converting
-    tmpls = sorted({f[0].split("__c")[0] for f in fs if "__c" in f[0]})   # the templates the copies come from (step 10)
+    # the templates the copies come from (step 10); a local fixpoint's copy (kqlfix__cK, step 31) has no template constant
+    tmpls = sorted({f[0].split("__c")[0] for f in fs if "__c" in f[0]} - {"kqlfix"})
     t += "Strategy opaque [" + " ".join([f[0] for f in fs if "__c" not in f[0]] + tmpls) + "].\n"   # a copy is unfolded first
     if not no_proof:
         for j, f in enumerate(fs):
