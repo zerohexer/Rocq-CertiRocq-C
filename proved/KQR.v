@@ -133,6 +133,7 @@ with scnt : Type :=
 | CO
 | CS (c : scnt)
 | CNat (e : sexp)                    (* kq_nat e: the counter of a number, at most 2^60 *)
+| CPred (c : scnt)                   (* Nat.pred c (step 30) *)
 with scnts : Type :=
 | CNil
 | CCons (c : scnt) (r : scnts)
@@ -147,6 +148,7 @@ with sbool : Type :=
 | BIfCmp (c : cmpop) (a b : sexp) (x y : sbool)   (* if a c b then x else y (step 22) *)
 | BMatchCnt (c : nat) (x0 x1 : sbool)   (* match on counter variable c: x0 at 0, x1 otherwise (the predecessor is CVar 0) *)
 | BCall (f : nat) (cs : scnts) (args : sexps)   (* function f of the program, giving back a boolean (step 24) *)
+| BCmpC (c : cmpop) (a b : scnt)     (* Nat.eqb, Nat.ltb, Nat.leb of two counters (step 30) *)
 with srec : Type :=                  (* a record *)
 | RVar (i : nat)                     (* the i-th record variable *)
 | RMk (ri : nat) (es : sexps)        (* the constructor of record type ri on these numbers *)
@@ -308,6 +310,9 @@ Definition callm (g : sig) (h : ftype g) (cvs : list nat) (vs : list val) (s : m
 Definition vrec_of (g : sig) : rtq (sr g) (sq g) -> val :=
   match sq g as q return rtq (sr g) q -> val with Some (KRec ri) => fun x => VRec ri x | _ => fun _ => VNum 0%uint63 end.
 
+(** a comparison of two counters (step 30): the user's own functions *)
+Definition cmpn (c : cmpop) (a b : nat) : bool := match c with Ceq => Nat.eqb a b | Clt => Nat.ltb a b | Cle => Nat.leb a b | _ => false end.
+
 (** the value a call gives back, when it is a boolean (step 24) *)
 Definition boolf (g : sig) : rtq (sr g) (sq g) -> bool :=
   match sq g as q return rtq (sr g) q -> bool with Some KBool => fun x => x | _ => fun _ => false end.
@@ -363,6 +368,7 @@ with denote_c (cs : list callee) (rec : list nat -> list val -> mem -> i63) (cen
   | CO => O
   | CS c => S (denote_c cs rec cenv benv renv env s c)
   | CNat e => KQ.KQRun.kq_nat (denote_e cs rec cenv benv renv env s e)
+  | CPred c => Nat.pred (denote_c cs rec cenv benv renv env s c)
   end
 with denote_cs (cs : list callee) (rec : list nat -> list val -> mem -> i63) (cenv : list nat) (benv : list bool) (renv : list val)
   (env : list i63) (s : mem) (ccs : scnts) {struct ccs} : list nat :=
@@ -391,6 +397,7 @@ with denote_b (cs : list callee) (rec : list nat -> list val -> mem -> i63) (cen
       | Some (existT _ g h) => boolf g (callf g h (denote_cs cs rec cenv benv renv env s ccs) (denote_es cs rec cenv benv renv env s args) s)
       | None => false
       end
+  | BCmpC c a b => cmpn c (denote_c cs rec cenv benv renv env s a) (denote_c cs rec cenv benv renv env s b)
   end
 with denote_r (cs : list callee) (rec : list nat -> list val -> mem -> i63) (cenv : list nat) (benv : list bool) (renv : list val)
   (env : list i63) (s : mem) (x : srec) {struct x} : val :=
@@ -781,7 +788,7 @@ with specb (b : sbool) : bool :=
   | BVar _ | BTrue | BFalse => true
   | BAnd x y | BOr x y => specb x && specb y
   | BNot x => specb x
-  | BIfCmp _ _ _ _ _ | BMatchCnt _ _ _ | BCall _ _ _ => false
+  | BIfCmp _ _ _ _ _ | BMatchCnt _ _ _ | BCall _ _ _ | BCmpC _ _ _ => false
   end.
 Fixpoint nrd (e : sexp) : nat :=
   match e with
@@ -815,7 +822,7 @@ Fixpoint kinds_s (rk : list nat) (es : sexps) : list kind :=
   match es with SNil => [] | SCons _ es => KNum :: kinds_s rk es | SConsB _ es => KBool :: kinds_s rk es
               | SConsR x es => KRec (rtype rk x) :: kinds_s rk es end.
 Fixpoint len_c (cs : scnts) : nat := match cs with CNil => O | CCons _ cs => S (len_c cs) end.
-Fixpoint cdepth (c : scnt) : nat := match c with CS c => S (cdepth c) | _ => O end.
+Fixpoint cdepth (c : scnt) : nat := match c with CS c => S (cdepth c) | CPred c => cdepth c | _ => O end.
 Fixpoint all_c (p : scnt -> bool) (cs : scnts) : bool := match cs with CNil => true | CCons c r => p c && all_c p r end.
 Fixpoint all_s (p : sexp -> bool) (es : sexps) : bool :=
   match es with SNil => true | SCons e r => p e && all_s p r | SConsB _ r | SConsR _ r => all_s p r end.
@@ -824,7 +831,7 @@ Fixpoint all_s (p : sexp -> bool) (es : sexps) : bool :=
     chosen by conditional moves (the translator's merging of calls, D17): arguments that are plain arithmetic (no read, no
     call), each chosen when the two differ ([same_e]: the same variable or the same number) *)
 Definition simple (e : sexp) : bool := spec e && Nat.eqb (nrd e) 0.
-Definition simple_c (c : scnt) : bool := match c with CVar _ | CO => true | CNat e => simple e | CS _ => false end.
+Definition simple_c (c : scnt) : bool := match c with CVar _ | CO => true | CNat e => simple e | CS _ | CPred _ => false end.
 Definition binop_eqb (o1 o2 : binop) : bool :=
   match o1, o2 with
   | Badd, Badd | Bsub, Bsub | Bmul, Bmul | Bland, Bland | Blor, Blor | Blxor, Blxor | Bdiv, Bdiv | Bmod, Bmod
@@ -980,6 +987,10 @@ with ccnt (c : scnt) (cenv benv : list atom) (renv : list (list atom)) (env : li
                 Esel n1 Csle A (Aint 0%uint63) (Aint 0%uint63) A
                   (Esel (Pos.succ n1) Cslt (Aint cap60) (Avar n1) (Aint cap60) (Avar n1)
                      (K (Avar (Pos.succ n1)) (Pos.succ (Pos.succ n1)))))
+  | CPred c => ccnt c cenv benv renv env nxt (fun A n1 =>
+                 Eop n1 Bsub A (Aint 1%uint63)
+                   (Esel (Pos.succ n1) Ceq A (Aint 0%uint63) (Aint 0%uint63) (Avar n1)
+                      (K (Avar (Pos.succ n1)) (Pos.succ (Pos.succ n1)))))
   end
 with ccnts (ccs : scnts) (cenv benv : list atom) (renv : list (list atom)) (env : list atom) (nxt : ident) (K : list atom -> ident -> exp) {struct ccs} : exp :=
   match ccs with
@@ -1006,6 +1017,7 @@ with ccond (b : sbool) (cenv benv : list atom) (renv : list (list atom)) (env : 
   | BCall f ccs args => ccnts ccs cenv benv renv env nxt (fun Cs n1 => cexps args cenv benv renv env n1 (fun As n2 =>
                           Ecall n2 (gidf f) (Cs ++ As)
                             (Eif Ceq (Avar n2) (Aint 0%uint63) (KF (Pos.succ n2)) (KT (after (Pos.succ n2) (KF (Pos.succ n2)))))))
+  | BCmpC c x y => ccnt x cenv benv renv env nxt (fun A n1 => ccnt y cenv benv renv env n1 (fun B n2 => Eif c A B (KT n2) (KF (after n2 (KT n2)))))
   end
 (** a boolean as a value, 1 or 0, with no jump: a comparison by a conditional move, [&&] [||] [negb] by [land] [lor]
     [lxor 1] of the parts' values *)
@@ -1029,6 +1041,8 @@ with cbval (b : sbool) (cenv benv : list atom) (renv : list (list atom)) (env : 
                                 (cbval x1 (Avar (after nxt t0) :: cenv) benv renv env (Pos.succ (after nxt t0)) K))
   | BCall f ccs args => ccnts ccs cenv benv renv env nxt (fun Cs n1 => cexps args cenv benv renv env n1 (fun As n2 =>
                           Ecall n2 (gidf f) (Cs ++ As) (K (Avar n2) (Pos.succ n2))))
+  | BCmpC c x y => ccnt x cenv benv renv env nxt (fun A n1 => ccnt y cenv benv renv env n1 (fun B n2 =>
+                     Esel n2 c A B (Aint 1%uint63) (Aint 0%uint63) (K (Avar n2) (Pos.succ n2))))
   end
 (** a choice of [T] or [F] on a boolean, with no jump, as the translator makes it (§1.5): on a comparison or a boolean
     variable a conditional move; on [&&], [||], [negb] choices on the parts -- [if a && b then T else F] is
@@ -1052,6 +1066,8 @@ with csel (b : sbool) (cenv benv : list atom) (renv : list (list atom)) (env : l
   | BCall f ccs args => ccnts ccs cenv benv renv env nxt (fun Cs n1 => cexps args cenv benv renv env n1 (fun As n2 =>
                           Ecall n2 (gidf f) (Cs ++ As)
                             (Esel (Pos.succ n2) Ceq (Avar n2) (Aint 0%uint63) F T (K (Avar (Pos.succ n2)) (Pos.succ (Pos.succ n2))))))
+  | BCmpC c x y => ccnt x cenv benv renv env nxt (fun A n1 => ccnt y cenv benv renv env n1 (fun B n2 =>
+                     Esel n2 c A B T F (K (Avar n2) (Pos.succ n2))))
   end
 (** a record: its fields' atoms *)
 with crec (x : srec) (cenv benv : list atom) (renv : list (list atom)) (env : list atom) (nxt : ident) (K : list atom -> ident -> exp)
@@ -1309,7 +1325,7 @@ Definition shallow (c : scnt) : bool := (Z.of_nat (cdepth c) <=? 1048576)%Z.
 Definition flat (c : scnt) : bool := Nat.eqb (cdepth c) 0.
 (** a counter bound by a let joins the function's counters, all below its bound: a variable or a budget with no successor
     over it, or one built of [O], [S] and budgets only, at most 2^20 successors deep *)
-Fixpoint cfree (c : scnt) : bool := match c with CS c => cfree c | CVar _ => false | _ => true end.
+Fixpoint cfree (c : scnt) : bool := match c with CS c | CPred c => cfree c | CVar _ => false | _ => true end.
 Definition letc_ok (c : scnt) : bool := flat c || (cfree c && shallow c).
 
 (** well formed, in a function whose callees have the signatures [sigs]: the recursive call only where [r] allows it, with
@@ -1361,7 +1377,7 @@ with wfs (sigs : list sig) (r mok : bool) (nx : nat) (k : list kind) (rk : list 
              | SConsB b es => wfb sigs r mok nx k rk b && wfs sigs r mok nx k rk es
              | SConsR x es => wfr sigs r mok nx k rk x && wfs sigs r mok nx k rk es end
 with wfc (sigs : list sig) (r mok : bool) (nx : nat) (k : list kind) (rk : list nat) (c : scnt) {struct c} : bool :=
-  match c with CVar _ | CO => true | CS c => wfc sigs r mok nx k rk c | CNat e => wf sigs r mok nx k rk e end
+  match c with CVar _ | CO => true | CS c | CPred c => wfc sigs r mok nx k rk c | CNat e => wf sigs r mok nx k rk e end
 with wfcs (sigs : list sig) (r mok : bool) (nx : nat) (k : list kind) (rk : list nat) (cs : scnts) {struct cs} : bool :=
   match cs with CNil => true | CCons c cs => wfc sigs r mok nx k rk c && wfcs sigs r mok nx k rk cs end
 with wfb (sigs : list sig) (r mok : bool) (nx : nat) (k : list kind) (rk : list nat) (b : sbool) {struct b} : bool :=
@@ -1380,6 +1396,9 @@ with wfb (sigs : list sig) (r mok : bool) (nx : nat) (k : list kind) (rk : list 
                    && all_c shallow ccs && wfcs sigs r mok nx k rk ccs && wfs sigs r mok nx k rk args
       | None => false
       end
+  (* a comparison of two counters (step 30): equal, less, at most *)
+  | BCmpC c x y => match c with Ceq | Clt | Cle => true | _ => false end && shallow x && shallow y
+                   && wfc sigs r mok nx k rk x && wfc sigs r mok nx k rk y
   end
 (** a record: built of as many numbers as its type has fields *)
 with wfr (sigs : list sig) (r mok : bool) (nx : nat) (k : list kind) (rk : list nat) (x : srec) {struct x} : bool :=
@@ -1555,7 +1574,7 @@ with sh_es (sh : list i63) (es : sexps) {struct es} : bool :=
   | SConsR x r => sh_r sh x && sh_es sh r
   end
 with sh_c (sh : list i63) (c : scnt) {struct c} : bool :=
-  match c with CVar _ | CO => true | CS c => sh_c sh c | CNat e => sh_e sh e end
+  match c with CVar _ | CO => true | CS c | CPred c => sh_c sh c | CNat e => sh_e sh e end
 with sh_cs (sh : list i63) (cs : scnts) {struct cs} : bool :=
   match cs with CNil => true | CCons c r => sh_c sh c && sh_cs sh r end
 with sh_b (sh : list i63) (b : sbool) {struct b} : bool :=
@@ -1567,6 +1586,7 @@ with sh_b (sh : list i63) (b : sbool) {struct b} : bool :=
   | BIfCmp _ a b x y => sh_e sh a && sh_e sh b && sh_b sh x && sh_b sh y
   | BMatchCnt _ x0 x1 => sh_b sh x0 && sh_b sh x1
   | BCall _ ccs args => sh_cs sh ccs && sh_es sh args
+  | BCmpC _ x y => sh_c sh x && sh_c sh y
   end
 with sh_r (sh : list i63) (x : srec) {struct x} : bool :=
   match x with
@@ -2276,6 +2296,7 @@ Proof.
   - intros; reflexivity.
   - intros c IH cs rec cenv benv renv env s s' r nx k rk Hr W. simpl in *. rewrite (IH _ _ _ _ _ _ s s' _ _ _ _ Hr W). reflexivity.
   - intros e IH cs rec cenv benv renv env s s' r nx k rk Hr W. simpl in *. rewrite (IH _ _ _ _ _ _ s s' _ _ _ _ Hr W). reflexivity.
+  - intros c IH cs rec cenv benv renv env s s' r nx k rk Hr W. simpl in *. rewrite (IH _ _ _ _ _ _ s s' _ _ _ _ Hr W). reflexivity.
   - intros; reflexivity.
   - intros c IHc ccs IHs cs rec cenv benv renv env s s' r nx k rk Hr W. simpl in *. apply andb_true_iff in W as [Wc Ws].
     rewrite (IHc _ _ _ _ _ _ s s' _ _ _ _ Hr Wc), (IHs _ _ _ _ _ _ s s' _ _ _ _ Hr Ws). reflexivity.
@@ -2301,6 +2322,9 @@ Proof.
     apply andb_true_iff in W as [W Wq]. apply andb_true_iff in W as [W Wsw]. apply andb_true_iff in W as [W Wr]. apply andb_true_iff in W as [W Wm].
     rewrite (IHc _ _ _ _ _ _ s s' _ _ _ _ Hr Wc), (IHs _ _ _ _ _ _ s s' _ _ _ _ Hr Ws). f_equal. apply callf_nomem.
     destruct (sm gs); [discriminate | reflexivity].
+  - intros c x IHx y IHy cs rec cenv benv renv env s s' r nx k rk Hr W. cbn [wfb denote_b] in *.
+    apply andb_true_iff in W as [W Wy]. apply andb_true_iff in W as [_ Wx].
+    rewrite (IHx _ _ _ _ _ _ s s' _ _ _ _ Hr Wx), (IHy _ _ _ _ _ _ s s' _ _ _ _ Hr Wy). reflexivity.
   - intros; reflexivity.
   - intros ri es IHes cs rec cenv benv renv env s s' r nx k rk Hr W. cbn [denote_r wfr] in *. apply andb_true_iff in W as [_ Wes].
     rewrite (IHes _ _ _ _ _ _ s s' _ _ _ _ Hr Wes). reflexivity.
@@ -2496,6 +2520,7 @@ Proof.
   - intros; reflexivity.
   - intros c IH cs rec1 rec2 cenv benv renv env s r mok nx k rk Hr W T. cbn [wfc denote_c] in *. rewrite (IH _ _ _ _ _ _ _ _ _ _ _ _ _ Hr W T). reflexivity.
   - intros e IH cs rec1 rec2 cenv benv renv env s r mok nx k rk Hr W T. cbn [wfc denote_c] in *. rewrite (IH _ _ _ _ _ _ _ _ _ _ _ _ _ Hr W T). reflexivity.
+  - intros c IH cs rec1 rec2 cenv benv renv env s r mok nx k rk Hr W T. cbn [wfc denote_c] in *. rewrite (IH _ _ _ _ _ _ _ _ _ _ _ _ _ Hr W T). reflexivity.
   - intros; reflexivity.
   - intros c IHc ccs IHs cs rec1 rec2 cenv benv renv env s r mok nx k rk Hr W T. cbn [wfcs denote_cs] in *. apply andb_true_iff in W as [Wc Ws].
     rewrite (IHc _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wc T), (IHs _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Ws T). reflexivity.
@@ -2520,6 +2545,9 @@ Proof.
     unfold callee in *. destruct (nth_error cs fi) as [[gs h]|] eqn:E; simpl in W; [|discriminate].
     apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [W Wc].
     rewrite (IHc _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wc T), (IHs _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Ws T). reflexivity.
+  - intros c x IHx y IHy cs rec1 rec2 cenv benv renv env s r mok nx k rk Hr W T. cbn [wfb denote_b] in *.
+    apply andb_true_iff in W as [W Wy]. apply andb_true_iff in W as [_ Wx].
+    rewrite (IHx _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wx T), (IHy _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wy T). reflexivity.
   - intros; reflexivity.
   - intros ri es IHes cs rec1 rec2 cenv benv renv env s r mok nx k rk Hr W T. cbn [denote_r wfr] in *. apply andb_true_iff in W as [_ Wes].
     rewrite (IHes _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wes T). reflexivity.
@@ -2655,6 +2683,30 @@ Proof.
       * apply ge0_iff. lia.
 Qed.
 
+(** counters below [wB] compare as their machine numbers do (step 30) *)
+Lemma cmpn_ofn : forall c a b, match c with Ceq | Clt | Cle => true | _ => false end = true ->
+  (Z.of_nat a < wB)%Z -> (Z.of_nat b < wB)%Z -> cmp_sem c (ofn a) (ofn b) = cmpn c a b.
+Proof.
+  intros c a b Hc Ha Hb. destruct c; try discriminate; cbn [cmp_sem cmpn].
+  - destruct (Nat.eqb a b) eqn:E.
+    + apply Nat.eqb_eq in E. subst b. apply Uint63.eqb_spec. reflexivity.
+    + apply Nat.eqb_neq in E. destruct (PrimInt63.eqb (ofn a) (ofn b)) eqn:E2; [|reflexivity].
+      apply Uint63.eqb_spec in E2. apply (f_equal to_Z) in E2. rewrite !ofn_phi in E2 by lia. lia.
+  - destruct (Nat.ltb a b) eqn:E.
+    + apply Nat.ltb_lt in E. apply Uint63.ltb_spec. rewrite !ofn_phi by lia. lia.
+    + apply Nat.ltb_ge in E. destruct (PrimInt63.ltb (ofn a) (ofn b)) eqn:E2; [|reflexivity].
+      apply Uint63.ltb_spec in E2. rewrite !ofn_phi in E2 by lia. lia.
+  - destruct (Nat.leb a b) eqn:E.
+    + apply Nat.leb_le in E. apply Uint63.leb_spec. rewrite !ofn_phi by lia. lia.
+    + apply Nat.leb_gt in E. destruct (PrimInt63.leb (ofn a) (ofn b)) eqn:E2; [|reflexivity].
+      apply Uint63.leb_spec in E2. rewrite !ofn_phi in E2 by lia. lia.
+Qed.
+
+(** the predecessor of a counter below [wB]: a subtraction of 1, and 0 kept by a conditional move (step 30) *)
+Lemma ofn_pred_sel : forall n, (Z.of_nat n < wB)%Z ->
+  (if PrimInt63.eqb (ofn n) 0%uint63 then 0%uint63 else PrimInt63.sub (ofn n) 1%uint63) = ofn (Nat.pred n).
+Proof. intros [|n] H; [reflexivity|]. rewrite ofn_S_ne0, ofn_pred by lia. reflexivity. Qed.
+
 Section Sim.
 Variables (P : prog) (f : fn) (gidf : nat -> ident) (g mv : ident).
 Variables (cs : list callee) (r rm hp mok : bool) (nx : nat) (k : list kind) (j : nat).
@@ -2775,24 +2827,26 @@ Qed.
 Lemma denote_c_bound : forall c cenv benv renv denv M, cbound (cbz j) cenv ->
   (Z.of_nat (denote_c cs rec cenv benv renv denv M c) < cbz j + Z.of_nat (cdepth c))%Z.
 Proof.
-  induction c as [i | | c IH | e]; intros cenv benv renv denv M B; simpl.
+  induction c as [i | | c IH | e | c IH]; intros cenv benv renv denv M B; simpl.
   - specialize (B i). lia.
   - pose proof cbz_big. lia.
   - specialize (IH cenv benv renv denv M B). lia.
   - pose proof (KQMAuto.kq_nat_le (denote_e cs rec cenv benv renv denv M e)) as K60. change (2 ^ 60)%Z with 1152921504606846976%Z in K60.
     pose proof cbz_big. lia.
+  - specialize (IH cenv benv renv denv M B). pose proof (Nat.le_pred_l (denote_c cs rec cenv benv renv denv M c)). lia.
 Qed.
 
 (** a counter with no variable is at most 2^60 and its successors; so a let-bound counter is below the bound *)
 Lemma cfree_bound : forall c cenv benv renv denv M, cfree c = true ->
   (Z.of_nat (denote_c cs rec cenv benv renv denv M c) <= 1152921504606846976 + Z.of_nat (cdepth c))%Z.
 Proof.
-  induction c as [i | | c IH | e]; intros cenv benv renv denv M F; cbn [cfree cdepth denote_c] in *.
+  induction c as [i | | c IH | e | c IH]; intros cenv benv renv denv M F; cbn [cfree cdepth denote_c] in *.
   - discriminate.
   - lia.
   - specialize (IH cenv benv renv denv M F). lia.
   - pose proof (KQMAuto.kq_nat_le (denote_e cs rec cenv benv renv denv M e)) as K60. change (2 ^ 60)%Z with 1152921504606846976%Z in K60.
     lia.
+  - specialize (IH cenv benv renv denv M F). pose proof (Nat.le_pred_l (denote_c cs rec cenv benv renv denv M c)). lia.
 Qed.
 
 Lemma letc_bound : forall c cenv benv renv denv M, letc_ok c = true -> cbound (cbz j) cenv ->
@@ -3252,6 +3306,19 @@ Proof.
     + lia.
     + simpl. lia.
     + simpl. rewrite PTree.gss. rewrite ofn_kq_nat. reflexivity.
+  - (* CPred *) intros c IH cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk W D Iv Rt HK. simpl in *.
+    pose proof Iv as (_ & _ & _ & _ & _ & _ & Cb & _).
+    pose proof (denote_c_bound c cenv benv renv denv M Cb) as Dc. pose proof cbz_small as Sm.
+    apply IH with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto.
+    intros rho1 n1 A A1 Le1 LA VA.
+    eapply K_op; [exact VA | reflexivity | ].
+    eapply K_sel; [rewrite (aval_agree rho1 _ n1); [exact VA | apply agree_set; lia | exact LA]
+                  | reflexivity | reflexivity | simpl; rewrite PTree.gss; reflexivity | ].
+    apply HK.
+    + apply agree_set1; [apply agree_set1; [exact A1 | lia] | lia].
+    + lia.
+    + simpl. lia.
+    + cbn [aval]. rewrite PTree.gss. cbn [cmp_sem binop_sem]. f_equal. apply ofn_pred_sel. lia.
   - (* CNil *) intros cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk W Sh Iv Rt HK. simpl.
     apply HK; [apply agree_refl | lia | constructor | reflexivity].
   - (* CCons *) intros c IHc ccs IHs cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk W Sh Iv Rt HK. simpl in *.
@@ -3600,6 +3667,67 @@ Proof.
         -- simpl. lia.
         -- cbn [aval denote_b]. unfold callee. rewrite PTree.gss, b2i_eq0, E.
            destruct (boolf gs (callf gs h (denote_cs cs rec cenv benv renv denv M ccs) (denote_es cs rec cenv benv renv denv M args) M)); reflexivity.
+  - (* BCmpC *) intros c x IHx y IHy.
+    assert (BC : forall cenv benv renv denv M rk, wfb sigs r mok nx k rk (BCmpC c x y) = true -> cbound (cbz j) cenv ->
+      cmp_sem c (ofn (denote_c cs rec cenv benv renv denv M x)) (ofn (denote_c cs rec cenv benv renv denv M y))
+      = denote_b cs rec cenv benv renv denv M (BCmpC c x y)).
+    { intros cenv benv renv denv M rk W Cb. cbn [wfb denote_b] in *.
+      apply andb_true_iff in W as [W _]. apply andb_true_iff in W as [W _]. apply andb_true_iff in W as [W Sy].
+      apply andb_true_iff in W as [Hc Sx]. unfold shallow in Sx, Sy. apply Z.leb_le in Sx, Sy.
+      pose proof (denote_c_bound x cenv benv renv denv M Cb). pose proof (denote_c_bound y cenv benv renv denv M Cb).
+      pose proof cbz_small. apply cmpn_ofn; [exact Hc | lia | lia]. }
+    split; [| split].
+    + intros cenvA benvA renvA envA cenv benv renv denv nxt KT KF rho M v M' rk W Iv Rt HT HF.
+      pose proof Iv as (_ & _ & _ & _ & _ & _ & Cb & _). pose proof (BC cenv benv renv denv M rk W Cb) as E.
+      cbn [ccond]. cbn [wfb] in W.
+      apply andb_true_iff in W as [W Wy]. apply andb_true_iff in W as [W Wx]. apply andb_true_iff in W as [W Sy].
+      apply andb_true_iff in W as [_ Sx]. unfold shallow in Sx, Sy. apply Z.leb_le in Sx, Sy.
+      apply IHx with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto. intros rho1 n1 A A1 Le1 LA VA.
+      apply IHy with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto. { eapply inv_step; eauto. }
+      intros rho2 n2 B A2 Le2 LB VB.
+      eapply K_if.
+      * rewrite (aval_agree rho1 rho2 n1); eauto.
+      * eauto.
+      * rewrite E. destruct (denote_b cs rec cenv benv renv denv M (BCmpC c x y)) eqn:C.
+        -- apply HT; [first [exact C | reflexivity] | eapply (agree_trans rho rho1 rho2 nxt n1); eauto | lia].
+        -- apply HF; [first [exact C | reflexivity] | eapply (agree_trans rho rho1 rho2 nxt n1); eauto | lia_a].
+    + intros cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk W Iv Rt HK.
+      pose proof Iv as (_ & _ & _ & _ & _ & _ & Cb & _). pose proof (BC cenv benv renv denv M rk W Cb) as E.
+      cbn [cbval]. cbn [wfb] in W.
+      apply andb_true_iff in W as [W Wy]. apply andb_true_iff in W as [W Wx]. apply andb_true_iff in W as [W Sy].
+      apply andb_true_iff in W as [_ Sx]. unfold shallow in Sx, Sy. apply Z.leb_le in Sx, Sy.
+      apply IHx with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto. intros rho1 n1 A A1 Le1 LA VA.
+      apply IHy with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto. { eapply inv_step; eauto. }
+      intros rho2 n2 B A2 Le2 LB VB.
+      eapply K_sel.
+      * rewrite (aval_agree rho1 rho2 n1); eauto.
+      * eauto.
+      * reflexivity.
+      * reflexivity.
+      * apply HK.
+        -- eapply (agree_set2 rho rho1 rho2); eauto; lia.
+        -- lia.
+        -- simpl. lia.
+        -- cbn [aval]. rewrite PTree.gss, E. reflexivity.
+    + intros cenvA benvA renvA envA cenv benv renv denv nxt T F tv fv K rho M v M' rk W Iv Rt LT LF VT VF HK.
+      pose proof Iv as (_ & _ & _ & _ & _ & _ & Cb & _). pose proof (BC cenv benv renv denv M rk W Cb) as E.
+      cbn [csel]. cbn [wfb] in W.
+      apply andb_true_iff in W as [W Wy]. apply andb_true_iff in W as [W Wx]. apply andb_true_iff in W as [W Sy].
+      apply andb_true_iff in W as [_ Sx]. unfold shallow in Sx, Sy. apply Z.leb_le in Sx, Sy.
+      apply IHx with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto. intros rho1 n1 A A1 Le1 LA VA.
+      apply IHy with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto. { eapply inv_step; eauto. }
+      intros rho2 n2 B A2 Le2 LB VB.
+      assert (A12 : agree rho rho2 nxt) by (eapply (agree_trans rho rho1 rho2 nxt n1); eauto).
+      eapply K_sel.
+      * rewrite (aval_agree rho1 rho2 n1); eauto.
+      * eauto.
+      * rewrite (aval_agree rho rho2 nxt); eauto.
+      * rewrite (aval_agree rho rho2 nxt); eauto.
+      * apply HK.
+        -- eapply (agree_set2 rho rho1 rho2); eauto; lia.
+        -- lia.
+        -- simpl. lia.
+        -- cbn [aval]. rewrite PTree.gss, E. reflexivity.
   - (* RVar *) intros i cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk W Iv Rt HK. cbn [crec denote_r].
     pose proof Iv as (_ & _ & _ & _ & _ & _ & _ & _ & _ & RV & RL).
     apply HK; [apply agree_refl | lia | apply rlt_nth; exact RL | apply renv_nth; exact RV].
@@ -7836,3 +7964,75 @@ Check (eq_refl : wf_f [] d1_g (FPlain (SMatchR (RMk 0 (SCons (SVar 0) (SCons (SI
 Check (eq_refl : wf_f [] d1_g (FPlain (SMatchR (RMk 0 (SCons (SInt 0) (SCons (SVar 0) SNil))) (SVar 0))) = false).
 Check (eq_refl : wf_f [] d1_g (FPlain (SMatchR (RMk 0 (SCons (SInt 2) (SCons (SVar 0) SNil))) (SVar 0))) = false).
 End D28.
+
+
+(* ---- comparisons of counters and the predecessor (step 30): [Nat.eqb] / [Nat.ltb] of a counter and a written one chosen
+   by a conditional move ([nceq], [nclt]: the construct table's A_par_nat_eqb, A_par_nat_ltb), [Nat.leb] of two counters as a
+   jump ([ncle]), a comparison bound by a let ([ncv]), a comparison in a loop's tail ([nloop]: the two calls merged);
+   [Nat.pred] given to a loop ([npgo] over [npk]: A_par_nat_pred) and bound by a let of a counter ([npv]) *)
+Definition nceq (n : nat) (a b : i63) : i63 := if Nat.eqb n 3 then a else b.
+Definition nclt (n : nat) (a b : i63) : i63 := if Nat.ltb n 10 then a else b.
+Definition ncle (n m : nat) (a : i63) : i63 := if Nat.leb n m then (let x := PrimInt63.add a 1 in PrimInt63.mul x x) else a.
+Definition ncv (n : nat) (a b : i63) : i63 := let c := Nat.eqb n 3 in if c then a else b.
+Fixpoint nloop (n : nat) (a : i63) : i63 :=
+  match n with O => a | S m => if Nat.ltb m 5 then nloop m (PrimInt63.add a 1) else nloop m (PrimInt63.add a 2) end.
+Fixpoint npk (n : nat) (x : i63) : i63 := match n with O => x | S m => npk m (PrimInt63.add x 1) end.
+Definition npgo (n : nat) (a b : i63) : i63 := npk (Nat.pred n) a.
+Definition npv (n : nat) (a : i63) : i63 := let w := Nat.pred n in npk w (PrimInt63.add a 1).
+Definition c3 := CS (CS (CS CO)).
+Definition n12_g := mksig 1 (nk 2) false false false None.
+Definition n21_g := mksig 2 (nk 1) false false false None.
+Definition n11_g := mksig 1 (nk 1) false false false None.
+Definition nceq_b := FPlain (SIfB (BCmpC Ceq (CVar 0) c3) (SVar 1) (SVar 0)).
+Definition nclt_b := FPlain (SIfB (BCmpC Clt (CVar 0) (CS (CS (CS (CS (CS (CS (CS c3)))))))) (SVar 1) (SVar 0)).
+Definition ncle_b := FPlain (SIfB (BCmpC Cle (CVar 1) (CVar 0)) (SLet (SOp Badd (SVar 0) (SInt 1)) (SOp Bmul (SVar 0) (SVar 0))) (SVar 0)).
+Definition ncv_b := FPlain (SLetB (BCmpC Ceq (CVar 0) c3) (SIfB (BVar 0) (SVar 1) (SVar 0))).
+Definition nloop_b := FRec (SVar 0) (SIfB (BCmpC Clt (CVar 0) (CS (CS c3))) (SRec CNil (SCons (SOp Badd (SVar 0) (SInt 1)) SNil))
+                                                                     (SRec CNil (SCons (SOp Badd (SVar 0) (SInt 2)) SNil))).
+Definition npk_b := FRec (SVar 0) (SRec CNil (SCons (SOp Badd (SVar 0) (SInt 1)) SNil)).
+Definition npgo_b := FPlain (SCall 5 (CCons (CPred (CVar 0)) CNil) (SCons (SVar 1) SNil)).
+Definition npv_b := FPlain (SLetC (CPred (CVar 0)) (SCall 5 (CCons (CVar 0) CNil) (SCons (SOp Badd (SVar 0) (SInt 1)) SNil))).
+Definition n_P := mkprog [(gid1 0, compile_f gid1 0 n12_g nceq_b); (gid1 1, compile_f gid1 1 n12_g nclt_b);
+                          (gid1 2, compile_f gid1 2 n21_g ncle_b); (gid1 3, compile_f gid1 3 n12_g ncv_b);
+                          (gid1 4, compile_f gid1 4 n11_g nloop_b); (gid1 5, compile_f gid1 5 n11_g npk_b);
+                          (gid1 6, compile_f gid1 6 n12_g npgo_b); (gid1 7, compile_f gid1 7 n11_g npv_b)] [].
+Time Lemma nceq_ok : callee_ok n_P (gid1 0) (cbz 0) n12_g nceq.
+Proof. Time exact_no_check (compile_f_ok n_P [] gid1 0 n12_g nceq_b eq_refl eq_refl (no_callees n_P gid1) eq_refl eq_refl). Time Qed.
+Time Lemma nclt_ok : callee_ok n_P (gid1 1) (cbz 1) n12_g nclt.
+Proof. Time exact_no_check (compile_f_ok n_P [] gid1 1 n12_g nclt_b eq_refl eq_refl (no_callees n_P gid1) eq_refl eq_refl). Time Qed.
+Time Lemma ncle_ok : callee_ok n_P (gid1 2) (cbz 2) n21_g ncle.
+Proof. Time exact_no_check (compile_f_ok n_P [] gid1 2 n21_g ncle_b eq_refl eq_refl (no_callees n_P gid1) eq_refl eq_refl). Time Qed.
+Time Lemma ncv_ok : callee_ok n_P (gid1 3) (cbz 3) n12_g ncv.
+Proof. Time exact_no_check (compile_f_ok n_P [] gid1 3 n12_g ncv_b eq_refl eq_refl (no_callees n_P gid1) eq_refl eq_refl). Time Qed.
+Time Lemma nloop_ok : callee_ok n_P (gid1 4) (cbz 4) n11_g nloop.
+Proof. Time exact_no_check (compile_f_ok n_P [] gid1 4 n11_g nloop_b eq_refl eq_refl (no_callees n_P gid1) eq_refl eq_refl). Time Qed.
+Time Lemma npk_ok : callee_ok n_P (gid1 5) (cbz 5) n11_g npk.
+Proof. Time exact_no_check (compile_f_ok n_P [] gid1 5 n11_g npk_b eq_refl eq_refl (no_callees n_P gid1) eq_refl eq_refl). Time Qed.
+Definition n_cs := [existT ftype n12_g nceq; existT ftype n12_g nclt; existT ftype n21_g ncle; existT ftype n12_g ncv;
+                    existT ftype n11_g nloop; existT ftype n11_g npk].
+Definition n_cs_ok := conj nceq_ok (conj nclt_ok (conj ncle_ok (conj ncv_ok (conj nloop_ok (conj npk_ok Logic.I))))).
+Time Lemma npgo_ok : callee_ok n_P (gid1 6) (cbz 6) n12_g npgo.
+Proof. Time exact_no_check (compile_f_ok n_P n_cs gid1 6 n12_g npgo_b eq_refl eq_refl (all_ok_callees n_P gid1 n_cs n_cs_ok) eq_refl eq_refl). Time Qed.
+Time Lemma npv_ok : callee_ok n_P (gid1 7) (cbz 7) n11_g npv.
+Proof.
+  Time exact_no_check (compile_f_ok n_P (n_cs ++ [existT ftype n12_g npgo]) gid1 7 n11_g npv_b eq_refl eq_refl
+    (all_ok_callees n_P gid1 (n_cs ++ [existT ftype n12_g npgo]) (conj nceq_ok (conj nclt_ok (conj ncle_ok (conj ncv_ok
+      (conj nloop_ok (conj npk_ok (conj npgo_ok Logic.I)))))))) eq_refl eq_refl).
+Time Qed.
+Print Assumptions npv_ok.
+Print Assumptions nceq_ok.
+(* the KQL: a test at the end of a function is a jump ([nceq], as for a comparison of numbers); a choice inside an expression
+   ([nsel]) one conditional move on the comparison, no bit operation; [ncle] a jump *)
+Check (eq_refl : shape (kbody (compile_f gid1 0 n12_g nceq_b)) = (0, 0)%nat).
+Definition nsel (n : nat) (a b : i63) : i63 := PrimInt63.add (if Nat.eqb n 3 then a else b) 1.
+Definition nsel_b := FPlain (SOp Badd (SIfB (BCmpC Ceq (CVar 0) c3) (SVar 1) (SVar 0)) (SInt 1)).
+Definition nsel_P := mkprog [(gid1 0, compile_f gid1 0 n12_g nsel_b)] [].
+Time Lemma nsel_ok : callee_ok nsel_P (gid1 0) (cbz 0) n12_g nsel.
+Proof. Time exact_no_check (compile_f_ok nsel_P [] gid1 0 n12_g nsel_b eq_refl eq_refl (no_callees nsel_P gid1) eq_refl eq_refl). Time Qed.
+Check (eq_refl : shape (kbody (compile_f gid1 0 n12_g nsel_b)) = (1, 0)%nat).
+Check (eq_refl : has_sel (kbody (compile_f gid1 2 n21_g ncle_b)) = false).
+(* refused: a signed comparison of counters, a wrong comparison (the check), the predecessor where the text has none *)
+Check (eq_refl : wf_f [] n12_g (FPlain (SIfB (BCmpC Cslt (CVar 0) c3) (SVar 1) (SVar 0))) = false).
+Time Fail Definition nceq_wrong : nceq = denote_f [] n12_g (FPlain (SIfB (BCmpC Cle (CVar 0) c3) (SVar 1) (SVar 0))) := eq_refl.
+Time Fail Definition npgo_wrong : npgo = denote_f [existT ftype n11_g npk] n12_g
+  (FPlain (SCall 0 (CCons (CVar 0) CNil) (SCons (SVar 1) SNil))) := eq_refl.

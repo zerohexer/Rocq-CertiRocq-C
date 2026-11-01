@@ -35,6 +35,14 @@ Definition kn_kq_nat := kn_of <% KQ.KQRun.kq_nat %>.
 Definition kn_andb := kn_of <% andb %>.
 Definition kn_orb := kn_of <% orb %>.
 Definition kn_negb := kn_of <% negb %>.
+(* the comparisons and the predecessor of counters (step 30) *)
+Definition kn_nat_eqb := kn_of <% Nat.eqb %>.
+Definition kn_nat_ltb := kn_of <% Nat.ltb %>.
+Definition kn_nat_leb := kn_of <% Nat.leb %>.
+Definition kn_nat_pred := kn_of <% Nat.pred %>.
+Definition ncmp_v (kn : kername) : option cmpop :=
+  if Kername.eqb kn kn_nat_eqb then Some Ceq else if Kername.eqb kn kn_nat_ltb then Some Clt
+  else if Kername.eqb kn kn_nat_leb then Some Cle else None.
 Definition ind_nat := ind_of <% nat %>.
 Definition ind_bool := ind_of <% bool %>.
 Definition kn_rd8 := kn_of <% KQ.KQRun.rd8 %>.
@@ -756,6 +764,7 @@ with reify_c (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sc
   | tApp (tRel i) args => match nth_error ctx i with Some (CFn _ t) => reify_c fuel ctx (wout (capsub ctx t) args) | _ => None end
   | tApp (tConst kn _) args =>
       if Kername.eqb kn kn_kq_nat then match args with [e] => option_map CNat (reify fuel ctx e) | _ => None end
+      else if Kername.eqb kn kn_nat_pred then match args with [c] => option_map KQR.CPred (reify_c fuel ctx c) | _ => None end
       else match hb kn with Some b => reify_c fuel ctx (wout b args) | None => None end
   | _ => None
   end
@@ -888,9 +897,13 @@ with reify_b (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sb
           else if Kername.eqb kn kn_orb then
             match reify_b fuel ctx a, reify_b fuel ctx b with Some x, Some y => Some (BOr x y) | _, _ => None end
           else
+            match ncmp_v kn with
+            | Some c => match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (BCmpC c x y) | _, _ => None end
+            | None =>
             match (if eq_mp (fst kn) prim_mp then cmp_v (snd kn) else None) with
             | Some c => match reify fuel ctx a, reify fuel ctx b with Some x, Some y => Some (BCmp c x y) | _, _ => None end
             | None => helper tt
+            end
             end
       | _ => helper tt
       end
@@ -2228,6 +2241,7 @@ Definition known_const (fns : list kername) (kn : kername) : bool :=
   || Kername.eqb kn kn_kq_nat || existsb (Kername.eqb kn) fns || Kername.eqb kn kn_ksize || Kername.eqb kn kn_w64_op
   || existsb (fun e => Kername.eqb (fst (fst e)) kn) hw_table || existsb (fun e => Kername.eqb (fst (fst e)) kn) hwf_table
   || Kername.eqb kn kn_andb || Kername.eqb kn kn_orb || Kername.eqb kn kn_negb
+  || match ncmp_v kn with Some _ => true | None => false end || Kername.eqb kn kn_nat_pred
   || Kername.eqb kn kn_int || Kername.eqb kn kn_mem.     (* as type arguments *)
 
 Definition head_name (t : term) : string :=
@@ -2316,6 +2330,7 @@ Definition bool_shape (c : term) : bool :=
   | tRel _ | tConstruct _ _ _ => true
   | tApp (tConst kn _) _ => Kername.eqb kn kn_andb || Kername.eqb kn kn_orb || Kername.eqb kn kn_negb
                             || (eq_mp (fst kn) prim_mp && match cmp_v (snd kn) with Some _ => true | None => false end)
+                            || match ncmp_v kn with Some _ => true | None => false end
   | _ => false
   end.
 
@@ -3657,3 +3672,40 @@ Definition t8sum_Pr := mkprog (funs_of 0 t8sum_src) [].
 Time Lemma t8sum_ok : callee_ok t8sum_Pr (gid1 0) (cbz 0) (sig_at t8sum_src 0) t8sum.
 Proof. Time exact_no_check (@compile_f_ok t8s_recs t8s_laws t8sum_Pr [] gid1 0 (sig_at t8sum_src 0) (body_at t8sum_src 0) eq_refl eq_refl (no_callees t8sum_Pr gid1) eq_refl eq_refl). Time Qed.
 End T8S.
+
+(* ---- comparisons of counters and the predecessor (step 30), read from the text: KQR.v's [nceq], [nclt], [npk] and [npgo]
+   (the trees exactly the hand-written ones), and the construct table's shapes in one caller with a memory it does not use *)
+Definition w30eq (n : nat) (a b : i63) : i63 := if Nat.eqb n 3 then a else b.
+Definition w30lt (n : nat) (a b : i63) : i63 := if Nat.ltb n 10 then a else b.
+Fixpoint w30k (n : nat) (x : i63) : i63 := match n with O => x | S m => w30k m (PrimInt63.add x 1) end.
+Definition w30pred (n : nat) (a b : i63) : i63 := w30k (Nat.pred n) a.
+Definition w30go (n : nat) (a b : i63) (s : mem) : i63 :=
+  PrimInt63.add (PrimInt63.add (if Nat.eqb n 3 then a else b) (if Nat.leb n 10 then a else b)) (w30k (Nat.pred n) a).
+Definition w30eq_src := ltac:(run_template_program (tmQuoteRec w30eq)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Definition w30lt_src := ltac:(run_template_program (tmQuoteRec w30lt)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Definition w30pred_src := ltac:(run_template_program (tmQuoteRec w30pred)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Definition w30go_src := ltac:(run_template_program (tmQuoteRec w30go)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : map snd w30eq_src = [nceq_b]).
+Check (eq_refl : map snd w30lt_src = [nclt_b]).
+Check (eq_refl : map snd w30pred_src = [npk_b; FPlain (SCall 0 (CCons (KQR.CPred (CVar 0)) CNil) (SCons (SVar 1) SNil))]).
+Definition w30pred_Pr := mkprog (funs_of 0 w30pred_src) [].
+Time Lemma w30k_ok : callee_ok w30pred_Pr (gid1 0) (cbz 0) (sig_at w30pred_src 0) w30k.
+Proof. Time exact_no_check (compile_f_ok w30pred_Pr [] gid1 0 (sig_at w30pred_src 0) (body_at w30pred_src 0) eq_refl eq_refl (no_callees w30pred_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma w30pred_ok : callee_ok w30pred_Pr (gid1 1) (cbz 1) (sig_at w30pred_src 1) w30pred.
+Proof.
+  Time exact_no_check (compile_f_ok w30pred_Pr [existT ftype (sig_at w30pred_src 0) w30k] gid1 1 (sig_at w30pred_src 1) (body_at w30pred_src 1)
+    eq_refl eq_refl (all_ok_callees w30pred_Pr gid1 [existT ftype (sig_at w30pred_src 0) w30k] (conj w30k_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
+Definition w30go_Pr := mkprog (funs_of 0 w30go_src) [].
+Time Lemma w30k_ok' : callee_ok w30go_Pr (gid1 0) (cbz 0) (sig_at w30go_src 0) w30k.
+Proof. Time exact_no_check (compile_f_ok w30go_Pr [] gid1 0 (sig_at w30go_src 0) (body_at w30go_src 0) eq_refl eq_refl (no_callees w30go_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma w30go_ok : callee_ok w30go_Pr (gid1 1) (cbz 1) (sig_at w30go_src 1) w30go.
+Proof.
+  Time exact_no_check (compile_f_ok w30go_Pr [existT ftype (sig_at w30go_src 0) w30k] gid1 1 (sig_at w30go_src 1) (body_at w30go_src 1)
+    eq_refl eq_refl (all_ok_callees w30go_Pr gid1 [existT ftype (sig_at w30go_src 0) w30k] (conj w30k_ok' Logic.I)) eq_refl eq_refl).
+Time Qed.
+Print Assumptions w30go_ok.
