@@ -132,7 +132,9 @@ with srec : Type :=                  (* a record *)
 | RCall (ri f : nat) (cs : scnts) (args : sexps)    (* function f of the program, giving back a record of type ri *)
 | RW64 (ri : nat) (o : KQ.KQRun.w64op) (a b : srec)    (* w64_op o a b, a u64 of the program's type ri (KQRun.v) *)
 | RLet (e : sexp) (x : srec)         (* let v := e in x, v a number: SVar 0 in x (a helper giving a record, written out) *)
-| RLetR (y x : srec).                (* let w := y in x, w a record: RVar 0 in x *)
+| RLetR (y x : srec)                 (* let w := y in x, w a record: RVar 0 in x *)
+| RIf (ri : nat) (c : cmpop) (a b : sexp) (x y : srec)   (* if a c b then x else y, records of type ri (step 21) *)
+| RMatchR (ri : nat) (x y : srec).   (* let '(a, b, ..) := x in y, y of type ri: x's fields the numbers 0 .. in y, the last one first *)
 
 Scheme sexp_mut := Induction for sexp Sort Prop
 with sexps_mut := Induction for sexps Sort Prop
@@ -359,6 +361,11 @@ with denote_r (cs : list callee) (rec : list nat -> list val -> mem -> i63) (cen
       VRec ri (rmk (RO ri) [KQ.KQRun.w_lo w; KQ.KQRun.w_hi w])
   | RLet e x => let v := denote_e cs rec cenv benv renv env s e in denote_r cs rec cenv benv renv (v :: env) s x
   | RLetR y x => let w := denote_r cs rec cenv benv renv env s y in denote_r cs rec cenv benv (w :: renv) env s x
+  (* the test and the match inside the record value: taken apart, it is the user's match on the user's test *)
+  | RIf ri c a b x y => VRec ri (if cmp_sem c (denote_e cs rec cenv benv renv env s a) (denote_e cs rec cenv benv renv env s b)
+                                 then to_rt ri (denote_r cs rec cenv benv renv env s x) else to_rt ri (denote_r cs rec cenv benv renv env s y))
+  | RMatchR ri x y => VRec ri (rmatch (denote_r cs rec cenv benv renv env s x)
+                                      (fun l => to_rt ri (denote_r cs rec cenv benv renv (rev l ++ env) s y)))
   end.
 
 Fixpoint denote_m (cs : list callee) (rec : list nat -> list val -> mem -> i63) (recm : list nat -> list val -> mem -> mem)
@@ -623,6 +630,7 @@ Fixpoint rtype (rk : list nat) (x : srec) : nat :=
   | RMk ri _ | RCall ri _ _ _ | RW64 ri _ _ _ => ri
   | RLet _ x => rtype rk x
   | RLetR y x => rtype (rtype rk y :: rk) x
+  | RIf ri _ _ _ _ _ | RMatchR ri _ _ => ri
   end.
 Fixpoint kinds_s (rk : list nat) (es : sexps) : list kind :=
   match es with SNil => [] | SCons _ es => KNum :: kinds_s rk es | SConsB _ es => KBool :: kinds_s rk es
@@ -853,6 +861,9 @@ with crec (x : srec) (cenv benv : list atom) (renv : list (list atom)) (env : li
                         (K [Avar n2; Avar (Pos.succ n2)] (Pos.succ (Pos.succ n2)))))
   | RLet e x => cexp e cenv benv renv env nxt (fun A n1 => crec x cenv benv renv (A :: env) n1 K)
   | RLetR y x => crec y cenv benv renv env nxt (fun As n1 => crec x cenv benv (As :: renv) env n1 K)
+  | RIf _ c a b x y => cexp a cenv benv renv env nxt (fun A n1 => cexp b cenv benv renv env n1 (fun B n2 =>
+                       let tc := crec x cenv benv renv env n2 K in Eif c A B tc (crec y cenv benv renv env (after n2 tc) K)))
+  | RMatchR _ x y => crec x cenv benv renv env nxt (fun As n1 => crec y cenv benv renv (rev As ++ env) n1 K)
   end.
 
 (** a merged call: the tests, then the arguments place by place -- an item the same at every end once, the others at each
@@ -1088,6 +1099,9 @@ with wfr (sigs : list sig) (r mok : bool) (nx : nat) (k : list kind) (rk : list 
                      && wfr sigs r mok nx k rk a && wfr sigs r mok nx k rk b
   | RLet e x => wf sigs r mok nx k rk e && wfr sigs r mok nx k rk x
   | RLetR y x => wfr sigs r mok nx k rk y && wfr sigs r mok nx k (rtype rk y :: rk) x
+  | RIf ri _ a b x y => Nat.eqb (rtype rk x) ri && Nat.eqb (rtype rk y) ri && wf sigs r mok nx k rk a && wf sigs r mok nx k rk b
+                        && wfr sigs r mok nx k rk x && wfr sigs r mok nx k rk y
+  | RMatchR ri x y => Nat.eqb (rtype rk y) ri && wfr sigs r mok nx k rk x && wfr sigs r mok nx k rk y
   end.
 
 (** a memory: its numbers as above; the recursive call only where [rm] allows it; a callee called for a memory takes one and
@@ -1214,6 +1228,8 @@ with sh_r (sh : list i63) (x : srec) {struct x} : bool :=
   | RW64 _ _ a b => sh_r sh a && sh_r sh b
   | RLet e x => sh_e sh e && sh_r sh x
   | RLetR y x => sh_r sh y && sh_r sh x
+  | RIf _ _ a b x y => sh_e sh a && sh_e sh b && sh_r sh x && sh_r sh y
+  | RMatchR _ x y => sh_r sh x && sh_r sh y
   end.
 Fixpoint sh_m (sh : list i63) (m : smem) {struct m} : bool :=
   match m with
@@ -1583,12 +1599,16 @@ Qed.
 Lemma rtyped_cons : forall renv rk v ri, rtyped renv rk -> kind_of v = KRec ri -> rtyped (v :: renv) (ri :: rk).
 Proof. unfold rtyped. intros renv rk v ri T K. cbn [map]. rewrite T, K. reflexivity. Qed.
 
+Lemma rmatch_eq : forall (P : Type) v (F : list i63 -> P), rmatch v F = F (vflat v).
+Proof. intros P [n|b|ri x] F; cbn [rmatch vflat]; [reflexivity | reflexivity | apply rl_nat]. Qed.
+
 (** a record's type, its variables in scope having the types [rk] *)
 Lemma kind_denote_r : forall r mok nx k rk cs rec cenv benv renv denv s x, wfr (map (@projT1 _ _) cs) r mok nx k rk x = true ->
   rtyped renv rk -> kind_of (denote_r cs rec cenv benv renv denv s x) = KRec (rtype rk x).
 Proof.
   intros r mok nx k rk cs rec cenv benv renv denv s x. revert rk renv denv.
-  induction x as [i | rj es | rj fi ccs args | rj o a IHa b IHb | e x IH | y IHy x IHx]; intros rk renv denv W T; cbn [rtype].
+  induction x as [i | rj es | rj fi ccs args | rj o a IHa b IHb | e x IH | y IHy x IHx | rj c a b x IHx y IHy | rj x IHx y IHy];
+    intros rk renv denv W T; cbn [rtype].
   - cbn [wfr] in W. apply Nat.ltb_lt in W. cbn [denote_r]. apply rtyped_nth; assumption.
   - reflexivity.
   - destruct (wfr_call_inv _ _ _ _ _ _ _ _ _ _ W) as (gs & Eg & _ & _ & _ & _ & _ & Q & _).
@@ -1598,6 +1618,8 @@ Proof.
   - cbn [wfr] in W. apply andb_true_iff in W as [_ Wx]. cbn [denote_r]. apply IH; assumption.
   - cbn [wfr] in W. apply andb_true_iff in W as [Wy Wx]. cbn [denote_r].
     apply IHx; [exact Wx | apply rtyped_cons; [exact T | apply IHy; assumption]].
+  - reflexivity.
+  - reflexivity.
 Qed.
 (** a record given back at the end of a body, of the type the function gives back *)
 Lemma kind_denote_br : forall r mok nx k rk cs rec cenv benv renv denv s x ri,
@@ -1634,8 +1656,6 @@ Proof.
   - apply andb_true_iff in W as [W1 W]. f_equal; [eapply kind_denote_r; eauto | apply IH; exact W].
 Qed.
 (** a value taken apart: its fields given to [F] *)
-Lemma rmatch_eq : forall (P : Type) v (F : list i63 -> P), rmatch v F = F (vflat v).
-Proof. intros P [n|b|ri x] F; cbn [rmatch vflat]; [reflexivity | reflexivity | apply rl_nat]. Qed.
 
 Lemma kind_eqb_eq : forall a b, kind_eqb a b = true -> a = b.
 Proof. intros [| | a] [| | b]; simpl; try congruence. intro H. apply Nat.eqb_eq in H. subst. reflexivity. Qed.
@@ -1848,6 +1868,14 @@ Proof.
     rewrite (IHe _ _ _ _ _ _ s s' _ _ _ _ Hr We). apply (IHx _ _ _ _ _ _ s s' _ _ _ _ Hr Wx).
   - intros y IHy x IHx cs rec cenv benv renv env s s' r nx k rk Hr W. cbn [denote_r wfr] in *. apply andb_true_iff in W as [Wy Wx].
     rewrite (IHy _ _ _ _ _ _ s s' _ _ _ _ Hr Wy). apply (IHx _ _ _ _ _ _ s s' _ _ _ _ Hr Wx).
+  - intros ri c a IHa b IHb x IHx y IHy cs rec cenv benv renv env s s' r nx k rk Hr W. cbn [denote_r wfr] in *.
+    apply andb_true_iff in W as [W Wy]. apply andb_true_iff in W as [W Wx]. apply andb_true_iff in W as [W Wb].
+    apply andb_true_iff in W as [_ Wa].
+    rewrite (IHa _ _ _ _ _ _ s s' _ _ _ _ Hr Wa), (IHb _ _ _ _ _ _ s s' _ _ _ _ Hr Wb), (IHx _ _ _ _ _ _ s s' _ _ _ _ Hr Wx),
+            (IHy _ _ _ _ _ _ s s' _ _ _ _ Hr Wy). reflexivity.
+  - intros ri x IHx y IHy cs rec cenv benv renv env s s' r nx k rk Hr W. cbn [denote_r wfr] in *.
+    apply andb_true_iff in W as [W Wy]. apply andb_true_iff in W as [_ Wx].
+    rewrite (IHx _ _ _ _ _ _ s s' _ _ _ _ Hr Wx), !rmatch_eq, (IHy _ _ _ _ _ _ s s' _ _ _ _ Hr Wy). reflexivity.
 Qed.
 
 (** a record given back reads no memory where its function has none *)
@@ -2008,6 +2036,14 @@ Proof.
   - intros y IHy x IHx cs rec1 rec2 cenv benv renv env s r mok nx k rk Hr W T. cbn [denote_r wfr] in *. apply andb_true_iff in W as [Wy Wx].
     rewrite (IHy _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wy T). apply (IHx _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wx).
     apply rtyped_cons; [exact T | eapply kind_denote_r; eauto].
+  - intros ri c a IHa b IHb x IHx y IHy cs rec1 rec2 cenv benv renv env s r mok nx k rk Hr W T. cbn [denote_r wfr] in *.
+    apply andb_true_iff in W as [W Wy]. apply andb_true_iff in W as [W Wx]. apply andb_true_iff in W as [W Wb].
+    apply andb_true_iff in W as [_ Wa].
+    rewrite (IHa _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wa T), (IHb _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wb T), (IHx _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wx T),
+            (IHy _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wy T). reflexivity.
+  - intros ri x IHx y IHy cs rec1 rec2 cenv benv renv env s r mok nx k rk Hr W T. cbn [denote_r wfr] in *.
+    apply andb_true_iff in W as [W Wy]. apply andb_true_iff in W as [_ Wx].
+    rewrite (IHx _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wx T), !rmatch_eq, (IHy _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wy T). reflexivity.
 Qed.
 
 (** the same for a memory and its recursive call *)
@@ -2937,6 +2973,34 @@ Proof.
     eapply IHy; [exact Wy | exact Iv | exact Rt |]. intros rho1 n1 As A1 Le1 LAs VAs.
     eapply IHx; [exact Wx | apply inv_rlet; [eapply inv_step; eauto | exact VAs | exact LAs] | apply rtyped_cons; [exact Rt | eapply kind_denote_r; eauto] |].
     intros rho2 n2 Bs A2 Le2 LBs VBs. apply HK; [eapply (agree_trans rho rho1 rho2 nxt n1); eauto | lia | exact LBs | exact VBs].
+  - (* RIf *) intros ri c a IHa b IHb x IHx y IHy cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk W Iv Rt HK.
+    cbn [crec denote_r wfr] in *.
+    apply andb_true_iff in W as [W Wy]. apply andb_true_iff in W as [W Wx]. apply andb_true_iff in W as [W Wb].
+    apply andb_true_iff in W as [W Wa]. apply andb_true_iff in W as [Ex Ey]. apply Nat.eqb_eq in Ex, Ey.
+    apply IHa with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto. intros rho1 n1 A A1 Le1 LA VA.
+    apply IHb with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto. { eapply inv_step; eauto. }
+    intros rho2 n2 B A2 Le2 LB VB.
+    assert (I2 : inv rho2 cenvA benvA renvA envA cenv benv renv denv n2). { eapply inv_step; [eapply inv_step; eauto | eauto | auto]. }
+    eapply K_if.
+    + rewrite (aval_agree rho1 rho2 n1); eauto.
+    + eauto.
+    + destruct (cmp_sem c (denote_e cs rec cenv benv renv denv M a) (denote_e cs rec cenv benv renv denv M b)) eqn:C.
+      * apply IHx with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto. intros rho3 n3 As3 A3 Le3 L3 V3.
+        apply HK; [| lia | exact L3 |].
+        { eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); eauto; lia. }
+        cbn [vflat]. rewrite to_rt_vflat; [exact V3 | rewrite <- Ex; eapply kind_denote_r; eauto].
+      * apply IHy with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto.
+        { eapply inv_step; [exact I2 | apply agree_refl | afterle]. }
+        intros rho3 n3 As3 A3 Le3 L3 V3.
+        apply HK; [| lia_a | exact L3 |].
+        { eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); [eauto | eauto | eapply agree_mono; [exact A3 | afterle] | lia | lia]. }
+        cbn [vflat]. rewrite to_rt_vflat; [exact V3 | rewrite <- Ey; eapply kind_denote_r; eauto].
+  - (* RMatchR *) intros ri x IHx y IHy cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk W Iv Rt HK. cbn [crec denote_r wfr] in *.
+    apply andb_true_iff in W as [W Wy]. apply andb_true_iff in W as [Ey Wx]. apply Nat.eqb_eq in Ey.
+    eapply IHx; [exact Wx | exact Iv | exact Rt |]. intros rho1 n1 As A1 Le1 LAs VAs.
+    eapply IHy; [exact Wy | apply inv_lets; [eapply inv_step; eauto | exact VAs | exact LAs] | exact Rt |].
+    intros rho2 n2 Bs A2 Le2 LBs VBs. apply HK; [eapply (agree_trans rho rho1 rho2 nxt n1); eauto | lia | exact LBs | ].
+    cbn [vflat]. rewrite rmatch_eq, to_rt_vflat; [exact VBs | rewrite <- Ey; eapply kind_denote_r; eauto].
 Qed.
 
 Definition cexp_ok := proj1 cexp_all.
@@ -5959,6 +6023,24 @@ Check (eq_refl : wf_f [] (mksig 0 [KRec 0] false false false (Some 0%nat)) (FPla
 (* a tree whose record has the fields the other way round is refused by the check *)
 Fail Check (eq_refl : minmax = denote_f [] minmax_g (FRecR (BRet (RMk 0 (SCons (SVar 0) (SCons (SVar 1) SNil)))) (BLet (SRd (SInt 0) (SVar 2)) (BRec CNil (SCons (SOp Badd (SVar 3) (SInt 1))
      (SCons (SIf Clt (SVar 0) (SVar 2) (SVar 0) (SVar 2)) (SCons (SIf Clt (SVar 1) (SVar 0) (SVar 0) (SVar 1)) SNil))))))).
+(* a record chosen by a test, and a record built from a record taken apart (step 21) *)
+Definition pchoose (a b : i63) : i63 :=
+  let '(p, q) := (if PrimInt63.ltb a b then (a, b) else (b, a)) in PrimInt63.sub q p.
+Definition pswap2 (a b : i63) : i63 :=
+  let '(p, q) := (let '(x, y) := (PrimInt63.add a b, a) in (y, x)) in PrimInt63.sub p q.
+Definition prif_g := mksig 0 [KNum; KNum] false false false None.
+Definition pchoose_b := FPlain (SMatchR (RIf 0 Clt (SVar 1) (SVar 0) (RMk 0 (SCons (SVar 1) (SCons (SVar 0) SNil)))
+                                                 (RMk 0 (SCons (SVar 0) (SCons (SVar 1) SNil)))) (SOp Bsub (SVar 0) (SVar 1))).
+Definition pswap2_b := FPlain (SMatchR (RMatchR 0 (RMk 0 (SCons (SOp Badd (SVar 1) (SVar 0)) (SCons (SVar 1) SNil)))
+                                                (RMk 0 (SCons (SVar 0) (SCons (SVar 1) SNil)))) (SOp Bsub (SVar 1) (SVar 0))).
+Definition prif_P := mkprog [(gid1 0, compile_f gid1 0 prif_g pchoose_b); (gid1 1, compile_f gid1 1 prif_g pswap2_b)] [].
+Time Lemma pchoose_ok : callee_ok prif_P (gid1 0) (cbz 0) prif_g pchoose.
+Proof. Time exact_no_check (compile_f_ok prif_P [] gid1 0 prif_g pchoose_b eq_refl eq_refl (no_callees prif_P gid1) eq_refl eq_refl). Time Qed.
+Time Lemma pswap2_ok : callee_ok prif_P (gid1 1) (cbz 1) prif_g pswap2.
+Proof. Time exact_no_check (compile_f_ok prif_P [] gid1 1 prif_g pswap2_b eq_refl eq_refl (no_callees prif_P gid1) eq_refl eq_refl). Time Qed.
+(* records of two types in the branches are refused *)
+Check (eq_refl : wf_f [] prif_g (FPlain (SMatchR (RIf 0 Clt (SVar 1) (SVar 0) (RMk 0 (SCons (SVar 1) (SCons (SVar 0) SNil)))
+                                                  (RMk 1 (SCons (SVar 0) (SCons (SVar 1) SNil)))) (SVar 0))) = false).
 End RecTest.
 
 (* ---- u64 (step 16): KQRun's u64 a record type of the program, [w64_op] one KQL instruction ([Ew64]); [uadd] an operation

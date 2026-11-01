@@ -608,6 +608,29 @@ with reify_r (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sr
           end
       | tConst kn _ => match hb kn with Some b => reify_r fuel ctx b | None => None end
       | tApp (tLambda _ _ _ as f) args => reify_r fuel ctx (wout f args)
+      (* a record chosen by a test of one comparison (step 21): its type the match's *)
+      | tCase ci p c0 [b0; b1] =>
+          if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_bool) then
+            match rindex (preturn p) rt 0,
+                  (match bnorm fuel c0 with
+                   | tApp (tConst kn _) [a; b] => if eq_mp (fst kn) prim_mp then option_map (fun x => (x, a, b)) (cmp_v (snd kn)) else None
+                   | _ => None
+                   end) with
+            | Some ri, Some (cmp, a, b) =>
+                match reify fuel ctx a, reify fuel ctx b, reify_r fuel ctx (bbody b0), reify_r fuel ctx (bbody b1) with
+                | Some x, Some y, Some t1, Some t2 => Some (RIf ri cmp x y t1 t2)
+                | _, _, _, _ => None
+                end
+            | _, _ => None
+            end
+          else None
+      (* a record built from a record taken apart (step 21): its type the match's *)
+      | tCase ci p c0 [br] =>
+          let c := match c0 with tApp (tConst kn _) args => match hb kn with Some hbd => wout hbd args | None => c0 end | _ => c0 end in
+          match rindex (preturn p) rt 0, reify_r fuel ctx c, reify_r fuel (repeat CNum (length (bcontext br)) ++ ctx) (bbody br) with
+          | Some ri, Some x, Some y => Some (RMatchR ri x y)
+          | _, _, _ => None
+          end
       (* a record under lets: a helper giving a record written out, its arguments bound (step 16) *)
       | tLetIn _ b ty body =>
           if is_ty kn_int ty then
@@ -2781,3 +2804,29 @@ Proof.
   Time exact_no_check (compile_f_ok rz_Pr [existT ftype (sig_at rzl_src 0) rzl] gid1 1 (sig_at rzd_src 0) (body_at rzd_src 0) eq_refl eq_refl
     (all_ok_callees rz_Pr gid1 [existT ftype (sig_at rzl_src 0) rzl] (conj rzl_ok Logic.I)) eq_refl eq_refl).
 Time Qed.
+
+(* ---------------------------------------------------------------- records chosen by a test or built from a record taken apart (step 21) *)
+(* the construct table's shapes: a helper giving a pair chosen by a test, and one swapping a pair it takes apart, each
+   written out where it is used and the pair taken apart there *)
+Definition rq_pick (a b : i63) : i63 * i63 := if PrimInt63.ltb a b then (a, b) else (b, a).
+Definition rq_swap (a b : i63) : i63 * i63 := match (PrimInt63.add a b, a) with (x, y) => (y, x) end.
+Definition rq (a b : i63) : i63 :=
+  PrimInt63.add (let '(p, q) := rq_pick a b in PrimInt63.sub q p) (let '(x, y) := rq_swap a b in PrimInt63.sub x y).
+Definition rq_src := ltac:(run_template_program (tmQuoteRec rq)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Eval vm_compute in map (fun x => snd x) rq_src.
+Section RQ.
+#[local] Instance rq_recs : RecTypes | 0 :=
+  {| RT := fun _ => (i63 * i63)%type;
+     RO := fun _ => mkrops 2 (fun l => (nth 0 l 0%uint63, nth 1 l 0%uint63)) (fun P v k => match v with (a, b) => k [a; b] end);
+     Rd := fun _ => (0%uint63, 0%uint63) |}.
+#[local] Instance rq_laws : RecLaws.
+Proof. split; [intros i [a b] P k; reflexivity | intros i [a b]; reflexivity | intros i [|a [|b [|c l]]] L; try discriminate; reflexivity]. Qed.
+Definition rq_Pr := mkprog (funs_of 0 rq_src) [].
+Time Lemma rq_ok : callee_ok rq_Pr (gid1 0) (cbz 0) (sig_at rq_src 0) rq.
+Proof.
+  Time exact_no_check (@compile_f_ok rq_recs rq_laws rq_Pr [] gid1 0 (sig_at rq_src 0) (body_at rq_src 0) eq_refl eq_refl
+    (no_callees rq_Pr gid1) eq_refl eq_refl).
+Time Qed.
+End RQ.
+
