@@ -49,9 +49,10 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    values (several counters, `S`/`O`, budgets, a match on a counter inside a body), booleans (tests made of `&&`, `||`,
    `negb`, boolean lets), choices between numbers as conditional moves, number functions that write the memory, cells of 4
    bytes, helpers written out where they are used, a `let` of a counter, chains of tail calls merged into one call,
-   functions given to recursive functions (a copy per function given), loops that write and give a number — each
+   functions given to recursive functions (a copy per function given), loops that write and give a number, booleans and
+   records as parameters (a record a value in the meaning, its fields in KQL) — each
    per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`);
-   `kitc.py --reflect` compiles a program through it when every function is read (52 of the gate's 71 programs today,
+   `kitc.py --reflect` compiles a program through it when every function is read (54 of the gate's 71 programs today,
    each corpus program timed against the translator's build), the translator otherwise; next records and pairs, in the order of
    §12.V's tally.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
@@ -2364,6 +2365,35 @@ bound by a `let` and used through its fields (`let w := scan .. in .. hi w ..`).
   booleans; the C of every program unchanged), (2) record parameters, fields, records built and passed, lets and matches,
   (3) records given back through the slot block.
 
+
+**Step 12, parts 1 and 2 done (2026-11-01): kinds in signatures; records and pairs as values.**
+- *Part 1* (`d84bfe0`): the parameters after the counters are a list of kinds in the user's order — numbers, booleans,
+  records — and a call's arguments numbers, booleans and records (a boolean passed as 1 or 0, a record as its fields);
+  `absn` / `appn` bind each kind into its own environment, the parameters' atoms are found by kind and width (`kpos`,
+  `katoms`); a chain of tail calls is merged only when every argument is a number.  The C of every program unchanged (63 of
+  63 compared).  Test: `bcount` (a boolean passed on negated to the recursive call, one chosen by the caller), read from text
+  too (`rbcount`).
+- *Part 2* (`a084907`): the program's record types are a class instance given to the meaning (`RecTypes`: each type, its
+  constructor on the list of its fields, the user's own match; `RecLaws`: the match gives its continuation the fields, there
+  are as many as the type says, the constructor's fields are what it was built of — per program by a fixed script); the
+  meaning holds record values (`VRec`), KQL their fields (the invariant's last part).  Syntax: a record sort (`RVar`,
+  `RMk`), a field (`SFld`), a let of a record (`SLetR`), a record taken apart (`SMatchR`), a record argument (`SConsR`).
+  Every field and match goes through `rmatch v F`, equal to `F (vflat v)` by the laws, so no kind check is needed where a
+  record is read.  A record passed as an argument is built in place; passing a record variable as it is needs a typing
+  context in `wf` and is not read yet (refused by `wf`: a gap of this step).  The reifier: the record types read off the
+  reached functions' types (an inductive with one constructor whose fields are numbers; `prod int int`), `fst` / `snd` and
+  the program's own projections written out (a field is then the record taken apart), a match on a record, a let of one, a
+  constructor; `kitc.py` writes the instance (`NAME_rt` / `_ro` / `_rd` and the laws) and passes it to the theorems
+  explicitly.  Tests: `pinner` / `pouter`, `pmatch`, `plet` (`KQR.v`); `rpinner` / `rpouter` (a pair as a loop's state) and
+  `rsinner` / `rsouter` (a record of the program's own type) read from text.  `KQR.v` compiles in 11.6 s; `Print
+  Assumptions` the same base (the cast of a record value to its type uses `Eqdep_dec.UIP_refl_nat`, a theorem).
+- *Through the verified compiler: 54 of the gate's 71 programs* (was 52): `rec_pair`, `rec_state` (examples, nothing to
+  time); the C of every other program unchanged.
+- *The gate with `KQ_REFLECT=1`, on the fork, on `a084907` (2026-11-01): everything passes* — `make.sh` `core-ok`; examples
+  27 / 27; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (37 / 39 / 39 / 57 / 43 s); **54
+  programs through the verified compiler, 0 read but refused by the check**.
+- *Left in step 12*: part 3, records given back through the slot block (`pair_ret`, `rec_ret`), as designed above.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -2536,11 +2566,15 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `f755ecc` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `c6cffe6` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 11 done (loops that write and give a number: 52 of 71), the C, the timing, the gate, the tally |
+| (this commit) | §12.V: step 12, parts 1 and 2 done (kinds in signatures; records and pairs as values: 54 of 71), the gate |
+| `a084907` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 12 part 2: records as values (`RecTypes`, `RecLaws`, `VRec`, `srec`, `rmatch`); the reifier reads them, `kitc.py` writes the instance |
+| `d84bfe0` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 12 part 1: kinds in signatures and argument lists (numbers, booleans) |
+| `79ae741` | §12.V: step 12's design (records and pairs) |
+| `c6cffe6` | §12.V: step 11 done (loops that write and give a number: 52 of 71), the C, the timing, the gate, the tally |
 | `00462c7` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 11: `XRec`, `XCall`, `FRecX`; `ctailx_ok` with the end memory chosen before the environment; `compile_f_okrx` |
 | `4adbee1` | §12.V: step 11's design |
 | `f755ecc` | §12.V: step 10 done (functions given to functions: 46 of 71), F54, the gate |
