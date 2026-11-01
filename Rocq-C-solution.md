@@ -51,11 +51,12 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    bytes, helpers written out where they are used, a `let` of a counter, chains of tail calls merged into one call,
    functions given to recursive functions (a copy per function given), loops that write and give a number, booleans and
    records as parameters (a record a value in the meaning, its fields in KQL), records given back (the fields after the first
-   through the slot block), functions given that name the caller's variables, machine operations, bytes — each per-program
-   step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`); `kitc.py
-   --reflect` compiles a program through it when every function is read (68 of the gate's 71 programs today, the five test
-   kernels included; each corpus program timed against the translator's build), the translator otherwise; next `u64`, then
-   mutual recursion, in the order of §12.V's tally.  Emit-then-prove is the interim.
+   through the slot block), functions given that name the caller's variables, machine operations, bytes, 64-bit numbers
+   (`u64`: record variables with their types, one instruction per operation) — each per-program step in milliseconds, long
+   read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program
+   through it when every function is read (70 of the gate's 71 programs today, the five test kernels included; each corpus
+   program timed against the translator's build), the translator otherwise; next mutual recursion, in the order of §12.V's
+   tally.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -2607,6 +2608,41 @@ halves of the result).  Read part by part, they need three things, built in this
   `kitc.py`'s instance for it is the one it writes for a record (its match is the projections, its laws by `reflexivity`).
 - *Expected*: `w64` and `views` (+2, 70 of 71).  The gap of (a) also closes for the program's own records.
 
+**Step 16 done (2026-11-01): `u64`.**  Built as designed, with one addition found by reading the two programs part by part:
+- *(a) Record variables with their types.*  `wf` and its relatives take `rk`, the types of the record variables in scope, the
+  nearest first (a parameter's from the signature, `rk0`; a `let`'s from what it binds, `rtype`); `RVar i` is well formed
+  when `i` is in scope, of type `nth i rk`, so it may be an argument of that kind or be given back.  The proof carries the
+  matching fact of the meaning, `rtyped renv rk` (`map kind_of renv = map KRec rk`), kept by every binder (`rtyped_cons`,
+  `kind_denote_r`) and true at a body's start (`rtyped0`, from the arguments' kinds).  Tests: `ppass` (a pair variable given
+  to another function as it is), `pswap` (given to the recursive call as it is or swapped, and given back as it is: `w64`'s
+  shape).
+- *(b) Records bound in memories.*  `MLetR` / `MMatchR` among the memories, `XLetR` / `XMatchR` among the numbers made after
+  memories; their cases the shape of `SLetR` / `SMatchR`'s.
+- *(c) The operation.*  `RW64 ri o a b` among the records, meaning `VRec ri` of the fields of
+  `w64_op o (u64_of_l (fields of a)) (u64_of_l (fields of b))`, the user's `w64_op o a b` by the definitional eta of `u64`;
+  compiled to one `Ew64`; one proof case by `K_w64` (`ra`, `rb` the operands' fields made a `u64`, the result's fields by
+  `rl_mk`); well formed when the result and both operands are of types of two fields.
+- *Found by reading part by part (F56)*: written out, a helper giving a record binds the arguments that are not plain by
+  `let`s (`u64_of_int (rd 0 i s land 255)`, `u64_of_halves (rd32 ..) (rd32 ..)`), and `mix` is a chain of `u64` lets, so
+  records under lets stand inside operands and arguments.  `RLet` (a number) and `RLetR` (a record) among the records read
+  them wherever a record stands; `rtype` is now recursive (a record under lets has the type of the record they end with).
+- No new hypothesis; `Print Assumptions` the same base.  `KQR.v` compiles in 17 s (13 s at step 15).  Tests (`U64Test`, `u64`
+  a record type of the program): `uadd` (its KQL starts with one `Ew64`), `ultb` (a comparison as a test), `ufold` (`views`'
+  `fold_words`), `uput` (`view_upd64`: a `u64` bound by a let in a memory, its halves written), `uwr` (a number after a memory,
+  a `u64` let and a match), `ulets` (lets in both operands); refused: a record variable out of scope, an operation not the
+  text's; each theorem 2–18 ms.
+- *The reifier* reads `w64_op` as `RW64` (`u64` in the program's record table, as any record of two numbers), a primitive
+  projection as a field (`SFld` of a variable, else the record taken apart), a `let` inside a record (`RLet` / `RLetR`),
+  record lets and matches in memories and in numbers made after memories.  Tests: `w64`'s text (`urfnv`, `urstream`, `urw64`)
+  and `views`' memory functions (`urvfill`, `urvfold`, `urviews`), each theorem by `compile_f_ok`, 3–38 ms.  `kitc.py`
+  unchanged: the instance it writes for a record is `u64`'s.
+- The C: 61 of 63 byte-identical, `w64` and `views` the moved ones.  **70 of the gate's 71 programs through the verified
+  compiler** (was 68): `w64`, `views` (examples: nothing to time).  The one not read: `mutual` (two functions of one `Fixpoint
+  .. with ..` calling each other on the counter's predecessor).  **Next: mutual recursion.**
+- The gate with `KQ_REFLECT=1`, on the fork, on `6c6f038` (2026-11-01): everything passes — `make.sh` `core-ok`; examples
+  27 / 27; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (10 / 10 / 10 / 12 / 12 s); **70 programs
+  through the verified compiler, 0 read but refused by the check**.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -2779,11 +2815,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `a28ed5e` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `59b5737` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 15 done (bytes: 68 of 71), the C, the gate |
+| (this commit) | §12.V: step 16 done (`u64`: 70 of 71), the C, the gate |
+| `6c6f038` | `proved/KQR.v` + `KQRReify.v` step 16: `u64` -- record variables with their types (`rk`, `rtyped`), `RW64` (one `Ew64`), records bound in memories (`MLetR`, `MMatchR`, `XLetR`, `XMatchR`), records under lets (`RLet`, `RLetR`); the reifier reads `w64_op`, primitive projections, lets inside records |
+| `a0e1e6c` | §12.V: step 16's design (`u64`) |
+| `59b5737` | §12.V: step 15 done (bytes: 68 of 71), the C, the gate |
 | `93b17a4` | `proved/KQR.v` + `KQRReify.v` step 15: bytes (`SRd8`, `MUpd8`); the reifier reads `rd8` / `upd8` |
 | `5c3f95c` | §12.V: step 15's design (bytes) |
 | `a28ed5e` | §12.V: step 14 done (machine operations: 67 of 71, the kernels included, built in 10–12 s), the C, the boots, the gate, the tally |
