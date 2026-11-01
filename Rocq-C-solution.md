@@ -2394,6 +2394,32 @@ bound by a `let` and used through its fields (`let w := scan .. in .. hi w ..`).
   programs through the verified compiler, 0 read but refused by the check**.
 - *Left in step 12*: part 3, records given back through the slot block (`pair_ret`, `rec_ret`), as designed above.
 
+**Step 12, part 3 in detail — the design (2026-11-01).**
+- *Signature*: `sig` gains `sq : option nat`, a record of type `ri` as the result; the meaning's type ends in `RT ri` (the
+  user's `int * int` or `span`), so `ntype` / `absn` / `appn` are generalized over the result type.
+- *Syntax*: records gain `RCall ri f cs args`, a call of a function giving back a record, wherever a record is read (a `let`, a
+  record taken apart, an argument).  A function giving back a record has a body of its own sort `sbr`: `BRet x` (a record built,
+  or given by a call), `BRec cs args` (the function itself at the end: a loop), `BMatchRec cs args b` and `BLetRec cs args b`
+  (the function itself not at the end, taken apart or bound: `fibp`'s `let '(a, b) := fibp m in ..`), and the lets, tests and
+  counter match of the other tail sorts; bodies `FRecR` / `FPlainR`.
+- *Meaning*: `denote_br` gives the record value itself (`RT ri`), the recursive call's meaning `recr` of that type, so the
+  user's `match fibp m with (a, b) => .. end` is literally what the meaning reduces to; `BRet x` is `to_rt ri` of the record's
+  value (the constructor on its fields reduces to the user's `(lo, hi)` or `mkspan a b`).
+- *KQL*: at the end, the fields after the first written into cells `0 .. rn-2` of the slot block, the last one first, then the
+  first field returned; a call giving back a record (another function, or the function itself not at the end): the cells
+  saved into fresh variables, the call, the cells read into fresh variables (the fields), the saved values written back, cell
+  0 first.
+- *Statement*: a function giving back a record returns its first field and ends with the memory those writes make
+  (`callm`: `wslot 0 (tl fields) M`); every theorem of a program takes `slot_room` (for each record type of more than one
+  field, `rn - 1 <= kq_len 63`), which the driver provides, as it provides `1 < kq_len 63` for the translator's two results.
+- *Proof*: after the save, the call, the reads and the write-back, the caller's memory is the one before, by `upd_upd`,
+  `upd_rd_id` and `rd_upd_ne` (`wback`); the fields are read back by `rd_upd_eq` (the cell inside the block: `size_ge_len`
+  and `slot_room`).
+- *Not in this part*: a record variable given back or passed as it is (`BRet (RVar ..)`: the typing context part 2 left for
+  later); the function itself giving back a record inside a number (`fst (fibp m) + 1`); a template giving back a record.
+- *Reifier*: the result type read into `sq`; a function whose result is a record read as `FRecR` / `FPlainR`; `let '(a, b)
+  := f ..`, `let w := f ..` and a record argument made by a call read as `RCall`; `kitc.py` prints the signature's sixth part.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
