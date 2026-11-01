@@ -381,7 +381,7 @@ def reflect(name, entry, prog, no_proof):
         + f"MetaRocq Run (monad_iter (fun p => tmMkDefinition (fst p) (snd p)) {name}_mts).\n")
     rc, out = coqc(f0)
     info = open(os.path.join(GEN, f"{name}_rinfo.out")).read() if rc == 0 and os.path.exists(os.path.join(GEN, f"{name}_rinfo.out")) else ""
-    fs = re.findall(r'\("([^"]+)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*(\d+)(?:%nat)?,\s*(true|false),\s*(true|false),\s*(true|false)\)', info)
+    fs = re.findall(r'\("([^"]+)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([IB]*)"(?:%bs)?,\s*(true|false),\s*(true|false),\s*(true|false)\)', info)
     if rc != 0 or not fs or "= None" in info:
         wp = os.path.join(GEN, f"{name}_rwhy.out")
         why = open(wp).read() if os.path.exists(wp) else ""
@@ -389,7 +389,9 @@ def reflect(name, entry, prog, no_proof):
         print(name, "reflect: not read by the verified compiler's reifier (" + ("; ".join(rs) if rs else "the reifier did not run")
               + "); the translator follows", flush=True)
         return None
-    sig = lambda f: f"(KQR.mksig {f[1]} {f[2]} {f[3]} {f[4]} {f[5]})"
+    # the kinds of the parameters after the counters: I a number, B a boolean
+    kl = lambda f: "[" + "; ".join("KQR.KNum" if c == "I" else "KQR.KBool" for c in f[2]) + "]"
+    sig = lambda f: f"(KQR.mksig {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]})"
     t = HDR + "From KQC Require KQR KQRReify.\nImport ListNotations.\n" + f"From KQG Require Import {name}_r.\n"
     t += f"Definition {name}_funs := match {name}_src with Some l => l | None => [] end.\n"
     t += f"Definition {name}_prog := KQL.mkprog (KQRReify.funs_of 0 {name}_funs) [].\n"
@@ -410,7 +412,7 @@ def reflect(name, entry, prog, no_proof):
                                    ("compile_f_okrx", "KQR.fx0", "KQR.fx1", "") if f[5] == "true" else
                                    ("compile_f_okr", "KQR.fr0", "KQR.fr1", f" {f[3]}"))
                 b = f"(KQRReify.body_at {name}_funs {j})"
-                t += (f"Proof. exact_no_check (KQR.{thm} {name}_prog {cs} KQR.gid1 {j} {int(f[1]) - 1} {f[2]}{mm} ({p0} {b}) ({p1} {b})"
+                t += (f"Proof. exact_no_check (KQR.{thm} {name}_prog {cs} KQR.gid1 {j} {int(f[1]) - 1} {kl(f)}{mm} ({p0} {b}) ({p1} {b})"
                       f" {f[0]} eq_refl eq_refl (KQR.all_ok_callees {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl eq_refl"
                       f" (fun n => eq_refl)). Qed.\n")
             else:
@@ -425,7 +427,7 @@ def reflect(name, entry, prog, no_proof):
         return None
     idx = [f[0] for f in fs].index(entry) if entry in [f[0] for f in fs] else len(fs) - 1
     e = fs[idx]
-    kinds = "N" * int(e[1]) + "I" * int(e[2]) + ("M" if e[3] == "true" else "")
+    kinds = "N" * int(e[1]) + "I" * len(e[2]) + ("M" if e[3] == "true" else "")   # a boolean is passed as a number, 1 or 0
     return 1000 + idx, kinds, "M" if e[4] == "true" else "I", len(fs)
 
 def main():
