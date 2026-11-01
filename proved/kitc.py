@@ -390,7 +390,7 @@ def reflect(name, entry, prog, no_proof):
     rc, out = coqc(f0)
     info = open(os.path.join(GEN, f"{name}_rinfo.out")).read() if rc == 0 and os.path.exists(os.path.join(GEN, f"{name}_rinfo.out")) else ""
     fs = re.findall(r'\("([^"]+)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([IBa-h]*)"(?:%bs)?,\s*(true|false),\s*(true|false),\s*(true|false),'
-                    r'\s*"([a-h]?)"(?:%bs)?\)', info)
+                    r'\s*"([a-hB]?)"(?:%bs)?\)', info)
     if rc != 0 or not fs or "= None" in info:
         wp = os.path.join(GEN, f"{name}_rwhy.out")
         why = open(wp).read() if os.path.exists(wp) else ""
@@ -409,8 +409,8 @@ def reflect(name, entry, prog, no_proof):
     # the kinds of the parameters after the counters: I a number, B a boolean, a .. h a record of the program's type 0 .. 7
     kc = lambda c: "KQR.KNum" if c == "I" else "KQR.KBool" if c == "B" else f"(KQR.KRec {ord(c) - ord('a')})"
     kl = lambda f: "[" + "; ".join(kc(c) for c in f[2]) + "]"
-    # the result: a record of the program's type 0 .. 7 (a .. h), or none
-    rq = lambda f: "None" if f[6] == "" else f"(Some {ord(f[6]) - ord('a')}%nat)"
+    # the result: a record of the program's type 0 .. 7 (a .. h), a boolean (B, step 24), or none
+    rq = lambda f: "None" if f[6] == "" else "(Some KQR.KBool)" if f[6] == "B" else f"(Some (KQR.KRec {ord(f[6]) - ord('a')}))"
     sig = lambda f: f"(KQR.mksig {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)})"
     t = HDR + "From KQC Require KQR KQRReify.\nImport ListNotations.\n" + f"From KQG Require Import {name}_r.\n"
     # the program's record types (step 12): each its type, its constructor and match, a value of it; the laws by a fixed script
@@ -476,7 +476,7 @@ def reflect(name, entry, prog, no_proof):
         return None
     idx = [f[0] for f in fs].index(entry) if entry in [f[0] for f in fs] else len(fs) - 1
     e = fs[idx]
-    if any(c not in "IB" for c in e[2]) or e[6]:   # an entry taking or giving back a record: main gives and takes numbers
+    if any(c not in "IB" for c in e[2]) or e[6] not in ("", "B"):   # an entry taking or giving back a record: main gives and takes numbers
         print(name, "reflect: the entry takes or gives back a record; the translator follows", flush=True)
         return None
     kinds = "N" * int(e[1]) + "I" * len(e[2]) + ("M" if e[3] == "true" else "")   # a boolean is passed as a number, 1 or 0
