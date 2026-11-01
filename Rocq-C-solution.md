@@ -53,10 +53,10 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    records as parameters (a record a value in the meaning, its fields in KQL), records given back (the fields after the first
    through the slot block), functions given that name the caller's variables, machine operations, bytes, 64-bit numbers
    (`u64`: record variables with their types, one instruction per operation), mutual recursion (a block as one function with
-   a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
+   a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program through it when every function is read (**all 71 of the gate's
    programs today**, the five test kernels included, and `lock` on two processors; each corpus program timed against the
-   translator's build), the translator otherwise; of the construct table's 780 cells 769 (2 more by the walk alone); next
+   translator's build), the translator otherwise; of the construct table's 780 cells 773 (0 more by the walk alone); next
    the rest of the table's fallbacks, then the walk retired.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
@@ -3022,6 +3022,29 @@ records already built (built, chosen by a test, taken apart, bound, passed, give
   tests of the tag, `relim` the type's match, `kq_tag_case` for the law).
 - *Expected*: the four cells.
 
+**Step 28 done (2026-11-02): `option`, `sum` and their kind held as their tag and fields.**  Built as designed:
+- *`KQR.v`*: `rops.rtg`; `canon` / `zeros_from` (a list in a constructor's form); `RecLaws` with `rl_mk` (a record) and
+  `rl_mk_tag` (a data type, for each constructor); `rl_mk_c` derived once; `canon_s` / `zeros_s` on `RMk`'s syntax and
+  `canon_s_ok`; `RW64` asks a plain record.  The proof cases touched: `RMk`'s and `RW64`'s in `cexp_all`, nothing else.  No new
+  hypothesis.  `kq_tag_case` (with `kq_zeros`), the per-program tactic for `rl_mk_tag`, outside the sections.  Tests (`d_recs`:
+  `option` and `sum`): `dopt`, `dsum` (built by a test, taken apart by a test of the tag), `dpar` (a parameter), `dres` / `dgo`
+  (given back by a recursion through the slot block, and its caller), `dstate` (a loop's state); a tag not written, a field after
+  the constructor's own not zero and a tag beyond the constructors refused; each theorem 3–24 ms; `Print Assumptions` the same
+  base.
+- *The reifier*: `rec_shape` takes a non-recursive inductive of several constructors whose fields are numbers or its number
+  parameters (not `bool`, not `nat`: found by a first version, which took `nat`'s `S` field, the type itself, for a parameter,
+  and read counter matches as data — every earlier test caught it), with its widths in the table's entry; `cindex` gives a
+  constructor its number and padding; `tag_parts` / `tag_chain` read a match in each of the six readers as the reader's record
+  match and a test chain on the tag (each branch lifted to the record's fields); `arity_recs` and `rec_text` carry the widths.
+  Rocq's `option` is `Some` (0) then `None` (1): the reifier follows the declaration.  Test `t8go`, `t8sum`, `t8rgo`, `t8sgo` (the
+  four cells' shapes): trees pinned, instances as `kitc.py` writes them, each theorem 2–8 ms.
+- *`kitc.py`*: a data type's instance — `rmk` a chain of tests of the tag, `relim` the type's match padded with zeros, the
+  laws by `destruct` and `KQR.kq_tag_case`.
+- The C: 63 of 63 byte-identical.  The construct table (on `14e971d`): **773 of 780 through the verified compiler** (was
+  769), 0 more by the walk alone, 7 gaps (was 9: `A_par_option_rec` and `A_par_option_state`, gaps on both
+  routes before, are proved now).  The gate with `KQ_REFLECT=1` on `14e971d`: everything passes — `make.sh` `core-ok`; examples
+  27 / 27; corpus 36 / 36; the five kernels (10 / 10 / 10 / 13 / 12 s); **71 programs through the verified compiler, 0 refused, 0 not read**.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3194,11 +3217,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `2b8c70d` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `c648ca8` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 27 done (a template giving its own function parameter to another template: the construct table 769 of 780), the C, the gate |
+| (this commit) | §12.V: step 28 done (`option`, `sum` and their kind held as their tag and fields: the construct table 773 of 780), the C, the gate |
+| `14e971d` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 28: `rtg`, `rl_mk_tag`, `canon_s`; the reifier's data types (`rec_shape`, `cindex`, `tag_parts`); `kitc.py`'s instances |
+| `c648ca8` | §12.V: step 27 done (a template giving its own function parameter to another template: the construct table 769 of 780), the C, the gate |
 | `e6b2aa4` | §12.V: step 28's design (`option`, `sum` and their kind held as their tag and fields) |
 | `09d1b1d` | `proved/KQRReify.v` step 27: a copy's function parameter given to another template resolved (`fsub`, `tcall`, `sites`, `ensure`) |
 | `2b8c70d` | §12.V: step 26 done (a number and a memory given back: the construct table 768 of 780), the C, the gate |
