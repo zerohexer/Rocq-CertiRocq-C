@@ -417,28 +417,47 @@ def reflect(name, entry, prog, no_proof):
     t = HDR + "From KQC Require KQR KQRReify.\nImport ListNotations.\n" + f"From KQG Require Import {name}_r.\n"
     # the program's record types (step 12): each its type, its constructor and match, a value of it; the laws by a fixed script
     rp = os.path.join(GEN, f"{name}_rrec.out")
-    recs = re.findall(r'\("([^"]*)"(?:%bs)?,\s*"([^"]*)"(?:%bs)?,\s*(\d+)(?:%nat)?\)', open(rp).read()) if os.path.exists(rp) else []
+    # each entry: its type, its constructor (a data type's: its constructors), its number of fields, a data type's widths
+    recs = re.findall(r'\("([^"]*)"(?:%bs)?,\s*"([^"]*)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([^"]*)"(?:%bs)?\)', open(rp).read()) if os.path.exists(rp) else []
     if recs:
         inst, laws = f"{name}_recs", f"{name}_laws"
         pat = lambda j: "S (" * j + "O" + ")" * j
-        t_rt = " | ".join(f"{pat(j)} => {ty}" for j, (ty, cn, n) in enumerate(recs))
+        t_rt = " | ".join(f"{pat(j)} => {ty}" for j, (ty, cn, n, wd) in enumerate(recs))
         t += f"Definition {name}_rt (i : nat) : Type := match i with {t_rt} | _ => unit end.\n"
-        def ro(cn, n):
+        def ro(cn, n, wd):
             n = int(n); xs = [f"x{q}" for q in range(n)]
-            mk = f"(fun l => {cn} " + " ".join(f"(nth {q}%nat l 0%uint63)" for q in range(n)) + ")" if n else f"(fun _ => {cn})"
-            lst = "".join(f"(cons {x} " for x in xs) + "nil" + ")" * n
-            return f"KQR.mkrops {n}%nat {mk} (fun P v k => match v with {cn} {' '.join(xs)} => k {lst} end)"
-        t_ro = " | ".join(f"{pat(j)} => {ro(cn, n)}" for j, (ty, cn, n) in enumerate(recs))
+            if not wd.strip():
+                mk = f"(fun l => {cn} " + " ".join(f"(nth {q}%nat l 0%uint63)" for q in range(n)) + ")" if n else f"(fun _ => {cn})"
+                lst = "".join(f"(cons {x} " for x in xs) + "nil" + ")" * n
+                return f"KQR.mkrops {n}%nat None {mk} (fun P v k => match v with {cn} {' '.join(xs)} => k {lst} end)"
+            # a data type held as its tag and its fields (step 28): the constructor chosen by the tag, the fields after it
+            cns, ws = cn.split(), [int(w) for w in wd.split()]
+            app = lambda c, w: f"({c}" + "".join(f" (nth {q + 1}%nat l 0%uint63)" for q in range(w)) + ")"
+            mk = app(cns[-1], ws[-1])
+            for c in reversed(range(len(cns) - 1)):
+                mk = f"(if PrimInt63.eqb (nth 0%nat l 0%uint63) {c}%uint63 then {app(cns[c], ws[c])} else {mk})"
+            def arm(c):
+                ys = [f"y{q}" for q in range(ws[c])]
+                vals = [f"{c}%uint63"] + ys + ["0%uint63"] * (n - 1 - ws[c])
+                return f"{cns[c]} {' '.join(ys)} => k " + "".join(f"(cons {v} " for v in vals) + "nil" + ")" * len(vals)
+            wl = "[" + "; ".join(map(str, ws)) + "]%nat"
+            return (f"KQR.mkrops {n}%nat (Some {wl}) (fun l => {mk}) (fun P v k => match v with "
+                    + " | ".join(arm(c) for c in range(len(cns))) + " end)")
+        def rd0(cn, n, wd):
+            if not wd.strip(): return f"{cn}" + "".join(" 0%uint63" for _ in range(int(n)))
+            return f"{cn.split()[0]}" + "".join(" 0%uint63" for _ in range(int(wd.split()[0])))
+        t_ro = " | ".join(f"{pat(j)} => {ro(cn, n, wd)}" for j, (ty, cn, n, wd) in enumerate(recs))
         t += (f"Definition {name}_ro (i : nat) : KQR.rops ({name}_rt i) :=\n  match i as i0 return KQR.rops ({name}_rt i0) with {t_ro}\n"
-              f"  | _ => KQR.mkrops 0%nat (fun _ => tt) (fun P _ k => k nil) end.\n")
-        t_rd = " | ".join(f"{pat(j)} => {cn}" + "".join(" 0%uint63" for _ in range(int(n))) for j, (ty, cn, n) in enumerate(recs))
+              f"  | _ => KQR.mkrops 0%nat None (fun _ => tt) (fun P _ k => k nil) end.\n")
+        t_rd = " | ".join(f"{pat(j)} => {rd0(cn, n, wd)}" for j, (ty, cn, n, wd) in enumerate(recs))
         t += f"Definition {name}_rd (i : nat) : {name}_rt i := match i as i0 return {name}_rt i0 with {t_rd} | _ => tt end.\n"
         t += f"#[local] Instance {inst} : KQR.RecTypes | 0 := {{| KQR.RT := {name}_rt; KQR.RO := {name}_ro; KQR.Rd := {name}_rd |}}.\n"
         dpat = "".join("[|" for _ in range(len(recs))) + "i" + "]" * len(recs)
         t += (f"#[local] Instance {laws} : @KQR.RecLaws {inst}.\nProof. split.\n"
               f"- intros i x P k. destruct i as {dpat}; destruct x; reflexivity.\n"
               f"- intros i x. destruct i as {dpat}; destruct x; reflexivity.\n"
-              f"- intros i l L. destruct i as {dpat}; cbn in L; repeat (destruct l as [|? l]; try discriminate L); reflexivity.\nQed.\n")
+              f"- intros i l E L. destruct i as {dpat}; cbn in E, L; try discriminate E; repeat (destruct l as [|? l]; try discriminate L); reflexivity.\n"
+              f"- intros i ws c rest E Lc Lr Hz. destruct i as {dpat}; cbn in E; try discriminate E; injection E as <-; KQR.kq_tag_case.\nQed.\n")
     else:
         inst, laws = "KQR.no_recs", "KQR.no_recs_laws"
     t += f"Definition {name}_funs := match {name}_src with Some l => l | None => [] end.\n"
@@ -484,7 +503,7 @@ def reflect(name, entry, prog, no_proof):
     kinds = "N" * int(e[1]) + "I" * len(e[2]) + ("M" if e[3] == "true" else "")   # a boolean is passed as a number, 1 or 0
     # the slot block: room for the fields after the first of each record type of the program ([KQR.slot_room], which every
     # theorem of the program takes; the driver provides it, as for the translator's two results)
-    slots = max([int(n) for (_, _, n) in recs] + [1]) - 1
+    slots = max([int(n) for (_, _, n, _) in recs] + [1]) - 1
     return 1000 + idx, kinds, "M" if e[4] == "true" else "I", len(fs), slots
 
 def main():

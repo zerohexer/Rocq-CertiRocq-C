@@ -34,20 +34,38 @@ Definition b2i (b : bool) : i63 := if b then 1%uint63 else 0%uint63.
 
 (** a record type of the program: its number of fields, its constructor on the list of its fields, its match (the user's own
     match, so that a field is the user's projection: [fst p] is [match p with (a, b) => a end]) *)
-Record rops (T : Type) := mkrops { rn : nat; rmk : list i63 -> T; relim : forall P : Type, T -> (list i63 -> P) -> P }.
-Arguments mkrops {T} rn rmk relim.
+Record rops (T : Type) := mkrops { rn : nat; rtg : option (list nat); rmk : list i63 -> T; relim : forall P : Type, T -> (list i63 -> P) -> P }.
+Arguments mkrops {T} rn rtg rmk relim.
 Arguments rn {T} r.
+Arguments rtg {T} r.
 Arguments rmk {T} r l.
 Arguments relim {T} r {P} x k.
 (** the program's record types, given to the meaning as the callees are: type [i] is [RT i], with its operations [RO i]
     and a value of it [Rd i] *)
 Class RecTypes := { RT : nat -> Type; RO : forall i, rops (RT i); Rd : forall i, RT i }.
+(** a list in a constructor's form (step 28): for a record ([rtg = None]), any; for a data type held as its tag and its fields
+    ([rtg = Some ws]: constructor [c] carries [nth c ws] numbers), the tag a constructor's number and the fields after its own 0 *)
+Fixpoint zeros_from (w : nat) (l : list i63) : bool :=
+  match l with
+  | [] => true
+  | x :: r => match w with O => PrimInt63.eqb x 0%uint63 && zeros_from O r | S w' => zeros_from w' r end
+  end.
+Definition canon (g : option (list nat)) (l : list i63) : bool :=
+  match g with
+  | None => true
+  | Some ws => match l with
+               | t :: fs => existsb (fun c => PrimInt63.eqb t (ofn c) && zeros_from (nth c ws O) fs) (seq 0 (length ws))
+               | [] => false
+               end
+  end.
 (** what the proof needs of them: the match gives the fields to its continuation, there are [rn] of them, and the constructor
-    on [rn] numbers has those as its fields; for each program, proof terms by a dependent match *)
+    on [rn] numbers in a constructor's form has those as its fields; for each program, proof terms by a dependent match *)
 Class RecLaws `{RecTypes} : Prop := {
   rl_nat : forall i (x : RT i) (P : Type) (k : list i63 -> P), relim (RO i) x k = k (relim (RO i) x (fun l => l));
   rl_len : forall i (x : RT i), length (relim (RO i) x (fun l => l)) = rn (RO i);
-  rl_mk : forall i l, length l = rn (RO i) -> relim (RO i) (rmk (RO i) l) (fun l => l) = l }.
+  rl_mk : forall i l, rtg (RO i) = None -> length l = rn (RO i) -> relim (RO i) (rmk (RO i) l) (fun l => l) = l;
+  rl_mk_tag : forall i ws c rest, rtg (RO i) = Some ws -> (c < length ws)%nat -> length rest = Nat.pred (rn (RO i)) ->
+    zeros_from (nth c ws O) rest = true -> relim (RO i) (rmk (RO i) (ofn c :: rest)) (fun l => l) = ofn c :: rest }.
 
 Section Recs.
 Context {RTs : RecTypes}.
@@ -1297,6 +1315,23 @@ Definition letc_ok (c : scnt) : bool := flat c || (cfree c && shallow c).
 (** well formed, in a function whose callees have the signatures [sigs]: the recursive call only where [r] allows it, with
     [nx] counters after the first and [k] numbers; the memory read, or given to a callee, only where there is one ([mok]); a
     callee called for a number gives back a number *)
+(** a record built in a constructor's form (step 28), read off the syntax: the tag a written constructor number, the fields after
+    the constructor's own written zeros *)
+Fixpoint zeros_s (w : nat) (es : sexps) : bool :=
+  match es with
+  | SNil => true
+  | SCons e r => match w with O => match e with SInt x => PrimInt63.eqb x 0%uint63 | _ => false end && zeros_s O r | S w' => zeros_s w' r end
+  | _ => false
+  end.
+Definition canon_s (g : option (list nat)) (es : sexps) : bool :=
+  match g with
+  | None => true
+  | Some ws => match es with
+               | SCons (SInt t) fs => existsb (fun c => PrimInt63.eqb t (ofn c) && zeros_s (nth c ws O) fs) (seq 0 (length ws))
+               | _ => false
+               end
+  end.
+
 Fixpoint wf (sigs : list sig) (r mok : bool) (nx : nat) (k : list kind) (rk : list nat) (e : sexp) {struct e} : bool :=
   match e with
   | SVar _ | SInt _ => true
@@ -1350,7 +1385,7 @@ with wfb (sigs : list sig) (r mok : bool) (nx : nat) (k : list kind) (rk : list 
 with wfr (sigs : list sig) (r mok : bool) (nx : nat) (k : list kind) (rk : list nat) (x : srec) {struct x} : bool :=
   match x with
   | RVar i => Nat.ltb i (length rk)        (* a record variable in scope: its type is known *)
-  | RMk ri es => Nat.eqb (len_s es) (rn (RO ri)) && forallb (kind_eqb KNum) (kinds_s rk es) && wfs sigs r mok nx k rk es
+  | RMk ri es => canon_s (rtg (RO ri)) es && Nat.eqb (len_s es) (rn (RO ri)) && forallb (kind_eqb KNum) (kinds_s rk es) && wfs sigs r mok nx k rk es
   (* a call of a function giving back a record of type ri, read from the memory or not; a record of at least one field and
      at most 2^20 *)
   | RCall ri f ccs args =>
@@ -1362,7 +1397,7 @@ with wfr (sigs : list sig) (r mok : bool) (nx : nat) (k : list kind) (rk : list 
       | None => false
       end
   (* a u64 operation: the result and both operands of types of two fields *)
-  | RW64 ri _ a b => Nat.eqb (rn (RO ri)) 2 && Nat.eqb (rn (RO (rtype rk a))) 2 && Nat.eqb (rn (RO (rtype rk b))) 2
+  | RW64 ri _ a b => match rtg (RO ri) with None => true | Some _ => false end && Nat.eqb (rn (RO ri)) 2 && Nat.eqb (rn (RO (rtype rk a))) 2 && Nat.eqb (rn (RO (rtype rk b))) 2
                      && wfr sigs r mok nx k rk a && wfr sigs r mok nx k rk b
   | RLet e x => wf sigs r mok nx k rk e && wfr sigs r mok nx k rk x
   | RLetR y x => wfr sigs r mok nx k rk y && wfr sigs r mok nx k (rtype rk y :: rk) x
@@ -1926,6 +1961,34 @@ Proof.
   destruct (IH H) as [H1 H2]. cbn [denote_es flat_map vflat vnums]. split; [f_equal; exact H1 | simpl; f_equal; exact H2].
 Qed.
 Arguments flat_nums cs rec cenv benv renv denv M es {rk} _.
+(** built in a constructor's form, a record or a data type gives its fields back (step 28) *)
+Lemma rl_mk_c : forall i l, length l = rn (RO i) -> canon (rtg (RO i)) l = true -> relim (RO i) (rmk (RO i) l) (fun l => l) = l.
+Proof.
+  intros i l L C. destruct (rtg (RO i)) as [ws|] eqn:G; [| apply rl_mk; assumption].
+  cbn [canon] in C. destruct l as [|t rest]; [discriminate C|].
+  apply existsb_exists in C as (c & Hin & C). apply in_seq in Hin. apply andb_true_iff in C as [Ht Hz].
+  apply eqb_correct in Ht. subst t. apply (rl_mk_tag i ws c rest G); [lia | simpl in L; lia | exact Hz].
+Qed.
+(** a record built in a constructor's form, read off the syntax, is in that form (step 28) *)
+Lemma zeros_s_ok : forall cs rec cenv benv renv denv M es w, zeros_s w es = true ->
+  zeros_from w (vnums (denote_es cs rec cenv benv renv denv M es)) = true.
+Proof.
+  intros cs rec cenv benv renv denv M es. induction es as [|e es IH|b es IH|x es IH]; intros w H; cbn [zeros_s] in H; try discriminate H.
+  - reflexivity.
+  - cbn [denote_es vnums flat_map]. destruct w as [|w].
+    + destruct e; try (rewrite Bool.andb_false_l in H; discriminate H). apply andb_true_iff in H as [H0 H1].
+      cbn [app denote_e zeros_from]. rewrite H0. apply (IH O H1).
+    + apply (IH w H).
+Qed.
+Lemma canon_s_ok : forall cs rec cenv benv renv denv M es g, canon_s g es = true ->
+  canon g (vnums (denote_es cs rec cenv benv renv denv M es)) = true.
+Proof.
+  intros cs rec cenv benv renv denv M es [ws|] H; [|reflexivity]. cbn [canon_s] in H.
+  destruct es as [|e fs|b fs|x fs]; try discriminate H. destruct e; try discriminate H.
+  cbn [denote_es vnums flat_map app denote_e canon]. fold (vnums (denote_es cs rec cenv benv renv denv M fs)).
+  apply existsb_exists in H as (c & Hc & H). apply existsb_exists. exists c. split; [exact Hc|].
+  apply andb_true_iff in H as [H0 H1]. rewrite H0. apply (zeros_s_ok _ _ _ _ _ _ _ _ _ H1).
+Qed.
 
 
 Lemma nth_sigs : forall (cs : list callee) f, nth_error (map (@projT1 _ _) cs) f = option_map (@projT1 _ _) (nth_error cs f).
@@ -3541,10 +3604,10 @@ Proof.
     pose proof Iv as (_ & _ & _ & _ & _ & _ & _ & _ & _ & RV & RL).
     apply HK; [apply agree_refl | lia | apply rlt_nth; exact RL | apply renv_nth; exact RV].
   - (* RMk *) intros ri es IHes cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk W Iv Rt HK. cbn [crec denote_r wfr] in *.
-    apply andb_true_iff in W as [W Wes]. apply andb_true_iff in W as [La Fn]. apply Nat.eqb_eq in La.
+    apply andb_true_iff in W as [W Wes]. apply andb_true_iff in W as [W Fn]. apply andb_true_iff in W as [Cn La]. apply Nat.eqb_eq in La.
     eapply IHes; [exact Wes | exact Iv | exact Rt |]. intros rho1 n1 As A1 Le1 LAs VAs.
     apply HK; auto. cbn [vflat]. destruct (flat_nums cs rec cenv benv renv denv M es Fn) as [F1 F2].
-    rewrite rl_mk by lia. rewrite <- F1. exact VAs.
+    rewrite rl_mk_c; [ | lia | apply canon_s_ok; exact Cn]. rewrite <- F1. exact VAs.
   - (* RCall *) intros ri fi ccs IHc args IHs cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk W Iv Rt HK.
     destruct (wfr_call_inv _ _ _ _ _ _ _ _ _ _ W) as (gs & E & Wn & Wk & Wm & Wr & Wsw & Q & R1 & R2 & Wsh & Wc & Ws).
     cbn [denote_r] in HK. unfold sigs in E. rewrite nth_sigs in E. pose proof (Hcs fi) as Hc.
@@ -3584,7 +3647,7 @@ Proof.
   - (* RW64 *) intros ri o a IHa b IHb cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk W Iv Rt HK.
     cbn [crec denote_r wfr] in *.
     apply andb_true_iff in W as [W Wb]. apply andb_true_iff in W as [W Wa]. apply andb_true_iff in W as [W Rb].
-    apply andb_true_iff in W as [Ri Ra]. apply Nat.eqb_eq in Ri.
+    apply andb_true_iff in W as [W Ra]. apply andb_true_iff in W as [Tg Ri]. apply Nat.eqb_eq in Ri.
     apply IHa with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto. intros rho1 n1 As A1 Le1 LAs VAs.
     apply IHb with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto. { eapply inv_step; eauto. }
     intros rho2 n2 Bs A2 Le2 LBs VBs.
@@ -3600,7 +3663,7 @@ Proof.
       * eapply agree_set1; [eapply (agree_set2 rho rho1 rho2); eauto; lia | lia].
       * lia.
       * constructor; [simpl; lia | constructor; [simpl; lia | constructor]].
-      * cbn [vflat]. rewrite rl_mk by (simpl; lia). simpl.
+      * cbn [vflat]. rewrite rl_mk; [ | destruct (rtg (RO ri)); [discriminate | reflexivity] | simpl; lia]. simpl.
         rewrite PTree.gss. rewrite PTree.gso by (apply Pos.succ_discr). rewrite PTree.gss. reflexivity.
   - (* RLet *) intros e IHe x IHx cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk W Iv Rt HK. cbn [crec denote_r wfr] in *.
     apply andb_true_iff in W as [We Wx].
@@ -6386,9 +6449,21 @@ End Recs.
 
 (** a program with no record types *)
 #[global] Instance no_recs : RecTypes | 100 :=
-  {| RT := fun _ => unit; RO := fun _ => mkrops 0 (fun _ => tt) (fun P _ k => k []); Rd := fun _ => tt |}.
+  {| RT := fun _ => unit; RO := fun _ => mkrops 0 None (fun _ => tt) (fun P _ k => k []); Rd := fun _ => tt |}.
 #[global] Instance no_recs_laws : @RecLaws no_recs.
-Proof. split; [intros i x P k; destruct x; reflexivity | intros i x; destruct x; reflexivity | intros i l L; destruct l; [reflexivity | discriminate]]. Qed.
+Proof. split; [intros i x P k; destruct x; reflexivity | intros i x; destruct x; reflexivity | intros i l E L; destruct l; [reflexivity | discriminate] | intros i ws c rest E; discriminate E]. Qed.
+
+(** the second law for a data type, per program (step 28), after the type is chosen ([destruct i]) and its widths named
+    ([injection E]): the tag's cases one by one, the fields their exact number, the written zeros put in, then by computation *)
+Ltac kq_zeros := repeat match goal with
+  | H : andb (PrimInt63.eqb ?x 0%uint63) _ = true |- _ =>
+      let H1 := fresh in let H2 := fresh in apply andb_true_iff in H as [H1 H2]; apply eqb_correct in H1; subst x
+  end.
+Ltac kq_tag_case :=
+  match goal with Lc : (?c < _)%nat, Lr : length ?rest = _, Hz : zeros_from _ ?rest = true |- _ =>
+    cbn in Lc, Lr; repeat (destruct rest as [|? rest]; try discriminate Lr);
+    repeat (destruct c as [|c]; [ cbn in Hz; kq_zeros; reflexivity | cbn in Lc ]); lia
+  end.
 (* ================================================================ the measurement: the per-program check, end to end *)
 Local Open Scope uint63_scope.
 
@@ -7241,10 +7316,10 @@ Check (eq_refl : match kbody (compile_f gid1 1 bfill_g bfill_b) with
 Section RecTest.
 #[local] Instance pair_recs : RecTypes | 0 :=
   {| RT := fun _ => (i63 * i63)%type;
-     RO := fun _ => mkrops 2 (fun l => (nth 0 l 0%uint63, nth 1 l 0%uint63)) (fun P v k => match v with (a, b) => k [a; b] end);
+     RO := fun _ => mkrops 2 None (fun l => (nth 0 l 0%uint63, nth 1 l 0%uint63)) (fun P v k => match v with (a, b) => k [a; b] end);
      Rd := fun _ => (0%uint63, 0%uint63) |}.
 #[local] Instance pair_laws : RecLaws.
-Proof. split; [intros i [a b] P k; reflexivity | intros i [a b]; reflexivity | intros i [|a [|b [|c l]]] L; try discriminate; reflexivity]. Qed.
+Proof. split; [intros i [a b] P k; reflexivity | intros i [a b]; reflexivity | intros i [|a [|b [|c l]]] E L; try discriminate; reflexivity | intros i ws c rest E; discriminate E]. Qed.
 
 (* [pinner] (rec_pair's loop): a pair as the loop's state, its fields read, a pair built and passed to the recursive call;
    [pouter] passes a pair built in place *)
@@ -7412,11 +7487,11 @@ End RecTest.
 Section U64Test.
 #[local] Instance u64_recs : RecTypes | 0 :=
   {| RT := fun _ => KQ.KQRun.u64;
-     RO := fun _ => mkrops 2 (fun l => KQ.KQRun.mk_u64 (nth 0 l 0%uint63) (nth 1 l 0%uint63))
+     RO := fun _ => mkrops 2 None (fun l => KQ.KQRun.mk_u64 (nth 0 l 0%uint63) (nth 1 l 0%uint63))
                      (fun P v k => match v with KQ.KQRun.mk_u64 a b => k [a; b] end);
      Rd := fun _ => KQ.KQRun.mk_u64 0%uint63 0%uint63 |}.
 #[local] Instance u64_laws : RecLaws.
-Proof. split; [intros i [a b] P k; reflexivity | intros i [a b]; reflexivity | intros i [|a [|b [|c l]]] L; try discriminate; reflexivity]. Qed.
+Proof. split; [intros i [a b] P k; reflexivity | intros i [a b]; reflexivity | intros i [|a [|b [|c l]]] E L; try discriminate; reflexivity | intros i ws c rest E; discriminate E]. Qed.
 
 Definition uadd (a b : KQ.KQRun.u64) : KQ.KQRun.u64 := KQ.KQRun.u64_add a b.
 Definition ultb (a b : KQ.KQRun.u64) : i63 := if KQ.KQRun.u64_ltb a b then 1 else 0.
@@ -7689,3 +7764,75 @@ Check (eq_refl : has_loop (kbody (compile_f gid1 1 jp_g jnon_b)) = false).
 Check (eq_refl : wf_f [] (mksig 1 (nk 2) false false false (Some KNum)) (FRecP (PvMk (SVar 1) MCur) (PvMk (SVar 1) MCur)) = false).
 Check (eq_refl : wf_f [jx_g] jx_g (FPlainX (XMatchP (PvCall 0 (CCons (CVar 0) CNil) (SCons (SVar 1) (SCons (SVar 0) SNil)) MCur) jread)) = false).
 Fail Definition jif_wrong : jif = denote_f [] jx_g (FPlainX (XMatchP (PvIf Clt (SVar 1) (SVar 0) (PvMk (SVar 0) MCur) (PvMk (SVar 1) MCur)) jread)) := eq_refl.
+
+
+(* ---- data types held as their tag and their fields (step 28): option and sum in a program's record table, each value its
+   constructor's number then its fields; taken apart by a test of the tag ([dopt], [dsum]: built by a test; [dpar]: a
+   parameter), given back by a recursion ([dres], the construct table's A_par_option_rec, and its caller [dgo]), kept as a
+   loop's state ([dstate], A_par_option_state) *)
+Definition dt_rt (i : nat) : Type := match i with O => option i63 | _ => (i63 + i63)%type end.
+Definition dt_ro (i : nat) : rops (dt_rt i) :=
+  match i as i0 return rops (dt_rt i0) with
+  | O => mkrops 2 (Some [0; 1]%nat) (fun l => if PrimInt63.eqb (nth 0 l 0) 0 then None else Some (nth 1 l 0))
+           (fun P v k => match v with None => k [0; 0] | Some x => k [1; x] end)
+  | _ => mkrops 2 (Some [1; 1]%nat) (fun l => if PrimInt63.eqb (nth 0 l 0) 0 then inl (nth 1 l 0) else inr (nth 1 l 0))
+           (fun P v k => match v with inl x => k [0; x] | inr y => k [1; y] end)
+  end.
+Definition dt_rd (i : nat) : dt_rt i := match i as i0 return dt_rt i0 with O => None | _ => inl 0 end.
+Section D28.
+#[local] Instance d_recs : RecTypes | 0 := {| RT := dt_rt; RO := dt_ro; Rd := dt_rd |}.
+#[local] Instance d_laws : RecLaws.
+Proof. split.
+- intros [|i] x P k; destruct x; reflexivity.
+- intros [|i] x; destruct x; reflexivity.
+- intros [|i] l E; discriminate E.
+- intros i ws c rest E Lc Lr Hz. destruct i as [|i]; cbn in E; injection E as <-; kq_tag_case.
+Qed.
+Definition dopt (a : i63) : i63 := match (if PrimInt63.ltb a 7 then None else Some a) with Some x => x | None => 0 end.
+Definition dsum (a : i63) : i63 := match (if PrimInt63.ltb a 5 then inl a else inr a) with inl x => x | inr y => PrimInt63.add y 1 end.
+Definition dpar (o : option i63) (a : i63) : i63 := match o with Some x => PrimInt63.add x a | None => a end.
+Fixpoint dres (n : nat) (x : i63) : option i63 :=
+  match n with O => None | S m => if PrimInt63.eqb x 5 then Some x else dres m (PrimInt63.add x 1) end.
+Definition dgo (n : nat) (a : i63) : i63 := match dres n a with Some y => y | None => 0 end.
+Fixpoint dstate (n : nat) (x : i63) (o : option i63) : i63 :=
+  match n with O => match o with Some y => y | None => x end | S m => dstate m (PrimInt63.add x 1) (if PrimInt63.eqb x 3 then Some x else o) end.
+Definition dnone := RMk 0 (SCons (SInt 0) (SCons (SInt 0) SNil)).
+Definition dsome (e : sexp) := RMk 0 (SCons (SInt 1) (SCons e SNil)).
+Definition d1_g := mksig 0 (nk 1) false false false None.
+Definition dopt_b := FPlain (SMatchR (RIf 0 Clt (SVar 0) (SInt 7) dnone (dsome (SVar 0))) (SIf Ceq (SVar 1) (SInt 0) (SInt 0) (SVar 0))).
+Definition dsum_b := FPlain (SMatchR (RIf 1 Clt (SVar 0) (SInt 5) (RMk 1 (SCons (SInt 0) (SCons (SVar 0) SNil))) (RMk 1 (SCons (SInt 1) (SCons (SVar 0) SNil))))
+                              (SIf Ceq (SVar 1) (SInt 0) (SVar 0) (SOp Badd (SVar 0) (SInt 1)))).
+Definition dpar_g := mksig 0 [KRec 0; KNum] false false false None.
+Definition dpar_b := FPlain (SMatchR (RVar 0) (SIf Ceq (SVar 1) (SInt 0) (SVar 2) (SOp Badd (SVar 0) (SVar 2)))).
+Definition dres_g := mksig 1 (nk 1) false false false (Some (KRec 0)).
+Definition dres_b := FRecR (BRet dnone) (BIf Ceq (SVar 0) (SInt 5) (BRet (dsome (SVar 0))) (BRec CNil (SCons (SOp Badd (SVar 0) (SInt 1)) SNil))).
+Definition dgo_g := mksig 1 (nk 1) false false false None.
+Definition dgo_b := FPlain (SMatchR (RCall 0 3 (CCons (CVar 0) CNil) (SCons (SVar 0) SNil)) (SIf Ceq (SVar 1) (SInt 0) (SInt 0) (SVar 0))).
+Definition dstate_g := mksig 1 [KNum; KRec 0] false false false None.
+Definition dstate_b := FRec (SMatchR (RVar 0) (SIf Ceq (SVar 1) (SInt 0) (SVar 2) (SVar 0)))
+  (SRec CNil (SCons (SOp Badd (SVar 0) (SInt 1)) (SConsR (RIf 0 Ceq (SVar 0) (SInt 3) (dsome (SVar 0)) (RVar 0)) SNil))).
+Definition d_P := mkprog [(gid1 0, compile_f gid1 0 d1_g dopt_b); (gid1 1, compile_f gid1 1 d1_g dsum_b);
+                          (gid1 2, compile_f gid1 2 dpar_g dpar_b); (gid1 3, compile_f gid1 3 dres_g dres_b);
+                          (gid1 4, compile_f gid1 4 dgo_g dgo_b); (gid1 5, compile_f gid1 5 dstate_g dstate_b)] [].
+Time Lemma dopt_ok : callee_ok d_P (gid1 0) (cbz 0) d1_g dopt.
+Proof. Time exact_no_check (compile_f_ok d_P [] gid1 0 d1_g dopt_b eq_refl eq_refl (no_callees d_P gid1) eq_refl eq_refl). Time Qed.
+Time Lemma dsum_ok : callee_ok d_P (gid1 1) (cbz 1) d1_g dsum.
+Proof. Time exact_no_check (compile_f_ok d_P [] gid1 1 d1_g dsum_b eq_refl eq_refl (no_callees d_P gid1) eq_refl eq_refl). Time Qed.
+Time Lemma dpar_ok : callee_ok d_P (gid1 2) (cbz 2) dpar_g dpar.
+Proof. Time exact_no_check (compile_f_ok d_P [] gid1 2 dpar_g dpar_b eq_refl eq_refl (no_callees d_P gid1) eq_refl eq_refl). Time Qed.
+Time Lemma dres_ok : callee_ok d_P (gid1 3) (cbz 3) dres_g dres.
+Proof. Time exact_no_check (compile_f_ok d_P [] gid1 3 dres_g dres_b eq_refl eq_refl (no_callees d_P gid1) eq_refl eq_refl). Time Qed.
+Definition d_cs := [existT ftype d1_g dopt; existT ftype d1_g dsum; existT ftype dpar_g dpar; existT ftype dres_g dres].
+Time Lemma dgo_ok : callee_ok d_P (gid1 4) (cbz 4) dgo_g dgo.
+Proof.
+  Time exact_no_check (compile_f_ok d_P d_cs gid1 4 dgo_g dgo_b eq_refl eq_refl
+    (all_ok_callees d_P gid1 d_cs (conj dopt_ok (conj dsum_ok (conj dpar_ok (conj dres_ok Logic.I))))) eq_refl eq_refl).
+Time Qed.
+Time Lemma dstate_ok : callee_ok d_P (gid1 5) (cbz 5) dstate_g dstate.
+Proof. Time exact_no_check (compile_f_ok d_P [] gid1 5 dstate_g dstate_b eq_refl eq_refl (no_callees d_P gid1) eq_refl eq_refl). Time Qed.
+Print Assumptions dgo_ok.
+(* refused: a constructor's number not written, a field after the constructor's own not zero, a tag beyond the constructors *)
+Check (eq_refl : wf_f [] d1_g (FPlain (SMatchR (RMk 0 (SCons (SVar 0) (SCons (SInt 0) SNil))) (SVar 0))) = false).
+Check (eq_refl : wf_f [] d1_g (FPlain (SMatchR (RMk 0 (SCons (SInt 0) (SCons (SVar 0) SNil))) (SVar 0))) = false).
+Check (eq_refl : wf_f [] d1_g (FPlain (SMatchR (RMk 0 (SCons (SInt 2) (SCons (SVar 0) SNil))) (SVar 0))) = false).
+End D28.
