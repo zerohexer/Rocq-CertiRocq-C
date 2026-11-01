@@ -2689,6 +2689,24 @@ function and its meaning is made of the user's functions:
   27 / 27; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (10 / 10 / 10 / 12 / 11 s); **71 programs
   through the verified compiler, 0 read but refused by the check, 0 not read**.
 
+**Step 18, blocks shared with another processor — the design (2026-11-01).**  `hw/lock.body` and `hw/lock_ap.body` (two
+processors, one counter under a spinlock; outside the gate) declare `kq_shared` and are sent to the translator, the one
+program family the verified compiler leaves to the walk.  The guarantee is the same on both routes: each program is proved as a
+sequential function of the memory, for every value a marked operation gives back (§9.4) — the compiler stays sequential, as
+every verified compiler does (CompCert, CakeML / Pancake, Bedrock2, Jasmin: none proves shared-memory concurrency; the
+Pancake route's recommended pattern, components that share only declared regions through operations whose semantics lets
+the memory change, is the one built here).  What the verified side lacks is the translator's rule that keeps the sequential
+model honest: in a program that declares `kq_shared`, a plain access to a narrow block (`rd32`, `rd8`, `upd32`, `upd8`)
+names its block by a number written where it is used and not shared.  So:
+- *`KQR.v`*: `sh_ok sh b`, the rule as a function of the syntax tree (every `SRd32` / `SRd8` / `MUpd32` / `MUpd8` of the
+  body: its block a literal `SInt n` with `n` not in `sh`; nothing asked when `sh` is empty).  A check beside the theorem, as
+  `wf` is: `compile_f_ok` is unchanged, the per-program file adds one lemma per function, `sh_ok kq_shared body = true`,
+  proved by `eq_refl` — the kernel checks the rule on the tree whose meaning it checked.
+- *The reifier* reports a function that breaks it (its reason the translator's message); *`kitc.py`* no longer sends a
+  `kq_shared` program to the translator: it reads it, and proves the rule beside each function.
+- *Expected*: `lock` and `lock_ap` through the verified compiler, built and booted on two processors (200 000); no gate
+  program changes.  The protocol itself (the lock's mutual exclusion, so 200 000) stays where it is (§12.G).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
