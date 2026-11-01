@@ -385,6 +385,24 @@ Definition iota_pair (ci : case_info) (p : predicate term) (c : term) (br : bran
     end
   else None.
 
+(** step 26: a number and a memory, [int * mem] *)
+Definition is_pm (ty : term) : bool :=
+  match ty with
+  | tApp (tInd i _) [a; b] => Kername.eqb (inductive_mind i) (inductive_mind ind_prod) && is_ty kn_int a && is_ty kn_mem b
+  | _ => false
+  end.
+Definition is_pm_case (ci : case_info) (p : predicate term) (br : branch term) : bool :=
+  Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_prod) && Nat.eqb (length (bcontext br)) 2
+  && match pparams p with [a; b] => is_ty kn_int a && is_ty kn_mem b | _ => false end.
+(** [let r := v in body], r of type [int * mem], is read with [r] replaced by the pair of two new variables, the number below
+    the memory: [fst r] and [snd r] then reduce to them (the readers' iota), and the meaning ([XLetP]) binds them to [fst v]
+    and [snd v] -- the same term up to zeta and iota *)
+Definition pm_split (ty body : term) : term :=
+  match ty with
+  | tApp (tInd i u) [a; b] => subst [tApp (tConstruct i 0 u) [a; b; tRel 1; tRel 0]] 0 (lift 2 1 body)
+  | _ => body
+  end.
+
 (** step 25: a value of any inductive type built in place and taken apart.  A plain value -- a plain argument, a function, a
     type, or a constructor applied to plain values -- may be put in where it is named (its work is nothing at run time) *)
 Fixpoint plain_val (fuel : nat) (t : term) : bool :=
@@ -553,13 +571,18 @@ Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option 
         end
       else if Kername.eqb kn kn_rd || Kername.eqb kn kn_rd32 || Kername.eqb kn kn_rd8 then
         match args with
-        | [h; i; tRel m] =>
-            if is_ent CMem ctx m then
-              match reify fuel ctx h, reify fuel ctx i with
-              | Some x, Some y => Some (if Kername.eqb kn kn_rd then SRd x y else if Kername.eqb kn kn_rd32 then SRd32 x y else SRd8 x y)
-              | _, _ => None
-              end
-            else None
+        | [h; i; m0] =>
+            (* the memory: the newest one, or a term reducing to it ([snd (v, s2)], step 26) *)
+            match (match m0 with tRel _ => m0 | _ => hnf_con 50 m0 end) with
+            | tRel m =>
+                if is_ent CMem ctx m then
+                  match reify fuel ctx h, reify fuel ctx i with
+                  | Some x, Some y => Some (if Kername.eqb kn kn_rd then SRd x y else if Kername.eqb kn kn_rd32 then SRd32 x y else SRd8 x y)
+                  | _, _ => None
+                  end
+                else None
+            | _ => None
+            end
         | _ => None
         end
       else
@@ -968,6 +991,124 @@ Definition is_rel (t : term) : bool := match t with tRel _ => true | _ => false 
 (** a number made after memories: lets of memories, numbers and booleans, tests, and at the end a number from the newest
     memory.  A read or a call whose memory is made in place ([rd h i (f .. s)]) is read as [let s2 := f .. s in rd h i s2] --
     the same term up to [let]; its numbers are read with the older memories dead, so they may not name one *)
+(** a number and a memory (step 26): built, given back by a function of the program or by the function itself, chosen by a
+    test or a counter's match, after lets, or made from another one taken apart *)
+Fixpoint reify_pv (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option spv :=
+  match fuel with
+  | O => None
+  | S fuel =>
+  let reify_args (c : list cent) (l : list term) : option sexps :=
+    to_args (map (fun a => match reify fuel c a with Some e => Some (inl e) | None =>
+                            match reify_b fuel c a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel c a) end end) l) in
+  let reify_cs (c : list cent) (l : list term) : option scnts := option_map to_scnts (opt_all (map (reify_c fuel c) l)) in
+  match head_r t with Some t' => reify_pv fuel ctx t' | None =>
+  match t with
+  | tApp (tConstruct ind 0 _) [a; b; e; m] =>
+      if Kername.eqb (inductive_mind ind) (inductive_mind ind_prod) && is_ty kn_int a && is_ty kn_mem b then
+        match reify fuel ctx e, reify_m fuel ctx m with Some x, Some y => Some (PvMk x y) | _, _ => None end
+      else None
+  | tApp (tConst kn _) args =>
+      let '(kn1, args1) := tcall kn args in
+      match find_callee kn1 callees 0, rev args1 with
+      | Some (f, gs), m :: rnums =>
+          if match sq gs with Some KNum => true | _ => false end && Nat.leb (sn gs) (length (rev rnums)) then
+            let rest := rev rnums in
+            match reify_m fuel ctx m, reify_cs ctx (firstn (sn gs) rest), reify_args ctx (skipn (sn gs) rest) with
+            | Some mm, Some cs, Some As => Some (PvCall f cs As mm)
+            | _, _, _ => None
+            end
+          else None
+      | None, _ => match hb kn with Some b => reify_pv fuel ctx (wout b args) | None => None end
+      | _, _ => None
+      end
+  | tConst kn _ => match hb kn with Some b => reify_pv fuel ctx b | None => None end
+  | tApp (tLambda _ _ _ as f) args => reify_pv fuel ctx (wout f args)
+  | tApp (tRel fi) args0 =>
+      match nth_error ctx fi, args0 with
+      | Some (CFn _ t), _ => reify_pv fuel ctx (wout (capsub ctx t) args0)
+      | _, tRel mi :: rest0 =>
+          if is_ent CSelf ctx fi then
+            (* the function itself, given a memory made from the newest one *)
+            match option_map (with_caps ctx) (drop_fns ctx fd rest0) with
+            | Some rest =>
+                if is_ent CPred ctx mi && Nat.leb fnx (length rest) then
+                  match rev (skipn fnx rest) with
+                  | m :: rnums =>
+                      match reify_cs ctx (firstn fnx rest), reify_args ctx (rev rnums), reify_m fuel ctx m with
+                      | Some cs, Some As, Some d => Some (PvRec cs As d)
+                      | _, _, _ => None
+                      end
+                  | [] => None
+                  end
+                else None
+            | None => None
+            end
+          else None
+      | _, _ => None
+      end
+  | tCase ci p c0 [b0; b1] =>
+      let c := if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_bool) then bnorm fuel c0 else c0 in
+      match lets_first ci p c [b0; b1] with Some t' => reify_pv fuel ctx t' | None =>
+      if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_bool) then
+        match (match c with
+               | tApp (tConst kn _) [a; b] => if eq_mp (fst kn) prim_mp then option_map (fun x => (x, a, b)) (cmp_v (snd kn)) else None
+               | _ => None
+               end) with
+        | Some (cmp, a, b) =>
+            match reify fuel ctx a, reify fuel ctx b, reify_pv fuel ctx (bbody b0), reify_pv fuel ctx (bbody b1) with
+            | Some x, Some y, Some t1, Some t2 => Some (PvIf cmp x y t1 t2)
+            | _, _, _, _ => None
+            end
+        | None =>
+            match reify_b fuel ctx c, reify_pv fuel ctx (bbody b0), reify_pv fuel ctx (bbody b1) with
+            | Some x, Some t1, Some t2 => Some (PvIfB x t1 t2)
+            | _, _, _ => None
+            end
+        end
+      else if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_nat) then
+        match c with
+        | tRel i =>
+            match cnt_index ctx i, reify_pv fuel ctx (bbody b0), reify_pv fuel (CCnt :: ctx) (bbody b1) with
+            | Some x, Some t0, Some t1 => Some (PvMatch x t0 t1)
+            | _, _, _ => None
+            end
+        | _ => match known_branch c b0 b1 with Some t => reify_pv fuel ctx t | None => None end
+        end
+      else None
+      end
+  | tCase ci p c0 [br] =>
+      let c := match c0 with tApp (tConst kn _) args => match hb kn with Some hbd => wout hbd args | None => c0 end | _ => c0 end in
+      match lets_first ci p c [br] with Some t' => reify_pv fuel ctx t' | None =>
+      match iota_pair ci p c br with Some t' => reify_pv fuel ctx t' | None =>
+      if is_pm_case ci p br then
+        (* a number and a memory taken apart: the number below the memory, every older memory dead *)
+        match reify_pv fuel ctx c, reify_pv fuel (CMem :: CNum :: kill_mem ctx) (bbody br) with
+        | Some x, Some y => Some (PvMatchP x y)
+        | _, _ => None
+        end
+      else
+        match reify_r fuel ctx c, reify_pv fuel (repeat CNum (length (bcontext br)) ++ ctx) (bbody br) with
+        | Some x, Some e => Some (PvMatchR x e)
+        | _, _ => None
+        end
+      end
+      end
+  | tLetIn _ b ty body =>
+      if is_ty kn_mem ty then
+        match reify_m fuel ctx b, reify_pv fuel (CMem :: kill_mem ctx) body with Some m, Some x => Some (PvLetM m x) | _, _ => None end
+      else if is_ty kn_int ty then
+        match reify fuel ctx b, reify_pv fuel (CNum :: ctx) body with Some e, Some x => Some (PvLet e x) | _, _ => None end
+      else if is_bool ty then
+        match reify_b fuel ctx b, reify_pv fuel (CBool :: ctx) body with Some e, Some x => Some (PvLetB e x) | _, _ => None end
+      else if is_nat ty then
+        match reify_c fuel ctx b, reify_pv fuel (CCnt :: ctx) body with Some c, Some x => Some (PvLetC c x) | _, _ => None end
+      else if is_pm ty then None
+      else match reify_r fuel ctx b, reify_pv fuel (CRec :: ctx) body with Some r, Some x => Some (PvLetR r x) | _, _ => None end
+  | _ => None
+  end
+  end
+  end.
+
 Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sx :=
   match fuel with
   | O => None
@@ -982,6 +1123,12 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
   | tLetIn _ b ty body =>
       if is_ty kn_mem ty then
         match reify_m fuel ctx b, reify_x fuel (CMem :: kill_mem ctx) body with Some m, Some x => Some (XLetM m x) | _, _ => None end
+      else if is_pm ty then
+        (* a number and a memory bound by a let, read through fst and snd (step 26) *)
+        match reify_pv fuel ctx b, reify_x fuel (CMem :: CNum :: kill_mem ctx) (pm_split ty body) with
+        | Some p, Some x => Some (XLetP p x)
+        | _, _ => None
+        end
       else if is_ty kn_int ty then
         match reify fuel ctx b, reify_x fuel (CNum :: ctx) body with Some e, Some x => Some (XLet e x) | _, _ => None end
       else if is_bool ty then
@@ -995,7 +1142,18 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
       match lets_first ci p c [br] with Some t' => reify_x fuel ctx t' | None =>
       match reify_r fuel ctx c, reify_x fuel (repeat CNum (length (bcontext br)) ++ ctx) (bbody br) with
       | Some r, Some x => Some (XMatchR r x)
-      | _, _ => match iota_pair ci p c br with Some t' => reify_x fuel ctx t' | None => fallback end
+      | _, _ =>
+          match iota_pair ci p c br with
+          | Some t' => reify_x fuel ctx t'
+          | None =>
+              (* a number and a memory taken apart (step 26): the number below the memory, every older memory dead *)
+              if is_pm_case ci p br then
+                match reify_pv fuel ctx c, reify_x fuel (CMem :: CNum :: kill_mem ctx) (bbody br) with
+                | Some x, Some y => Some (XMatchP x y)
+                | _, _ => fallback
+                end
+              else fallback
+          end
       end
       end
   | tApp (tLambda _ _ _ as f) args => reify_x fuel ctx (wout f args)
@@ -1320,12 +1478,15 @@ Definition read_sig (rt : list rentry) (tys : list term) (ret : term) : option s
   match opt_all (map (kind_ty rt) nums) with
   | Some ks => if r || is_ty kn_int ret then Some (mksig c ks m r false None)
                else if is_bool ret then Some (mksig c ks m false false (Some KBool))
+               else if is_pm ret then Some (mksig c ks m false false (Some KNum))
                else option_map (fun ri => mksig c ks m false false (Some (KRec ri))) (rindex ret rt 0)
   | None => None
   end.
 
 (** whether a function gives back a boolean (step 24) *)
 Definition isbq (gs : sig) : bool := match sq gs with Some KBool => true | _ => false end.
+(** whether a function gives back a number and a memory (step 26) *)
+Definition ispq (gs : sig) : bool := match sq gs with Some KNum => true | _ => false end.
 
 Definition cent_of (k : kind) : cent := match k with KNum => CNum | KBool => CBool | KRec _ => CRec end.
 Definition fun_ctx (gs : sig) : list cent := (if sm gs then [CMem] else []) ++ rev (map cent_of (sk gs)) ++ repeat CCnt (sn gs).
@@ -1346,7 +1507,12 @@ Definition read_fun (Σ : global_env) (hb : kername -> option term) (tc : kernam
                 if negb (Nat.eqb (sn gs) 0) && Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_nat)
                    && Nat.eqb cnt ((if sm gs then 1 else 0) + length (sk gs) + nx) then
                   let ctx := fun_ctx gs ++ [CSelf] in
-                  if isbq gs then
+                  if ispq gs then
+                    match reify_pv callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_pv callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
+                    | Some p0, Some p1 => Some (gs, FRecP p0 p1)
+                    | _, _ => None
+                    end
+                  else if isbq gs then
                     match reify_bb callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_bb callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
                     | Some r0, Some r1 => Some (gs, FRecB r0 r1)
                     | _, _ => None
@@ -1383,7 +1549,8 @@ Definition read_fun (Σ : global_env) (hb : kername -> option term) (tc : kernam
           match read_sig rt tys (ret_ty (cst_type cb)) with
           | Some gs =>
               let nx := Nat.pred (sn gs) in
-              if isbq gs then option_map (fun r => (gs, FPlainB r)) (reify_bb callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body)
+              if ispq gs then option_map (fun r => (gs, FPlainP r)) (reify_pv callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body)
+              else if isbq gs then option_map (fun r => (gs, FPlainB r)) (reify_bb callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body)
               else if isq gs then option_map (fun r => (gs, FPlainR r)) (reify_br callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body)
               else if sr gs then option_map (fun m => (gs, FPlainM m)) (reify_m callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body)
               else match reify callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body with
@@ -2139,7 +2306,7 @@ Definition kletters (ks : list kind) : string :=
   fold_right (fun k a => (match k with KNum => "I" | KBool => "B" | KRec i => rletter i end) ^ a) ""%bs ks.
 Definition info_of (l : list (kername * sig * fbody)) :=
   map (fun x : kername * sig * fbody => let '(kn, g, _) := x in
-         (snd kn, sn g, kletters (sk g), sm g, sr g, sw g, match sq g with Some (KRec i) => rletter i | Some KBool => "B"%bs | _ => ""%bs end)) l.
+         (snd kn, sn g, kletters (sk g), sm g, sr g, sw g, match sq g with Some (KRec i) => rletter i | Some KBool => "B"%bs | Some KNum => "P"%bs | None => ""%bs end)) l.
 
 (** compatibility: one recursive function *)
 Definition reify_top (p : program) : option (sig * fbody) :=
@@ -3207,3 +3374,40 @@ Definition w5gm_Pr := mkprog (funs_of 0 w5gm_src) [].
 Time Lemma w5gm_ok : callee_ok w5gm_Pr (gid1 0) (cbz 0) (sig_at w5gm_src 0) w5gm.
 Proof. Time exact_no_check (compile_f_ok w5gm_Pr [] gid1 0 (sig_at w5gm_src 0) (body_at w5gm_src 0) eq_refl eq_refl (no_callees w5gm_Pr gid1) eq_refl eq_refl). Time Qed.
 Print Assumptions w5go_ok.
+
+(* ---------------------------------------------------------------- a number and a memory given back (step 26) *)
+(* KQR.v's step 26 tests read from their text: a caller taking apart the pair of a recursion that takes its own pair apart
+   ([jgo] over [jnon]), a caller binding the pair of a loop by a let read through fst and snd ([jlet] over [jtail]), a pair
+   chosen by a test taken apart where it is made ([jif]) *)
+Definition vjgo_src := ltac:(run_template_program (tmQuoteRec jgo)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Definition vjlet_src := ltac:(run_template_program (tmQuoteRec jlet)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Definition vjif_src := ltac:(run_template_program (tmQuoteRec jif)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : map (fun x => snd x) vjgo_src = [jnon_b;
+  FPlainX (XMatchP (PvCall 0 (CCons (CVar 0) CNil) (SCons (SVar 1) (SCons (SVar 0) SNil)) MCur) jread)]).
+Check (eq_refl : map (fun x => snd x) vjlet_src = [jtail_b;
+  FPlainX (XLetP (PvCall 0 (CCons (CVar 0) CNil) (SCons (SVar 1) (SCons (SVar 0) SNil)) MCur)
+                 (XRet (SOp Badd (SLet (SVar 0) (SVar 0)) (SRd (SInt 0) (SInt 0)))))]).
+Check (eq_refl : map (fun x => snd x) vjif_src = [jif_b]).
+Definition vjgo_Pr := mkprog (funs_of 0 vjgo_src) [].
+Time Lemma vjnon_ok : callee_ok vjgo_Pr (gid1 0) (cbz 0) (sig_at vjgo_src 0) jnon.
+Proof. Time exact_no_check (compile_f_ok vjgo_Pr [] gid1 0 (sig_at vjgo_src 0) (body_at vjgo_src 0) eq_refl eq_refl (no_callees vjgo_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma vjgo_ok : callee_ok vjgo_Pr (gid1 1) (cbz 1) (sig_at vjgo_src 1) jgo.
+Proof.
+  Time exact_no_check (compile_f_ok vjgo_Pr [existT ftype (sig_at vjgo_src 0) jnon] gid1 1 (sig_at vjgo_src 1) (body_at vjgo_src 1)
+    eq_refl eq_refl (all_ok_callees vjgo_Pr gid1 [existT ftype (sig_at vjgo_src 0) jnon] (conj vjnon_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
+Definition vjlet_Pr := mkprog (funs_of 0 vjlet_src) [].
+Time Lemma vjtail_ok : callee_ok vjlet_Pr (gid1 0) (cbz 0) (sig_at vjlet_src 0) jtail.
+Proof. Time exact_no_check (compile_f_ok vjlet_Pr [] gid1 0 (sig_at vjlet_src 0) (body_at vjlet_src 0) eq_refl eq_refl (no_callees vjlet_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma vjlet_ok : callee_ok vjlet_Pr (gid1 1) (cbz 1) (sig_at vjlet_src 1) jlet.
+Proof.
+  Time exact_no_check (compile_f_ok vjlet_Pr [existT ftype (sig_at vjlet_src 0) jtail] gid1 1 (sig_at vjlet_src 1) (body_at vjlet_src 1)
+    eq_refl eq_refl (all_ok_callees vjlet_Pr gid1 [existT ftype (sig_at vjlet_src 0) jtail] (conj vjtail_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
+Definition vjif_Pr := mkprog (funs_of 0 vjif_src) [].
+Time Lemma vjif_ok : callee_ok vjif_Pr (gid1 0) (cbz 0) (sig_at vjif_src 0) jif.
+Proof. Time exact_no_check (compile_f_ok vjif_Pr [] gid1 0 (sig_at vjif_src 0) (body_at vjif_src 0) eq_refl eq_refl (no_callees vjif_Pr gid1) eq_refl eq_refl). Time Qed.
+Print Assumptions vjlet_ok.
