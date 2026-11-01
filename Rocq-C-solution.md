@@ -56,7 +56,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program through it when every function is read (**all 71 of the gate's
    programs today**, the five test kernels included, and `lock` on two processors; each corpus program timed against the
-   translator's build), the translator otherwise; of the construct table's 780 cells 768 (3 more by the walk alone); next
+   translator's build), the translator otherwise; of the construct table's 780 cells 769 (2 more by the walk alone); next
    the rest of the table's fallbacks, then the walk retired.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
@@ -2987,6 +2987,19 @@ of a call of a template (`tc_of`) resolves to the function it is bound to.  So, 
   needs before the copy itself (the copy of `fold` for `outer`'s function, taking the same captured variable).
 `KQR.v` and `kitc.py` unchanged; the copy's theorem is `compile_f_okr` as for every copy.  *Expected*: the cell.
 
+**Step 27 done (2026-11-02): a template giving its own function parameter to another template.**  Built as designed, in the
+reifier only (`KQR.v` and `kitc.py` unchanged): `fsub` (a copy's function parameter is the function it is bound to, its
+captured variables placed as the copy's), used by `tcall` at every look-up of a call and by `sites` in the scan; `ensure` scans
+the template's own body, its function parameters bound to the functions given, and makes the copies it needs first.  Test
+`zof1` / `zof2` (the cell's shape with and without a captured number): the copy of `zfold` for `zouter`'s function takes the
+captured number before its own, `zouter`'s copy calls it passing it on; trees pinned; each copy by `compile_f_okr`, the caller
+by `compile_f_ok`, 2–8 ms; `Print Assumptions` the same base (the test's tree list taken from `reify_prog`, not from the pair
+`reify_prog2` gives with the copies' meaning terms, whose type carries MetaRocq's term syntax and with it the declarations of
+Rocq's primitive float and string types).  The C: 63 of 63 byte-identical.  The construct table (on `e6b2aa4`, the code of `09d1b1d`): **769 of 780
+through the verified compiler** (was 768), 2 more by the walk alone, 9 gaps.  The gate with `KQ_REFLECT=1` on
+`09d1b1d`: everything passes — `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (10 / 10 / 11 / 12 / 12 s); **71 programs
+through the verified compiler, 0 refused, 0 not read**.
+
 **Step 28, `option`, `sum` and their kind held as their tag and fields — the design (2026-11-02).**  Two cells proved only by
 the walk (`A_par_option`, `A_par_sum`: a helper choosing `None` / `Some x` or `inl x` / `inr x` by a test, its value taken apart
 by the caller) and two gaps on both routes (`A_par_option_rec`: an `option` given back by a recursion; `A_par_option_state`: an
@@ -3185,7 +3198,8 @@ Pushed to the public repository up to `2b8c70d` (2026-11-02); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 28's design (`option`, `sum` and their kind held as their tag and fields) |
+| (this commit) | §12.V: step 27 done (a template giving its own function parameter to another template: the construct table 769 of 780), the C, the gate |
+| `e6b2aa4` | §12.V: step 28's design (`option`, `sum` and their kind held as their tag and fields) |
 | `09d1b1d` | `proved/KQRReify.v` step 27: a copy's function parameter given to another template resolved (`fsub`, `tcall`, `sites`, `ensure`) |
 | `2b8c70d` | §12.V: step 26 done (a number and a memory given back: the construct table 768 of 780), the C, the gate |
 | `4fff28f` | §12.V: step 27's design (a template giving its own function parameter to another template) |
