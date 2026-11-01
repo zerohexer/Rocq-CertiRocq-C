@@ -40,6 +40,18 @@ Definition ind_bool := ind_of <% bool %>.
 Definition kn_rd8 := kn_of <% KQ.KQRun.rd8 %>.
 Definition kn_upd8 := kn_of <% KQ.KQRun.upd8 %>.
 Definition kn_w64_op := kn_of <% KQ.KQRun.w64_op %>.
+Definition ind_u64 := ind_of <% KQ.KQRun.u64 %>.
+Definition ind_w64op := ind_of <% KQ.KQRun.w64op %>.
+(** a 64-bit operation (step 16), by its constructor's number *)
+Definition w64_of (t : term) : option KQ.KQRun.w64op :=
+  match t with
+  | tConstruct i k _ =>
+      if Kername.eqb (inductive_mind i) (inductive_mind ind_w64op)
+      then nth_error [KQ.KQRun.W_add; KQ.KQRun.W_sub; KQ.KQRun.W_mul; KQ.KQRun.W_and; KQ.KQRun.W_or; KQ.KQRun.W_xor;
+                      KQ.KQRun.W_shl; KQ.KQRun.W_shr; KQ.KQRun.W_ltu; KQ.KQRun.W_leu; KQ.KQRun.W_eq] k
+      else None
+  | _ => None
+  end.
 Definition kit_mp : modpath := fst kn_rd.
 Definition kn_ksize := kn_of <% KQ.KQRun.kq_size %>.
 (** the machine's operations (step 14), as the translator's tables: the Rocq constant, the KQL operation, how many numbers it
@@ -342,6 +354,15 @@ Fixpoint cindex (ind : inductive) (args : list term) (rt : list rentry) (i : nat
       then Some (i, length qs) else cindex ind args r (S i)
   end.
 
+(** the index and number of fields of a record type without parameters, by its inductive (a primitive projection names it) *)
+Fixpoint rind (ind : inductive) (rt : list rentry) (i : nat) : option (nat * nat) :=
+  match rt with
+  | [] => None
+  | (_, j, n, qs) :: r =>
+      if Kername.eqb (inductive_mind ind) (inductive_mind j) && Nat.eqb (inductive_ind ind) (inductive_ind j) && Nat.eqb (length qs) 0
+      then Some (i, n) else rind ind r (S i)
+  end.
+
 Section R.
 Variable callees : list (kername * sig).   (* the program's functions read so far, callees first *)
 Variable fm : bool.                        (* the function being read takes a memory *)
@@ -518,6 +539,16 @@ Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option 
         | _, _ => None
         end
       end
+  (* a field of a record of the program's types with primitive projections ([w_lo r]): of a record variable, or of a record
+     taken apart (its fields the nearest numbers, the last one first) *)
+  | tProj p c =>
+      match c with
+      | tRel i => option_map (fun r => SFld r (proj_arg p)) (rec_index ctx i)
+      | _ => match rind (proj_ind p) rt 0, reify_r fuel ctx c with
+             | Some (_, n), Some x => Some (SMatchR x (SVar (n - 1 - proj_arg p)))
+             | _, _ => None
+             end
+      end
   | _ => None
   end
   end
@@ -557,7 +588,24 @@ with reify_r (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sr
           end
       | tConst kn _ => match hb kn with Some b => reify_r fuel ctx b | None => None end
       | tApp (tLambda _ _ _ as f) args => reify_r fuel ctx (wout f args)
+      (* a record under lets: a helper giving a record written out, its arguments bound (step 16) *)
+      | tLetIn _ b ty body =>
+          if is_ty kn_int ty then
+            match reify fuel ctx b, reify_r fuel (CNum :: ctx) body with Some e, Some x => Some (RLet e x) | _, _ => None end
+          else if is_bool ty || is_nat ty || is_ty kn_mem ty then None
+          else match reify_r fuel ctx b, reify_r fuel (CRec :: ctx) body with Some y, Some x => Some (RLetR y x) | _, _ => None end
       | tApp (tConst kn _) args =>
+          (* a 64-bit operation: [u64] a record type of the program *)
+          if Kername.eqb kn kn_w64_op then
+            match args with
+            | [o; a; b] =>
+                match w64_of o, rind ind_u64 rt 0, reify_r fuel ctx a, reify_r fuel ctx b with
+                | Some op, Some (ri, _), Some x, Some y => Some (RW64 ri op x y)
+                | _, _, _, _ => None
+                end
+            | _ => None
+            end
+          else
           let '(kn1, args1) := tcall kn args in
           match find_callee kn1 callees 0 with
           | Some (f, gs) =>
@@ -719,7 +767,14 @@ Fixpoint reify_m (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
         match reify_b fuel ctx b, reify_m fuel (CBool :: ctx) body with Some x, Some y => Some (MLetB x y) | _, _ => None end
       else if is_nat ty then
         match reify_c fuel ctx b, reify_m fuel (CCnt :: ctx) body with Some x, Some y => Some (MLetC x y) | _, _ => None end
-      else None
+      else match reify_r fuel ctx b, reify_m fuel (CRec :: ctx) body with Some x, Some y => Some (MLetR x y) | _, _ => None end
+  | tCase ci p c0 [br] =>
+      (* a record taken apart *)
+      let c := match c0 with tApp (tConst kn _) args => match hb kn with Some hbd => wout hbd args | None => c0 end | _ => c0 end in
+      match reify_r fuel ctx c, reify_m fuel (repeat CNum (length (bcontext br)) ++ ctx) (bbody br) with
+      | Some x, Some m => Some (MMatchR x m)
+      | _, _ => None
+      end
   | _ => None
   end
   end.
@@ -748,7 +803,14 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
         match reify_b fuel ctx b, reify_x fuel (CBool :: ctx) body with Some e, Some x => Some (XLetB e x) | _, _ => None end
       else if is_nat ty then
         match reify_c fuel ctx b, reify_x fuel (CCnt :: ctx) body with Some c, Some x => Some (XLetC c x) | _, _ => None end
-      else None
+      else match reify_r fuel ctx b, reify_x fuel (CRec :: ctx) body with Some r, Some x => Some (XLetR r x) | _, _ => None end
+  | tCase ci p c0 [br] =>
+      (* a record taken apart, the number after it made after memories; or a number *)
+      let c := match c0 with tApp (tConst kn _) args => match hb kn with Some hbd => wout hbd args | None => c0 end | _ => c0 end in
+      match reify_r fuel ctx c, reify_x fuel (repeat CNum (length (bcontext br)) ++ ctx) (bbody br) with
+      | Some r, Some x => Some (XMatchR r x)
+      | _, _ => fallback
+      end
   | tApp (tLambda _ _ _ as f) args => reify_x fuel ctx (wout f args)
   | tCase ci p c0 [b0; b1] =>
       let c := if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_bool) then bnorm fuel c0 else c0 in
@@ -1431,7 +1493,7 @@ Definition add_s (x : string) (l : list string) : list string := if existsb (fun
 Definition known_const (fns : list kername) (kn : kername) : bool :=
   (eq_mp (fst kn) prim_mp && (match binop_v (snd kn), cmp_v (snd kn) with None, None => false | _, _ => true end))
   || Kername.eqb kn kn_rd || Kername.eqb kn kn_upd || Kername.eqb kn kn_rd32 || Kername.eqb kn kn_upd32 || Kername.eqb kn kn_rd8 || Kername.eqb kn kn_upd8
-  || Kername.eqb kn kn_kq_nat || existsb (Kername.eqb kn) fns || Kername.eqb kn kn_ksize
+  || Kername.eqb kn kn_kq_nat || existsb (Kername.eqb kn) fns || Kername.eqb kn kn_ksize || Kername.eqb kn kn_w64_op
   || existsb (fun e => Kername.eqb (fst (fst e)) kn) hw_table || existsb (fun e => Kername.eqb (fst (fst e)) kn) hwf_table
   || Kername.eqb kn kn_andb || Kername.eqb kn kn_orb || Kername.eqb kn kn_negb
   || Kername.eqb kn kn_int || Kername.eqb kn kn_mem.     (* as type arguments *)
@@ -1467,8 +1529,9 @@ Fixpoint blockers (fuel : nat) (fns : list kername) (hb : kername -> option term
                      then acc else add_s ("a match on " ^ snd (inductive_mind i)) acc in
           fold_left (fun a br => blockers fuel fns hb (bbody br) a) brs (blockers fuel fns hb c acc)
       | tProj _ c => blockers fuel fns hb c (add_s "a projection" acc)
-      | tConstruct i _ _ =>      (* O and S are counters, true and false booleans *)
-          if Kername.eqb (inductive_mind i) (inductive_mind ind_nat) || Kername.eqb (inductive_mind i) (inductive_mind ind_bool) then acc
+      | tConstruct i _ _ =>      (* O and S are counters, true and false booleans, a 64-bit operation's name *)
+          if Kername.eqb (inductive_mind i) (inductive_mind ind_nat) || Kername.eqb (inductive_mind i) (inductive_mind ind_bool)
+             || Kername.eqb (inductive_mind i) (inductive_mind ind_w64op) then acc
           else add_s ("a constructor of " ^ snd (inductive_mind i)) acc
       | tFix _ _ => add_s "a local fix" acc
       | _ => acc
@@ -2367,3 +2430,105 @@ Definition lw_gcd (a b : int) : int := if PrimInt63.ltb 0 b then b else a.
 Definition lw_pair (n : nat) (a : int) : int * int := (a, a).
 Definition lw (n : nat) (i : int) (s : mem) : int := let p := lw_pair n i in fst p.
 Eval vm_compute in ltac:(run_template_program (tmQuoteRec lw) (fun q => let r := eval vm_compute in (reify_why q) in exact r)).
+
+(* ---------------------------------------------------------------- u64 (step 16) *)
+(* w64's text: a hash loop over bytes and a generator over u64 values passed on and given back as they are, a helper written
+   out under lets ([urmix]), comparisons as tests; and views' memory functions: a u64 bound by a let and its halves written
+   ([urv_upd64]), a u64 read from two cells ([urv_rd64]) *)
+Definition urfnv_off : KQ.KQRun.u64 := KQ.KQRun.u64_of_halves 3421674724 2216829733.
+Definition urfnv_prime : KQ.KQRun.u64 := KQ.KQRun.u64_of_halves 256 435.
+Definition urgolden : KQ.KQRun.u64 := KQ.KQRun.u64_of_halves 2654435769 2135587861.
+Definition urm1 : KQ.KQRun.u64 := KQ.KQRun.u64_of_halves 3210233709 484763065.
+Definition urm2 : KQ.KQRun.u64 := KQ.KQRun.u64_of_halves 2496678331 321982955.
+Fixpoint urfnv (f : nat) (i n : i63) (h : KQ.KQRun.u64) (s : mem) : KQ.KQRun.u64 :=
+  match f with
+  | O => h
+  | S f => if PrimInt63.leb n i then h
+           else urfnv f (PrimInt63.add i 1) n (KQ.KQRun.u64_mul (KQ.KQRun.u64_xor h (KQ.KQRun.u64_of_int (PrimInt63.land (KQ.KQRun.rd 0 i s) 255))) urfnv_prime) s
+  end.
+Definition urmix (z0 : KQ.KQRun.u64) : KQ.KQRun.u64 :=
+  let z1 := KQ.KQRun.u64_mul (KQ.KQRun.u64_xor z0 (KQ.KQRun.u64_shr z0 30)) urm1 in
+  let z2 := KQ.KQRun.u64_mul (KQ.KQRun.u64_xor z1 (KQ.KQRun.u64_shr z1 27)) urm2 in
+  KQ.KQRun.u64_xor z2 (KQ.KQRun.u64_shr z2 31).
+Definition urrotl (a : KQ.KQRun.u64) (k : i63) : KQ.KQRun.u64 := KQ.KQRun.u64_or (KQ.KQRun.u64_shl a k) (KQ.KQRun.u64_shr a (PrimInt63.sub 64 k)).
+Fixpoint urstream (f : nat) (st acc : KQ.KQRun.u64) (big : i63) : KQ.KQRun.u64 :=
+  match f with
+  | O => acc
+  | S f => let st1 := KQ.KQRun.u64_add st urgolden in
+           let z := urmix st1 in
+           urstream f st1 (KQ.KQRun.u64_xor (urrotl acc 13) z) (if KQ.KQRun.u64_ltb (KQ.KQRun.u64_of_halves 2147483648 0) z then PrimInt63.add big 1 else big)
+  end.
+Definition urw64 (n : nat) (nz : i63) (s : mem) : i63 :=
+  let h := urfnv n 0 nz urfnv_off s in
+  let r := urstream n h urfnv_off 0 in
+  PrimInt63.add (PrimInt63.add (PrimInt63.add (KQ.KQRun.u64_lo32 r) (PrimInt63.mul (KQ.KQRun.u64_hi32 r) 1000003))
+    (if KQ.KQRun.u64_eqb h r then 7 else 0)) (KQ.KQRun.u64_to_int (KQ.KQRun.u64_shr h 40)).
+Definition urw64_src := ltac:(run_template_program (tmQuoteRec urw64)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Eval vm_compute in map (fun x => (snd (fst x), snd x)) urw64_src.
+
+Definition urv_upd64 (h i : i63) (v : KQ.KQRun.u64) (s : mem) : mem :=
+  KQ.KQRun.upd32 h (PrimInt63.add (PrimInt63.mul 2 i) 1) (KQ.KQRun.u64_hi32 v) (KQ.KQRun.upd32 h (PrimInt63.mul 2 i) (KQ.KQRun.u64_lo32 v) s).
+Definition urv_rd64 (h i : i63) (s : mem) : KQ.KQRun.u64 :=
+  KQ.KQRun.u64_of_halves (KQ.KQRun.rd32 h (PrimInt63.add (PrimInt63.mul 2 i) 1) s) (KQ.KQRun.rd32 h (PrimInt63.mul 2 i) s).
+Fixpoint urvfill (f : nat) (i n : i63) (s : mem) : mem :=
+  match f with
+  | O => s
+  | S f => if PrimInt63.leb n i then s
+           else urvfill f (PrimInt63.add i 1) n (urv_upd64 0 i (KQ.KQRun.u64_mul (KQ.KQRun.u64_of_int (PrimInt63.add i 1)) urgolden) s)
+  end.
+Fixpoint urvfold (f : nat) (i n : i63) (a : KQ.KQRun.u64) (s : mem) : KQ.KQRun.u64 :=
+  match f with
+  | O => a
+  | S f => if PrimInt63.leb n i then a
+           else urvfold f (PrimInt63.add i 1) n (KQ.KQRun.u64_xor (KQ.KQRun.u64_add a (urv_rd64 0 i s)) (KQ.KQRun.u64_shl a 1)) s
+  end.
+Definition urviews (n : nat) (nz : i63) (s : mem) : i63 :=
+  let s1 := urvfill n 0 nz s in
+  let r := urvfold n 0 nz (KQ.KQRun.u64_of_int 1) s1 in
+  let s2 := urv_upd64 0 (PrimInt63.add nz 1) (KQ.KQRun.u64_of_int (PrimInt63.sub 0 123456789)) s1 in
+  PrimInt63.add (PrimInt63.add (KQ.KQRun.u64_lo32 r) (PrimInt63.mul (KQ.KQRun.u64_hi32 r) 1000003))
+    (KQ.KQRun.u64_to_int (urv_rd64 0 (PrimInt63.add nz 1) s2)).
+Definition urviews_src := ltac:(run_template_program (tmQuoteRec urviews)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Eval vm_compute in map (fun x => (snd (fst x), snd x)) urviews_src.
+Section RU64.
+#[local] Instance ru64_recs : RecTypes | 0 :=
+  {| RT := fun _ => KQ.KQRun.u64;
+     RO := fun _ => mkrops 2 (fun l => KQ.KQRun.mk_u64 (nth 0 l 0%uint63) (nth 1 l 0%uint63))
+                     (fun P v k => match v with KQ.KQRun.mk_u64 a b => k [a; b] end);
+     Rd := fun _ => KQ.KQRun.mk_u64 0%uint63 0%uint63 |}.
+#[local] Instance ru64_laws : RecLaws.
+Proof. split; [intros i [a b] P k; reflexivity | intros i [a b]; reflexivity | intros i [|a [|b [|c l]]] L; try discriminate; reflexivity]. Qed.
+Definition urw64_Pr := mkprog (funs_of 0 urw64_src) [].
+Time Lemma urfnv_ok : callee_ok urw64_Pr (gid1 0) (cbz 0) (sig_at urw64_src 0) urfnv.
+Proof. Time exact_no_check (@compile_f_ok ru64_recs ru64_laws urw64_Pr [] gid1 0 (sig_at urw64_src 0) (body_at urw64_src 0) eq_refl eq_refl (no_callees urw64_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma urstream_ok : callee_ok urw64_Pr (gid1 1) (cbz 1) (sig_at urw64_src 1) urstream.
+Proof.
+  Time exact_no_check (@compile_f_ok ru64_recs ru64_laws urw64_Pr [existT ftype (sig_at urw64_src 0) urfnv] gid1 1 (sig_at urw64_src 1) (body_at urw64_src 1)
+    eq_refl eq_refl (all_ok_callees urw64_Pr gid1 [existT ftype (sig_at urw64_src 0) urfnv] (conj urfnv_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
+Time Lemma urw64_ok : callee_ok urw64_Pr (gid1 2) (cbz 2) (sig_at urw64_src 2) urw64.
+Proof.
+  Time exact_no_check (@compile_f_ok ru64_recs ru64_laws urw64_Pr [existT ftype (sig_at urw64_src 0) urfnv; existT ftype (sig_at urw64_src 1) urstream]
+    gid1 2 (sig_at urw64_src 2) (body_at urw64_src 2) eq_refl eq_refl
+    (all_ok_callees urw64_Pr gid1 [existT ftype (sig_at urw64_src 0) urfnv; existT ftype (sig_at urw64_src 1) urstream] (conj urfnv_ok (conj urstream_ok Logic.I)))
+    eq_refl eq_refl).
+Time Qed.
+Definition urviews_Pr := mkprog (funs_of 0 urviews_src) [].
+Time Lemma urvfill_ok : callee_ok urviews_Pr (gid1 0) (cbz 0) (sig_at urviews_src 0) urvfill.
+Proof. Time exact_no_check (@compile_f_ok ru64_recs ru64_laws urviews_Pr [] gid1 0 (sig_at urviews_src 0) (body_at urviews_src 0) eq_refl eq_refl (no_callees urviews_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma urvfold_ok : callee_ok urviews_Pr (gid1 1) (cbz 1) (sig_at urviews_src 1) urvfold.
+Proof.
+  Time exact_no_check (@compile_f_ok ru64_recs ru64_laws urviews_Pr [existT ftype (sig_at urviews_src 0) urvfill] gid1 1 (sig_at urviews_src 1) (body_at urviews_src 1)
+    eq_refl eq_refl (all_ok_callees urviews_Pr gid1 [existT ftype (sig_at urviews_src 0) urvfill] (conj urvfill_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
+Time Lemma urviews_ok : callee_ok urviews_Pr (gid1 2) (cbz 2) (sig_at urviews_src 2) urviews.
+Proof.
+  Time exact_no_check (@compile_f_ok ru64_recs ru64_laws urviews_Pr [existT ftype (sig_at urviews_src 0) urvfill; existT ftype (sig_at urviews_src 1) urvfold]
+    gid1 2 (sig_at urviews_src 2) (body_at urviews_src 2) eq_refl eq_refl
+    (all_ok_callees urviews_Pr gid1 [existT ftype (sig_at urviews_src 0) urvfill; existT ftype (sig_at urviews_src 1) urvfold] (conj urvfill_ok (conj urvfold_ok Logic.I)))
+    eq_refl eq_refl).
+Time Qed.
+Print Assumptions urviews_ok.
+End RU64.
