@@ -2585,6 +2585,28 @@ step 12 left out: a record variable's type is not known to `wf`), mutual recursi
 `core-ok`; examples 27 / 27; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (10 / 10 / 10 / 12 /
 11 s); **68 programs through the verified compiler, 0 read but refused by the check**.
 
+**Step 16, `u64` — the design (2026-11-01).**  `w64` and `views` compute on `u64` (§1.3): a record of two numbers (`w_lo`,
+`w_hi`) with primitive projections, whose operations are one sealed function, `w64_op o a b` (`u64_add a b := w64_op W_add a b`,
+`u64_ltb a b := w_lo (w64_op W_ltu a b) =? 1`, ...), and KQL's one instruction `Ew64` (the two halves of each operand to the two
+halves of the result).  Read part by part, they need three things, built in this order:
+- *(a) Record variables with their types.*  `w64` passes `u64` variables as they are (`stream f st1 ..`) and gives one back
+  (`| O => h`): the record variable that parts 2 and 3 of step 12 left out, because `wf` does not know a record variable's
+  type.  `wf` gains the types of the record variables in scope (`rk`, one record type each, the nearest first: a parameter's
+  from its kind, a `let`'s and a match's from what is bound); `RVar i` then has the type `nth i rk`, so it may be an argument
+  of that kind and may be given back.  The proof gains the matching fact of the meaning: each record value in scope has the
+  type `rk` says (`kind_of`), kept by every binder.
+- *(b) Records bound in memories.*  Written out, `view_upd64 h i (u64_mul ..) s` binds the `u64` by a `let` and writes its two
+  halves: `MLetR` / `MMatchR` among the memories and `XLetR` / `XMatchR` among the numbers made after memories, as `SLetR` /
+  `SMatchR` are among the numbers.
+- *(c) The operation and its fields.*  `RW64 o a b` among the records, meaning the record built from the fields of
+  `w64_op o (mk_u64 a0 a1) (mk_u64 b0 b1)`, the `aᵢ` / `bᵢ` the operands' fields: no type equality is needed, and because `u64`
+  has definitional eta (primitive projections), this is the user's `w64_op o a b` by conversion.  Compiled to `Ew64` on the
+  operands' field atoms, its result the two fields; one proof case by `K_w64`; well formed when the operands and the result
+  have two fields.  The reifier reads `w64_op` as `RW64` and a primitive projection (`w_lo r`) as the field of a record taken
+  apart; `u64` is a record type of the program like any other (`rec_shape` takes it: one constructor, two numbers), and
+  `kitc.py`'s instance for it is the one it writes for a record (its match is the projections, its laws by `reflexivity`).
+- *Expected*: `w64` and `views` (+2, 70 of 71).  The gap of (a) also closes for the program's own records.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
