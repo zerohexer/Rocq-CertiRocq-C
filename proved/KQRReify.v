@@ -385,6 +385,35 @@ Definition iota_pair (ci : case_info) (p : predicate term) (c : term) (br : bran
     end
   else None.
 
+(** step 25: a value of any inductive type built in place and taken apart.  A plain value -- a plain argument, a function, a
+    type, or a constructor applied to plain values -- may be put in where it is named (its work is nothing at run time) *)
+Fixpoint plain_val (fuel : nat) (t : term) : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      match t with
+      | tLambda _ _ _ | tInd _ _ | tSort _ | tProd _ _ _ => true
+      | tApp (tConstruct _ _ _) args | tApp (tInd _ _) args => forallb (plain_val fuel) args
+      | _ => plain_arg t
+      end
+  end.
+Definition is_con (t : term) : bool := match t with tConstruct _ _ _ | tApp (tConstruct _ _ _) _ => true | _ => false end.
+(** a match on a constructor whose fields are plain is its branch with the fields put in: Rocq's own iota *)
+Definition iota_go (ci : case_info) (c : term) (brs : list (branch term)) : option term :=
+  let '(hd, args) := match c with tApp h a => (h, a) | _ => (c, []) end in
+  match hd with
+  | tConstruct ind k _ =>
+      if Kername.eqb (inductive_mind ind) (inductive_mind (ci_ind ci)) then
+        let fields := skipn (ci_npar ci) args in
+        match nth_error brs k with
+        | Some br => if Nat.eqb (length (bcontext br)) (length fields) && forallb (plain_val 100) fields
+                     then Some (subst (rev fields) 0 (bbody br)) else None
+        | None => None
+        end
+      else None
+  | _ => None
+  end.
+
 Section R.
 Variable callees : list (kername * sig).   (* the program's functions read so far, callees first *)
 Variable fm : bool.                        (* the function being read takes a memory *)
@@ -442,6 +471,55 @@ Definition lets_first (ci : case_info) (p : predicate term) (c : term) (brs : li
   | (bs, c0) => match lift0 (length bs) (tCase ci p c brs) with tCase ci' p' _ brs' => Some (mklets bs (tCase ci' p' c0 brs')) | _ => None end
   end.
 
+(** the types the readers hold as values: a number, a boolean, a counter, a memory, a record of the program's types *)
+Definition held (ty : term) : bool :=
+  is_ty kn_int ty || is_bool ty || is_nat ty || is_ty kn_mem ty || match rindex ty rt 0 with Some _ => true | None => false end.
+(** a let of a constructor of plain values, at a type the readers do not hold, is its body with the value put in (zeta) *)
+Definition zeta_con (t : term) : option term :=
+  match t with
+  | tLetIn _ b ty body => if is_con b && plain_val 100 b && negb (held ty) then Some (subst [b] 0 body) else None
+  | _ => None
+  end.
+(** the head of a scrutinee: a helper written out, a let read by zeta, a match on a constructor its branch *)
+Fixpoint hnf_con (fuel : nat) (t : term) : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      match match zeta_head t with Some t' => Some t' | None => zeta_con t end with
+      | Some t' => hnf_con fuel t'
+      | None =>
+          match t with
+          | tConst kn _ => match hb kn with Some b => hnf_con fuel b | None => t end
+          | tApp (tConst kn _) args => match hb kn with Some b => hnf_con fuel (wout b args) | None => t end
+          | tApp (tLambda _ _ _ as f) args => hnf_con fuel (wout f args)
+          | tCase ci _ c brs => match iota_go ci (hnf_con fuel c) brs with Some t' => hnf_con fuel t' | None => t end
+          | _ => t
+          end
+      end
+  end.
+(** a match the readers do not take apart: of a type other than [bool], [nat], [prod] and the program's records *)
+Definition generic_ind (ind : inductive) : bool :=
+  negb (Kername.eqb (inductive_mind ind) (inductive_mind ind_bool) || Kername.eqb (inductive_mind ind) (inductive_mind ind_nat)
+        || Kername.eqb (inductive_mind ind) (inductive_mind ind_prod))
+  && match rind ind rt 0 with Some _ => false | None => true end.
+(** the head step of every reader: a let read by zeta (step 20), a let of a constructor put in, a match on a constructor of a
+    type no reader takes apart its branch, such a match at the head of an application its branch applied (step 25) -- each the
+    same term up to zeta, iota and beta, each firing only where no reader held the term before *)
+Definition head_r (t : term) : option term :=
+  match zeta_head t with
+  | Some t' => Some t'
+  | None =>
+      match zeta_con t with
+      | Some t' => Some t'
+      | None =>
+          match t with
+          | tCase ci _ c brs => if generic_ind (ci_ind ci) then iota_go ci (hnf_con 50 c) brs else None
+          | tApp (tCase ci _ c brs) args => option_map (fun t' => mkApps t' args) (iota_go ci (hnf_con 50 c) brs)
+          | _ => None
+          end
+      end
+  end.
+
 (** a number; and a counter: a counter variable, [O], [S c], [kq_nat e] *)
 Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sexp :=
   match fuel with
@@ -451,7 +529,7 @@ Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option 
     to_args (map (fun a => match reify fuel ctx a with Some e => Some (inl e) | None =>
                             match reify_b fuel ctx a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel ctx a) end end) l) in
   let reify_cs (l : list term) : option scnts := option_map to_scnts (opt_all (map (reify_c fuel ctx) l)) in
-  match zeta_head t with Some t' => reify fuel ctx t' | None =>
+  match head_r t with Some t' => reify fuel ctx t' | None =>
   match t with
   | tRel i => option_map SVar (num_index ctx i)
   | tInt n => Some (SInt n)
@@ -611,7 +689,7 @@ with reify_r (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sr
       let reify_args (l : list term) : option sexps :=
         to_args (map (fun a => match reify fuel ctx a with Some e => Some (inl e) | None =>
                                 match reify_b fuel ctx a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel ctx a) end end) l) in
-      match zeta_head t with Some t' => reify_r fuel ctx t' | None =>
+      match head_r t with Some t' => reify_r fuel ctx t' | None =>
       match t with
       | tRel i => option_map RVar (rec_index ctx i)
       | tApp (tConstruct ind 0 _) args =>
@@ -766,7 +844,7 @@ Fixpoint reify_m (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
     to_args (map (fun a => match reify fuel ctx a with Some e => Some (inl e) | None =>
                             match reify_b fuel ctx a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel ctx a) end end) l) in
   let reify_cs (l : list term) : option scnts := option_map to_scnts (opt_all (map (reify_c fuel ctx) l)) in
-  match zeta_head t with Some t' => reify_m fuel ctx t' | None =>
+  match head_r t with Some t' => reify_m fuel ctx t' | None =>
   match t with
   | tRel i => if is_ent CMem ctx i then Some MCur else None
   | tConst kn _ => match hb kn with Some b => reify_m fuel ctx b | None => None end
@@ -899,7 +977,7 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
     to_args (map (fun a => match reify fuel c a with Some e => Some (inl e) | None =>
                             match reify_b fuel c a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel c a) end end) l) in
   let reify_cs (c : list cent) (l : list term) : option scnts := option_map to_scnts (opt_all (map (reify_c fuel c) l)) in
-  match zeta_head t with Some t' => reify_x fuel ctx t' | None =>
+  match head_r t with Some t' => reify_x fuel ctx t' | None =>
   match t with
   | tLetIn _ b ty body =>
       if is_ty kn_mem ty then
@@ -1036,7 +1114,7 @@ Fixpoint reify_br (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
         end
     | _ => None
     end in
-  match zeta_head t with Some t' => reify_br fuel ctx t' | None =>
+  match head_r t with Some t' => reify_br fuel ctx t' | None =>
   match self_call t with
   | Some (cs, a) => Some (BRec cs a)
   | None =>
@@ -1150,7 +1228,7 @@ Fixpoint reify_bb (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
         end
     | _, _ => None
     end in
-  match zeta_head t with Some t' => reify_bb fuel ctx t' | None =>
+  match head_r t with Some t' => reify_bb fuel ctx t' | None =>
   match self_call t with
   | Some (cs, a) => Some (BbRec cs a)
   | None =>
@@ -3080,3 +3158,52 @@ Proof.
     eq_refl eq_refl).
 Time Qed.
 Print Assumptions vbgo_ok.
+
+(* ---------------------------------------------------------------- a value built in place, taken apart (step 25) *)
+(* the construct table's shapes: a record with a proof field and one with a memory field, a list cell, a pair of pairs and a
+   pair holding a function given to helpers (written out, each argument a constructor of plain values); a pair holding the
+   memory, taken apart after a helper *)
+Record w5bnd := w5mkb { w5bv : i63; w5bok : True }.
+Record w5ms := w5mkms { w5mv : i63; w5mm : KQ.KQRun.mem }.
+Definition w5k1 (x : i63) : i63 := w5bv (w5mkb x I).
+Definition w5k2 (x : i63) : list i63 := cons x nil.
+Definition w5k3 (t : KQ.KQRun.mem) (x : i63) : i63 := w5mv (w5mkms x t).
+Definition w5k4 (p : (i63 * i63) * i63) : i63 := PrimInt63.add (PrimInt63.add (fst (fst p)) (snd (fst p))) (snd p).
+Definition w5k5 (p : i63 * (i63 -> i63)) : i63 := (snd p) (fst p).
+Definition w5k6 (p : i63 * KQ.KQRun.mem) : i63 * KQ.KQRun.mem := (PrimInt63.add (fst p) 1, snd p).
+Definition w5go (n : nat) (a b : i63) (s : KQ.KQRun.mem) : i63 :=
+  PrimInt63.add (PrimInt63.add (w5k1 a) (match w5k2 a with nil => 0 | cons x _ => x end))
+    (PrimInt63.add (w5k3 s a) (PrimInt63.add (w5k4 ((a, b), a)) (w5k5 (a, fun x => PrimInt63.add x 1)))).
+Definition w5gm (n : nat) (a b : i63) (s : KQ.KQRun.mem) : i63 :=
+  let '(x, t) := w5k6 (a, s) in PrimInt63.add x (KQ.KQRun.rd 0 0 t).
+Definition w5go_src := ltac:(run_template_program (tmQuoteRec w5go)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Definition w5gm_src := ltac:(run_template_program (tmQuoteRec w5gm)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+(* each value read away by zeta and iota: the record fields, the list cell's head, the pairs' parts and the function applied *)
+Check (eq_refl : map (fun x => snd x) w5go_src =
+  [FPlain (SOp Badd (SOp Badd (SVar 1) (SVar 1)) (SOp Badd (SVar 1) (SOp Badd
+     (SOp Badd (SOp Badd (SLetR (RLetR (RMk 0 (SCons (SVar 1) (SCons (SVar 0) SNil))) (RVar 0)) (SMatchR (RVar 0) (SVar 1)))
+                         (SLetR (RLetR (RMk 0 (SCons (SVar 1) (SCons (SVar 0) SNil))) (RVar 0)) (SMatchR (RVar 0) (SVar 0))))
+               (SLet (SVar 1) (SVar 0)))
+     (SLet (SLet (SVar 1) (SVar 0)) (SOp Badd (SVar 0) (SInt 1))))))]).
+Check (eq_refl : map (fun x => snd x) w5gm_src =
+  [FPlainX (XLet (SOp Badd (SLet (SVar 1) (SVar 0)) (SInt 1)) (XLetM (MLetM MCur MCur) (XRet (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 0))))))]).
+Section W5.
+#[local] Instance w5_recs : RecTypes | 0 :=
+  {| RT := fun _ => (i63 * i63)%type;
+     RO := fun _ => mkrops 2 (fun l => (nth 0 l 0%uint63, nth 1 l 0%uint63)) (fun P v k => match v with (a, b) => k [a; b] end);
+     Rd := fun _ => (0%uint63, 0%uint63) |}.
+#[local] Instance w5_laws : RecLaws.
+Proof. split; [intros i [a b] P k; reflexivity | intros i [a b]; reflexivity | intros i [|a [|b [|c l]]] L; try discriminate; reflexivity]. Qed.
+Definition w5go_Pr := mkprog (funs_of 0 w5go_src) [].
+Time Lemma w5go_ok : callee_ok w5go_Pr (gid1 0) (cbz 0) (sig_at w5go_src 0) w5go.
+Proof.
+  Time exact_no_check (@compile_f_ok w5_recs w5_laws w5go_Pr [] gid1 0 (sig_at w5go_src 0) (body_at w5go_src 0) eq_refl eq_refl
+    (no_callees w5go_Pr gid1) eq_refl eq_refl).
+Time Qed.
+End W5.
+Definition w5gm_Pr := mkprog (funs_of 0 w5gm_src) [].
+Time Lemma w5gm_ok : callee_ok w5gm_Pr (gid1 0) (cbz 0) (sig_at w5gm_src 0) w5gm.
+Proof. Time exact_no_check (compile_f_ok w5gm_Pr [] gid1 0 (sig_at w5gm_src 0) (body_at w5gm_src 0) eq_refl eq_refl (no_callees w5gm_Pr gid1) eq_refl eq_refl). Time Qed.
+Print Assumptions w5go_ok.
