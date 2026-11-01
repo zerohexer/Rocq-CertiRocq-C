@@ -53,10 +53,10 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    records as parameters (a record a value in the meaning, its fields in KQL), records given back (the fields after the first
    through the slot block), functions given that name the caller's variables, machine operations, bytes, 64-bit numbers
    (`u64`: record variables with their types, one instruction per operation), mutual recursion (a block as one function with
-   a selector), functions giving back a boolean, values of any inductive type built in place and taken apart — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
+   a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program through it when every function is read (**all 71 of the gate's
    programs today**, the five test kernels included, and `lock` on two processors; each corpus program timed against the
-   translator's build), the translator otherwise; of the construct table's 780 cells 764 (7 more by the walk alone); next
+   translator's build), the translator otherwise; of the construct table's 780 cells 768 (3 more by the walk alone); next
    the rest of the table's fallbacks, then the walk retired.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
@@ -2950,6 +2950,31 @@ test must be a construct of `S`, as a record chosen by a test is (step 21).  The
 - *Expected*: the four cells.  Not in this step: a pair of a number and a memory as a parameter (a memory is passed only as
   the function's memory), records of a number and a memory (`mem_pair`) beyond `prod`.
 
+**Step 26 done (2026-11-02): a number and a memory given back.**  Built as designed, with one place left for later:
+- *`KQR.v`*: `sq = Some KNum` gives back `i63 * mem` (`rtq`; `calln` its first part, `callm` its second; `pvf` the pair a call
+  gives back).  The sort `spv` (`PvMk`, `PvCall`, `PvRec`, the lets and the memory let, `PvIf`, `PvIfB`, `PvMatch`, `PvMatchP`),
+  `denote_pv` with its own `recp`; `cpv` (continuation style: the number's atom given on, the KQL memory the pair's) and `ctailp`
+  (tail: the number returned after the writes, the function itself a loop); `XMatchP` and `XLetP` among the numbers made after
+  memories (one compilation, `cpv` then the rest); `wfpv`, `sh_pv`; bodies `FRecP`, `FPlainP`.  Proved once: `pvcall_run` (a
+  callee's statement read at a pair), `cpv_ok`, `ctailp_ok` — both stated for any recursive call (`recp`, `rp` quantified, not
+  section variables: `ctailx_ok` uses them at `rp = false`) —, the two cases of `ctailx_ok` and `denote_x_recx_ext`,
+  `compile_f_ok_pair` (by the counter's induction) and `compile_f_ok`'s case.  No new hypothesis.  Tests: `jtail`, `jnon`,
+  `jif`, `jgo`, `jlet` (the four cells' shapes and the let form: `jtail`'s KQL a loop, `jnon`'s a call); a pair function without
+  a memory, a pair taken from a number function and the parts the other way round refused; each theorem 2–8 ms; `Print
+  Assumptions` the same base.
+- *Not built*: `MMatchP` / `MLetP` (a memory function taking a pair apart): `smem` would become mutual with `spv` and every proof
+  over memories one mutual induction; no cell of the table needs it yet, so it stays open.
+- *The reifier*: `read_sig` reads `int * mem` as the result; `reify_pv`; `XMatchP` after the step-23 reading (a pair built in
+  place is still read as two lets); the let form by putting the pair of two new variables in for `r` (`pm_split`), so that `fst
+  r` and `snd r` reduce by step 25's rules; a read whose memory argument reduces to the newest memory (`rd 0 0 (snd r)`) read as
+  a read.  Test: KQR.v's tests read from their text (`jgo` over `jnon`, `jlet` over `jtail`, `jif`), the trees pinned, each
+  theorem 2–6 ms.
+- *`kitc.py`*: the signature's sixth part `P`.
+- The C: 63 of 63 byte-identical.  The construct table (on `4fff28f`, the code of `6b0d249`): **768 of 780 through the verified compiler** (was
+  764), 3 more by the walk alone, 9 gaps.  The gate with `KQ_REFLECT=1` on `6b0d249`: everything passes — `make.sh`
+  `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (10 / 10 / 10 / 12 / 12 s); **71 programs through the verified compiler, 0 refused,
+  0 not read**.
+
 **Step 27, a template giving its own function parameter to another template — the design (2026-11-02).**  One cell proved
 only by the walk, `P_int_outer_capt`: `outer r acc f := match r with O => acc | S r' => outer r' (fold 3 0 acc f) f end`, called
 with a function naming the caller's `b`.  Read apart (a scratch file, the reifier on smaller programs): the copy of `outer` is
@@ -3134,11 +3159,12 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `d143561` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `e6853d4` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 27's design (a template giving its own function parameter to another template) |
+| (this commit) | §12.V: step 26 done (a number and a memory given back: the construct table 768 of 780), the C, the gate |
+| `4fff28f` | §12.V: step 27's design (a template giving its own function parameter to another template) |
 | `6b0d249` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 26: `sq = Some KNum`, pair values `spv` (`cpv_ok`, `ctailp_ok`, `compile_f_ok_pair`), `XMatchP`, `XLetP`; the reifier reads them |
 | `e6853d4` | §12.V: step 25 done (a value of any inductive type built in place, taken apart: the construct table 764 of 780), the C, the gate |
 | `9ab7709` | §12.V: step 26's design (a number and a memory given back: pair values) |
