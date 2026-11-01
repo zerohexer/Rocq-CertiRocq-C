@@ -2837,6 +2837,26 @@ pairs as a parameter (1), a pair holding a function (1), a capture of an outer v
 steps.  The gate with `KQ_REFLECT=1` on `e0c149e`: everything passes — `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36;
 the five kernels (10 / 10 / 10 / 12 / 12 s); **71 programs through the verified compiler, 0 refused, 0 not read**.
 
+**Step 24, functions giving back a boolean — the design (2026-11-02).**  Five of the 18 cells proved only by the walk
+(`P_bool_tail_rec`, `_rec_search`, `_nontail_and`, `_nontail_or`, `A_par_bool_rec_negb`) are recursive functions giving back a
+boolean (`match n with O => true | S m => (a <? b) && f m (a + 1) b s end`, `negb (k m (x + 1))`), tested by their callers.
+The meaning's recursive call (`rec`) gives a number, so a boolean function needs its own, as a record's (`recr` of
+`denote_br`); built as step 12 part 3 built records given back, with no slot block:
+- *The result kind*: `sq : option kind` (was `option nat`): `Some (KRec ri)` a record (as before), `Some KBool` a boolean;
+  `rtq` gives `bool`, `calln` its number `b2i` (the KQL returns 1 or 0), `callm` the memory it was given; `callee_ok`
+  unchanged in shape.
+- *The body*: a new sort `sbb` (a boolean given back) — `BbRet b` (a boolean at the end), `BbRec cs args` (the function itself
+  at the end: a loop), `BbNotRec cs args` (its negation at the end: a call, then `lxor 1`), `BbIf`, `BbIfB`, `BbMatch`, `BbLet` —
+  with `denote_bb` and its own `recb` (giving a boolean); `x && f ..` is `if x then f .. else false` and `x || f ..` is `if x
+  then true else f ..` by the definitions of `andb` / `orb`, so `BbIfB` reads them.  Bodies `FRecB`, `FPlainB`; `ctailb`
+  compiles in tail position; `wfbb`; `ctailb_ok` and `compile_f_ok`'s boolean case (by the counter's induction, its
+  hypothesis the recursive call's KQL giving `b2i (recb ..)`).
+- *A call*: `BCall f cs args` among the booleans, a call of a function giving back a boolean, in its three compilations (the
+  call, then a jump on its 1 or 0, or the value, or a choice); proved from `callee_ok`.
+- *The reifier*: `read_sig` reads a boolean result; a body giving back a boolean read as `sbb`; a call of such a function in a
+  test read as `BCall`; `kitc.py` prints the signature's sixth part `B` for it.
+- *Expected*: the five cells.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
