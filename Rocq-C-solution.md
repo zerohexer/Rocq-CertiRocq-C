@@ -2733,6 +2733,16 @@ names its block by a number written where it is used and not shared.  So:
   27 / 27; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (10 / 10 / 10 / 12 / 11 s); **71 programs
   through the verified compiler, 0 read but refused by the check, 0 not read**.
 
+**Step 19, record types from the bodies — the design (2026-11-01).**  224 of the construct table's 253 cells proved only by the
+walk build a record and take it apart inside a body (`let '(p, q) := (a + b, b) in p - q`; a helper giving a pair or an `r3`,
+written out) with the record's type in no function's signature: the program's record table is read off the signatures of the
+functions reached (`rtab_of`), so the type is not in it, and the constructor and the match are not read.  So `rtab_of` also
+takes the record types the bodies name — of a constructor applied (its parameters the first arguments), of a match (its
+parameters the predicate's), of a `let`, of a primitive projection — in the functions reached and the helpers they write out
+(each helper once), after the signatures' (so a program's record indices are unchanged).  `KQR.v` is unchanged: a record
+built and taken apart is `RMk` and `SMatchR`, its fields atoms of KQL (no memory, no call).  *Expected*: the 224 cells, and
+`P_int_w64` (a `u64` built inside a body); the C of every gate program unchanged.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
