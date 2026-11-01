@@ -2987,6 +2987,28 @@ of a call of a template (`tc_of`) resolves to the function it is bound to.  So, 
   needs before the copy itself (the copy of `fold` for `outer`'s function, taking the same captured variable).
 `KQR.v` and `kitc.py` unchanged; the copy's theorem is `compile_f_okr` as for every copy.  *Expected*: the cell.
 
+**Step 28, `option`, `sum` and their kind held as their tag and fields — the design (2026-11-02).**  Two cells proved only by
+the walk (`A_par_option`, `A_par_sum`: a helper choosing `None` / `Some x` or `inl x` / `inr x` by a test, its value taken apart
+by the caller) and two gaps on both routes (`A_par_option_rec`: an `option` given back by a recursion; `A_par_option_state`: an
+`option` as a loop's state).  A match on a test is not the test of two matches up to conversion, so the value must be held.
+Rather than a new sort, a non-recursive inductive whose constructors carry numbers is held as a record whose first field is
+its constructor's number and the others its fields, padded with 0 — the way C holds a tagged union — so every construct of
+records already built (built, chosen by a test, taken apart, bound, passed, given back through the slot block) serves it:
+- *`KQR.v`*: `rops` gains `rtg : option (list nat)` (`None` a record; `Some ws` a data type, constructor `c` carrying `nth c
+  ws` numbers).  `RecLaws`' third law splits: `rl_mk` for a record (as now), `rl_mk_tag` for a data type (each constructor's
+  number, its fields and written zeros, built then taken apart, gives them back) — per program by a fixed tactic
+  (`kq_tag_case`); `rl_mk_c` derives the law for any list in a constructor's form (`canon`).  `RMk`'s well-formedness asks the
+  form of the syntax (`canon_s`: the tag a written constructor number, the fields after the constructor's own written zeros),
+  and `canon_s_ok` carries it to the meaning; `RW64` asks a plain record.  The only proof cases touched are `RMk`'s and
+  `RW64`'s.  A match on such a value is a record taken apart and a test of its tag: `match v with None => e0 | Some x => e1
+  end` is, by the record's own match and the kernel's computation of `PrimInt63.eqb` on written numbers, the same term as
+  taking the record apart and choosing `e0` where the tag is 0, `e1` otherwise.
+- *The reifier*: the record table takes such types (`rec_shape`: several constructors, their fields numbers), with their
+  widths; a constructor reads as `RMk` with its number and the padding; a match reads, in each reader, as its record match and
+  a chain of tests of the tag (the branches lifted to the record's fields); `kitc.py` writes the instance (`rmk` a chain of
+  tests of the tag, `relim` the type's match, `kq_tag_case` for the law).
+- *Expected*: the four cells.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3159,11 +3181,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `e6853d4` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `2b8c70d` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 26 done (a number and a memory given back: the construct table 768 of 780), the C, the gate |
+| (this commit) | §12.V: step 28's design (`option`, `sum` and their kind held as their tag and fields) |
+| `09d1b1d` | `proved/KQRReify.v` step 27: a copy's function parameter given to another template resolved (`fsub`, `tcall`, `sites`, `ensure`) |
+| `2b8c70d` | §12.V: step 26 done (a number and a memory given back: the construct table 768 of 780), the C, the gate |
 | `4fff28f` | §12.V: step 27's design (a template giving its own function parameter to another template) |
 | `6b0d249` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 26: `sq = Some KNum`, pair values `spv` (`cpv_ok`, `ctailp_ok`, `compile_f_ok_pair`), `XMatchP`, `XLetP`; the reifier reads them |
 | `e6853d4` | §12.V: step 25 done (a value of any inductive type built in place, taken apart: the construct table 764 of 780), the C, the gate |
