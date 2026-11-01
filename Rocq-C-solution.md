@@ -2857,6 +2857,27 @@ The meaning's recursive call (`rec`) gives a number, so a boolean function needs
   test read as `BCall`; `kitc.py` prints the signature's sixth part `B` for it.
 - *Expected*: the five cells.
 
+**Step 25, a value of any inductive type built in place and taken apart — the design (2026-11-02).**  Six of the cells proved only
+by the walk (`A_par_dep_record`, `A_par_list`, `A_par_mem_record`, `A_par_pair_nested`, `A_par_fun_in_pair`,
+`A_par_mem_pair`) build a value in place and take it apart: a record with a proof or a memory field (`bv (mkb x I)`,
+`mv (mkms x t)`), a list cell (`match k a with nil => 0 | cons x _ => x end`, `k a := cons a nil`), a pair of pairs or a pair
+holding a function or a memory given to a helper (`k ((a, b), a)`, `k (a, fun x => x + 1)`, `k (a, s)`).  Read apart (a scratch
+file, the reifier on the smaller terms): a match on such a value written directly is read already (`iota_pair`, step 23); what
+stops is the helper written out — `wout` binds an argument that is a constructor applied by a `let`, of a type no reader
+holds, so the match under it never meets the constructor.  All three rules below give the same term up to Rocq's own zeta,
+iota and beta, so the check is unchanged, and they fire only where the readers held nothing before (F40's rule), so a program
+read before is read the same way:
+- *zeta*: a `let` of a constructor applied to arguments that are themselves plain (variables, numbers, constants,
+  constructors, functions), at a type the readers do not hold (not a number, boolean, counter, memory or record of the
+  program's types), is its body with the value put in;
+- *iota*: a match, of any inductive type, on a constructor applied whose fields are plain is its branch with the fields put in
+  (after the readings there are, as `iota_pair` is), with a two-branch match on a type other than `bool` / `nat` and a match of
+  more branches included; the scrutinee a helper's call written out first;
+- *iota at the head of an application*: such a match applied to arguments (`(snd (a, F)) x` written out) is its branch applied.
+`KQR.v` and `kitc.py` unchanged.  *Expected*: the six cells.  Not in this step: `option` / `sum` chosen by a test and taken
+apart (`A_par_option`, `A_par_sum`: a match on an `if` is not the `if` of two matches up to conversion, so it needs the type held
+as its tag and fields, a construct of `S`), a number and a memory given back (4), a capture through two templates (1).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3029,11 +3050,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `9cf5da1` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `12e40c7` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 23 done (a pair built in place, taken apart: the construct table 752 of 780), the C, the gate |
+| (this commit) | §12.V: step 25's design (a value of any inductive type built in place, taken apart) |
+| `8da3b4d` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 24: `sq : option kind`, the body sort `sbb` (`ctailb_ok`, `compile_f_ok_bool`), `BCall` among the booleans; the reifier reads boolean results |
+| `2220ad4` | §12.V: step 24's design (functions giving back a boolean) |
+| `12e40c7` | §12.V: step 23 done (a pair built in place, taken apart: the construct table 752 of 780), the C, the gate |
 | `e0c149e` | `proved/KQRReify.v` step 23: `iota_pair` in the readers, after the record reading |
 | `9cf5da1` | §12.V: step 22 done (booleans chosen by a test or a counter's match: the construct table 744 of 780), the C, the gate; step 23's design (a pair built in place, taken apart) |
 | `825c046` | `proved/KQR.v` + `KQRReify.v` step 22: `BIfCmp`, `BMatchCnt` in the three forms a boolean is compiled to |
