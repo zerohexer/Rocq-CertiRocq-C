@@ -53,10 +53,10 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    records as parameters (a record a value in the meaning, its fields in KQL), records given back (the fields after the first
    through the slot block), functions given that name the caller's variables, machine operations, bytes, 64-bit numbers
    (`u64`: record variables with their types, one instruction per operation), mutual recursion (a block as one function with
-   a selector) — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
+   a selector), functions giving back a boolean — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program through it when every function is read (**all 71 of the gate's
    programs today**, the five test kernels included, and `lock` on two processors; each corpus program timed against the
-   translator's build), the translator otherwise; of the construct table's 780 cells 752 (18 more by the walk alone); next
+   translator's build), the translator otherwise; of the construct table's 780 cells 757 (13 more by the walk alone); next
    the rest of the table's fallbacks, then the walk retired.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
@@ -2857,6 +2857,35 @@ The meaning's recursive call (`rec`) gives a number, so a boolean function needs
   test read as `BCall`; `kitc.py` prints the signature's sixth part `B` for it.
 - *Expected*: the five cells.
 
+**Step 24 done (2026-11-02): functions giving back a boolean.**  Built as designed, with the lets of the other tail sorts all
+in the body sort (the design named `BbLet`; `BbLetB`, `BbLetC`, `BbLetR`, `BbMatchR` came with it, each a case copied from the
+record body's):
+- *`KQR.v`*: `sig.sq : option kind` (a record `Some (KRec ri)`, a boolean `Some KBool`; `Some KNum` is refused by `wf_f`);
+  `rtq`, `calln` (`b2i`), `callm` (the memory given), `vrec_of`, `boolf` (the boolean a call gives back).  The sort `sbb`
+  (`BbRet`, `BbRec`, `BbNotRec`, the lets, `BbIf`, `BbIfB`, `BbMatch`), `denote_bb` with its own `recb`, `FRecB` / `FPlainB`,
+  `ctailb` (a boolean at the end by its value, `cbval`; the function itself at the end `Eloop`; its negation the call and
+  `lxor 1`), `wfbb`, `sh_bb`.  `BCall f cs args` among the booleans, compiled in the three forms a boolean is compiled to (the
+  call, then a jump on its 1 or 0, or the value, or a conditional move on it), `wfb` asking a callee that gives back a boolean
+  and keeps the memory.  Proved once: `bcall_run` (the callee's statement read at a boolean) and the `BCall` case of each of the
+  three parts of `cexp_all`'s boolean statement, `denote_nomem`, `denote_rec_ext`, `denote_bb_nomem`; `ctailb_ok` (every case
+  of the body, the recursive call's hypothesis `Hrecb`: its KQL gives `b2i (recb ..)` and keeps the memory);
+  `compile_f_ok_bool` (by the counter's induction, as `compile_f_ok_rec`), the `Some KBool` case of `compile_f_ok`.  No new
+  hypothesis.  Tests: `qtail`, `qsearch`, `qand`, `qor`, `qneg` (the five cells' shapes; `qand`'s KQL a loop, `qneg`'s a call
+  and `lxor`), callers testing them by a jump (`qgo`), as a value (`qval`), by a choice (`qpick`); the recursive call in a plain
+  body, a call of a number function as a boolean and the tree of `||` for `&&` refused; each theorem 3–15 ms; `Print
+  Assumptions` the same base.  Trap met: a `lia` in a section sees every section hypothesis in scope, so `ctailb_ok`, written
+  after the record part, took that part's `ri` and `1 <= rn (RO ri)` as arguments — the boolean part now stands before it.
+- *The reifier*: `read_sig` reads a boolean result; `reify_bb` reads a body giving back one (at the end `a && b` as `if a
+  then b else false` and `a || b` as `if a then true else b`, the same terms by the definitions of `andb` / `orb`, so the
+  function itself in `b` is a loop — the translator's rule, F39; `negb` of the function itself `BbNotRec`); `reify_b` reads a
+  call of such a function as `BCall`.  Test `vbgo` (the five and a caller testing each): the five trees exactly KQR.v's
+  hand-written ones, each theorem 3–11 ms.
+- *`kitc.py`*: the signature's sixth part `B`; an entry giving back a boolean is compiled (its KQL returns 1 or 0).
+- The C: 63 of 63 byte-identical (no gate program has a function giving back a boolean).  The construct table (on
+  `8780f64`, the code of `8da3b4d`): **757 of 780 through the verified compiler** (was 752: the five), 13 more by the walk alone, 10 gaps.
+  The gate with `KQ_REFLECT=1` on `8da3b4d`: everything passes — `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the
+  five kernels (11 / 11 / 11 / 13 / 12 s); **71 programs through the verified compiler, 0 refused, 0 not read**.
+
 **Step 25, a value of any inductive type built in place and taken apart — the design (2026-11-02).**  Six of the cells proved only
 by the walk (`A_par_dep_record`, `A_par_list`, `A_par_mem_record`, `A_par_pair_nested`, `A_par_fun_in_pair`,
 `A_par_mem_pair`) build a value in place and take it apart: a record with a proof or a memory field (`bv (mkb x I)`,
@@ -3054,7 +3083,8 @@ Pushed to the public repository up to `12e40c7` (2026-11-02); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 25's design (a value of any inductive type built in place, taken apart) |
+| (this commit) | §12.V: step 24 done (functions giving back a boolean: the construct table 757 of 780), the C, the gate |
+| `8780f64` | §12.V: step 25's design (a value of any inductive type built in place, taken apart) |
 | `8da3b4d` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 24: `sq : option kind`, the body sort `sbb` (`ctailb_ok`, `compile_f_ok_bool`), `BCall` among the booleans; the reifier reads boolean results |
 | `2220ad4` | §12.V: step 24's design (functions giving back a boolean) |
 | `12e40c7` | §12.V: step 23 done (a pair built in place, taken apart: the construct table 752 of 780), the C, the gate |
