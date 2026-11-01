@@ -55,9 +55,9 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    (`u64`: record variables with their types, one instruction per operation), mutual recursion (a block as one function with
    a selector) — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program through it when every function is read (**all 71 of the gate's
-   programs today**, the five test kernels included; each corpus program timed against the translator's build), the
-   translator otherwise; next the acceptance of §12.V's plan (2) — the trusted base, the check's time, the construct table —
-   and then the walk retired.  Emit-then-prove is the interim.
+   programs today**, the five test kernels included, and `lock` on two processors; each corpus program timed against the
+   translator's build), the translator otherwise; of the construct table's 780 cells 512 (253 more by the walk alone); next
+   record types from the bodies and the rest of the table's fallbacks, then the walk retired.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -2707,6 +2707,32 @@ names its block by a number written where it is used and not shared.  So:
 - *Expected*: `lock` and `lock_ap` through the verified compiler, built and booted on two processors (200 000); no gate
   program changes.  The protocol itself (the lock's mutual exclusion, so 200 000) stays where it is (§12.G).
 
+**Step 18 done (2026-11-01): blocks shared with another processor.**  Built as designed:
+- *`KQR.v`*: `sh_ok sh b` (with `sh_blk` and one function per sort of the syntax), definitions only: `compile_f_ok` and every
+  other theorem unchanged.  Tests: a plain narrow-block read and write of unshared blocks accepted, a write to the shared
+  block and a read through a block number not written refused, a marked operation and a wide-block read not asked, a
+  program sharing nothing not asked.
+- *`kitc.py`*: a `kq_shared` program is read by the verified compiler; `sh_ok kq_shared` is worked out on every tree read
+  (a function that breaks it: the reason, the translator's own refusal next), and proved beside each function's theorem by
+  a lemma `<program>_rsh<j>` (`exact eq_refl`), so the kernel checks the rule on the tree whose meaning it checked.  The
+  reifier is unchanged (the rule is a property of the tree, worked out in Rocq).
+- *`lock`*: `hw/build_proved.sh lock` with `KQ_REFLECT=1` — `lock` 9 functions and `lock_ap` 4 through the verified
+  compiler, a rule lemma for each, built in 12.6 s; booted on two processors, under QEMU's processor and under KVM: `cntr
+  200000`, the program answered 0.  A plain `rd32` of the shared block is refused on both routes (the verified side's
+  reason, then the translator's).  `lock` stays outside `hw/check.sh` (the machine's gate, whose every kernel has a control).
+- The C: 63 of 63 byte-identical (no gate program shares blocks; compared on this machine, the work laptop busy with the
+  construct table).  The construct table through the verified compiler (the acceptance, on `beff230`, 19 min): of 780 cells,
+  **512 through the verified compiler**, 253 more proved only by the walk, 15 gaps on both routes (765 proved, against 759
+  in the last table of the translator alone), 0 read but refused by the check.  So the walk is not retired yet (§12.V (2):
+  the construct table unchanged or better): 224 of the 253 are one construct — a record built or taken apart inside a body,
+  in no function's signature (`let '(p, q) := (a + b, b) in ..`), absent from the program's record table, which is read
+  off the signatures; the other 29: functions giving back a boolean (8), a function bound by a `let` (5), writing
+  functions with a number and a memory or a pair (9), `option` / `sum` / `list` / records of other fields (5), a capture
+  (1), `u64` inside a body (1).  **Next: record types from the bodies, then these by the tally, then the walk retired.**
+- The gate with `KQ_REFLECT=1`, on the fork, on `8642551` (2026-11-01): everything passes — `make.sh` `core-ok`; examples
+  27 / 27; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (10 / 10 / 10 / 12 / 11 s); **71 programs
+  through the verified compiler, 0 read but refused by the check, 0 not read**.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -2879,11 +2905,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `0dd75b3` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `beff230` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 17 done (mutual recursion: 71 of 71), the C, the gate |
+| (this commit) | §12.V: step 18 done (blocks shared with another processor: `lock` through the verified compiler), the C, the gate |
+| `8642551` | `proved/KQR.v` + `kitc.py` step 18: `sh_ok`, the shared-block rule over the syntax tree, proved by the kernel beside each function's theorem; `kq_shared` programs read by the verified compiler |
+| `30c1981` | §12.V: step 18's design (blocks shared with another processor) |
+| `beff230` | §12.V: step 17 done (mutual recursion: 71 of 71), the C, the gate |
 | `c6a1d3e` | `proved/KQR.v` + `KQRReify.v` step 17: mutual recursion -- a block as one function with a selector counter, its meaning `blk` of the user's own functions (`compile_f_okr`), each member one call of it; the reifier reads a fixpoint of several bodies |
 | `b7dc4c7` | §12.V: step 17's design (mutual recursion) |
 | `0dd75b3` | §12.V: step 16 done (`u64`: 70 of 71), the C, the gate |
