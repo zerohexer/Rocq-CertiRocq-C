@@ -126,6 +126,8 @@ with sbool : Type :=
 | BAnd (x y : sbool)                 (* x && y *)
 | BOr (x y : sbool)                  (* x || y *)
 | BNot (x : sbool)                   (* negb x *)
+| BIfCmp (c : cmpop) (a b : sexp) (x y : sbool)   (* if a c b then x else y (step 22) *)
+| BMatchCnt (c : nat) (x0 x1 : sbool)   (* match on counter variable c: x0 at 0, x1 otherwise (the predecessor is CVar 0) *)
 with srec : Type :=                  (* a record *)
 | RVar (i : nat)                     (* the i-th record variable *)
 | RMk (ri : nat) (es : sexps)        (* the constructor of record type ri on these numbers *)
@@ -345,6 +347,12 @@ with denote_b (cs : list callee) (rec : list nat -> list val -> mem -> i63) (cen
   | BAnd x y => andb (denote_b cs rec cenv benv renv env s x) (denote_b cs rec cenv benv renv env s y)
   | BOr x y => orb (denote_b cs rec cenv benv renv env s x) (denote_b cs rec cenv benv renv env s y)
   | BNot x => negb (denote_b cs rec cenv benv renv env s x)
+  | BIfCmp c a b x y => if cmp_sem c (denote_e cs rec cenv benv renv env s a) (denote_e cs rec cenv benv renv env s b)
+                        then denote_b cs rec cenv benv renv env s x else denote_b cs rec cenv benv renv env s y
+  | BMatchCnt c x0 x1 => match nth c cenv O with
+                         | O => denote_b cs rec cenv benv renv env s x0
+                         | S p => denote_b cs rec (p :: cenv) benv renv env s x1
+                         end
   end
 with denote_r (cs : list callee) (rec : list nat -> list val -> mem -> i63) (cenv : list nat) (benv : list bool) (renv : list val)
   (env : list i63) (s : mem) (x : srec) {struct x} : val :=
@@ -603,6 +611,7 @@ with specb (b : sbool) : bool :=
   | BVar _ | BTrue | BFalse => true
   | BAnd x y | BOr x y => specb x && specb y
   | BNot x => specb x
+  | BIfCmp _ _ _ _ _ | BMatchCnt _ _ _ => false
   end.
 Fixpoint nrd (e : sexp) : nat :=
   match e with
@@ -818,6 +827,12 @@ with ccond (b : sbool) (cenv benv : list atom) (renv : list (list atom)) (env : 
   | BAnd x y => ccond x cenv benv renv env nxt (fun n => ccond y cenv benv renv env n KT KF) KF
   | BOr x y => ccond x cenv benv renv env nxt KT (fun n => ccond y cenv benv renv env n KT KF)
   | BNot x => ccond x cenv benv renv env nxt KF KT
+  | BIfCmp c a b x y => cexp a cenv benv renv env nxt (fun A n1 => cexp b cenv benv renv env n1 (fun B n2 =>
+                          let tc := ccond x cenv benv renv env n2 KT KF in Eif c A B tc (ccond y cenv benv renv env (after n2 tc) KT KF)))
+  | BMatchCnt c x0 x1 => let t0 := ccond x0 cenv benv renv env nxt KT KF in
+                         Eif Ceq (nth c cenv (Aint 0%uint63)) (Aint 0%uint63) t0
+                           (Eop (after nxt t0) Bsub (nth c cenv (Aint 0%uint63)) (Aint 1%uint63)
+                                (ccond x1 (Avar (after nxt t0) :: cenv) benv renv env (Pos.succ (after nxt t0)) KT KF))
   end
 (** a boolean as a value, 1 or 0, with no jump: a comparison by a conditional move, [&&] [||] [negb] by [land] [lor]
     [lxor 1] of the parts' values *)
@@ -833,6 +848,12 @@ with cbval (b : sbool) (cenv benv : list atom) (renv : list (list atom)) (env : 
   | BOr x y => cbval x cenv benv renv env nxt (fun A n1 => cbval y cenv benv renv env n1 (fun B n2 =>
                  Eop n2 Blor A B (K (Avar n2) (Pos.succ n2))))
   | BNot x => cbval x cenv benv renv env nxt (fun A n1 => Eop n1 Blxor A (Aint 1%uint63) (K (Avar n1) (Pos.succ n1)))
+  | BIfCmp c a b x y => cexp a cenv benv renv env nxt (fun A n1 => cexp b cenv benv renv env n1 (fun B n2 =>
+                          let tc := cbval x cenv benv renv env n2 K in Eif c A B tc (cbval y cenv benv renv env (after n2 tc) K)))
+  | BMatchCnt c x0 x1 => let t0 := cbval x0 cenv benv renv env nxt K in
+                         Eif Ceq (nth c cenv (Aint 0%uint63)) (Aint 0%uint63) t0
+                           (Eop (after nxt t0) Bsub (nth c cenv (Aint 0%uint63)) (Aint 1%uint63)
+                                (cbval x1 (Avar (after nxt t0) :: cenv) benv renv env (Pos.succ (after nxt t0)) K))
   end
 (** a choice of [T] or [F] on a boolean, with no jump, as the translator makes it (§1.5): on a comparison or a boolean
     variable a conditional move; on [&&], [||], [negb] choices on the parts -- [if a && b then T else F] is
@@ -847,6 +868,12 @@ with csel (b : sbool) (cenv benv : list atom) (renv : list (list atom)) (env : l
   | BAnd x y => csel y cenv benv renv env nxt T F (fun V n1 => csel x cenv benv renv env n1 V F K)
   | BOr x y => csel y cenv benv renv env nxt T F (fun V n1 => csel x cenv benv renv env n1 T V K)
   | BNot x => csel x cenv benv renv env nxt F T K
+  | BIfCmp c a b x y => cexp a cenv benv renv env nxt (fun A n1 => cexp b cenv benv renv env n1 (fun B n2 =>
+                          let tc := csel x cenv benv renv env n2 T F K in Eif c A B tc (csel y cenv benv renv env (after n2 tc) T F K)))
+  | BMatchCnt c x0 x1 => let t0 := csel x0 cenv benv renv env nxt T F K in
+                         Eif Ceq (nth c cenv (Aint 0%uint63)) (Aint 0%uint63) t0
+                           (Eop (after nxt t0) Bsub (nth c cenv (Aint 0%uint63)) (Aint 1%uint63)
+                                (csel x1 (Avar (after nxt t0) :: cenv) benv renv env (Pos.succ (after nxt t0)) T F K))
   end
 (** a record: its fields' atoms *)
 with crec (x : srec) (cenv benv : list atom) (renv : list (list atom)) (env : list atom) (nxt : ident) (K : list atom -> ident -> exp)
@@ -1078,6 +1105,8 @@ with wfb (sigs : list sig) (r mok : bool) (nx : nat) (k : list kind) (rk : list 
   | BVar _ | BTrue | BFalse => true
   | BAnd x y | BOr x y => wfb sigs r mok nx k rk x && wfb sigs r mok nx k rk y
   | BNot x => wfb sigs r mok nx k rk x
+  | BIfCmp _ a b x y => wf sigs r mok nx k rk a && wf sigs r mok nx k rk b && wfb sigs r mok nx k rk x && wfb sigs r mok nx k rk y
+  | BMatchCnt _ x0 x1 => wfb sigs r mok nx k rk x0 && wfb sigs r mok nx k rk x1
   end
 (** a record: built of as many numbers as its type has fields *)
 with wfr (sigs : list sig) (r mok : bool) (nx : nat) (k : list kind) (rk : list nat) (x : srec) {struct x} : bool :=
@@ -1219,6 +1248,8 @@ with sh_b (sh : list i63) (b : sbool) {struct b} : bool :=
   | BVar _ | BTrue | BFalse => true
   | BAnd x y | BOr x y => sh_b sh x && sh_b sh y
   | BNot x => sh_b sh x
+  | BIfCmp _ a b x y => sh_e sh a && sh_e sh b && sh_b sh x && sh_b sh y
+  | BMatchCnt _ x0 x1 => sh_b sh x0 && sh_b sh x1
   end
 with sh_r (sh : list i63) (x : srec) {struct x} : bool :=
   match x with
@@ -1852,6 +1883,12 @@ Proof.
   - intros x IHx y IHy cs rec cenv benv renv env s s' r nx k rk Hr W. simpl in *. apply andb_true_iff in W as [Wx Wy].
     rewrite (IHx _ _ _ _ _ _ s s' _ _ _ _ Hr Wx), (IHy _ _ _ _ _ _ s s' _ _ _ _ Hr Wy). reflexivity.
   - intros x IHx cs rec cenv benv renv env s s' r nx k rk Hr W. simpl in *. rewrite (IHx _ _ _ _ _ _ s s' _ _ _ _ Hr W). reflexivity.
+  - intros c a IHa b IHb x IHx y IHy cs rec cenv benv renv env s s' r nx k rk Hr W. simpl in *.
+    apply andb_true_iff in W as [W Wy]. apply andb_true_iff in W as [W Wx]. apply andb_true_iff in W as [Wa Wb].
+    rewrite (IHa _ _ _ _ _ _ s s' _ _ _ _ Hr Wa), (IHb _ _ _ _ _ _ s s' _ _ _ _ Hr Wb), (IHx _ _ _ _ _ _ s s' _ _ _ _ Hr Wx),
+            (IHy _ _ _ _ _ _ s s' _ _ _ _ Hr Wy). reflexivity.
+  - intros c x0 IH0 x1 IH1 cs rec cenv benv renv env s s' r nx k rk Hr W. simpl in *. apply andb_true_iff in W as [W0 W1].
+    destruct (nth c cenv O); [apply (IH0 _ _ _ _ _ _ s s' _ _ _ _ Hr W0) | apply (IH1 _ _ _ _ _ _ s s' _ _ _ _ Hr W1)].
   - intros; reflexivity.
   - intros ri es IHes cs rec cenv benv renv env s s' r nx k rk Hr W. cbn [denote_r wfr] in *. apply andb_true_iff in W as [_ Wes].
     rewrite (IHes _ _ _ _ _ _ s s' _ _ _ _ Hr Wes). reflexivity.
@@ -2022,6 +2059,13 @@ Proof.
   - intros x IHx y IHy cs rec1 rec2 cenv benv renv env s r mok nx k rk Hr W T. cbn [wfb denote_b] in *. apply andb_true_iff in W as [Wx Wy].
     rewrite (IHx _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wx T), (IHy _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wy T). reflexivity.
   - intros x IHx cs rec1 rec2 cenv benv renv env s r mok nx k rk Hr W T. cbn [wfb denote_b] in *. rewrite (IHx _ _ _ _ _ _ _ _ _ _ _ _ _ Hr W T). reflexivity.
+  - intros c a IHa b IHb x IHx y IHy cs rec1 rec2 cenv benv renv env s r mok nx k rk Hr W T. cbn [wfb denote_b] in *.
+    apply andb_true_iff in W as [W Wy]. apply andb_true_iff in W as [W Wx]. apply andb_true_iff in W as [Wa Wb].
+    rewrite (IHa _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wa T), (IHb _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wb T), (IHx _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wx T),
+            (IHy _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wy T). reflexivity.
+  - intros c x0 IH0 x1 IH1 cs rec1 rec2 cenv benv renv env s r mok nx k rk Hr W T. cbn [wfb denote_b] in *.
+    apply andb_true_iff in W as [W0 W1].
+    destruct (nth c cenv O); [apply (IH0 _ _ _ _ _ _ _ _ _ _ _ _ _ Hr W0 T) | apply (IH1 _ _ _ _ _ _ _ _ _ _ _ _ _ Hr W1 T)].
   - intros; reflexivity.
   - intros ri es IHes cs rec1 rec2 cenv benv renv env s r mok nx k rk Hr W T. cbn [denote_r wfr] in *. apply andb_true_iff in W as [_ Wes].
     rewrite (IHes _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wes T). reflexivity.
@@ -2897,6 +2941,126 @@ Proof.
       eapply IHxs; [exact W | exact Iv | exact Rt | exact LF | exact LT | exact VF | exact VT | ].
       intros rho1 n1 a A1 Le1 La Va. apply HK; [exact A1 | exact Le1 | exact La | ].
       rewrite Va. simpl. destruct (denote_b cs rec cenv benv renv denv M x); reflexivity.
+  - (* BIfCmp *) intros c a IHa b IHb x IHx y IHy. destruct IHx as [IHxc [IHxv IHxs]]. destruct IHy as [IHyc [IHyv IHys]].
+    split; [| split].
+    + intros cenvA benvA renvA envA cenv benv renv denv nxt KT KF rho M v M' rk W Iv Rt HT HF. cbn [ccond]. cbn [wfb] in W.
+      apply andb_true_iff in W as [W Wy]. apply andb_true_iff in W as [W Wx]. apply andb_true_iff in W as [Wa Wb].
+      apply IHa with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto. intros rho1 n1 A A1 Le1 LA VA.
+      apply IHb with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto. { eapply inv_step; eauto. }
+      intros rho2 n2 B A2 Le2 LB VB.
+      assert (I2 : inv rho2 cenvA benvA renvA envA cenv benv renv denv n2). { eapply inv_step; [eapply inv_step; eauto | eauto | auto]. }
+      eapply K_if.
+      * rewrite (aval_agree rho1 rho2 n1); eauto.
+      * eauto.
+      * destruct (cmp_sem c (denote_e cs rec cenv benv renv denv M a) (denote_e cs rec cenv benv renv denv M b)) eqn:C.
+        -- apply IHxc with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto.
+           ++ intros Hx rho3 n3 A3 Le3.
+              apply HT; [cbn [denote_b]; rewrite C; exact Hx | eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); eauto; lia | lia].
+           ++ intros Hx rho3 n3 A3 Le3.
+              apply HF; [cbn [denote_b]; rewrite C; exact Hx | eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); eauto; lia | lia].
+        -- apply IHyc with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto.
+           { eapply inv_step; [exact I2 | apply agree_refl | afterle]. }
+           ++ intros Hy rho3 n3 A3 Le3. apply HT; [cbn [denote_b]; rewrite C; exact Hy | | lia_a].
+              eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); [eauto | eauto | eapply agree_mono; [exact A3 | afterle] | lia | lia].
+           ++ intros Hy rho3 n3 A3 Le3. apply HF; [cbn [denote_b]; rewrite C; exact Hy | | lia_a].
+              eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); [eauto | eauto | eapply agree_mono; [exact A3 | afterle] | lia | lia].
+    + intros cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk W Iv Rt HK. cbn [cbval]. cbn [wfb] in W.
+      apply andb_true_iff in W as [W Wy]. apply andb_true_iff in W as [W Wx]. apply andb_true_iff in W as [Wa Wb].
+      apply IHa with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto. intros rho1 n1 A A1 Le1 LA VA.
+      apply IHb with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto. { eapply inv_step; eauto. }
+      intros rho2 n2 B A2 Le2 LB VB.
+      assert (I2 : inv rho2 cenvA benvA renvA envA cenv benv renv denv n2). { eapply inv_step; [eapply inv_step; eauto | eauto | auto]. }
+      eapply K_if.
+      * rewrite (aval_agree rho1 rho2 n1); eauto.
+      * eauto.
+      * destruct (cmp_sem c (denote_e cs rec cenv benv renv denv M a) (denote_e cs rec cenv benv renv denv M b)) eqn:C.
+        -- apply IHxv with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto. intros rho3 n3 a3 A3 Le3 L3 V3.
+           apply HK; [eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); eauto; lia | lia | exact L3 | cbn [denote_b]; rewrite C; exact V3].
+        -- apply IHyv with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto. { eapply inv_step; [exact I2 | apply agree_refl | afterle]. }
+           intros rho3 n3 a3 A3 Le3 L3 V3.
+           apply HK; [ | lia_a | exact L3 | cbn [denote_b]; rewrite C; exact V3].
+           eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); [eauto | eauto | eapply agree_mono; [exact A3 | afterle] | lia | lia].
+    + intros cenvA benvA renvA envA cenv benv renv denv nxt T F tv fv K rho M v M' rk W Iv Rt LT LF VT VF HK. cbn [csel]. cbn [wfb] in W.
+      apply andb_true_iff in W as [W Wy]. apply andb_true_iff in W as [W Wx]. apply andb_true_iff in W as [Wa Wb].
+      apply IHa with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto. intros rho1 n1 A A1 Le1 LA VA.
+      apply IHb with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto. { eapply inv_step; eauto. }
+      intros rho2 n2 B A2 Le2 LB VB.
+      assert (I2 : inv rho2 cenvA benvA renvA envA cenv benv renv denv n2). { eapply inv_step; [eapply inv_step; eauto | eauto | auto]. }
+      assert (A12 : agree rho rho2 nxt) by (eapply (agree_trans rho rho1 rho2 nxt n1); eauto).
+      assert (VT2 : aval rho2 T = Some tv) by (rewrite (aval_agree rho rho2 nxt); eauto).
+      assert (VF2 : aval rho2 F = Some fv) by (rewrite (aval_agree rho rho2 nxt); eauto).
+      assert (LT2 : atom_lt T n2) by (eapply atom_lt_mono; [exact LT | lia]).
+      assert (LF2 : atom_lt F n2) by (eapply atom_lt_mono; [exact LF | lia]).
+      eapply K_if.
+      * rewrite (aval_agree rho1 rho2 n1); eauto.
+      * eauto.
+      * destruct (cmp_sem c (denote_e cs rec cenv benv renv denv M a) (denote_e cs rec cenv benv renv denv M b)) eqn:C.
+        -- eapply IHxs; [exact Wx | exact I2 | exact Rt | exact LT2 | exact LF2 | exact VT2 | exact VF2 | ].
+           intros rho3 n3 a3 A3 Le3 L3 V3.
+           apply HK; [eapply (agree_trans rho rho2 rho3 nxt n2); eauto; lia | lia | exact L3 | cbn [denote_b]; rewrite C; exact V3].
+        -- eapply IHys; [exact Wy | eapply inv_step; [exact I2 | apply agree_refl | afterle] | exact Rt
+                        | eapply atom_lt_mono; [exact LT2 | afterle] | eapply atom_lt_mono; [exact LF2 | afterle] | exact VT2 | exact VF2 | ].
+           intros rho3 n3 a3 A3 Le3 L3 V3.
+           apply HK; [ | lia_a | exact L3 | cbn [denote_b]; rewrite C; exact V3].
+           eapply (agree_trans rho rho2 rho3 nxt n2); [exact A12 | eapply agree_mono; [exact A3 | afterle] | lia].
+  - (* BMatchCnt *) intros c x0 IH0 x1 IH1. destruct IH0 as [IH0c [IH0v IH0s]]. destruct IH1 as [IH1c [IH1v IH1s]].
+    split; [| split].
+    + intros cenvA benvA renvA envA cenv benv renv denv nxt KT KF rho M v M' rk W Iv Rt HT HF. cbn [ccond]. cbn [wfb] in W.
+      apply andb_true_iff in W as [W0 W1].
+      pose proof Iv as (E & L & C & LC & Bv & LBv & Cb & Mv & H & _).
+      destruct (nth c cenv O) as [|p] eqn:Ec.
+      * assert (CC : aval rho (nth c cenvA (Aint 0%uint63)) = Some (ofn 0)) by (rewrite <- Ec; apply C).
+        eapply K_if; [exact CC | reflexivity | ]. rewrite ofn_0. simpl.
+        apply IH0c with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto.
+        -- intros Hx. apply HT. cbn [denote_b]. rewrite Ec. exact Hx.
+        -- intros Hx. apply HF. cbn [denote_b]. rewrite Ec. exact Hx.
+      * assert (CC : aval rho (nth c cenvA (Aint 0%uint63)) = Some (ofn (S p))) by (rewrite <- Ec; apply C).
+        assert (Bp : (Z.of_nat (S p) < cbz j)%Z) by (specialize (Cb c); rewrite Ec in Cb; exact Cb).
+        pose proof cbz_small as Sm.
+        eapply K_if; [exact CC | reflexivity | ]. rewrite ofn_S_ne0 by lia. simpl.
+        eapply K_op; [exact CC | reflexivity | ]. simpl binop_sem. rewrite ofn_pred by lia.
+        apply IH1c with (cenv := p :: cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto.
+        -- apply inv_cpush; [eapply inv_step; [exact Iv | apply agree_refl | afterle] | lia].
+        -- intros Hx rho3 n3 A3 Le3. apply HT; [cbn [denote_b]; rewrite Ec; exact Hx | | lia_a].
+           refine (agree_trans rho _ rho3 nxt _ _ A3 _); [apply agree_set; afterle | lia_a].
+        -- intros Hx rho3 n3 A3 Le3. apply HF; [cbn [denote_b]; rewrite Ec; exact Hx | | lia_a].
+           refine (agree_trans rho _ rho3 nxt _ _ A3 _); [apply agree_set; afterle | lia_a].
+    + intros cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk W Iv Rt HK. cbn [cbval]. cbn [wfb] in W.
+      apply andb_true_iff in W as [W0 W1].
+      pose proof Iv as (E & L & C & LC & Bv & LBv & Cb & Mv & H & _).
+      destruct (nth c cenv O) as [|p] eqn:Ec.
+      * assert (CC : aval rho (nth c cenvA (Aint 0%uint63)) = Some (ofn 0)) by (rewrite <- Ec; apply C).
+        eapply K_if; [exact CC | reflexivity | ]. rewrite ofn_0. simpl.
+        apply IH0v with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto. intros rho3 n3 a3 A3 Le3 L3 V3.
+        apply HK; [exact A3 | exact Le3 | exact L3 | cbn [denote_b]; rewrite Ec; exact V3].
+      * assert (CC : aval rho (nth c cenvA (Aint 0%uint63)) = Some (ofn (S p))) by (rewrite <- Ec; apply C).
+        assert (Bp : (Z.of_nat (S p) < cbz j)%Z) by (specialize (Cb c); rewrite Ec in Cb; exact Cb).
+        pose proof cbz_small as Sm.
+        eapply K_if; [exact CC | reflexivity | ]. rewrite ofn_S_ne0 by lia. simpl.
+        eapply K_op; [exact CC | reflexivity | ]. simpl binop_sem. rewrite ofn_pred by lia.
+        apply IH1v with (cenv := p :: cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); auto.
+        -- apply inv_cpush; [eapply inv_step; [exact Iv | apply agree_refl | afterle] | lia].
+        -- intros rho3 n3 a3 A3 Le3 L3 V3. apply HK; [ | lia_a | exact L3 | cbn [denote_b]; rewrite Ec; exact V3].
+           refine (agree_trans rho _ rho3 nxt _ _ A3 _); [apply agree_set; afterle | lia_a].
+    + intros cenvA benvA renvA envA cenv benv renv denv nxt T F tv fv K rho M v M' rk W Iv Rt LT LF VT VF HK. cbn [csel]. cbn [wfb] in W.
+      apply andb_true_iff in W as [W0 W1].
+      pose proof Iv as (E & L & C & LC & Bv & LBv & Cb & Mv & H & _).
+      destruct (nth c cenv O) as [|p] eqn:Ec.
+      * assert (CC : aval rho (nth c cenvA (Aint 0%uint63)) = Some (ofn 0)) by (rewrite <- Ec; apply C).
+        eapply K_if; [exact CC | reflexivity | ]. rewrite ofn_0. simpl.
+        eapply IH0s; [exact W0 | exact Iv | exact Rt | exact LT | exact LF | exact VT | exact VF | ].
+        intros rho3 n3 a3 A3 Le3 L3 V3. apply HK; [exact A3 | exact Le3 | exact L3 | cbn [denote_b]; rewrite Ec; exact V3].
+      * assert (CC : aval rho (nth c cenvA (Aint 0%uint63)) = Some (ofn (S p))) by (rewrite <- Ec; apply C).
+        assert (Bp : (Z.of_nat (S p) < cbz j)%Z) by (specialize (Cb c); rewrite Ec in Cb; exact Cb).
+        pose proof cbz_small as Sm.
+        eapply K_if; [exact CC | reflexivity | ]. rewrite ofn_S_ne0 by lia. simpl.
+        eapply K_op; [exact CC | reflexivity | ]. simpl binop_sem. rewrite ofn_pred by lia.
+        eapply IH1s with (cenv := p :: cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk); [exact W1 | apply inv_cpush; [eapply inv_step; [exact Iv | apply agree_refl | afterle] | lia] | exact Rt
+                     | eapply atom_lt_mono; [exact LT | afterle] | eapply atom_lt_mono; [exact LF | afterle]
+                     | rewrite (aval_agree rho _ nxt); [exact VT | apply agree_set; afterle | exact LT]
+                     | rewrite (aval_agree rho _ nxt); [exact VF | apply agree_set; afterle | exact LF] | ].
+        intros rho3 n3 a3 A3 Le3 L3 V3. apply HK; [ | lia_a | exact L3 | cbn [denote_b]; rewrite Ec; exact V3].
+        refine (agree_trans rho _ rho3 nxt _ _ A3 _); [apply agree_set; afterle | lia_a].
   - (* RVar *) intros i cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk W Iv Rt HK. cbn [crec denote_r].
     pose proof Iv as (_ & _ & _ & _ & _ & _ & _ & _ & _ & RV & RL).
     apply HK; [apply agree_refl | lia | apply rlt_nth; exact RL | apply renv_nth; exact RV].
@@ -6184,3 +6348,35 @@ Check (eq_refl : sh_ok [6%uint63] (FPlain (SRd8 (SVar 0) (SInt 0))) = false).
 Check (eq_refl : sh_ok [6%uint63] (FPlainX (XLetM (MHw HAStore (SCons (SInt 4) (SCons (SVar 0) (SCons (SInt 1) SNil))) MCur) (XRet (SRd (SInt 6) (SInt 0))))) = true).
 Check (eq_refl : sh_ok [] (FPlain (SRd8 (SVar 0) (SInt 0))) = true).
 
+
+(* ---- a boolean chosen by a test, or by a match on a counter, where a boolean stands (step 22): as a choice ([bpick],
+   simple branches), as a jump ([bjump], a branch with a let), as a value ([bval], bound by a let); the counter's match the
+   same ways ([bcnt], [bcntv]) *)
+Definition bpick (a b : i63) : i63 := if (if PrimInt63.ltb a b then PrimInt63.ltb a 5 else PrimInt63.ltb b 5) then 1 else 0.
+Definition bjump (a b : i63) : i63 :=
+  if (if PrimInt63.ltb a b then PrimInt63.ltb a 5 else PrimInt63.ltb b 5) then (let x := PrimInt63.add a 1 in PrimInt63.mul x x) else 0.
+Definition bval (a b : i63) : i63 := let c := (if PrimInt63.ltb a b then PrimInt63.ltb a 5 else PrimInt63.ltb b 5) in if c then 1 else 0.
+Definition bcnt (n : nat) (a : i63) : i63 := if (match n with O => true | S _ => false end) then (let x := PrimInt63.add a 1 in x) else a.
+Definition bcntv (n : nat) (a : i63) : i63 := let c := (match n with O => true | S _ => false end) in if c then a else PrimInt63.add a 1.
+Definition btest := BIfCmp Clt (SVar 1) (SVar 0) (BCmp Clt (SVar 1) (SInt 5)) (BCmp Clt (SVar 0) (SInt 5)).
+Definition b2_g := mksig 0 (nk 2) false false false None.
+Definition b1_g := mksig 1 (nk 1) false false false None.
+Definition bpick_b := FPlain (SIfB btest (SInt 1) (SInt 0)).
+Definition bjump_b := FPlain (SIfB btest (SLet (SOp Badd (SVar 1) (SInt 1)) (SOp Bmul (SVar 0) (SVar 0))) (SInt 0)).
+Definition bval_b := FPlain (SLetB btest (SIfB (BVar 0) (SInt 1) (SInt 0))).
+Definition bcnt_b := FPlain (SIfB (BMatchCnt 0 BTrue BFalse) (SLet (SOp Badd (SVar 0) (SInt 1)) (SVar 0)) (SVar 0)).
+Definition bcntv_b := FPlain (SLetB (BMatchCnt 0 BTrue BFalse) (SIfB (BVar 0) (SVar 0) (SOp Badd (SVar 0) (SInt 1)))).
+Definition bsel_P := mkprog [(gid1 0, compile_f gid1 0 b2_g bpick_b); (gid1 1, compile_f gid1 1 b2_g bjump_b);
+                             (gid1 2, compile_f gid1 2 b2_g bval_b); (gid1 3, compile_f gid1 3 b1_g bcnt_b);
+                             (gid1 4, compile_f gid1 4 b1_g bcntv_b)] [].
+Time Lemma bpick_ok : callee_ok bsel_P (gid1 0) (cbz 0) b2_g bpick.
+Proof. Time exact_no_check (compile_f_ok bsel_P [] gid1 0 b2_g bpick_b eq_refl eq_refl (no_callees bsel_P gid1) eq_refl eq_refl). Time Qed.
+Time Lemma bjump_ok : callee_ok bsel_P (gid1 1) (cbz 1) b2_g bjump.
+Proof. Time exact_no_check (compile_f_ok bsel_P [] gid1 1 b2_g bjump_b eq_refl eq_refl (no_callees bsel_P gid1) eq_refl eq_refl). Time Qed.
+Time Lemma bval_ok : callee_ok bsel_P (gid1 2) (cbz 2) b2_g bval.
+Proof. Time exact_no_check (compile_f_ok bsel_P [] gid1 2 b2_g bval_b eq_refl eq_refl (no_callees bsel_P gid1) eq_refl eq_refl). Time Qed.
+Time Lemma bcnt_ok : callee_ok bsel_P (gid1 3) (cbz 3) b1_g bcnt.
+Proof. Time exact_no_check (compile_f_ok bsel_P [] gid1 3 b1_g bcnt_b eq_refl eq_refl (no_callees bsel_P gid1) eq_refl eq_refl). Time Qed.
+Time Lemma bcntv_ok : callee_ok bsel_P (gid1 4) (cbz 4) b1_g bcntv.
+Proof. Time exact_no_check (compile_f_ok bsel_P [] gid1 4 b1_g bcntv_b eq_refl eq_refl (no_callees bsel_P gid1) eq_refl eq_refl). Time Qed.
+Print Assumptions bjump_ok.

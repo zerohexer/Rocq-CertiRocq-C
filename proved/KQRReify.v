@@ -694,6 +694,30 @@ with reify_b (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sb
             end
       | _ => helper tt
       end
+  (* a boolean chosen by a test of one comparison, or by a match on a counter variable (step 22) *)
+  | tCase ci p c0 [b0; b1] =>
+      if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_bool) then
+        match (match bnorm fuel c0 with
+               | tApp (tConst kn _) [a; b] => if eq_mp (fst kn) prim_mp then option_map (fun x => (x, a, b)) (cmp_v (snd kn)) else None
+               | _ => None
+               end) with
+        | Some (cmp, a, b) =>
+            match reify fuel ctx a, reify fuel ctx b, reify_b fuel ctx (bbody b0), reify_b fuel ctx (bbody b1) with
+            | Some x, Some y, Some t1, Some t2 => Some (BIfCmp cmp x y t1 t2)
+            | _, _, _, _ => None
+            end
+        | None => None
+        end
+      else if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_nat) then
+        match c0 with
+        | tRel i =>
+            match cnt_index ctx i, reify_b fuel ctx (bbody b0), reify_b fuel (CCnt :: ctx) (bbody b1) with
+            | Some x, Some t0, Some t1 => Some (BMatchCnt x t0 t1)
+            | _, _, _ => None
+            end
+        | _ => None
+        end
+      else None
   | _ => None
   end
   end.
@@ -2829,4 +2853,20 @@ Proof.
     (no_callees rq_Pr gid1) eq_refl eq_refl).
 Time Qed.
 End RQ.
+
+(* ---------------------------------------------------------------- booleans chosen by a test or a counter's match (step 22) *)
+(* the construct table's shapes: a helper giving a boolean chosen by a test (of comparisons, or of calls of another helper),
+   or by a match on its counter, written out where it is tested *)
+Definition rbh (a b : i63) : bool := PrimInt63.ltb a b.
+Definition rbt (n : nat) (a b : i63) : bool := if PrimInt63.ltb a b then true else false.
+Definition rbc (n : nat) (a b : i63) : bool := if PrimInt63.ltb a b then rbh a b else rbh b a.
+Definition rbm (n : nat) (a b : i63) : bool := match n with O => true | S _ => false end.
+Definition rbu (n : nat) (a b : i63) : i63 :=
+  PrimInt63.add (PrimInt63.add (if rbt n a b then 1 else 0) (if rbc n a b then 2 else 0)) (if rbm n a b then 4 else 0).
+Definition rbu_src := ltac:(run_template_program (tmQuoteRec rbu)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Eval vm_compute in map (fun x => snd x) rbu_src.
+Definition rbu_Pr := mkprog (funs_of 0 rbu_src) [].
+Time Lemma rbu_ok : callee_ok rbu_Pr (gid1 0) (cbz 0) (sig_at rbu_src 0) rbu.
+Proof. Time exact_no_check (compile_f_ok rbu_Pr [] gid1 0 (sig_at rbu_src 0) (body_at rbu_src 0) eq_refl eq_refl (no_callees rbu_Pr gid1) eq_refl eq_refl). Time Qed.
 
