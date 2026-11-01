@@ -2757,6 +2757,15 @@ records of other fields (5), a capture (1).  **Next: these, by the tally.**  The
 `d61befd`: everything passes — `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels proved and built
 (10 / 10 / 10 / 13 / 12 s); **71 programs through the verified compiler, 0 refused, 0 not read**.
 
+**Step 20, lets read by zeta — the design (2026-11-02).**  Of the construct table's 39 cells proved only by the walk, six
+need no new syntax: a `let` binding a function (`let g := fun x => x + b in g a`: `P_int_lam_let`, `_noncapt`, `_twice`,
+`P_int_local_fun_multi`, `P_int_hof_passed`) and a dead `let` (`let t := upd 0 a b s in upd 0 b a s`, `t` unused:
+`P_mem_dup`, where the reader took `s` for dead once `t` was bound).  Both are the same term as their body with the binding
+put in, up to zeta — as a helper written out is up to delta and beta — so the reifier reads them so, in every reader (numbers,
+records, memories, numbers made after memories, records given back): a function's `let` becomes calls of the function
+written out, a dead `let` is dropped (its meaning is not part of the result, and its KQL is not made).  `KQR.v` and
+`kitc.py` unchanged.  *Expected*: the six cells; a gate program's C changes only if it has such a `let`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
