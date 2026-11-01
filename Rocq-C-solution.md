@@ -51,11 +51,11 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    bytes, helpers written out where they are used, a `let` of a counter, chains of tail calls merged into one call,
    functions given to recursive functions (a copy per function given), loops that write and give a number, booleans and
    records as parameters (a record a value in the meaning, its fields in KQL), records given back (the fields after the first
-   through the slot block) — each per-program step in milliseconds, long read-then-write bodies included on our fork of
-   Rocq's kernel (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program through it when every function is read
-   (56 of the gate's 71 programs today, each corpus program timed against the translator's build), the translator
-   otherwise; next calls of writing functions and reads in place inside expressions, in the order of §12.V's tally.
-   Emit-then-prove is the interim.
+   through the slot block), functions given that name the caller's variables — each per-program step in milliseconds, long
+   read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program
+   through it when every function is read (57 of the gate's 71 programs today, each corpus program timed against the
+   translator's build), the translator otherwise; next machine operations, in the order of §12.V's tally.  Emit-then-prove is the
+   interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -2485,6 +2485,32 @@ is captures.
 - *Not in this step*: capturing a counter, a record, or a variable bound by a match; capturing the memory when the template
   takes a memory too (two memories at once — refused by design, §0.5's third refusal, when both are used).
 
+**Step 13 done (2026-11-01): functions given that name the caller's variables.**  Built as designed, in the reifier only
+(`KQR.v` and `kitc.py` unchanged):
+- *Reading*: the variables a function given names (`fvs`, in the order they first appear) are numbered `0 ..` (`abs_caps`),
+  so the same function at two calls is the same copy; the call sites carry their kinds, read off the binders' types
+  (`sites`, a number, a boolean or the memory; any other kind: no copy, so the caller is not read); the copy table keeps
+  the kinds with the functions given.  The copy's signature is the template's with the captured numbers and booleans before
+  its other parameters and the captured memory last; its context has the captured variables after `CSelf`, where the
+  template's own text cannot name them; a function given, written out, names them (`capsub`); the recursive call passes
+  them on (`with_caps`); a call of the template passes the caller's variables (`tc_of`).  The copy's meaning
+  (`copy_meaning`) takes them as parameters in that order; a copy without captures is the same term as before.
+- *Tests* (`KQRReify.v`): `rcap` (the first two lines of `loops`: a sum whose function names the caller's number and memory,
+  a search whose test names a number and the memory), both copies read with the captured variables as parameters, each
+  checked by `compile_f_okr` with its two equations by conversion, the caller by `compile_f_ok`; each theorem 0.001–0.004 s.
+- *The C*: of the 63 examples and corpus programs compared with step 12's, 62 have byte-identical C; `loops` is the moved one.
+- *Through the verified compiler: 57 of the gate's 71 programs* (was 56): `loops` (185; an example: nothing to time).
+- *The tally after the step* (over the gate's 71 programs; the 14 not read): "a number function that writes the memory where
+  it is not read yet" 12 (the reason scan's flag, which F56 found wrong for `loops`: to be confirmed program by program),
+  machine operations 10 (the kernels' eight programs, `hw_mmio`, `heap`), bytes 2, tests on a call giving back a boolean 2,
+  `u64` 2 (with its record), mutual recursion 1 (with a local `fix`).  **The order that completes the most now**: machine
+  operations (+9, 66 of 71: the kernels and `hw_mmio`, if their flag is the scan's), tests on calls giving back a boolean
+  (+1, 67: `heap`), bytes (+1, 68), `u64` (+2, 70), mutual recursion (+1, 71).  **Next: machine operations** (their
+  programs read part by part first, F56).
+- *The gate with `KQ_REFLECT=1`, on the fork, on `b4899ef` (2026-11-01): everything passes* — `make.sh` `core-ok`; examples
+  27 / 27; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (37 / 38 / 40 / 56 / 43 s); **57
+  programs through the verified compiler, 0 read but refused by the check**.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -2657,11 +2683,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `536603c` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `25cd09b` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 12, part 3 done (records given back: 56 of 71), the C, the gate, the tally |
+| (this commit) | §12.V: step 13 done (functions given that name the caller's variables: 57 of 71), the C, the gate, the tally |
+| `b4899ef` | `proved/KQRReify.v` step 13: captures -- a copy takes the variables of the caller its functions given name as parameters, the call passes them |
+| `3eb1143` | §12.V: step 13's design (captures); F56 |
+| `25cd09b` | §12.V: step 12, part 3 done (records given back: 56 of 71), the C, the gate, the tally |
 | `6fda012` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 12 part 3: records given back through the slot block (`RCall`, `sbr`, `ccallr_ok`, `compile_f_ok_rec`, `slot_room`); the reifier reads them, `kitc.py` the sixth part of a signature and the slot block |
 | `d9216ac` | §12.V: step 12, part 3 in detail |
 | `536603c` | §12.V: step 12, parts 1 and 2 done (kinds in signatures; records and pairs as values: 54 of 71), the gate |
