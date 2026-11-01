@@ -372,6 +372,19 @@ Definition zeta_head (t : term) : option term :=
   | _ => None
   end.
 
+(** a match on a pair built in place (step 23): its branch with the two parts bound by lets -- the same term up to iota and
+    zeta; the parts' types the pair's parameters (a number, a memory, ...), as the readers of lets ask *)
+Definition ind_prod := ind_of <% prod %>.
+Definition iota_pair (ci : case_info) (p : predicate term) (c : term) (br : branch term) : option term :=
+  if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_prod) && Nat.eqb (length (bcontext br)) 2 then
+    match c, pparams p with
+    | tApp (tConstruct _ 0 _) [_; _; a; b], [A; B] =>
+        Some (tLetIn {| binder_name := nAnon; binder_relevance := Relevant |} a A
+               (tLetIn {| binder_name := nAnon; binder_relevance := Relevant |} (lift0 1 b) (lift0 1 B) (bbody br)))
+    | _, _ => None
+    end
+  else None.
+
 Section R.
 Variable callees : list (kername * sig).   (* the program's functions read so far, callees first *)
 Variable fm : bool.                        (* the function being read takes a memory *)
@@ -554,7 +567,7 @@ Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option 
       match lets_first ci p c [br] with Some t' => reify fuel ctx t' | None =>
         match reify_r fuel ctx c, reify fuel (repeat CNum (length (bcontext br)) ++ ctx) (bbody br) with
         | Some x, Some e => Some (SMatchR x e)
-        | _, _ => None
+        | _, _ => match iota_pair ci p c br with Some t' => reify fuel ctx t' | None => None end
         end
       end
   (* a field of a record of the program's types with primitive projections ([w_lo r]): of a record variable, or of a record
@@ -627,9 +640,11 @@ with reify_r (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sr
       (* a record built from a record taken apart (step 21): its type the match's *)
       | tCase ci p c0 [br] =>
           let c := match c0 with tApp (tConst kn _) args => match hb kn with Some hbd => wout hbd args | None => c0 end | _ => c0 end in
+          match lets_first ci p c [br] with Some t' => reify_r fuel ctx t' | None =>
           match rindex (preturn p) rt 0, reify_r fuel ctx c, reify_r fuel (repeat CNum (length (bcontext br)) ++ ctx) (bbody br) with
           | Some ri, Some x, Some y => Some (RMatchR ri x y)
-          | _, _, _ => None
+          | _, _, _ => match iota_pair ci p c br with Some t' => reify_r fuel ctx t' | None => None end
+          end
           end
       (* a record under lets: a helper giving a record written out, its arguments bound (step 16) *)
       | tLetIn _ b ty body =>
@@ -840,9 +855,11 @@ Fixpoint reify_m (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
   | tCase ci p c0 [br] =>
       (* a record taken apart *)
       let c := match c0 with tApp (tConst kn _) args => match hb kn with Some hbd => wout hbd args | None => c0 end | _ => c0 end in
+      match lets_first ci p c [br] with Some t' => reify_m fuel ctx t' | None =>
       match reify_r fuel ctx c, reify_m fuel (repeat CNum (length (bcontext br)) ++ ctx) (bbody br) with
       | Some x, Some m => Some (MMatchR x m)
-      | _, _ => None
+      | _, _ => match iota_pair ci p c br with Some t' => reify_m fuel ctx t' | None => None end
+      end
       end
   | _ => None
   end
@@ -878,9 +895,11 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
   | tCase ci p c0 [br] =>
       (* a record taken apart, the number after it made after memories; or a number *)
       let c := match c0 with tApp (tConst kn _) args => match hb kn with Some hbd => wout hbd args | None => c0 end | _ => c0 end in
+      match lets_first ci p c [br] with Some t' => reify_x fuel ctx t' | None =>
       match reify_r fuel ctx c, reify_x fuel (repeat CNum (length (bcontext br)) ++ ctx) (bbody br) with
       | Some r, Some x => Some (XMatchR r x)
-      | _, _ => fallback
+      | _, _ => match iota_pair ci p c br with Some t' => reify_x fuel ctx t' | None => fallback end
+      end
       end
   | tApp (tLambda _ _ _ as f) args => reify_x fuel ctx (wout f args)
   | tCase ci p c0 [b0; b1] =>
@@ -1047,7 +1066,10 @@ Fixpoint reify_br (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
       | None =>
           let c := match c0 with tApp (tConst kn _) args => match hb kn with Some hbd => wout hbd args | None => c0 end | _ => c0 end in
           match lets_first ci p c [br] with Some t' => reify_br fuel ctx t' | None =>
-            match reify_r fuel ctx c, inner with Some x, Some e => Some (BMatchR x e) | _, _ => None end
+            match reify_r fuel ctx c, inner with
+            | Some x, Some e => Some (BMatchR x e)
+            | _, _ => match iota_pair ci p c br with Some t' => reify_br fuel ctx t' | None => None end
+            end
           end
       end
   | tLetIn _ b ty body =>
@@ -2869,4 +2891,16 @@ Eval vm_compute in map (fun x => snd x) rbu_src.
 Definition rbu_Pr := mkprog (funs_of 0 rbu_src) [].
 Time Lemma rbu_ok : callee_ok rbu_Pr (gid1 0) (cbz 0) (sig_at rbu_src 0) rbu.
 Proof. Time exact_no_check (compile_f_ok rbu_Pr [] gid1 0 (sig_at rbu_src 0) (body_at rbu_src 0) eq_refl eq_refl (no_callees rbu_Pr gid1) eq_refl eq_refl). Time Qed.
+
+(* ---------------------------------------------------------------- a pair built in place, taken apart (step 23) *)
+(* the construct table's number-and-memory shapes whose pair is built where it is taken apart: a helper giving a number and a
+   memory, written out (its pair after a let), and the pair taken apart *)
+Definition ip_f (a b : i63) (s : mem) : i63 * mem := let p := KQ.KQRun.rd 0 a s in (p, KQ.KQRun.upd 0 a (PrimInt63.add p b) s).
+Definition ip (a b : i63) (s : mem) : i63 := let '(x, s2) := ip_f a b s in PrimInt63.add x (KQ.KQRun.rd 0 0 s2).
+Definition ip_src := ltac:(run_template_program (tmQuoteRec ip)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Eval vm_compute in map (fun x => snd x) ip_src.
+Definition ip_Pr := mkprog (funs_of 0 ip_src) [].
+Time Lemma ip_ok : callee_ok ip_Pr (gid1 0) (cbz 0) (sig_at ip_src 0) ip.
+Proof. Time exact_no_check (compile_f_ok ip_Pr [] gid1 0 (sig_at ip_src 0) (body_at ip_src 0) eq_refl eq_refl (no_callees ip_Pr gid1) eq_refl eq_refl). Time Qed.
 
