@@ -274,6 +274,9 @@ Definition capsub (ctx : list cent) (t : term) : term :=
   | [] => t
   | cs => subst (map (fun k => tRel (length ctx - 1 - k)) (seq 0 (length cs))) 0 t
   end.
+(** a function parameter of a copy, given on to another template, is the function it is bound to (step 27) *)
+Definition fsub (ctx : list cent) (a : term) : term :=
+  match a with tRel i => match nth_error ctx i with Some (CFn _ t) => capsub ctx t | _ => a end | _ => a end.
 
 (** the recursive call of a template's copy passes its function parameters on unchanged: they are dropped ([fd]: for each
     argument after the first counter, the function parameter it must be, or none) *)
@@ -455,7 +458,8 @@ Definition with_caps (ctx : list cent) (rest : list term) : list term :=
       ++ map snd (filter (fun p => is_memc (fst p)) cs)
   end.
 
-Definition tcall (kn : kername) (args : list term) : kername * list term :=
+Definition tcall (ctx : list cent) (kn : kername) (args : list term) : kername * list term :=
+  let args := map (fsub ctx) args in
   match tc kn args with Some p => p | None => (kn, args) end.
 
 (** the subject of a test: helpers and functions applied to their arguments written out, and the lets the first operand of
@@ -586,7 +590,7 @@ Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option 
         | _ => None
         end
       else
-        let '(kn1, args1) := tcall kn args in
+        let '(kn1, args1) := tcall ctx kn args in
         match find_callee kn1 callees 0 with
         | Some (f, gs) =>
             let args := args1 in
@@ -765,7 +769,7 @@ with reify_r (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sr
             | _ => None
             end
           else
-          let '(kn1, args1) := tcall kn args in
+          let '(kn1, args1) := tcall ctx kn args in
           match find_callee kn1 callees 0 with
           | Some (f, gs) =>
               match sq gs with
@@ -800,7 +804,7 @@ with reify_b (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sb
                                 match reify_b fuel ctx a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel ctx a) end end) l) in
       (* a call of a function of the program giving back a boolean (step 24), else a helper written out *)
       let helper := fun _ : unit =>
-        let '(kn1, args1) := tcall kn args0 in
+        let '(kn1, args1) := tcall ctx kn args0 in
         match find_callee kn1 callees 0 with
         | Some (f, gs) =>
             match sq gs with
@@ -893,7 +897,7 @@ Fixpoint reify_m (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
         | _, _ => None
         end
       else
-        let '(kn1, args1) := tcall kn args in
+        let '(kn1, args1) := tcall ctx kn args in
         match find_callee kn1 callees 0 with
         | Some (f, gs) =>
             let args := args1 in
@@ -1008,7 +1012,7 @@ Fixpoint reify_pv (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
         match reify fuel ctx e, reify_m fuel ctx m with Some x, Some y => Some (PvMk x y) | _, _ => None end
       else None
   | tApp (tConst kn _) args =>
-      let '(kn1, args1) := tcall kn args in
+      let '(kn1, args1) := tcall ctx kn args in
       match find_callee kn1 callees 0, rev args1 with
       | Some (f, gs), m :: rnums =>
           if match sq gs with Some KNum => true | _ => false end && Nat.leb (sn gs) (length (rev rnums)) then
@@ -1199,7 +1203,7 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
         | _ => None
         end
       else
-        let '(kn1, args1) := tcall kn args in
+        let '(kn1, args1) := tcall ctx kn args in
         match find_callee kn1 callees 0, rev args1 with
         | Some (f, gs), m :: rnums =>
             if negb (sr gs) && negb (sw gs) && sm gs && negb (is_rel m) && Nat.leb (sn gs) (length (rev rnums)) then
@@ -1279,7 +1283,7 @@ Fixpoint reify_br (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
   match t with
   | tApp (tLambda _ _ _ as f) args => reify_br fuel ctx (wout f args)
   | tApp (tConst kn _) args =>
-      match find_callee (fst (tcall kn args)) callees 0, hb kn with
+      match find_callee (fst (tcall ctx kn args)) callees 0, hb kn with
       | None, Some b => reify_br fuel ctx (wout b args)
       | _, _ => option_map BRet (reify_r fuel ctx t)
       end
@@ -1395,19 +1399,19 @@ Fixpoint reify_bb (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
   | tApp (tConst kn _) [a] =>
       if Kername.eqb kn kn_negb then
         match self_call a with Some (cs, x) => Some (BbNotRec cs x) | None => option_map BbRet (reify_b fuel ctx t) end
-      else match find_callee (fst (tcall kn [a])) callees 0, hb kn with
+      else match find_callee (fst (tcall ctx kn [a])) callees 0, hb kn with
            | None, Some b => reify_bb fuel ctx (wout b [a])
            | _, _ => option_map BbRet (reify_b fuel ctx t)
            end
   | tApp (tConst kn _) [a; b] =>
       if Kername.eqb kn kn_andb then test a (reify_bb fuel ctx b) (Some (BbRet BFalse))
       else if Kername.eqb kn kn_orb then test a (Some (BbRet BTrue)) (reify_bb fuel ctx b)
-      else match find_callee (fst (tcall kn [a; b])) callees 0, hb kn with
+      else match find_callee (fst (tcall ctx kn [a; b])) callees 0, hb kn with
            | None, Some bd => reify_bb fuel ctx (wout bd [a; b])
            | _, _ => option_map BbRet (reify_b fuel ctx t)
            end
   | tApp (tConst kn _) args =>
-      match find_callee (fst (tcall kn args)) callees 0, hb kn with
+      match find_callee (fst (tcall ctx kn args)) callees 0, hb kn with
       | None, Some b => reify_bb fuel ctx (wout b args)
       | _, _ => option_map BbRet (reify_b fuel ctx t)
       end
@@ -1853,8 +1857,9 @@ Fixpoint sites (fuel : nat) (Σ : global_env) (tms : list kername) (hb : kername
         if existsb (Kername.eqb kn) th then match hb kn with Some b => sites fuel Σ tms hb th kctx (wout b args) acc | None => acc end
         else acc in
       match t with
-      | tApp (tConst kn _) args =>
-          let acc := fold_left (fun a x => sites fuel Σ tms hb th kctx x a) args acc in
+      | tApp (tConst kn _) args0 =>
+          let acc := fold_left (fun a x => sites fuel Σ tms hb th kctx x a) args0 acc in
+          let args := map (fsub (map (fun o => match o with Some c => c | None => CNum end) kctx)) args0 in
           match (if existsb (Kername.eqb kn) tms then tmpl_tys Σ kn else None) with
           | Some tys =>
               if Nat.eqb (length args) (length tys) then
@@ -1957,6 +1962,17 @@ Fixpoint ensure (fuel : nat) (Σ : global_env) (mp : modpath) (hb : kername -> o
           | None => None
           | Some tys =>
               let nested := fold_left (fun a f => sites 1000 Σ tms hb th (map Some capk) f a) fargs [] in
+              (* the copies the template's own body needs, its function parameters bound to the functions given (step 27) *)
+              let nested := match lookup_env Σ T with
+                            | Some (ConstantDecl cb) =>
+                                match cst_body cb with
+                                | Some (tFix [d] 0) =>
+                                    let body := snd (lams (dbody d)) in
+                                    sites 1000 Σ tms hb th (map Some (rev (tkinds tys fargs 0) ++ [CSelf] ++ rev capk)) body nested
+                                | _ => nested
+                                end
+                            | _ => nested
+                            end in
               match fold_left (fun st s => ensure fuel Σ mp hb rt th tms s st) (rev nested) st with
               | Some (es, tbl) =>
                   let ckn := (MPfile ["kqcopy"%bs], snd T ^ "__c" ^ string_of_nat (length tbl)) in
@@ -3411,3 +3427,46 @@ Definition vjif_Pr := mkprog (funs_of 0 vjif_src) [].
 Time Lemma vjif_ok : callee_ok vjif_Pr (gid1 0) (cbz 0) (sig_at vjif_src 0) jif.
 Proof. Time exact_no_check (compile_f_ok vjif_Pr [] gid1 0 (sig_at vjif_src 0) (body_at vjif_src 0) eq_refl eq_refl (no_callees vjif_Pr gid1) eq_refl eq_refl). Time Qed.
 Print Assumptions vjlet_ok.
+
+(* ---------------------------------------------------------------- a template giving its function on (step 27) *)
+(* the construct table's P_int_outer_capt: a template whose body gives its own function parameter to another template; the
+   function given names the caller's number ([zof1]) or nothing ([zof2]) *)
+Fixpoint zfold (n : nat) (i acc : i63) (f : i63 -> i63 -> i63) : i63 :=
+  match n with O => acc | S m => zfold m (PrimInt63.add i 1) (f i acc) f end.
+Fixpoint zouter (r : nat) (acc : i63) (f : i63 -> i63 -> i63) : i63 :=
+  match r with O => acc | S r' => zouter r' (zfold 3 0 acc f) f end.
+Definition zof1 (n : nat) (a b : i63) (s : KQ.KQRun.mem) : i63 := zouter n a (fun i acc => PrimInt63.add acc (PrimInt63.mul i b)).
+Definition zof2 (n : nat) (a b : i63) (s : KQ.KQRun.mem) : i63 := zouter n a (fun i acc => PrimInt63.add acc (PrimInt63.mul i 7)).
+Definition zof1_res := ltac:(run_template_program (tmQuoteRec zof1)
+  (fun q => let r := eval vm_compute in (reify_prog2 q) in match r with Some ?x => exact x end)).
+Definition zof1_src := ltac:(run_template_program (tmQuoteRec zof1)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+(* the copy of zfold for zouter's function, taking the captured number before its own; zouter's copy calls it, passing it on *)
+Check (eq_refl : map (fun x => snd x) zof1_src =
+  [FRec (SVar 0) (SRec CNil (SCons (SVar 2) (SCons (SOp Badd (SVar 1) (SInt 1)) (SCons (SOp Badd (SVar 0) (SOp Bmul (SVar 1) (SVar 2))) SNil))));
+   FRec (SVar 0) (SRec CNil (SCons (SVar 1) (SCons (SCall 0 (CCons (CS (CS (CS CO))) CNil) (SCons (SVar 1) (SCons (SInt 0) (SCons (SVar 0) SNil)))) SNil)));
+   FPlain (SCall 1 (CCons (CVar 0) CNil) (SCons (SVar 0) (SCons (SVar 1) SNil)))]).
+MetaRocq Run (tmMkDefinition "zof1_c0"%bs (meaning_of (snd zof1_res) "zfold__c0"%bs)).
+MetaRocq Run (tmMkDefinition "zof1_c1"%bs (meaning_of (snd zof1_res) "zouter__c1"%bs)).
+Definition zof1_Pr := mkprog (funs_of 0 zof1_src) [].
+Time Lemma zof1_ok0 : callee_ok zof1_Pr (gid1 0) (cbz 0) (sig_at zof1_src 0) zof1_c0.
+Proof.
+  Time exact_no_check (compile_f_okr zof1_Pr [] gid1 0 0 [KNum; KNum; KNum] false (fr0 (body_at zof1_src 0)) (fr1 (body_at zof1_src 0)) zof1_c0
+    eq_refl eq_refl (no_callees zof1_Pr gid1) eq_refl eq_refl eq_refl (fun n => eq_refl)).
+Time Qed.
+Time Lemma zof1_ok1 : callee_ok zof1_Pr (gid1 1) (cbz 1) (sig_at zof1_src 1) zof1_c1.
+Proof.
+  Time exact_no_check (compile_f_okr zof1_Pr [existT ftype (sig_at zof1_src 0) zof1_c0] gid1 1 0 [KNum; KNum] false
+    (fr0 (body_at zof1_src 1)) (fr1 (body_at zof1_src 1)) zof1_c1 eq_refl eq_refl
+    (all_ok_callees zof1_Pr gid1 [existT ftype (sig_at zof1_src 0) zof1_c0] (conj zof1_ok0 Logic.I)) eq_refl eq_refl eq_refl (fun n => eq_refl)).
+Time Qed.
+Time Lemma zof1_ok2 : callee_ok zof1_Pr (gid1 2) (cbz 2) (sig_at zof1_src 2) zof1.
+Proof.
+  Time exact_no_check (compile_f_ok zof1_Pr [existT ftype (sig_at zof1_src 0) zof1_c0; existT ftype (sig_at zof1_src 1) zof1_c1]
+    gid1 2 (sig_at zof1_src 2) (body_at zof1_src 2) eq_refl eq_refl
+    (all_ok_callees zof1_Pr gid1 [existT ftype (sig_at zof1_src 0) zof1_c0; existT ftype (sig_at zof1_src 1) zof1_c1]
+       (conj zof1_ok0 (conj zof1_ok1 Logic.I))) eq_refl eq_refl).
+Time Qed.
+Print Assumptions zof1_ok2.
+(* without a capture: the same copies, the function given naming nothing *)
+Check (eq_refl : option_map (fun l => length l) (reify_prog ltac:(run_template_program (tmQuoteRec zof2) (fun q => exact q))) = Some 3%nat).
