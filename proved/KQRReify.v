@@ -1509,15 +1509,47 @@ Fixpoint ensure (fuel : nat) (Σ : global_env) (mp : modpath) (hb : kername -> o
     and the meaning of each copy *)
 (** the program's record types: those of the reached functions' parameters and results, each once *)
 Fixpoint prod_tys (t : term) : list term := match t with tProd _ a b => a :: prod_tys b | _ => [t] end.
-Definition rtab_of (Σ : global_env) (kns : list kername) : list rentry :=
-  fold_left (fun rt kn =>
+(** the record types a body names (step 19): of a constructor applied (its parameters the first arguments), of a match
+    (its parameters the predicate's), of a [let], of a primitive projection -- in the body and the helpers it writes out,
+    each helper once *)
+Definition ind_app (i : inductive) (u : Instance.t) (ps : list term) : term := match ps with [] => tInd i u | _ => tApp (tInd i u) ps end.
+Definition ctor_ty (Σ : global_env) (i : inductive) (u : Instance.t) (args : list term) : term :=
+  match lookup_env Σ (inductive_mind i) with
+  | Some (InductiveDecl mib) => ind_app i u (firstn (ind_npars mib) args)
+  | _ => tVar "none"%bs
+  end.
+Fixpoint body_rtys (fuel : nat) (Σ : global_env) (hb : kername -> option term) (t : term) (st : list term * list kername)
+  {struct fuel} : list term * list kername :=
+  match fuel with
+  | O => st
+  | S fuel =>
+      let add (ty : term) (s : list term * list kername) := (fst s ++ [ty], snd s) in
+      match t with
+      | tApp (tConstruct i 0 u) args => fold_left (fun s x => body_rtys fuel Σ hb x s) args (add (ctor_ty Σ i u args) st)
+      | tApp f args => fold_left (fun s x => body_rtys fuel Σ hb x s) args (body_rtys fuel Σ hb f st)
+      | tLambda _ _ b => body_rtys fuel Σ hb b st
+      | tLetIn _ b ty body => body_rtys fuel Σ hb body (body_rtys fuel Σ hb b (add ty st))
+      | tCase ci p c brs => fold_left (fun s br => body_rtys fuel Σ hb (bbody br) s) brs
+                              (body_rtys fuel Σ hb c (add (ind_app (ci_ind ci) (puinst p) (pparams p)) st))
+      | tProj pr c => body_rtys fuel Σ hb c (add (tInd (proj_ind pr) []) st)
+      | tFix mfix _ => fold_left (fun s d => body_rtys fuel Σ hb (dbody d) s) mfix st
+      | tConst kn _ => if existsb (Kername.eqb kn) (snd st) then st else
+                       match hb kn with Some b => body_rtys fuel Σ hb b (fst st, kn :: snd st) | None => st end
+      | _ => st
+      end
+  end.
+Definition rtab_of (Σ : global_env) (hb : kername -> option term) (kns : list kername) : list rentry :=
+  let add_ty := fun rt t => match rec_shape Σ t with
+                            | Some e => match rindex t rt 0 with Some _ => rt | None => rt ++ [e] end
+                            | None => rt end in
+  let sig_rt := fold_left (fun rt kn =>
     match lookup_env Σ kn with
-    | Some (ConstantDecl cb) =>
-        fold_left (fun rt t => match rec_shape Σ t with
-                               | Some e => match rindex t rt 0 with Some _ => rt | None => rt ++ [e] end
-                               | None => rt end) (prod_tys (cst_type cb)) rt
+    | Some (ConstantDecl cb) => fold_left add_ty (prod_tys (cst_type cb)) rt
     | _ => rt
-    end) kns [].
+    end) kns [] in
+  (* the bodies' record types after the signatures': a program's record indices are those of before *)
+  let btys := fst (fold_left (fun s kn => match body_of Σ kn with Some b => body_rtys 2000 Σ hb b s | None => s end) kns ([], [])) in
+  fold_left add_ty btys sig_rt.
 (** for kitc.py: each record type's text, its constructor's name, its number of fields *)
 Definition rec_text (Σ : global_env) (e : rentry) : string * string * nat :=
   let '(t, i, n, ps) := e in
@@ -1529,7 +1561,8 @@ Definition rec_text (Σ : global_env) (e : rentry) : string * string * nat :=
   (ty, cn, n).
 Definition rec_info (p : program) : list (string * string * nat) :=
   match p with
-  | (Σ, tConst root _) => let mp := fst root in map (rec_text Σ) (rtab_of Σ (reach 1000 Σ mp root root []))
+  | (Σ, tConst root _) => let mp := fst root in let kns := reach 1000 Σ mp root root [] in
+                          map (rec_text Σ) (rtab_of Σ (helper_of Σ mp kns) kns)
   | _ => []
   end.
 
@@ -1539,7 +1572,7 @@ Definition reify_prog2 (p : program) : option (list (kername * sig * fbody) * li
       let mp := fst root in
       let kns := reach 1000 Σ mp root root [] in
       let hb := helper_of Σ mp kns in
-      let rt := rtab_of Σ kns in
+      let rt := rtab_of Σ hb kns in
       let tms := filter (is_tmpl Σ mp) kns in
       let th := tmpl_helpers Σ hb tms kns in
       let st := fold_left (fun st kn =>
@@ -1778,7 +1811,7 @@ Definition reify_why (p : program) : list (string * list string) :=
       let mp := fst root in
       let kns := reach 1000 Σ mp root root [] in
       let hb := helper_of Σ mp kns in
-      let rt := rtab_of Σ kns in
+      let rt := rtab_of Σ hb kns in
       let tms := filter (is_tmpl Σ mp) kns in
       let th := tmpl_helpers Σ hb tms kns in
       let '(_, _, _, out) :=
@@ -2687,3 +2720,27 @@ Proof.
     eq_refl eq_refl).
 Time Qed.
 Print Assumptions qrounds_ok.
+
+(* ---------------------------------------------------------------- record types from the bodies (step 19) *)
+(* a pair built and taken apart inside a body (the construct table's N_nest shape), its type in no signature: the record
+   table takes it from the body *)
+Definition rbp (a b : i63) : i63 := PrimInt63.mul (let '(p, q) := (PrimInt63.add a b, b) in PrimInt63.sub p q) 3.
+Definition rbp_src := ltac:(run_template_program (tmQuoteRec rbp)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : map (fun x => snd x) rbp_src =
+  [FPlain (SOp Bmul (SMatchR (RMk 0 (SCons (SOp Badd (SVar 1) (SVar 0)) (SCons (SVar 0) SNil))) (SOp Bsub (SVar 1) (SVar 0))) (SInt 3))]).
+Eval vm_compute in ltac:(run_template_program (tmQuoteRec rbp) (fun q => let r := eval vm_compute in (rec_info q) in exact r)).
+Section RBP.
+#[local] Instance rbp_recs : RecTypes | 0 :=
+  {| RT := fun _ => (i63 * i63)%type;
+     RO := fun _ => mkrops 2 (fun l => (nth 0 l 0%uint63, nth 1 l 0%uint63)) (fun P v k => match v with (a, b) => k [a; b] end);
+     Rd := fun _ => (0%uint63, 0%uint63) |}.
+#[local] Instance rbp_laws : RecLaws.
+Proof. split; [intros i [a b] P k; reflexivity | intros i [a b]; reflexivity | intros i [|a [|b [|c l]]] L; try discriminate; reflexivity]. Qed.
+Definition rbp_Pr := mkprog (funs_of 0 rbp_src) [].
+Time Lemma rbp_ok : callee_ok rbp_Pr (gid1 0) (cbz 0) (sig_at rbp_src 0) rbp.
+Proof.
+  Time exact_no_check (@compile_f_ok rbp_recs rbp_laws rbp_Pr [] gid1 0 (sig_at rbp_src 0) (body_at rbp_src 0) eq_refl eq_refl
+    (no_callees rbp_Pr gid1) eq_refl eq_refl).
+Time Qed.
+End RBP.
