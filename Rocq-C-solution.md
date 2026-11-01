@@ -2511,6 +2511,28 @@ is captures.
   27 / 27; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (37 / 38 / 40 / 56 / 43 s); **57
   programs through the verified compiler, 0 read but refused by the check**.
 
+**Step 14, machine operations — the design (2026-11-01).**  Ten programs of the gate use the machine's operations (§1.8):
+the five kernels' eight programs, `hw_mmio`, `heap` (`kq_grow`, `kq_size`).  KQL has them already, with their meaning:
+`Ehw o args k` (an operation on the memory, `hw_sem o vs M` — `hw_store a b c M`, `kq_grow h n M`, ..., each the kit's own
+function), `Ehwf o x args k` (a number the machine gives without a memory, `hwf_sem`: `hw_addr`, `hw_irq_info`, ...),
+`Eksize x h k` (a block's size now); the generator emits the first two as calls of the external functions whose C bodies
+are assumed by `hw_law` / `hwf_law` (§1.10).  So `S` takes them as KQL does:
+- *Syntax and meaning*: `MHw o args m` among the memories, `hw_sem o (numbers of args) (memory of m)` — the numbers worked
+  out on the memory before `m`'s writes, as for `MUpd`; `SHwf o args` among the numbers, `hwf_sem o (numbers)`; `SSize h`,
+  `KQRun.kq_size h s` on the newest memory.  `hw_sem HStore [a; b; c] s` is `hw_store a b c s` by computation, so the
+  user's text is what the meaning reduces to and the check stays a conversion.
+- *Well formed*: as many numbers as the operation takes (`hw_arity`, `hwf_arity`); `SSize` only where there is a memory.
+  A choice with a size or a machine number in it is a jump, as in the translator (its `choice_ok` has neither).
+- *Proof*: one case each, by `K_hw`, `K_hwf`, `K_size`, which have the shape of `K_st` / `K_op` / `K_ld`; nothing is
+  assumed of the operations in `KQR.v` — what they do is `hw_sem`, and what the machine does is `hw_law` / `hwf_law`, below,
+  as for the translator.
+- *Reifier*: the translator's two tables (the Rocq constant, the operation, its number of arguments before the memory);
+  `kq_size` with the newest memory.  The reasons scan stops naming them.
+- *`kitc.py`*: a program that shares blocks with another processor (`kq_shared`, §9.4: plain accesses to them refused)
+  stays with the translator until the verified path has that rule — none of the gate's programs does (`lock` does).
+- *Expected*: the kernels and `hw_mmio`, if their remaining reason ("a number function that writes the memory where it is
+  not read yet") is the scan's (F56) — read part by part once the operations are read.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
