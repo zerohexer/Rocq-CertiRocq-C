@@ -3045,6 +3045,21 @@ records already built (built, chosen by a test, taken apart, bound, passed, give
   routes before, are proved now).  The gate with `KQ_REFLECT=1` on `14e971d`: everything passes — `make.sh` `core-ok`; examples
   27 / 27; corpus 36 / 36; the five kernels (10 / 10 / 10 / 13 / 12 s); **71 programs through the verified compiler, 0 refused, 0 not read**.
 
+**Step 29, the walk retired — the design (2026-11-02).**  Since step 28 every cell of the construct table that is proved at all
+is proved by the verified compiler (773 of 780; the 7 left are gaps on both routes), every program of the gate goes through it
+(71 of 71, `lock` too), and the trusted base is the one of §1.10 — the condition §12.V (2) set for retiring the walk ("the
+construct table unchanged or better").  So:
+- *`kitc.py`*: the verified compiler is the route (`KQ_REFLECT` is no longer needed); a program the reifier does not read, or
+  whose check fails, is refused with the reifier's reasons — read like a type error (D23), not handed to a proof search.  The
+  translator and the walk stay in the tree, reachable only by an explicit `--walk` (or `KQ_WALK=1`): the yardstick F49 asks for
+  (a program moved to the verified compiler is timed against the translator's build) and the record of what the walk proved.
+- *The construct table*: its classifier names the refusal ("not read by the verified compiler", with the reasons).
+- *Accepted when*: the gate without `KQ_REFLECT` and without `--walk` (goal row 8b: "the gate with the walk switched off")
+  passes — examples, corpus, the five kernels — every program through the verified compiler, none refused; the construct table
+  run the same way proves the same 773 cells; `ASSUME=1 make.sh` lists §1.10's base.
+- *Not in this step*: removing the translator's and the walk's files (`KQMTrans.v`, `KQMAuto.v`, `KQMNames.v`): the timing
+  yardstick still uses them, and `lib/` and the kit route are untouched.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3217,11 +3232,12 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `c648ca8` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `d819c8d` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 28 done (`option`, `sum` and their kind held as their tag and fields: the construct table 773 of 780), the C, the gate |
+| (this commit) | §12.V: step 29's design (the walk retired) |
+| `d819c8d` | §12.V: step 28 done (`option`, `sum` and their kind held as their tag and fields: the construct table 773 of 780), the C, the gate |
 | `14e971d` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 28: `rtg`, `rl_mk_tag`, `canon_s`; the reifier's data types (`rec_shape`, `cindex`, `tag_parts`); `kitc.py`'s instances |
 | `c648ca8` | §12.V: step 27 done (a template giving its own function parameter to another template: the construct table 769 of 780), the C, the gate |
 | `e6b2aa4` | §12.V: step 28's design (`option`, `sum` and their kind held as their tag and fields) |
