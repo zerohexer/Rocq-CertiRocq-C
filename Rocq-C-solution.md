@@ -2643,6 +2643,27 @@ halves of the result).  Read part by part, they need three things, built in this
   27 / 27; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (10 / 10 / 10 / 12 / 12 s); **70 programs
   through the verified compiler, 0 read but refused by the check**.
 
+**Step 17, mutual recursion — the design (2026-11-01).**  `mutual`'s `ping` and `pong` are one `Fixpoint .. with ..`: each
+calls the other (or itself) on the counter's predecessor; `rounds` is not read only because it calls `ping` (read part by part,
+F56).  The meaning of a function is checked by conversion against the user's constant, and the user's `ping` is a fixpoint of
+two bodies, which no single-body fixpoint converts to; so the block is not given a meaning of its own -- it is compiled as one
+function and its meaning is made of the user's functions:
+- *The block function.*  The members (number functions of one signature, for now) become one function with one counter more,
+  the *selector*, last among its counters: its body is `FRec` of a match on the selector over the members' bodies, and a call of
+  member `j` on the predecessor is the recursive call `SRec` given the selector `CNat (SInt j)` (a counter that does not grow:
+  `flat`).  So a tail call between members is a loop, in KQL as in C.
+- *Its meaning.*  `blk hs` (`KQR.v`, new definition): the function of one counter more that, at a counter `n`, takes the
+  parameters and applies member `sel` of the list `hs` at `n` -- written with its parameter lambdas outside the choice, as the
+  meaning of a body is, so the choice and the match on the selector stand in the same place.  With `hs` the user's `[ping;
+  pong]`, its two equations (at `0`, and at `S n` with the recursive call `blk hs n`) hold by conversion: unfolded at `S n`,
+  `ping` calls `pong n`, and `blk hs n` at selector `1` is `pong n`.  So the block function's theorem is `compile_f_okr` (step
+  10's theorem for a function given by its equations): no new theorem.
+- *The members.*  Each is one call of the block function with its selector (`FPlain (SCall ..)`), meaning `blk hs n j ..` --
+  the user's member by conversion; its theorem is `compile_f_ok`.  A caller calls a member as any function.
+- *The reifier* reads a constant whose body is a fixpoint of several bodies as the block function (a function of its own, as a
+  template's copy is, with its meaning `blk [..]`) and its members; `kitc.py` proves the block function by `compile_f_okr`.
+- *Expected*: `mutual` (+1, 71 of 71).  Not in this step: members of different signatures, or giving back a memory or a record.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
