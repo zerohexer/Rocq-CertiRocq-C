@@ -51,10 +51,10 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    bytes, helpers written out where they are used, a `let` of a counter, chains of tail calls merged into one call,
    functions given to recursive functions (a copy per function given), loops that write and give a number, booleans and
    records as parameters (a record a value in the meaning, its fields in KQL), records given back (the fields after the first
-   through the slot block), functions given that name the caller's variables, machine operations — each per-program step in
-   milliseconds, long read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`); `kitc.py --reflect`
-   compiles a program through it when every function is read (67 of the gate's 71 programs today, the five test kernels
-   included; each corpus program timed against the translator's build), the translator otherwise; next bytes, then `u64` and
+   through the slot block), functions given that name the caller's variables, machine operations, bytes — each per-program
+   step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`); `kitc.py
+   --reflect` compiles a program through it when every function is read (68 of the gate's 71 programs today, the five test
+   kernels included; each corpus program timed against the translator's build), the translator otherwise; next `u64`, then
    mutual recursion, in the order of §12.V's tally.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
@@ -2574,6 +2574,17 @@ case each by `K_ld8` / `K_st8`, the shape of `K_ld32` / `K_st32`; the reifier re
 and writes `rd16` / `upd16` out over them, as the translator does.  A choice with a byte read in it is a jump, as in the
 translator (its `choice_ok` counts `rd` and `rd32` only).  Expected: `bytes` (+1); `views` needs `u64` too.
 
+**Step 15 done (2026-11-01): bytes.**  Built as designed: `SRd8`, `MUpd8` (`KQR.v`: meanings, KQL, well-formedness, one proof
+case each, `Print Assumptions` the same base; tests `bsum`, `bfill`, their KQL one `Ekld8` / `Ekst8` each, each theorem in
+milliseconds); the reifier reads `rd8` / `upd8` and writes `rd16` / `upd16` out over them (test `hb8`: a byte and a halfword
+read, a byte and a halfword written).  The C: 62 of 63 byte-identical, `bytes` the moved one.  **68 of the gate's 71
+programs through the verified compiler** (was 67): `bytes` (an example: nothing to time).  The three not read: `u64` 2
+(`views`, `w64` — and `w64` passes and gives back `u64` variables as they are, the record variable that parts 2 and 3 of
+step 12 left out: a record variable's type is not known to `wf`), mutual recursion 1 (`mutual`, with a local `fix`).
+**Next: `u64`.**  The gate with `KQ_REFLECT=1`, on the fork, on `93b17a4` (2026-11-01): everything passes — `make.sh`
+`core-ok`; examples 27 / 27; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (10 / 10 / 10 / 12 /
+11 s); **68 programs through the verified compiler, 0 read but refused by the check**.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -2746,11 +2757,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `4e2504c` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `a28ed5e` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 14 done (machine operations: 67 of 71, the kernels included, built in 10–12 s), the C, the boots, the gate, the tally |
+| (this commit) | §12.V: step 15 done (bytes: 68 of 71), the C, the gate |
+| `93b17a4` | `proved/KQR.v` + `KQRReify.v` step 15: bytes (`SRd8`, `MUpd8`); the reifier reads `rd8` / `upd8` |
+| `5c3f95c` | §12.V: step 15's design (bytes) |
+| `a28ed5e` | §12.V: step 14 done (machine operations: 67 of 71, the kernels included, built in 10–12 s), the C, the boots, the gate, the tally |
 | `6241ac9` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 14: machine operations (`MHw`, `SHwf`, `SSize`); the reifier reads the translator's tables; `kq_shared` programs stay with the translator |
 | `8587156` | §12.V: step 14's design (machine operations) |
 | `4e2504c` | §12.V: step 13 done (functions given that name the caller's variables: 57 of 71), the C, the gate, the tally |
