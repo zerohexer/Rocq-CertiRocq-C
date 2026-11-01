@@ -2950,6 +2950,18 @@ test must be a construct of `S`, as a record chosen by a test is (step 21).  The
 - *Expected*: the four cells.  Not in this step: a pair of a number and a memory as a parameter (a memory is passed only as
   the function's memory), records of a number and a memory (`mem_pair`) beyond `prod`.
 
+**Step 27, a template giving its own function parameter to another template — the design (2026-11-02).**  One cell proved
+only by the walk, `P_int_outer_capt`: `outer r acc f := match r with O => acc | S r' => outer r' (fold 3 0 acc f) f end`, called
+with a function naming the caller's `b`.  Read apart (a scratch file, the reifier on smaller programs): the copy of `outer` is
+not read even when the function given names nothing — inside the copy, `fold 3 0 acc f` gives `fold` the copy's own function
+parameter, which neither the scan for the copies a program needs (`sites`, run over the functions given only) nor the look-up
+of a call of a template (`tc_of`) resolves to the function it is bound to.  So, in the reifier only:
+- a function parameter of a copy, given to another template, is the function it is bound to (its context entry's function,
+  its captured variables placed as the copy's, `capsub`) — where a call is looked up in every reader, and in the scan for sites;
+- `ensure` scans the template's own body too, its function parameters bound to the functions given, and makes the copies it
+  needs before the copy itself (the copy of `fold` for `outer`'s function, taking the same captured variable).
+`KQR.v` and `kitc.py` unchanged; the copy's theorem is `compile_f_okr` as for every copy.  *Expected*: the cell.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3126,7 +3138,9 @@ Pushed to the public repository up to `d143561` (2026-11-02); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 25 done (a value of any inductive type built in place, taken apart: the construct table 764 of 780), the C, the gate |
+| (this commit) | §12.V: step 27's design (a template giving its own function parameter to another template) |
+| `6b0d249` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 26: `sq = Some KNum`, pair values `spv` (`cpv_ok`, `ctailp_ok`, `compile_f_ok_pair`), `XMatchP`, `XLetP`; the reifier reads them |
+| `e6853d4` | §12.V: step 25 done (a value of any inductive type built in place, taken apart: the construct table 764 of 780), the C, the gate |
 | `9ab7709` | §12.V: step 26's design (a number and a memory given back: pair values) |
 | `31bb4f4` | `proved/KQRReify.v` step 25: a let of a constructor of plain values put in, a match on a constructor its branch (`head_r`) |
 | `d143561` | §12.V: step 24 done (functions giving back a boolean: the construct table 757 of 780), the C, the gate |
