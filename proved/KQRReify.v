@@ -364,6 +364,14 @@ Fixpoint rind (ind : inductive) (rt : list rentry) (i : nat) : option (nat * nat
       then Some (i, n) else rind ind r (S i)
   end.
 
+(** a let read by zeta (step 20): a let binding a function, or one whose variable its body does not name, is its body with
+    the binding put in -- the same term up to zeta, as a helper written out is up to delta and beta *)
+Definition zeta_head (t : term) : option term :=
+  match t with
+  | tLetIn _ b ty body => if fun_or_type ty || noccur_between 0 1 body then Some (subst [b] 0 body) else None
+  | _ => None
+  end.
+
 Section R.
 Variable callees : list (kername * sig).   (* the program's functions read so far, callees first *)
 Variable fm : bool.                        (* the function being read takes a memory *)
@@ -430,6 +438,7 @@ Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option 
     to_args (map (fun a => match reify fuel ctx a with Some e => Some (inl e) | None =>
                             match reify_b fuel ctx a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel ctx a) end end) l) in
   let reify_cs (l : list term) : option scnts := option_map to_scnts (opt_all (map (reify_c fuel ctx) l)) in
+  match zeta_head t with Some t' => reify fuel ctx t' | None =>
   match t with
   | tRel i => option_map SVar (num_index ctx i)
   | tInt n => Some (SInt n)
@@ -561,6 +570,7 @@ Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option 
   | _ => None
   end
   end
+  end
 with reify_c (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option scnt :=
   match fuel with
   | O => None
@@ -588,6 +598,7 @@ with reify_r (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sr
       let reify_args (l : list term) : option sexps :=
         to_args (map (fun a => match reify fuel ctx a with Some e => Some (inl e) | None =>
                                 match reify_b fuel ctx a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel ctx a) end end) l) in
+      match zeta_head t with Some t' => reify_r fuel ctx t' | None =>
       match t with
       | tRel i => option_map RVar (rec_index ctx i)
       | tApp (tConstruct ind 0 _) args =>
@@ -631,6 +642,7 @@ with reify_r (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sr
           end
       | _ => None
       end
+      end
   end
 with reify_b (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sbool :=
   match fuel with
@@ -673,6 +685,7 @@ Fixpoint reify_m (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
     to_args (map (fun a => match reify fuel ctx a with Some e => Some (inl e) | None =>
                             match reify_b fuel ctx a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel ctx a) end end) l) in
   let reify_cs (l : list term) : option scnts := option_map to_scnts (opt_all (map (reify_c fuel ctx) l)) in
+  match zeta_head t with Some t' => reify_m fuel ctx t' | None =>
   match t with
   | tRel i => if is_ent CMem ctx i then Some MCur else None
   | tConst kn _ => match hb kn with Some b => reify_m fuel ctx b | None => None end
@@ -786,6 +799,7 @@ Fixpoint reify_m (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
       end
   | _ => None
   end
+  end
   end.
 
 Definition is_rel (t : term) : bool := match t with tRel _ => true | _ => false end.
@@ -802,6 +816,7 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
     to_args (map (fun a => match reify fuel c a with Some e => Some (inl e) | None =>
                             match reify_b fuel c a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel c a) end end) l) in
   let reify_cs (c : list cent) (l : list term) : option scnts := option_map to_scnts (opt_all (map (reify_c fuel c) l)) in
+  match zeta_head t with Some t' => reify_x fuel ctx t' | None =>
   match t with
   | tLetIn _ b ty body =>
       if is_ty kn_mem ty then
@@ -909,6 +924,7 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
       end
   | _ => fallback
   end
+  end
   end.
 (** a record given back: at the end a record (built, or given by a call), the function itself at the end, the function itself
     taken apart or bound by a let before the end, and lets, tests and a match on a counter around them *)
@@ -935,6 +951,7 @@ Fixpoint reify_br (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
         end
     | _ => None
     end in
+  match zeta_head t with Some t' => reify_br fuel ctx t' | None =>
   match self_call t with
   | Some (cs, a) => Some (BRec cs a)
   | None =>
@@ -999,6 +1016,7 @@ Fixpoint reify_br (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
         | None => match reify_r fuel ctx b, reify_br fuel (CRec :: ctx) body with Some x, Some y => Some (BLetR x y) | _, _ => None end
         end
   | _ => option_map BRet (reify_r fuel ctx t)
+  end
   end
   end
   end.
@@ -2744,3 +2762,22 @@ Proof.
     (no_callees rbp_Pr gid1) eq_refl eq_refl).
 Time Qed.
 End RBP.
+
+(* ---------------------------------------------------------------- lets read by zeta (step 20) *)
+(* a let binding a function (the function written out at its calls) and a dead memory let (dropped) *)
+Definition rzl (a b : i63) : i63 := let g := fun x => PrimInt63.add x b in PrimInt63.mul (g a) (g b).
+Definition rzd (a b : i63) (s : mem) : mem := let t := KQ.KQRun.upd 0 a b s in KQ.KQRun.upd 0 b a s.
+Definition rzl_src := ltac:(run_template_program (tmQuoteRec rzl)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Definition rzd_src := ltac:(run_template_program (tmQuoteRec rzd)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : map (fun x => snd x) rzl_src = [FPlain (SOp Bmul (SOp Badd (SVar 1) (SVar 0)) (SOp Badd (SVar 0) (SVar 0)))]).
+Check (eq_refl : map (fun x => snd x) rzd_src = [FPlainM (MUpd (SInt 0) (SVar 0) (SVar 1) MCur)]).
+Definition rz_Pr := mkprog (funs_of 0 rzl_src ++ funs_of 1 rzd_src) [].
+Time Lemma rzl_ok : callee_ok rz_Pr (gid1 0) (cbz 0) (sig_at rzl_src 0) rzl.
+Proof. Time exact_no_check (compile_f_ok rz_Pr [] gid1 0 (sig_at rzl_src 0) (body_at rzl_src 0) eq_refl eq_refl (no_callees rz_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma rzd_ok : callee_ok rz_Pr (gid1 1) (cbz 1) (sig_at rzd_src 0) rzd.
+Proof.
+  Time exact_no_check (compile_f_ok rz_Pr [existT ftype (sig_at rzl_src 0) rzl] gid1 1 (sig_at rzd_src 0) (body_at rzd_src 0) eq_refl eq_refl
+    (all_ok_callees rz_Pr gid1 [existT ftype (sig_at rzl_src 0) rzl] (conj rzl_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
