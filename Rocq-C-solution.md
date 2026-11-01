@@ -52,11 +52,12 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    functions given to recursive functions (a copy per function given), loops that write and give a number, booleans and
    records as parameters (a record a value in the meaning, its fields in KQL), records given back (the fields after the first
    through the slot block), functions given that name the caller's variables, machine operations, bytes, 64-bit numbers
-   (`u64`: record variables with their types, one instruction per operation) — each per-program step in milliseconds, long
-   read-then-write bodies included on our fork of Rocq's kernel (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program
-   through it when every function is read (70 of the gate's 71 programs today, the five test kernels included; each corpus
-   program timed against the translator's build), the translator otherwise; next mutual recursion, in the order of §12.V's
-   tally.  Emit-then-prove is the interim.
+   (`u64`: record variables with their types, one instruction per operation), mutual recursion (a block as one function with
+   a selector) — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
+   (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program through it when every function is read (**all 71 of the gate's
+   programs today**, the five test kernels included; each corpus program timed against the translator's build), the
+   translator otherwise; next the acceptance of §12.V's plan (2) — the trusted base, the check's time, the construct table —
+   and then the walk retired.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -2664,6 +2665,30 @@ function and its meaning is made of the user's functions:
   template's copy is, with its meaning `blk [..]`) and its members; `kitc.py` proves the block function by `compile_f_okr`.
 - *Expected*: `mutual` (+1, 71 of 71).  Not in this step: members of different signatures, or giving back a memory or a record.
 
+**Step 17 done (2026-11-01): mutual recursion.**  Built as designed:
+- *`KQR.v`*: `blk` (with `sel_app`, the choice of member applied in each branch, and `vals_rev`, the parameters' values from
+  a body's numbers, booleans and records) — definitions only: no new theorem, no change to the syntax, the meanings or the
+  proofs.  Test: `mping` / `mpong` (`mutual`'s two functions) as one function with a selector, `mblk = blk [mping; mpong]`
+  proved by `compile_f_okr` from its two equations by conversion, each member one call of it proved by `compile_f_ok`; the
+  block function's KQL is one loop (the test between a call of `mping` and one of `mpong` merged into one call, step 9); each
+  theorem 3–5 ms; `Print Assumptions` the same base.
+- *The reifier*: a constant whose body is a fixpoint of several bodies (number functions of one signature, numbers and
+  booleans as parameters, recursive on the first counter) is read as the block function `<first member>__cblk`, a function
+  of its own as a template's copy is: each member's body lifted to make room for the selector, the members' fix binders read
+  as `CSib j`, a call of member `j` on the predecessor the recursive call given `CNat (SInt j)`, the branches nested under
+  matches on the selector (`nest_sel`); its meaning `@blk no_recs .. [tFix mfix 0; ..]`, the fixpoint's own bodies (so a member
+  the program does not name, as `pong`, needs nothing), the first member's type as the list's; each member reached is one call
+  of it (`member_body`).  Test: `mutual`'s text (`qping`, `qpong`, `qrounds`), the block's tree the hand-written one, each
+  theorem 3–6 ms.  `kitc.py` unchanged: the block function is proved as a copy is (`compile_f_okr`).
+- The C: 62 of 63 byte-identical, `mutual` the moved one.  **All 71 of the gate's programs through the verified compiler**
+  (was 70): `mutual` (an example: nothing to time).  §12.V's tally is done.  **Next: the acceptance of §12.V's plan (2)** —
+  the trusted base (`Print Assumptions`), the check's time, the construct table through the verified compiler — and then the
+  walk retired (the one program known to stay with the translator: `lock`, outside the gate, a block shared with another
+  processor).
+- The gate with `KQ_REFLECT=1`, on the fork, on `c6a1d3e` (2026-11-01): everything passes — `make.sh` `core-ok`; examples
+  27 / 27; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (10 / 10 / 10 / 12 / 11 s); **71 programs
+  through the verified compiler, 0 read but refused by the check, 0 not read**.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -2836,11 +2861,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `59b5737` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `0dd75b3` (2026-11-01); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 16 done (`u64`: 70 of 71), the C, the gate |
+| (this commit) | §12.V: step 17 done (mutual recursion: 71 of 71), the C, the gate |
+| `c6a1d3e` | `proved/KQR.v` + `KQRReify.v` step 17: mutual recursion -- a block as one function with a selector counter, its meaning `blk` of the user's own functions (`compile_f_okr`), each member one call of it; the reifier reads a fixpoint of several bodies |
+| `b7dc4c7` | §12.V: step 17's design (mutual recursion) |
+| `0dd75b3` | §12.V: step 16 done (`u64`: 70 of 71), the C, the gate |
 | `6c6f038` | `proved/KQR.v` + `KQRReify.v` step 16: `u64` -- record variables with their types (`rk`, `rtyped`), `RW64` (one `Ew64`), records bound in memories (`MLetR`, `MMatchR`, `XLetR`, `XMatchR`), records under lets (`RLet`, `RLetR`); the reifier reads `w64_op`, primitive projections, lets inside records |
 | `a0e1e6c` | §12.V: step 16's design (`u64`) |
 | `59b5737` | §12.V: step 15 done (bytes: 68 of 71), the C, the gate |
