@@ -396,7 +396,13 @@ def reflect(name, entry, prog, no_proof):
     info = open(os.path.join(GEN, f"{name}_rinfo.out")).read() if rc == 0 and os.path.exists(os.path.join(GEN, f"{name}_rinfo.out")) else ""
     fs = re.findall(r'\("([^"]+)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([IBa-h]*)"(?:%bs)?,\s*(true|false),\s*(true|false),\s*(true|false),'
                     r'\s*"([a-hBP]?)"(?:%bs)?\)', info)
-    if rc != 0 or not fs or "= None" in info:
+    if rc != 0:
+        # the file did not compile: the program is not Rocq (Rocq's own error, the first of them), or the reifier failed
+        m = re.search(r"Error:\s*(.*?)(?:\n\n|$)", out, re.S)
+        err = " ".join(m.group(1).split())[:200] if m else "the reifier did not run"
+        print(name, "reflect: not read by the verified compiler's reifier (Rocq refused the file: " + err + ")" + FOLLOW, flush=True)
+        return None
+    if not fs or "= None" in info:
         wp = os.path.join(GEN, f"{name}_rwhy.out")
         why = open(wp).read() if os.path.exists(wp) else ""
         rs = [f + ": " + ", ".join(re.findall(r'"([^"]*)"', r)) for f, r in re.findall(r'\("([^"]+)",\s*\[(.*?)\]\)', why, re.S)]
