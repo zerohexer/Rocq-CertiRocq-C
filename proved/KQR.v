@@ -236,6 +236,28 @@ Definition callf (g : sig) : ftype g -> list nat -> list val -> mem -> rtq (sr g
   | mksig x k m r _ q => fun h cvs vs s => appnT k m (rtq r q) (appc x (ntypeT k m (rtq r q)) h cvs) vs s
   end.
 
+(** a mutual block (step 17): the members, number functions of one signature, are one function with one counter more, the
+    selector, last among its counters.  Its meaning applies member [i] of [hs] at the first counter [n] -- the choice the head
+    of the meaning, the application in each branch, as a match on the selector stands in a body's meaning *)
+Fixpoint sel_app (x : nat) (k : list kind) (m : bool) (hs : list (nat -> ctype x (ntype k m false))) (i n : nat) (cvs : list nat)
+  (vs : list val) (s : mem) {struct hs} : i63 :=
+  match hs with
+  | [] => 0%uint63
+  | [h] => appn k m false (appc x _ (h n) cvs) vs s
+  | h :: hs' => match i with O => appn k m false (appc x _ (h n) cvs) vs s | S i' => sel_app x k m hs' i' n cvs vs s end
+  end.
+(** the values of a body's parameters, the last one first, from its numbers, booleans and records *)
+Fixpoint vals_rev (ks : list kind) (env : list i63) (benv : list bool) (renv : list val) : list val :=
+  match ks with
+  | [] => []
+  | KNum :: ks => VNum (hd 0%uint63 env) :: vals_rev ks (tl env) benv renv
+  | KBool :: ks => VBool (hd false benv) :: vals_rev ks env (tl benv) renv
+  | KRec _ :: ks => hd (VNum 0%uint63) renv :: vals_rev ks env benv (tl renv)
+  end.
+Definition blk (x : nat) (k : list kind) (m : bool) (hs : list (nat -> ctype x (ntype k m false))) : nat -> ctype (S x) (ntype k m false) :=
+  fun n => absc (S x) _ (fun cenv => absn k m false (fun env benv renv s =>
+    sel_app x k m hs (hd O cenv) n (rev (tl cenv)) (rev (vals_rev (rev k) env benv renv)) s)).
+
 (** the slot block's cells [j ..] written with these numbers, the last one first *)
 Fixpoint wslot (j : nat) (vs : list i63) (s : mem) : mem :=
   match vs with [] => s | v :: vs => KQ.KQRun.upd 63%uint63 (KQLAuto.ofn j) v (wslot (S j) vs s) end.
@@ -5914,3 +5936,57 @@ Check (eq_refl : wf_f [] (mksig 0 [KRec 0; KRec 0] false false false None)
 (* a tree with an operation not the text's is refused by the check *)
 Fail Check (eq_refl : uadd = denote_f [] uadd_g (FPlainR (BRet (RW64 0 KQ.KQRun.W_sub (RVar 1) (RVar 0))))).
 End U64Test.
+
+(* ---- a mutual block (step 17): [mping] and [mpong] (mutual's ping and pong) are one function with a selector counter, a call
+   of a member on the predecessor the recursive call given the selector; its meaning [blk] of the user's own functions, its
+   theorem compile_f_okr's from its two equations by conversion; each member one call of it *)
+Fixpoint mping (n : nat) (a b : i63) (s : mem) : i63 :=
+  match n with
+  | O => a
+  | S m => mpong m (PrimInt63.add a (KQ.KQRun.rd 0 (PrimInt63.land b 1023) s)) (PrimInt63.add b 3) s
+  end
+with mpong (n : nat) (a b : i63) (s : mem) : i63 :=
+  match n with
+  | O => PrimInt63.add a b
+  | S m => if PrimInt63.eqb (PrimInt63.land a 1) 0 then mping m (PrimInt63.land (PrimInt63.mul a 3) 65535) (PrimInt63.add b 1) s
+           else mpong m (PrimInt63.add a 5) (PrimInt63.add b 2) s
+  end.
+Definition mblk_g := mksig 2 (nk 2) true false false None.
+Definition mblk_e0 := SMatch 0 (SVar 1) (SOp Badd (SVar 1) (SVar 0)).
+Definition mblk_e1 := SMatch 1
+  (SRec (CCons (CNat (SInt 1)) CNil) (SCons (SOp Badd (SVar 1) (SRd (SInt 0) (SOp Bland (SVar 0) (SInt 1023)))) (SCons (SOp Badd (SVar 0) (SInt 3)) SNil)))
+  (SIf Ceq (SOp Bland (SVar 1) (SInt 1)) (SInt 0)
+     (SRec (CCons (CNat (SInt 0)) CNil) (SCons (SOp Bland (SOp Bmul (SVar 1) (SInt 3)) (SInt 65535)) (SCons (SOp Badd (SVar 0) (SInt 1)) SNil)))
+     (SRec (CCons (CNat (SInt 1)) CNil) (SCons (SOp Badd (SVar 1) (SInt 5)) (SCons (SOp Badd (SVar 0) (SInt 2)) SNil)))).
+Definition mmem_g := mksig 1 (nk 2) true false false None.
+Definition mmem_b (j : i63) := FPlain (SCall 0 (CCons (CVar 0) (CCons (CNat (SInt j)) CNil)) (SCons (SVar 1) (SCons (SVar 0) SNil))).
+Definition mut_P := mkprog [(gid1 0, compile_f gid1 0 mblk_g (FRec mblk_e0 mblk_e1)); (gid1 1, compile_f gid1 1 mmem_g (mmem_b 0));
+                            (gid1 2, compile_f gid1 2 mmem_g (mmem_b 1))] [].
+Definition mblk := blk 0 (nk 2) true [mping; mpong].
+Time Lemma mblk_ok : callee_ok mut_P (gid1 0) (cbz 0) mblk_g mblk.
+Proof.
+  Time exact_no_check (compile_f_okr mut_P [] gid1 0 1 (nk 2) true mblk_e0 mblk_e1 mblk eq_refl eq_refl (no_callees mut_P gid1) eq_refl eq_refl
+    eq_refl (fun n => eq_refl)).
+Time Qed.
+Time Lemma mping_ok : callee_ok mut_P (gid1 1) (cbz 1) mmem_g mping.
+Proof.
+  Time exact_no_check (compile_f_ok mut_P [existT ftype mblk_g mblk] gid1 1 mmem_g (mmem_b 0) eq_refl eq_refl
+    (all_ok_callees mut_P gid1 [existT ftype mblk_g mblk] (conj mblk_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
+Time Lemma mpong_ok : callee_ok mut_P (gid1 2) (cbz 2) mmem_g mpong.
+Proof.
+  Time exact_no_check (compile_f_ok mut_P [existT ftype mblk_g mblk] gid1 2 mmem_g (mmem_b 1) eq_refl eq_refl
+    (all_ok_callees mut_P gid1 [existT ftype mblk_g mblk] (conj mblk_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
+Print Assumptions mpong_ok.
+(* a call between members at the end is a loop: the block function's KQL loops (the test between two calls merged into one) *)
+Fixpoint has_loop (e : exp) : bool :=
+  match e with
+  | Eloop _ => true
+  | Eret _ => false
+  | Eop _ _ _ _ k | Esel _ _ _ _ _ _ k | Ecall _ _ _ k | Eload _ _ _ k | Ekld _ _ _ k | Ekld32 _ _ _ k | Ekld8 _ _ _ k
+  | Eksize _ _ k | Ehwf _ _ _ k | Ew64 _ _ _ _ _ _ _ k | Estore _ _ _ k | Ekst _ _ _ k | Ekst32 _ _ _ k | Ekst8 _ _ _ k | Ehw _ _ k => has_loop k
+  | Eif _ _ _ t f => has_loop t || has_loop f
+  end.
+Check (eq_refl : has_loop (kbody (compile_f gid1 0 mblk_g (FRec mblk_e0 mblk_e1))) = true).
+
