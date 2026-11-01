@@ -54,10 +54,12 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    through the slot block), functions given that name the caller's variables, machine operations, bytes, 64-bit numbers
    (`u64`: record variables with their types, one instruction per operation), mutual recursion (a block as one function with
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
-   (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program through it when every function is read (**all 71 of the gate's
-   programs today**, the five test kernels included, and `lock` on two processors; each corpus program timed against the
-   translator's build), the translator otherwise; of the construct table's 780 cells 773 (0 more by the walk alone); next
-   the rest of the table's fallbacks, then the walk retired.  Emit-then-prove is the interim.
+   (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
+   gate's programs**, the five test kernels included, and `lock` on two processors, and **773 of the construct table's 780
+   cells** (the other 7: 6 gaps and 1 program that is not Rocq) — a program the reifier does not read is refused with its
+   reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
+   against.  Next: the 6 gaps as constructs of `S` (arithmetic and comparisons on counters, a local `fix`, a pair of pairs given
+   back by recursion).
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -711,7 +713,8 @@ now; if MetaRocq gains primitive operations upstream, the all-of-Rocq route beco
 - **Stays as it is:** KQL, the generator and its theorem, the printer, the trusted base (§1.10) — the per-program equation is
   checked by the kernel, so the reifier adds nothing; the construct table (it now measures `reify` and `compile`); the gate.
 - **Stays as the fallback:** the current translator with the walk, for programs `S` does not yet cover — the gate keeps both
-  paths green — until the table's cells all go through `compile`; then the walk is retired.
+  paths green — until the table's cells all go through `compile`; then the walk is retired.  *(Retired 2026-11-02, step 29:
+  every proved cell goes through `compile`; the translator and the walk are kept behind `kitc.py --walk` as the yardstick.)*
 - **The claim becomes:** `compile` is a verified compiler for `S` ("for every program of `S`, the KQL computes its meaning");
   each user program is compiled by reifying it into `S` and checking `denote s = f` once.
 
@@ -1602,7 +1605,7 @@ Each item: what, why, and how it is accepted.  The order is by how much of the g
 
 **The order to take them in** (the letters are names, not the order): the batch of **A** in progress lands (done,
 `30d0199`) → **B**'s emit-then-prove part (done: `--emit-first`, `--no-proof`) → **V** (the verified compiler by reflection:
-spike, then growth; D26) → the rest of **A**, **L**, **P** (the user's ordinary text refused), done as constructs of `S` →
+spike, then growth; D26 — done 2026-11-02, the walk retired, step 29) → the rest of **A**, **L**, **P** (the user's ordinary text refused), done as constructs of `S` →
 **O** (operations C has) → the rest of **B** (compiling like `lean --c`) → **C** → **D** → **E** → **H** (with release builds
 through `ccomp`) → **G** → **M** → **J**; **F**, **I** and **N** when their condition arises; **K** when the owner says.
 **Q** is dropped (D26).
@@ -3060,6 +3063,25 @@ construct table unchanged or better").  So:
 - *Not in this step*: removing the translator's and the walk's files (`KQMTrans.v`, `KQMAuto.v`, `KQMNames.v`): the timing
   yardstick still uses them, and `lib/` and the kit route are untouched.
 
+**Step 29 done (2026-11-02): the walk retired.**  Built as designed: `kitc.py`'s route is the verified compiler (`KQ_REFLECT`
+and `--reflect` change nothing now); a program the reifier does not read, or whose check fails, is refused with the reifier's
+reasons (`... ; refused`, then `NAME REFUSED: not compiled by the verified compiler`); `--walk` / `KQ_WALK=1` give the translator
+and the walk alone.  `matrix/classify.py` names the refusal (its reasons as the category); `proved/README.md` says which route
+is which.  Found by the acceptance run and fixed in `8b406b3`: when Rocq itself refuses the program (the construct table's
+`A_par_nat_arith`, `k (m + 0)` not structurally smaller) the refusal said only "the reifier did not run", so the table counted
+it as a gap — the translator's message used to carry Rocq's error; now the refusal carries it (`Rocq refused the file: Cannot
+guess decreasing argument of fix.`) and the cell is "not Rocq" again (that cell, and a proved and a refused one, re-run alone;
+no gate program reaches that branch).  **Acceptance (goal row 8b, "the gate with the walk switched off"), on `eadb665`, with no
+`KQ_REFLECT` and no `--walk`**: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36 equal to the C++ answers; the five kernels
+proved and built (10 / 10 / 10 / 13 / 12 s); **71 programs through the verified compiler, 0 refused**; the retired route still
+builds its yardstick (`kitc.py --walk`, `reflect_counters` proved, 652); `ASSUME=1 make.sh` lists §1.10's base — Rocq's 63-bit
+integer axioms, `divs_min_neg1`, the kit's memory primitives and `real_laws`, the machine operations' declarations, CompCert's
+classical axioms — and nothing else.  The construct table run the same way: **773 of 780 through the verified compiler, none
+by the walk** (the same 773 as with it, step 28), 7 refused: 6 gaps (`A_par_nat_eqb`, `_ltb`, `_mul`, `_pred`: arithmetic and
+comparisons on counters; `P_int_local_fix`: a local `fix` naming the caller's variables; `P_pairp_rec`: a pair of pairs given
+back by recursion) and `A_par_nat_arith`, not Rocq.  The C: 63 of 63 byte-identical.  **§12.V is done**: every program is compiled
+through the verified `compile`, with only the conversion check per program.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3113,9 +3135,10 @@ Everything runs in the repository's CertiRocq image (Rocq 9 with MetaRocq, CompC
 
 ```
 bash proved/make.sh                     # every proof of the route, "core-ok" at the end (ASSUME=1: print the assumptions)
-python3 proved/kitc.py NAME ...         # translate, prove each function, print the C, build bin/P_NAME
-python3 proved/kitc.py --emit-first NAME  # the same, with the C and the binary first and the proofs behind
-python3 proved/kitc.py --no-proof --no-build NAME   # the translation alone: what is read, what is refused
+python3 proved/kitc.py NAME ...         # the verified compiler: read, check by conversion, print the C, build bin/P_NAME
+python3 proved/kitc.py --no-proof --no-build NAME   # what the reifier reads, what it refuses (with its reasons)
+python3 proved/kitc.py --walk NAME      # the retired route (translator + walk), the yardstick a program is timed against
+python3 proved/kitc.py --walk --emit-first NAME  # the same, with the C and the binary first and the proofs behind
 bash proved/examples.sh                 # every proved/examples/*.body: proved, built, answer = NAME.expect
 bash proved/corpus.sh [times]           # every program of hand.tsv; "times" also times each next to the kit's build
 bash hw/spec.sh                         # the laws, the model, the demos, the library theorems rest on the laws alone
@@ -3236,7 +3259,10 @@ Pushed to the public repository up to `d819c8d` (2026-11-02); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 29's design (the walk retired) |
+| (this commit) | §12.V: step 29 done (the walk retired: the gate and the construct table with the walk switched off, 773 of 780), the C |
+| `8b406b3` | `proved/kitc.py`: a program Rocq refuses is refused with Rocq's error (not Rocq in the table, as before) |
+| `eadb665` | `proved/kitc.py` + `matrix/classify.py` + `README.md` step 29: the verified compiler is the route, `--walk` the retired one |
+| `7b4fd2f` | §12.V: step 29's design (the walk retired) |
 | `d819c8d` | §12.V: step 28 done (`option`, `sum` and their kind held as their tag and fields: the construct table 773 of 780), the C, the gate |
 | `14e971d` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 28: `rtg`, `rl_mk_tag`, `canon_s`; the reifier's data types (`rec_shape`, `cindex`, `tag_parts`); `kitc.py`'s instances |
 | `c648ca8` | §12.V: step 27 done (a template giving its own function parameter to another template: the construct table 769 of 780), the C, the gate |
