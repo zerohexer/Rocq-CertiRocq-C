@@ -2773,7 +2773,18 @@ twice: the tree is the function written out at each call, `(a + b) * (b + b)`) a
 each theorem 0.002–0.004 s.  The C: 63 of 63 byte-identical (no gate program has such a `let`).  The construct table (on
 `0993a8b`): **735 of 780 through the verified compiler** (was 729: the six), 33 more by the walk alone, 12 gaps.  The gate
 with `KQ_REFLECT=1` on `0993a8b`: everything passes — `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels
-( s); **71 programs through the verified compiler, 0 refused, 0 not read**.
+(10 / 10 / 10 / 13 / 12 s); **71 programs through the verified compiler, 0 refused, 0 not read**.
+
+**Step 21, records chosen by a test or built from a record taken apart — the design (2026-11-02).**  Four of the 33 cells
+proved only by the walk (`P_rec3_if`, `P_rec3_match`, `P_pair_call_swap`, `P_pair_match_destr`) write out a helper giving a
+record that its body chooses by a test (`if a <? b then mk3 a b 0 else mk3 b a 1`) or builds from a record it takes apart
+(`match hp a b with (x, y) => (y, x) end`), and take the record apart where it is used.  So `RIf ri c a b x y` and `RMatchR
+ri x y` among the records, of type `ri`.  Their meanings put the test and the match inside one record value — `VRec ri (if ..
+then to_rt ri x else to_rt ri y)`, `VRec ri (rmatch x (fun l => to_rt ri y))` — so that taken apart they are the user's match
+on the user's test (a test of two record values, `if .. then VRec .. else VRec ..`, does not convert to it: measured, the
+kernel refused it).  Compiled as `SIf` and `SMatchR` are (the test a jump, the continuation in both branches); one proof case
+each, through `to_rt_vflat`; well formed when both branches, or the record made, are of type `ri`.  The reifier reads the
+type off the match's own return type.  *Expected*: the four cells.
 
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
