@@ -317,9 +317,10 @@ def driver(name, entry_id, kinds, res, args, wrap, uses_hw=False, bare=False, pr
         else:
             cargs.append(f"argI({a[1]})")
     call = f"{prefix}f{entry_id}({', '.join(cargs)})"
-    # a program with a function that gives back two numbers: block 63 (8 cells) carries the second one back to the caller
-    slotinit = ("  static value kq_slot_cells[16]; if (!kq_b[63].p) { for (int j = 0; j < 16; j++) kq_slot_cells[j] = KQ_V(0);\n"
-                "    kq_b[63].p = kq_slot_cells; kq_b[63].len = 8; kq_b[63].lim = 16; }\n") if slots else ""
+    # a program with a function that gives back two numbers or a record: block 63 (at least 8 cells) carries the numbers after
+    # the first back to the caller
+    slotinit = (f"  static value kq_slot_cells[{2 * slots}]; if (!kq_b[63].p) {{ for (int j = 0; j < {2 * slots}; j++) kq_slot_cells[j] = KQ_V(0);\n"
+                f"    kq_b[63].p = kq_slot_cells; kq_b[63].len = {slots}; kq_b[63].lim = {2 * slots}; }}\n") if slots else ""
     ret = "return kq_sum(KQ_V(0));" if res == "M" else "return (value) r;"
     hwdef = ("/* ---- the machine's operations: the kit's C bodies (hw/kq_hw.h) behind the external functions of the theorem */\n"
              + ("" if bare else "#include <sys/mman.h>\nuintptr_t kq_hw_wlo, kq_hw_whi;\n") + ext_dispatch(ext) + HW_WRAPPERS + ("" if bare else HW_GROW)) if (uses_hw and not secondary) else ""
@@ -382,7 +383,8 @@ def reflect(name, entry, prog, no_proof):
         + f"MetaRocq Run (monad_iter (fun p => tmMkDefinition (fst p) (snd p)) {name}_mts).\n")
     rc, out = coqc(f0)
     info = open(os.path.join(GEN, f"{name}_rinfo.out")).read() if rc == 0 and os.path.exists(os.path.join(GEN, f"{name}_rinfo.out")) else ""
-    fs = re.findall(r'\("([^"]+)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([IBa-h]*)"(?:%bs)?,\s*(true|false),\s*(true|false),\s*(true|false)\)', info)
+    fs = re.findall(r'\("([^"]+)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([IBa-h]*)"(?:%bs)?,\s*(true|false),\s*(true|false),\s*(true|false),'
+                    r'\s*"([a-h]?)"(?:%bs)?\)', info)
     if rc != 0 or not fs or "= None" in info:
         wp = os.path.join(GEN, f"{name}_rwhy.out")
         why = open(wp).read() if os.path.exists(wp) else ""
@@ -393,7 +395,9 @@ def reflect(name, entry, prog, no_proof):
     # the kinds of the parameters after the counters: I a number, B a boolean, a .. h a record of the program's type 0 .. 7
     kc = lambda c: "KQR.KNum" if c == "I" else "KQR.KBool" if c == "B" else f"(KQR.KRec {ord(c) - ord('a')})"
     kl = lambda f: "[" + "; ".join(kc(c) for c in f[2]) + "]"
-    sig = lambda f: f"(KQR.mksig {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]})"
+    # the result: a record of the program's type 0 .. 7 (a .. h), or none
+    rq = lambda f: "None" if f[6] == "" else f"(Some {ord(f[6]) - ord('a')}%nat)"
+    sig = lambda f: f"(KQR.mksig {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)})"
     t = HDR + "From KQC Require KQR KQRReify.\nImport ListNotations.\n" + f"From KQG Require Import {name}_r.\n"
     # the program's record types (step 12): each its type, its constructor and match, a value of it; the laws by a fixed script
     rp = os.path.join(GEN, f"{name}_rrec.out")
@@ -455,11 +459,14 @@ def reflect(name, entry, prog, no_proof):
         return None
     idx = [f[0] for f in fs].index(entry) if entry in [f[0] for f in fs] else len(fs) - 1
     e = fs[idx]
-    if any(c not in "IB" for c in e[2]):   # an entry taking a record: main gives numbers only
-        print(name, "reflect: the entry takes a record; the translator follows", flush=True)
+    if any(c not in "IB" for c in e[2]) or e[6]:   # an entry taking or giving back a record: main gives and takes numbers
+        print(name, "reflect: the entry takes or gives back a record; the translator follows", flush=True)
         return None
     kinds = "N" * int(e[1]) + "I" * len(e[2]) + ("M" if e[3] == "true" else "")   # a boolean is passed as a number, 1 or 0
-    return 1000 + idx, kinds, "M" if e[4] == "true" else "I", len(fs)
+    # the slot block: room for the fields after the first of each record type of the program ([KQR.slot_room], which every
+    # theorem of the program takes; the driver provides it, as for the translator's two results)
+    slots = max([int(n) for (_, _, n) in recs] + [1]) - 1
+    return 1000 + idx, kinds, "M" if e[4] == "true" else "I", len(fs), slots
 
 def main():
     build = True
@@ -512,10 +519,10 @@ def main():
         if reflect_mode:
             r = reflect(name, entry, prog, no_proof)
             if r:
-                eid, kinds, res, n = r
+                eid, kinds, res, n, slots = r
                 print(name, ("NOT PROVED (proofs skipped)" if no_proof else "PROVED"), n, "functions by the verified compiler; entry",
                       entry, "id", eid, kinds, "->", res, flush=True)
-                write_c(name, eid, kinds, res, args, wrap, bare, prefix, entry_name, secondary, ext, [])
+                write_c(name, eid, kinds, res, args, wrap, bare, prefix, entry_name, secondary, ext, [], slots)
                 if build:
                     build_bin(name, bare)
                 continue
@@ -618,7 +625,7 @@ def c_print(name):
     return (f'\nFrom Stdlib Require Import String.\nLocal Open Scope string_scope.\n'
             f'Redirect "{name}_c" Eval vm_compute in (KQLPrint.pstr 77777%positive (KQMTop.tr_kit_program {name}_prog)).\n')
 
-def write_c(name, eid, kinds, res, args, wrap, bare, prefix, entry_name, secondary, ext, pairfns):
+def write_c(name, eid, kinds, res, args, wrap, bare, prefix, entry_name, secondary, ext, pairfns, slots=0):
     """NAME_c.out -> the C file with its driver"""
     raw = open(os.path.join(GEN, f"{name}_c.out")).read()
     c = raw[raw.index('"') + 1: raw.rindex('"')].replace('""', '"')
@@ -627,7 +634,8 @@ def write_c(name, eid, kinds, res, args, wrap, bare, prefix, entry_name, seconda
     if prefix:
         c = re.sub(r"\bf(1\d{3})\b", prefix + r"f\1", c)
     open(cfile, "w").write('#include "gc_stack.h"\n#include "kq_io.h"\n' + ('#include "kq_hw.h"\n' if uses_hw else "") + c
-                           + driver(name, eid, kinds, res, args, wrap, uses_hw, bare, prefix, entry_name, secondary, ext, bool(pairfns)))
+                           + driver(name, eid, kinds, res, args, wrap, uses_hw, bare, prefix, entry_name, secondary, ext,
+                                    max(8, slots) if slots else (8 if pairfns else 0)))
 
 def build_bin(name, bare):
     """build bin/P_NAME as the kit builds its programs"""
