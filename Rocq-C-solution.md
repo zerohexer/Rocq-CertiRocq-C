@@ -56,7 +56,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector) — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program through it when every function is read (**all 71 of the gate's
    programs today**, the five test kernels included, and `lock` on two processors; each corpus program timed against the
-   translator's build), the translator otherwise; of the construct table's 780 cells 744 (26 more by the walk alone); next
+   translator's build), the translator otherwise; of the construct table's 780 cells 752 (18 more by the walk alone); next
    the rest of the table's fallbacks, then the walk retired.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
@@ -2825,6 +2825,18 @@ lets, which the readers read (a number's let, a memory's).  So the reifier reads
 parameters), in every reader, after the record reading (so a record of numbers is read as before).  `KQR.v` and `kitc.py`
 unchanged.  *Expected*: the five cells.  Not in this step: a function giving back a number and a memory (4 of the 26).
 
+**Step 23 done (2026-11-02): a pair built in place, taken apart.**  Built as designed (`iota_pair`, in the readers of numbers,
+records, memories, numbers made after memories and records given back, after the record reading and the lets brought before
+the match).  Test `ip` (a helper giving a number and a memory, its pair after a let, taken apart): read as a number's `let`
+and a memory's, the theorem in milliseconds; the earlier tests' trees unchanged.  The C: 63 of 63 byte-identical.  The
+construct table (on `e0c149e`): **752 of 780 through the verified compiler** (was 744: the five, and three pairs of pairs
+built in place, `P_pairp_lit`, `_let`, `_call`, whose inner pair is a record), 18 more by the walk alone, 10 gaps.  The 18:
+functions giving back a boolean (5), functions giving back a number and a memory or a pair of them chosen by a test (4), a
+pair holding a memory as a parameter (1), `option` / `sum` / `list` and records holding a proof or a memory (5), a pair of
+pairs as a parameter (1), a pair holding a function (1), a capture of an outer variable (1) — each a new construct, the next
+steps.  The gate with `KQ_REFLECT=1` on `e0c149e`: everything passes — `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36;
+the five kernels (10 / 10 / 10 / 12 / 12 s); **71 programs through the verified compiler, 0 refused, 0 not read**.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -2997,11 +3009,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `ec2cedc` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `9cf5da1` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 22 done (booleans chosen by a test or a counter's match: the construct table 744 of 780), the C, the gate; step 23's design (a pair built in place, taken apart) |
+| (this commit) | §12.V: step 23 done (a pair built in place, taken apart: the construct table 752 of 780), the C, the gate |
+| `e0c149e` | `proved/KQRReify.v` step 23: `iota_pair` in the readers, after the record reading |
+| `9cf5da1` | §12.V: step 22 done (booleans chosen by a test or a counter's match: the construct table 744 of 780), the C, the gate; step 23's design (a pair built in place, taken apart) |
 | `825c046` | `proved/KQR.v` + `KQRReify.v` step 22: `BIfCmp`, `BMatchCnt` in the three forms a boolean is compiled to |
 | `7ae0f91` | §12.V: step 22's design (booleans chosen by a test or by a counter's match) |
 | `ec2cedc` | §12.V: step 21 done (records chosen by a test or built from a record taken apart: the construct table 741 of 780), the C, the gate |
