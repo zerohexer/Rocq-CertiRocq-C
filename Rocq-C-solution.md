@@ -2907,6 +2907,33 @@ read before is read the same way:
 apart (`A_par_option`, `A_par_sum`: a match on an `if` is not the `if` of two matches up to conversion, so it needs the type held
 as its tag and fields, a construct of `S`), a number and a memory given back (4), a capture through two templates (1).
 
+**Step 26, a number and a memory given back — the design (2026-11-02).**  Four of the cells proved only by the walk give
+back `int * mem`: a helper choosing the pair by a test, written out where its pair is taken apart (`P_intmem_if`: `let '(x,
+s2) := (if a <? b then (a, upd 0 a b s) else (b, s)) in x + rd 0 0 s2`); a loop (`P_intmem_tail_rec`: `f m (a + 1) b (upd 0 a
+b s)` at the end; `A_par_mem_pair_rec`); a recursion taking its own pair apart (`P_intmem_nontail`: `let '(x, s2) := f m a b s
+in (x + 1, upd 0 x b s2)`); their callers take the pair apart, by a match or by a let read through `fst` / `snd` (`let r := k n
+a s in fst r + rd 0 0 (snd r)`).  A match on a test is not the test of two matches up to conversion, so the pair chosen by a
+test must be a construct of `S`, as a record chosen by a test is (step 21).  The translator states such a function as
+`runk P f args M (fst (g ..)) (snd (g ..))` (§1.6): its KQL returns the number and ends with the memory.
+- *The result kind*: `sq = Some KNum` (a number and a memory): `rtq` gives `i63 * mem`, `calln` its first part, `callm` its
+  second, so `callee_ok` states it as the translator does, unchanged in shape.
+- *Pair values*: a sort `spv` — `PvMk e m` (built: the number worked out on the memory before `m`'s writes, then `m`),
+  `PvCall f cs args m` (a function giving back a pair), `PvRec cs args m` (the function itself), `PvIf`, `PvIfB`, `PvMatch c
+  p0 p1` (a counter's match), `PvLet`-family lets, `PvMatchP p q` (`p` taken apart: its number the nearest number, its memory
+  the newest, then `q`); its meaning `denote_pv` is the user's pair itself (with the recursive call's own meaning `recp`).
+- *Compiled two ways*: in tail position (`ctailp`: the number returned after the writes, the function itself a loop, a call
+  then its result), and where it is taken apart (`cpv`, continuation style: the number's atom given on, the KQL memory the
+  pair's memory — `cpv_ok`, from `cmem_ok`, `ccallr`'s pattern without the slot block).
+- *Taken apart*: `XMatchP p x` among the numbers made after memories, `MMatchP p m` among the memories, `PvMatchP` among the
+  pairs; and the let form, `XLetP` / `MLetP` (`fst r` a number variable, `snd r` the newest memory while nothing writes after
+  it — the memory's linearity, checked as for every memory).
+- *Bodies*: `FRecP`, `FPlainP`; `ctailp_ok` and `compile_f_ok`'s case (the counter's induction, its hypothesis the recursive
+  call's KQL giving the pair's number and ending with its memory).
+- *The reifier*: `read_sig` reads `int * mem` as the result; a body read as a pair value; a pair taken apart read as
+  `XMatchP` / `MMatchP` / `PvMatchP` (a helper's pair written out first), the let form through `fst` / `snd`.
+- *Expected*: the four cells.  Not in this step: a pair of a number and a memory as a parameter (a memory is passed only as
+  the function's memory), records of a number and a memory (`mem_pair`) beyond `prod`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3079,11 +3106,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `12e40c7` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `d143561` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 24 done (functions giving back a boolean: the construct table 757 of 780), the C, the gate |
+| (this commit) | §12.V: step 26's design (a number and a memory given back: pair values) |
+| `31bb4f4` | `proved/KQRReify.v` step 25: a let of a constructor of plain values put in, a match on a constructor its branch (`head_r`) |
+| `d143561` | §12.V: step 24 done (functions giving back a boolean: the construct table 757 of 780), the C, the gate |
 | `8780f64` | §12.V: step 25's design (a value of any inductive type built in place, taken apart) |
 | `8da3b4d` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 24: `sq : option kind`, the body sort `sbb` (`ctailb_ok`, `compile_f_ok_bool`), `BCall` among the booleans; the reifier reads boolean results |
 | `2220ad4` | §12.V: step 24's design (functions giving back a boolean) |
