@@ -1165,6 +1165,110 @@ Fixpoint wfbr (sigs : list sig) (r rb mok : bool) (nx : nat) (k : list kind) (rk
   | BMatch _ b0 b1 => wfbr sigs r rb mok nx k rk ri b0 && wfbr sigs r rb mok nx k rk ri b1
   end.
 
+(** blocks shared with another processor (step 18): in a program that lists them, a plain access to a narrow block names it
+    by a number written where it is used, not one of them (the translator's rule, §9.4); nothing asked when none is listed.
+    A check beside the theorem, as [wf] is: the sequential meaning describes such a program only if it holds *)
+Definition sh_blk (sh : list i63) (h : sexp) : bool :=
+  match sh with
+  | [] => true
+  | _ => match h with SInt n => negb (existsb (PrimInt63.eqb n) sh) | _ => false end
+  end.
+Fixpoint sh_e (sh : list i63) (e : sexp) {struct e} : bool :=
+  match e with
+  | SVar _ | SInt _ | SFld _ _ => true
+  | SOp _ a b | SLet a b | SRd a b => sh_e sh a && sh_e sh b
+  | SRd32 a b | SRd8 a b => sh_blk sh a && sh_e sh a && sh_e sh b
+  | SIf _ a b t f => sh_e sh a && sh_e sh b && sh_e sh t && sh_e sh f
+  | SRec ccs args | SCall _ ccs args => sh_cs sh ccs && sh_es sh args
+  | SMatch _ e0 e1 => sh_e sh e0 && sh_e sh e1
+  | SIfB b t f => sh_b sh b && sh_e sh t && sh_e sh f
+  | SLetB b e => sh_b sh b && sh_e sh e
+  | SLetC c e => sh_c sh c && sh_e sh e
+  | SLetR x e | SMatchR x e => sh_r sh x && sh_e sh e
+  | SHwf _ args => sh_es sh args
+  | SSize h => sh_e sh h
+  end
+with sh_es (sh : list i63) (es : sexps) {struct es} : bool :=
+  match es with
+  | SNil => true
+  | SCons e r => sh_e sh e && sh_es sh r
+  | SConsB b r => sh_b sh b && sh_es sh r
+  | SConsR x r => sh_r sh x && sh_es sh r
+  end
+with sh_c (sh : list i63) (c : scnt) {struct c} : bool :=
+  match c with CVar _ | CO => true | CS c => sh_c sh c | CNat e => sh_e sh e end
+with sh_cs (sh : list i63) (cs : scnts) {struct cs} : bool :=
+  match cs with CNil => true | CCons c r => sh_c sh c && sh_cs sh r end
+with sh_b (sh : list i63) (b : sbool) {struct b} : bool :=
+  match b with
+  | BCmp _ x y => sh_e sh x && sh_e sh y
+  | BVar _ | BTrue | BFalse => true
+  | BAnd x y | BOr x y => sh_b sh x && sh_b sh y
+  | BNot x => sh_b sh x
+  end
+with sh_r (sh : list i63) (x : srec) {struct x} : bool :=
+  match x with
+  | RVar _ => true
+  | RMk _ es => sh_es sh es
+  | RCall _ _ ccs args => sh_cs sh ccs && sh_es sh args
+  | RW64 _ _ a b => sh_r sh a && sh_r sh b
+  | RLet e x => sh_e sh e && sh_r sh x
+  | RLetR y x => sh_r sh y && sh_r sh x
+  end.
+Fixpoint sh_m (sh : list i63) (m : smem) {struct m} : bool :=
+  match m with
+  | MCur => true
+  | MUpd h i v m => sh_e sh h && sh_e sh i && sh_e sh v && sh_m sh m
+  | MUpd32 h i v m | MUpd8 h i v m => sh_blk sh h && sh_e sh h && sh_e sh i && sh_e sh v && sh_m sh m
+  | MLet e m => sh_e sh e && sh_m sh m
+  | MLetM m1 m2 => sh_m sh m1 && sh_m sh m2
+  | MIf _ a b m1 m2 => sh_e sh a && sh_e sh b && sh_m sh m1 && sh_m sh m2
+  | MRec ccs args m | MCall _ ccs args m => sh_cs sh ccs && sh_es sh args && sh_m sh m
+  | MMatch _ m0 m1 => sh_m sh m0 && sh_m sh m1
+  | MIfB b m1 m2 => sh_b sh b && sh_m sh m1 && sh_m sh m2
+  | MLetB b m => sh_b sh b && sh_m sh m
+  | MLetC c m => sh_c sh c && sh_m sh m
+  | MHw _ args m => sh_es sh args && sh_m sh m
+  | MLetR x m | MMatchR x m => sh_r sh x && sh_m sh m
+  end.
+Fixpoint sh_x (sh : list i63) (x : sx) {struct x} : bool :=
+  match x with
+  | XRet e => sh_e sh e
+  | XLetM m x => sh_m sh m && sh_x sh x
+  | XLet e x => sh_e sh e && sh_x sh x
+  | XLetB b x => sh_b sh b && sh_x sh x
+  | XIf _ a b x1 x2 => sh_e sh a && sh_e sh b && sh_x sh x1 && sh_x sh x2
+  | XIfB b x1 x2 => sh_b sh b && sh_x sh x1 && sh_x sh x2
+  | XMatch _ x0 x1 => sh_x sh x0 && sh_x sh x1
+  | XLetC c x => sh_c sh c && sh_x sh x
+  | XRec ccs args m | XCall _ ccs args m => sh_cs sh ccs && sh_es sh args && sh_m sh m
+  | XLetR r x | XMatchR r x => sh_r sh r && sh_x sh x
+  end.
+Fixpoint sh_br (sh : list i63) (b : sbr) {struct b} : bool :=
+  match b with
+  | BRet x => sh_r sh x
+  | BRec ccs args => sh_cs sh ccs && sh_es sh args
+  | BMatchRec ccs args b | BLetRec ccs args b => sh_cs sh ccs && sh_es sh args && sh_br sh b
+  | BLet e b => sh_e sh e && sh_br sh b
+  | BLetB c b => sh_b sh c && sh_br sh b
+  | BLetC c b => sh_c sh c && sh_br sh b
+  | BLetR x b | BMatchR x b => sh_r sh x && sh_br sh b
+  | BIf _ x y t f => sh_e sh x && sh_e sh y && sh_br sh t && sh_br sh f
+  | BIfB c t f => sh_b sh c && sh_br sh t && sh_br sh f
+  | BMatch _ b0 b1 => sh_br sh b0 && sh_br sh b1
+  end.
+Definition sh_ok (sh : list i63) (b : fbody) : bool :=
+  match b with
+  | FRec e0 e1 => sh_e sh e0 && sh_e sh e1
+  | FPlain e => sh_e sh e
+  | FRecM m0 m1 => sh_m sh m0 && sh_m sh m1
+  | FPlainM m => sh_m sh m
+  | FPlainX x => sh_x sh x
+  | FRecX x0 x1 => sh_x sh x0 && sh_x sh x1
+  | FRecR b0 b1 => sh_br sh b0 && sh_br sh b1
+  | FPlainR b => sh_br sh b
+  end.
+
 (** the types of a function's record parameters, the last one first (as the meaning binds them) *)
 Definition rk0 (ks : list kind) : list nat := rev (flat_map (fun k => match k with KRec ri => [ri] | _ => [] end) ks).
 
@@ -5989,4 +6093,12 @@ Fixpoint has_loop (e : exp) : bool :=
   | Eif _ _ _ t f => has_loop t || has_loop f
   end.
 Check (eq_refl : has_loop (kbody (compile_f gid1 0 mblk_g (FRec mblk_e0 mblk_e1))) = true).
+
+(* ---- blocks shared with another processor (step 18): a plain narrow-block access names an unshared block by a written
+   number; atomics, wide blocks and a program sharing nothing are not asked *)
+Check (eq_refl : sh_ok [6%uint63] (FPlainM (MUpd32 (SInt 1) (SInt 0) (SRd32 (SInt 1) (SInt 4)) MCur)) = true).
+Check (eq_refl : sh_ok [6%uint63] (FPlainM (MUpd32 (SInt 6) (SInt 0) (SInt 1) MCur)) = false).
+Check (eq_refl : sh_ok [6%uint63] (FPlain (SRd8 (SVar 0) (SInt 0))) = false).
+Check (eq_refl : sh_ok [6%uint63] (FPlainX (XLetM (MHw HAStore (SCons (SInt 4) (SCons (SVar 0) (SCons (SInt 1) SNil))) MCur) (XRet (SRd (SInt 6) (SInt 0))))) = true).
+Check (eq_refl : sh_ok [] (FPlain (SRd8 (SVar 0) (SInt 0))) = true).
 

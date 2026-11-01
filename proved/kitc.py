@@ -370,11 +370,10 @@ def reflect(name, entry, prog, no_proof):
     assumption: one [exact_no_check] per function, which the kernel checks at Qed (the meaning of the syntax tree against
     the user's function, by conversion).  No tactic, no search.  -> (eid, kinds, res, n, slots) or None (not read: the caller
     takes the translator)"""
-    # a program that shares blocks with another processor: plain accesses to them are refused by the translator (§9.4), a rule
-    # the verified path does not have yet
-    if re.search(r"Definition\s+kq_shared\b", prog):
-        print(name, "reflect: a program sharing blocks with another processor (kq_shared); the translator follows", flush=True)
-        return None
+    # a program that shares blocks with another processor (step 18): a plain access to a narrow block names an unshared block
+    # by a written number (the translator's rule, §9.4) -- KQR.sh_ok, worked out here on the trees read and proved by the
+    # kernel beside each function's theorem
+    shared = bool(re.search(r"Definition\s+kq_shared\b", prog))
     f0 = os.path.join(GEN, f"{name}_r.v")
     open(f0, "w").write(HDR + "From KQC Require KQR KQRReify.\n" + prog
         + f"\nDefinition {name}_res := ltac:(run_template_program (tmQuoteRec {entry})\n"
@@ -384,6 +383,8 @@ def reflect(name, entry, prog, no_proof):
         + f'Redirect "{name}_rinfo" Eval vm_compute in (option_map KQRReify.info_of {name}_src).\n'
         + f'Redirect "{name}_rwhy" Eval vm_compute in (snd (fst {name}_res)).\n'
         + f'Redirect "{name}_rrec" Eval vm_compute in (snd {name}_res).\n'
+        + (f'Redirect "{name}_rsh" Eval vm_compute in (match {name}_src with Some l => map (fun f => (snd (fst (fst f)), '
+           f'KQR.sh_ok kq_shared (snd f))) l | None => [] end).\n' if shared else "")
         # a copy of a recursive function for the functions it is given: its meaning, the function applied to them (step 10)
         + f"MetaRocq Run (monad_iter (fun p => tmMkDefinition (fst p) (snd p)) {name}_mts).\n")
     rc, out = coqc(f0)
@@ -397,6 +398,14 @@ def reflect(name, entry, prog, no_proof):
         print(name, "reflect: not read by the verified compiler's reifier (" + ("; ".join(rs) if rs else "the reifier did not run")
               + "); the translator follows", flush=True)
         return None
+    if shared:
+        shp = os.path.join(GEN, f"{name}_rsh.out")
+        bad = re.findall(r'\("([^"]+)"(?:%bs)?,\s*false\)', open(shp).read()) if os.path.exists(shp) else ["(not worked out)"]
+        if bad:
+            print(name, "reflect: not read by the verified compiler's reifier (" + "; ".join(
+                  f + ": a block that another processor can change is read or written by a plain access, or its number is not written"
+                  " where it is used" for f in bad) + "); the translator follows", flush=True)
+            return None
     # the kinds of the parameters after the counters: I a number, B a boolean, a .. h a record of the program's type 0 .. 7
     kc = lambda c: "KQR.KNum" if c == "I" else "KQR.KBool" if c == "B" else f"(KQR.KRec {ord(c) - ord('a')})"
     kl = lambda f: "[" + "; ".join(kc(c) for c in f[2]) + "]"
@@ -455,6 +464,9 @@ def reflect(name, entry, prog, no_proof):
             else:
                 t += (f"Proof. exact_no_check (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j})"
                       f" eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl). Qed.\n")
+            if shared:
+                # the sequential meaning describes the program only if it reaches its shared blocks through marked operations
+                t += f"Lemma {name}_rsh{j} : KQR.sh_ok kq_shared (KQRReify.body_at {name}_funs {j}) = true.\nProof. exact eq_refl. Qed.\n"
     t += c_print(name)
     f1 = os.path.join(GEN, f"{name}_rp.v")
     open(f1, "w").write(t)
