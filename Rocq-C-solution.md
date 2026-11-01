@@ -2565,6 +2565,15 @@ are assumed by `hw_law` / `hwf_law` (§1.10).  So `S` takes them as KQL does:
   27 / 27; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (10 / 10 / 10 / 12 / 11 s); **67
   programs through the verified compiler, 0 read but refused by the check**.
 
+**Step 15, bytes — the design (2026-11-01).**  `bytes` and `views` read and write single bytes (`rd8`, `upd8`; `rd16`, `upd16`
+are definitions over them).  Step 8 left them out of the helpers written out on purpose, so that each stays one byte access
+(§6.1: 74 against 136 ms) — and KQL has that access: `Ekld8` / `Ekst8`, whose meaning is `KQRun.rd8` / `upd8` themselves
+(the generator's C is one byte load or store, `KQBytes.v`).  So, as step 7 did for 4-byte cells: `SRd8 h i` among the numbers
+and `MUpd8 h i v m` among the memories, meaning `rd8` / `upd8` of the user's own text, compiled to `Ekld8` / `Ekst8`; one proof
+case each by `K_ld8` / `K_st8`, the shape of `K_ld32` / `K_st32`; the reifier reads `rd8` / `upd8` (still not written out)
+and writes `rd16` / `upd16` out over them, as the translator does.  A choice with a byte read in it is a jump, as in the
+translator (its `choice_ok` counts `rd` and `rd32` only).  Expected: `bytes` (+1); `views` needs `u64` too.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
