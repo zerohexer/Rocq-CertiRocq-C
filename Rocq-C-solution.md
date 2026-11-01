@@ -55,11 +55,11 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    (`u64`: record variables with their types, one instruction per operation), mutual recursion (a block as one function with
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
-   gate's programs**, the five test kernels included, and `lock` on two processors, and **773 of the construct table's 780
-   cells** (the other 7: 6 gaps and 1 program that is not Rocq) — a program the reifier does not read is refused with its
+   gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
+   cells** (the other 4: 3 gaps and 1 program that is not Rocq) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
-   against.  Next: the 6 gaps as constructs of `S` (arithmetic and comparisons on counters, a local `fix`, a pair of pairs given
-   back by recursion).
+   against.  Next: the 3 gaps as constructs of `S` (a local `fix` naming the caller's variables, a pair of pairs given back by
+   recursion, a sum of counters given to a callee).
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -3099,6 +3099,27 @@ take a predecessor: `if Nat.eqb n 3 then a else b` (`A_par_nat_eqb`), `if Nat.lt
   counters below its own bound, which the sum of two of the caller's can pass; it needs bounds per function computed and checked
   for the program instead of `cbz j`, a step of its own; a local `fix` naming the caller's variables; a pair of pairs given back.
 
+**Step 30 done (2026-11-02): comparisons of counters and the predecessor.**  Built as designed:
+- *`KQR.v`*: `BCmpC c a b` among the booleans, meaning `cmpn c` of the two counters (`Nat.eqb` / `Nat.ltb` / `Nat.leb`, the user's
+  own functions), compiled in the three forms a boolean is compiled to (a jump, a value, a choice of two atoms) on the counters'
+  atoms; `CPred c` among the counters (`Nat.pred`), a subtraction of 1 and a conditional move keeping 0, adding no depth.  `wf`
+  takes a comparison of the unsigned kinds only (`Ceq`, `Clt`, `Cle`), of counters at most 2^20 successors deep (`shallow`).
+  Proved once: `cmpn_ofn` (counters below `wB` compare as their machine numbers, through `ofn_phi`) and `ofn_pred_sel` (the
+  predecessor's machine number), the two cases of `cexp_all` (the comparison's three parts, the predecessor),
+  `denote_nomem`, `denote_rec_ext`, `denote_c_bound`, `cfree_bound`.  No new hypothesis; `Print Assumptions` the same base.
+  Tests: `nceq`, `nclt` (the shapes of `A_par_nat_eqb` / `_ltb`), `ncle` (two counters, a jump), `ncv` (bound by a let), `nloop`
+  (a comparison in a loop's tail: the two calls merged), `npk` / `npgo` (`A_par_nat_pred`: the predecessor given to a loop),
+  `npv` (bound by a let of a counter), `nsel` (a choice inside an expression: one conditional move; a test at the end of a
+  function stays a jump, as for numbers); a signed comparison of counters refused by `wf`, a wrong comparison and a missing
+  predecessor refused by the check; each theorem in milliseconds.
+- *The reifier*: `Nat.eqb`, `Nat.ltb`, `Nat.leb` of two counters read as `BCmpC` (`reify_b`; the reasons scan knows them),
+  `Nat.pred` as `CPred` (`reify_c`).  Test `w30*`: the trees of `nceq`, `nclt`, `npk` / `npgo` exactly the hand-written ones, a
+  caller with the three shapes and a memory it does not use, each theorem in milliseconds.
+- The C: 63 of 63 byte-identical.  The construct table (on `d61d943`): **776 of 780 through the verified compiler** (was 773:
+  the three), 3 gaps (`A_par_nat_mul`, `P_int_local_fix`, `P_pairp_rec`) and `A_par_nat_arith`, not Rocq.  The gate on
+  `d61d943`, the walk switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (10 / 10 / 11 / 13 /
+  12 s); **71 programs through the verified compiler, 0 refused**; `ASSUME=1 make.sh` the same base as step 29's.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3272,11 +3293,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `283540d` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `d61d943` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 30's design (comparisons of counters and the predecessor) |
+| (this commit) | §12.V: step 30 done (comparisons of counters and the predecessor: the construct table 776 of 780), the C, the gate |
+| `d61d943` | `proved/KQR.v` + `KQRReify.v` step 30: `BCmpC`, `CPred` (`cmpn_ofn`, `ofn_pred_sel`); the reifier reads `Nat.eqb`, `Nat.ltb`, `Nat.leb`, `Nat.pred` of counters |
+| `9f75ef1` | §12.V: step 30's design (comparisons of counters and the predecessor) |
 | `283540d` | §12.V: step 29 done (the walk retired: the gate and the construct table with the walk switched off, 773 of 780), the C |
 | `8b406b3` | `proved/kitc.py`: a program Rocq refuses is refused with Rocq's error (not Rocq in the table, as before) |
 | `eadb665` | `proved/kitc.py` + `matrix/classify.py` + `README.md` step 29: the verified compiler is the route, `--walk` the retired one |
