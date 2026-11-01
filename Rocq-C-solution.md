@@ -56,7 +56,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector) — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program through it when every function is read (**all 71 of the gate's
    programs today**, the five test kernels included, and `lock` on two processors; each corpus program timed against the
-   translator's build), the translator otherwise; of the construct table's 780 cells 735 (33 more by the walk alone); next
+   translator's build), the translator otherwise; of the construct table's 780 cells 741 (29 more by the walk alone); next
    the rest of the table's fallbacks, then the walk retired.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
@@ -2786,6 +2786,17 @@ kernel refused it).  Compiled as `SIf` and `SMatchR` are (the test a jump, the c
 each, through `to_rt_vflat`; well formed when both branches, or the record made, are of type `ri`.  The reifier reads the
 type off the match's own return type.  *Expected*: the four cells.
 
+**Step 21 done (2026-11-02): records chosen by a test or built from a record taken apart.**  Built as designed (`KQR.v`:
+`RIf ri`, `RMatchR ri`, their meanings, KQL, types, well-formedness and shared-block rule; one case each in `cexp_all`, the
+others trivial or rewrites).  Tests: `pchoose` (a pair chosen by a test, taken apart) and `pswap2` (a pair built from a pair
+taken apart), each theorem in milliseconds; branches of two record types refused.  The reifier reads a record-valued test of
+one comparison and a match on a record, the type off `preturn` (test `rq`: the construct table's shapes, a helper choosing a
+pair by a test and one swapping a pair it takes apart).  The C: 63 of 63 byte-identical.  The construct table (on
+`97b3ece`): **741 of 780 through the verified compiler** (was 735: the four, and two gaps on both routes before), 29 more by
+the walk alone, 10 gaps (770 proved).  The gate with `KQ_REFLECT=1` on `97b3ece`: everything passes — `make.sh` `core-ok`;
+examples 27 / 27; corpus 36 / 36; the five kernels (10 / 10 / 10 / 13 / 11 s); **71 programs through the verified compiler,
+0 refused, 0 not read**.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -2958,11 +2969,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `2af2d8d` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `39faaef` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 20 done (lets read by zeta: the construct table 735 of 780), the C, the gate |
+| (this commit) | §12.V: step 21 done (records chosen by a test or built from a record taken apart: the construct table 741 of 780), the C, the gate |
+| `97b3ece` | `proved/KQR.v` + `KQRReify.v` step 21: `RIf ri`, `RMatchR ri` (the test and the match inside one record value) |
+| `1751739` | §12.V: step 21's design (records chosen by a test or built from a record taken apart) |
+| `39faaef` | §12.V: step 20 done (lets read by zeta: the construct table 735 of 780), the C, the gate |
 | `0993a8b` | `proved/KQRReify.v` step 20: lets read by zeta (`zeta_head` in the readers) |
 | `1c4ce89` | §12.V: step 20's design (lets read by zeta) |
 | `2af2d8d` | §12.V: step 19 done (record types from the bodies: the construct table 729 of 780 through the verified compiler), the C, the gate |
