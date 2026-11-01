@@ -1588,6 +1588,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F53 | Moving `CF1100F` to the verified compiler made it 1.52x slower: a chain of three tests whose four ends call the loop itself on the same cells written was jumps, where the translator merges it into one call (its differing arguments and the written values chosen by conditional moves); step 6's merge took only two ends on the newest memory (2026-11-01) | `compile` merges any such chain (`mrg_e`, `mrg_m`, proved once; tests on comparisons or booleans; writes of the same cells), the two-call case giving the same code as before; `CF1100F` 109.1 / 108.5 ms |
 | F54 | A copy of a recursive function for the functions it is given (step 10) set to be unfolded last, like the program's functions: comparing a caller's text (`wfix2_go (kq_nat (..)) F a b`) with the copy's call, the kernel unfolded the template on `kq_nat (..)` rather than the copy, and the check did not end in 10 minutes (2026-11-01, `wfix`) | the templates are unfolded last, the copies first (a copy is a definition that unfolds to its caller's text in one step) |
 | F55 | A bound written as a `nat` literal (`1048576` in `nat`, in the first version of step 12 part 3's `wfr`) is elaborated as a computation (`Nat.of_num_uint ..`), not a numeral: `lia` treats it as an unknown and fails ("Cannot find witness") (2026-11-01) | bounds in `Z` (`Z.of_nat x <= 1048576`), as the rest of `KQR.v` writes them |
+| F56 | The reasons tally after step 12 counted `loops` under "calls of writing functions inside expressions": the reason scan (`writes`) flags a number function whose text mentions a function that writes, and `loops`' `solve` does make a memory with `loop_up_m`; read part by part, that part is read and the blocker is a function given to a template that names the caller's variables (a closure), which the scan does not name (2026-11-01) | step 13 is captures; a program's blocker is confirmed by reading its parts apart before a step is chosen for it |
 | F38 | MetaRocq's formal evaluation (`EWcbvEval.eval`, `PCUICWcbvEval`) has rules for primitive values only, none for primitive operations: `PrimInt63.add` has no body, `eval_delta` cannot fire, every program here is stuck in it | the verified compiler is built by reflection over our own syntax instead (D26, §1.12) (read in the image's MetaRocq sources, 2026-10-30) |
 | F37 | CakeML's architecture is ours: a proof-producing translator from the logic's functions on top, one verified compiler below; Pancake is verified through a proof-producing decompiler.  The difference is that CakeML builds each proof by construction while ours searches | D25, §1.11 (read in the CakeML repository, 2026-10-30) |
 
@@ -2464,6 +2465,25 @@ bound by a `let` and used through its fields (`let w := scan .. in .. hi w ..`).
 - *The gate with `KQ_REFLECT=1`, on the fork, on `6fda012` (2026-11-01): everything passes* — `make.sh` `core-ok`; examples
   27 / 27; corpus 36 / 36 equal to the C++ answers; the five kernels proved and built (37 / 38 / 40 / 56 / 44 s); **56
   programs through the verified compiler, 0 read but refused by the check**.
+
+**Step 13, functions given that name the caller's variables — the design (2026-11-01).**  The tally after step 12 put `loops`
+under "calls of writing functions and reads in place inside expressions".  Read part by part (each of its lines as a function
+of its own), its memory part is read already (`let s2 := loop_up_m .. s .. in .. rd 1 (lo + 2) s2`); what is not read is a
+function given to `loop_up` / `loop_find` that names variables of the caller (`fun i acc => acc + rd 0 i s * b`: the
+memory `s` and the number `b`) — the captures of §5.2, which the translator has and step 10 left out (F56).  So this step
+is captures.
+- *The reifier, and nothing else*: a call of a template whose functions given name the caller's variables gets a copy whose
+  meaning takes those variables as parameters — `fun k b i acc s => loop_up_go k i acc (fun i acc => acc + rd 0 i s * b)`:
+  the template's counters, the captured numbers and booleans in the order they first appear, the template's other
+  parameters, the captured memory last (only when the template takes no memory: one memory per function, linearity).  The
+  call passes the caller's variables (`C (kq_nat (hi - lo)) b lo 0 s`), which is the caller's text up to delta and beta, so
+  the caller's check is unchanged.  The copy is read as a copy is read now: the captured variables are entries of the
+  context after the copy's own, the function given written out names them, the recursive call passes them on; its theorem
+  is `compile_f_okr` with its two equations by conversion (step 10).  Two functions given are the same copy when they are
+  the same term once their captured variables are numbered in the order they first appear, and of the same kinds.
+- *Nothing in `KQR.v`*: a copy with captures is an ordinary function of `S`; nothing is added to what is proved or trusted.
+- *Not in this step*: capturing a counter, a record, or a variable bound by a match; capturing the memory when the template
+  takes a memory too (two memories at once — refused by design, §0.5's third refusal, when both are used).
 
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
