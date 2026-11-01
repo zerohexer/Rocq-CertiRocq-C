@@ -3120,6 +3120,23 @@ take a predecessor: `if Nat.eqb n 3 then a else b` (`A_par_nat_eqb`), `if Nat.lt
   `d61d943`, the walk switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (10 / 10 / 11 / 13 /
   12 s); **71 programs through the verified compiler, 0 refused**; `ASSUME=1 make.sh` the same base as step 29's.
 
+**Step 31, a local `fix` naming the caller's variables — the design (2026-11-02).**  `P_int_local_fix`: `f n a b s := let fix g
+m x := match m with O => x | S k => g k (x + b) end in g n a`, called by `go`.  Read apart: `f` is refused as a constant outside the
+syntax — not a function of the program (no fixpoint at its head, small) and not a helper (its body has a fixpoint); and written
+out, a fixpoint applied is no construct of `S`.  A local fixpoint is a template applied to nothing but its captured variables
+(§5.6: lambda lifting, as captures are), so, in the reifier only, as step 13's copies are made:
+- a local fixpoint of one body, recursive on its first parameter, a counter, taking no function, applied to all its arguments,
+  is a call of a *copy*: a function of the program whose parameters are the fixpoint's counters, its captured numbers and
+  booleans (in the order they first appear), its other parameters, the captured memory last (only when it takes none of its
+  own); its meaning is the fixpoint itself with the captured variables as those parameters (`fun c b x => (fix g m x := ..
+  b ..) c x`), so the caller's text is the call of the copy up to delta, beta and zeta, and the copy's theorem is
+  `compile_f_okr` with its two equations by conversion (step 10);
+- two local fixpoints are one copy when they are the same term once their captured variables are numbered;
+- a definition of the program's file whose fixpoints are all local is a helper, written out where it is used;
+- the call sites are looked for as a template's (`sites`), in the functions and in the helpers that have a local fixpoint,
+  with a `let` of a function read as its body with the function put in, as the readers read it.
+`KQR.v` unchanged.  *Expected*: the cell.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3297,7 +3314,8 @@ Pushed to the public repository up to `d61d943` (2026-11-02); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 30 done (comparisons of counters and the predecessor: the construct table 776 of 780), the C, the gate |
+| (this commit) | §12.V: step 31's design (a local `fix` naming the caller's variables) |
+| `c70baa5` | §12.V: step 30 done (comparisons of counters and the predecessor: the construct table 776 of 780), the C, the gate |
 | `d61d943` | `proved/KQR.v` + `KQRReify.v` step 30: `BCmpC`, `CPred` (`cmpn_ofn`, `ofn_pred_sel`); the reifier reads `Nat.eqb`, `Nat.ltb`, `Nat.leb`, `Nat.pred` of counters |
 | `9f75ef1` | §12.V: step 30's design (comparisons of counters and the predecessor) |
 | `283540d` | §12.V: step 29 done (the walk retired: the gate and the construct table with the walk switched off, 773 of 780), the C |
