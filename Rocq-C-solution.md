@@ -56,7 +56,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector) — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program through it when every function is read (**all 71 of the gate's
    programs today**, the five test kernels included, and `lock` on two processors; each corpus program timed against the
-   translator's build), the translator otherwise; of the construct table's 780 cells 729 (39 more by the walk alone); next
+   translator's build), the translator otherwise; of the construct table's 780 cells 735 (33 more by the walk alone); next
    the rest of the table's fallbacks, then the walk retired.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
@@ -2766,6 +2766,15 @@ records, memories, numbers made after memories, records given back): a function'
 written out, a dead `let` is dropped (its meaning is not part of the result, and its KQL is not made).  `KQR.v` and
 `kitc.py` unchanged.  *Expected*: the six cells; a gate program's C changes only if it has such a `let`.
 
+**Step 20 done (2026-11-02): lets read by zeta.**  Built as designed: `zeta_head` (a `let` whose type is a function's, or
+whose variable its body does not name — `noccur_between` — read as `subst [b] 0 body`), at the head of the readers of
+numbers, records, memories, numbers made after memories and records given back.  Tests: `rzl` (a `let` of a function called
+twice: the tree is the function written out at each call, `(a + b) * (b + b)`) and `rzd` (a dead memory `let`: one `MUpd`),
+each theorem 0.002–0.004 s.  The C: 63 of 63 byte-identical (no gate program has such a `let`).  The construct table (on
+`0993a8b`): **735 of 780 through the verified compiler** (was 729: the six), 33 more by the walk alone, 12 gaps.  The gate
+with `KQ_REFLECT=1` on `0993a8b`: everything passes — `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels
+( s); **71 programs through the verified compiler, 0 refused, 0 not read**.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -2938,11 +2947,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `9b7eac3` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `2af2d8d` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 19 done (record types from the bodies: the construct table 729 of 780 through the verified compiler), the C, the gate |
+| (this commit) | §12.V: step 20 done (lets read by zeta: the construct table 735 of 780), the C, the gate |
+| `0993a8b` | `proved/KQRReify.v` step 20: lets read by zeta (`zeta_head` in the readers) |
+| `1c4ce89` | §12.V: step 20's design (lets read by zeta) |
+| `2af2d8d` | §12.V: step 19 done (record types from the bodies: the construct table 729 of 780 through the verified compiler), the C, the gate |
 | `d61befd` | `proved/KQRReify.v` step 19: record types from the bodies (`body_rtys`, `rtab_of` after the signatures') |
 | `6e4a59c` | §12.V: step 19's design (record types from the bodies) |
 | `9b7eac3` | §12.V: step 18 done (blocks shared with another processor: `lock` through the verified compiler), the C, the gate |
