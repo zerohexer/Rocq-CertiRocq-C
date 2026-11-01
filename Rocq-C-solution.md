@@ -53,10 +53,10 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    records as parameters (a record a value in the meaning, its fields in KQL), records given back (the fields after the first
    through the slot block), functions given that name the caller's variables, machine operations, bytes, 64-bit numbers
    (`u64`: record variables with their types, one instruction per operation), mutual recursion (a block as one function with
-   a selector), functions giving back a boolean — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
+   a selector), functions giving back a boolean, values of any inductive type built in place and taken apart — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); `kitc.py --reflect` compiles a program through it when every function is read (**all 71 of the gate's
    programs today**, the five test kernels included, and `lock` on two processors; each corpus program timed against the
-   translator's build), the translator otherwise; of the construct table's 780 cells 757 (13 more by the walk alone); next
+   translator's build), the translator otherwise; of the construct table's 780 cells 764 (7 more by the walk alone); next
    the rest of the table's fallbacks, then the walk retired.  Emit-then-prove is the interim.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
@@ -2907,6 +2907,22 @@ read before is read the same way:
 apart (`A_par_option`, `A_par_sum`: a match on an `if` is not the `if` of two matches up to conversion, so it needs the type held
 as its tag and fields, a construct of `S`), a number and a memory given back (4), a capture through two templates (1).
 
+**Step 25 done (2026-11-02): a value of any inductive type built in place and taken apart.**  Built as designed, in the
+reifier only (`KQR.v` and `kitc.py` unchanged): `plain_val` (a plain argument, a function, a type, or a constructor of plain
+values), `zeta_con` (a `let` of a constructor of plain values at a type no reader holds — `held`: a number, a boolean, a
+counter, a memory or a record of the program's types — is its body with the value put in), `iota_go` (a match on a
+constructor whose fields are plain is its branch with the fields put in), `hnf_con` (the head of a scrutinee: a helper written
+out, a `let` read, a match on a constructor reduced) and `head_r`, which replaces `zeta_head` at the head of the six readers:
+the lets of step 20, then the constructor `let`, then iota on a constructor of a type no reader takes apart (`generic_ind`: not
+`bool`, `nat`, `prod` or a record of the program's) or at the head of an application.  Test `w5go` / `w5gm` (the six shapes):
+the record fields, the list cell's head, the pairs' parts and the function applied are read away, the pair holding the memory
+is read as a number made after memories; trees pinned, each theorem 2–6 ms, `Print Assumptions` the same base.  The C: 63 of 63
+byte-identical.  The construct table (on `9ab7709`, the code of `31bb4f4`): **764 of 780 through the verified compiler** (was
+757: the six, and `A_par_typeclass`, a gap on both routes before — a class's method taken from its instance built in place),
+7 more by the walk alone, 9 gaps.  The gate with `KQ_REFLECT=1` on `31bb4f4`: everything passes —
+`make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (10 / 10 / 10 / 12 / 11 s); **71 programs through the verified compiler, 0
+refused, 0 not read**.
+
 **Step 26, a number and a memory given back — the design (2026-11-02).**  Four of the cells proved only by the walk give
 back `int * mem`: a helper choosing the pair by a test, written out where its pair is taken apart (`P_intmem_if`: `let '(x,
 s2) := (if a <? b then (a, upd 0 a b s) else (b, s)) in x + rd 0 0 s2`); a loop (`P_intmem_tail_rec`: `f m (a + 1) b (upd 0 a
@@ -3110,7 +3126,8 @@ Pushed to the public repository up to `d143561` (2026-11-02); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 26's design (a number and a memory given back: pair values) |
+| (this commit) | §12.V: step 25 done (a value of any inductive type built in place, taken apart: the construct table 764 of 780), the C, the gate |
+| `9ab7709` | §12.V: step 26's design (a number and a memory given back: pair values) |
 | `31bb4f4` | `proved/KQRReify.v` step 25: a let of a constructor of plain values put in, a match on a constructor its branch (`head_r`) |
 | `d143561` | §12.V: step 24 done (functions giving back a boolean: the construct table 757 of 780), the C, the gate |
 | `8780f64` | §12.V: step 25's design (a value of any inductive type built in place, taken apart) |
