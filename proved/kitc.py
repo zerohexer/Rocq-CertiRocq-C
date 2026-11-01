@@ -368,8 +368,13 @@ def reflect(name, entry, prog, no_proof):
     applies and every function it reaches (proved/KQRReify.v); each function is compiled by KQR.compile_f, and gets its
     statement from KQR.compile_f_ok -- proved once -- with the theorems of the functions before it as its callee
     assumption: one [exact_no_check] per function, which the kernel checks at Qed (the meaning of the syntax tree against
-    the user's function, by conversion).  No tactic, no search.  -> (eid, kinds, res, n) or None (not read: the caller
+    the user's function, by conversion).  No tactic, no search.  -> (eid, kinds, res, n, slots) or None (not read: the caller
     takes the translator)"""
+    # a program that shares blocks with another processor: plain accesses to them are refused by the translator (§9.4), a rule
+    # the verified path does not have yet
+    if re.search(r"Definition\s+kq_shared\b", prog):
+        print(name, "reflect: a program sharing blocks with another processor (kq_shared); the translator follows", flush=True)
+        return None
     f0 = os.path.join(GEN, f"{name}_r.v")
     open(f0, "w").write(HDR + "From KQC Require KQR KQRReify.\n" + prog
         + f"\nDefinition {name}_res := ltac:(run_template_program (tmQuoteRec {entry})\n"

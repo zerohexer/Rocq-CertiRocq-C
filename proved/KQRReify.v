@@ -16,7 +16,7 @@ From Stdlib Require Import List Uint63 ZArith.
 From MetaRocq.Utils Require Import utils bytestring.
 From MetaRocq.Template Require Import All.
 From KQC Require Import KQL KQLAuto KQMSem KQR.
-Require KQ.KQRun.
+Require KQ.KQRun KQ.hw.Runtime KQ.hw.User.
 Import MonadNotation ListNotations.
 
 Definition kn_of (t : term) : kername := match t with tConst kn _ => kn | _ => (MPfile [], ""%bs) end.
@@ -41,6 +41,29 @@ Definition kn_rd8 := kn_of <% KQ.KQRun.rd8 %>.
 Definition kn_upd8 := kn_of <% KQ.KQRun.upd8 %>.
 Definition kn_w64_op := kn_of <% KQ.KQRun.w64_op %>.
 Definition kit_mp : modpath := fst kn_rd.
+Definition kn_ksize := kn_of <% KQ.KQRun.kq_size %>.
+(** the machine's operations (step 14), as the translator's tables: the Rocq constant, the KQL operation, how many numbers it
+    takes before the memory *)
+Definition hw_table : list (kername * hwop * nat) :=
+  [ (kn_of <% KQ.KQRun.hw_load %>, HLoad, 4); (kn_of <% KQ.KQRun.hw_store %>, HStore, 3);
+    (kn_of <% KQ.KQRun.hw_store64 %>, HStore64, 3); (kn_of <% KQ.KQRun.hw_atomic %>, HAtomic, 6);
+    (kn_of <% KQ.KQRun.hw_atomic64 %>, HAtomic64, 6); (kn_of <% KQ.KQRun.hw_cas %>, HCas, 6);
+    (kn_of <% KQ.KQRun.hw_cas64 %>, HCas64, 7); (kn_of <% KQ.KQRun.hw_aload %>, HALoad, 4);
+    (kn_of <% KQ.KQRun.hw_astore %>, HAStore, 3); (kn_of <% KQ.KQRun.hw_astore64 %>, HAStore64, 3);
+    (kn_of <% KQ.KQRun.hw_fence %>, HFence, 1); (kn_of <% KQ.KQRun.hw_copy %>, HCopy, 3);
+    (kn_of <% KQ.KQRun.hw_fill %>, HFill, 3); (kn_of <% KQ.KQRun.hw_cmp %>, HCmp, 5);
+    (kn_of <% KQ.KQRun.hw_call %>, HCall, 4); (kn_of <% KQ.KQRun.hw_run %>, HRun, 10);
+    (kn_of <% KQ.KQRun.hw_code_sync %>, HCodeSync, 2); (kn_of <% KQ.hw.Runtime.hw_irq_take %>, HIrqTake, 2);
+    (kn_of <% KQ.hw.User.hw_user %>, HUser, 5); (kn_of <% KQ.KQRun.kq_grow %>, HGrow, 2) ].
+(** the machine's numbers, given without a memory *)
+Definition hwf_table : list (kername * hwfop * nat) :=
+  [ (kn_of <% KQ.KQRun.hw_addr %>, FAddr, 1); (kn_of <% KQ.hw.Runtime.hw_irq_info %>, FIrqInfo, 1);
+    (kn_of <% KQ.hw.Runtime.hw_irq_entry %>, FIrqEntry, 1); (kn_of <% KQ.hw.Runtime.hw_cpu_code %>, FCpuCode, 1);
+    (kn_of <% KQ.hw.Runtime.hw_sym %>, FSym, 1); (kn_of <% KQ.hw.User.hw_userf %>, FUser, 5) ].
+Definition hw_lookup (kn : kername) : option (hwop * nat) :=
+  option_map (fun e => (snd (fst e), snd e)) (List.find (fun e => Kername.eqb (fst (fst e)) kn) hw_table).
+Definition hwf_lookup (kn : kername) : option (hwfop * nat) :=
+  option_map (fun e => (snd (fst e), snd e)) (List.find (fun e => Kername.eqb (fst (fst e)) kn) hwf_table).
 Definition uint63_mp : modpath := fst (kn_of <% Uint63.opp %>).
 
 Definition binop_v (s : ident) : option binop :=
@@ -396,6 +419,16 @@ Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option 
             match reify fuel ctx a, reify fuel ctx b with Some x, Some y => Some (SOp o x y) | _, _ => None end
         | _, _ => None
         end
+      else if Kername.eqb kn kn_ksize then
+        match args with
+        | [h; tRel m] => if is_ent CMem ctx m then option_map SSize (reify fuel ctx h) else None
+        | _ => None
+        end
+      else if match hwf_lookup kn with Some _ => true | None => false end then
+        match hwf_lookup kn with
+        | Some (o, n) => if Nat.eqb (length args) n then option_map (fun l => SHwf o (to_sexps l)) (opt_all (map (reify fuel ctx) args)) else None
+        | None => None
+        end
       else if Kername.eqb kn kn_rd || Kername.eqb kn kn_rd32 then
         match args with
         | [h; i; tRel m] =>
@@ -595,6 +628,17 @@ Fixpoint reify_m (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
             | _, _, _, _ => None
             end
         | _ => None
+        end
+      else if match hw_lookup kn with Some _ => true | None => false end then
+        match hw_lookup kn, rev args with
+        | Some (o, n), m :: rnums =>
+            if Nat.eqb (length rnums) n then
+              match opt_all (map (reify fuel ctx) (rev rnums)), reify_m fuel ctx m with
+              | Some l, Some d => Some (MHw o (to_sexps l) d)
+              | _, _ => None
+              end
+            else None
+        | _, _ => None
         end
       else
         let '(kn1, args1) := tcall kn args in
@@ -1387,7 +1431,8 @@ Definition add_s (x : string) (l : list string) : list string := if existsb (fun
 Definition known_const (fns : list kername) (kn : kername) : bool :=
   (eq_mp (fst kn) prim_mp && (match binop_v (snd kn), cmp_v (snd kn) with None, None => false | _, _ => true end))
   || Kername.eqb kn kn_rd || Kername.eqb kn kn_upd || Kername.eqb kn kn_rd32 || Kername.eqb kn kn_upd32
-  || Kername.eqb kn kn_kq_nat || existsb (Kername.eqb kn) fns
+  || Kername.eqb kn kn_kq_nat || existsb (Kername.eqb kn) fns || Kername.eqb kn kn_ksize
+  || existsb (fun e => Kername.eqb (fst (fst e)) kn) hw_table || existsb (fun e => Kername.eqb (fst (fst e)) kn) hwf_table
   || Kername.eqb kn kn_andb || Kername.eqb kn kn_orb || Kername.eqb kn kn_negb
   || Kername.eqb kn kn_int || Kername.eqb kn kn_mem.     (* as type arguments *)
 
@@ -2120,6 +2165,43 @@ Proof.
     eq_refl eq_refl (all_ok_callees rst_Pr gid1 [existT ftype (sig_at rst_src 0) rsinner] (conj rsinner_ok Logic.I)) eq_refl eq_refl).
 Time Qed.
 End RSt.
+
+(* ---------------------------------------------------------------- machine operations *)
+(* hw_mmio's loop (KQR.v's [mmio]), a machine number and a block's size, a block grown: the trees KQR.v's tests write by hand *)
+Fixpoint rmmio (fuel : nat) (i acc : i63) (s : mem) : i63 :=
+  match fuel with
+  | O => acc
+  | S f => let a := PrimInt63.add 268435456 (PrimInt63.mul 4 (PrimInt63.land i 15)) in
+           let s1 := KQ.KQRun.hw_store 4 a (PrimInt63.mul i 3) s in
+           let s2 := KQ.KQRun.hw_fence 0 s1 in
+           let s3 := KQ.KQRun.hw_load 4 a 3 0 s2 in
+           rmmio f (PrimInt63.add i 1) (PrimInt63.add acc (KQ.KQRun.rd 3 0 s3)) s3
+  end.
+Definition rhsz (s : mem) : i63 := PrimInt63.add (KQ.KQRun.hw_addr 4) (KQ.KQRun.kq_size 3 s).
+Definition rhgrow (n : i63) (s : mem) : mem := KQ.KQRun.kq_grow 2 n s.
+Definition rhw (n : nat) (s : mem) : i63 := rmmio n (rhsz s) 0 (rhgrow 5 s).
+Definition rhw_src := ltac:(run_template_program (tmQuoteRec rhw)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : map (fun x => (snd (fst x), snd x)) rhw_src =
+  [(mksig 1 [KNum; KNum] true false true None,
+    FRecX (XRet (SVar 0))
+      (XLet (SOp Badd (SInt 268435456) (SOp Bmul (SInt 4) (SOp Bland (SVar 1) (SInt 15))))
+        (XLetM (MHw HStore (SCons (SInt 4) (SCons (SVar 0) (SCons (SOp Bmul (SVar 2) (SInt 3)) SNil))) MCur)
+          (XLetM (MHw HFence (SCons (SInt 0) SNil) MCur)
+            (XLetM (MHw HLoad (SCons (SInt 4) (SCons (SVar 0) (SCons (SInt 3) (SCons (SInt 0) SNil)))) MCur)
+              (XRec CNil (SCons (SOp Badd (SVar 2) (SInt 1)) (SCons (SOp Badd (SVar 1) (SRd (SInt 3) (SInt 0))) SNil)) MCur))))));
+   (mksig 1 [] true false true None,
+    FPlainX (XCall 0 (CCons (CVar 0) CNil) (SCons (SOp Badd (SHwf FAddr (SCons (SInt 4) SNil)) (SSize (SInt 3))) (SCons (SInt 0) SNil))
+               (MHw HGrow (SCons (SInt 2) (SCons (SInt 5) SNil)) MCur)))]).
+Definition rhw_Pr := mkprog (funs_of 0 rhw_src) [].
+Time Lemma rhw_ok0 : callee_ok rhw_Pr (gid1 0) (cbz 0) (sig_at rhw_src 0) rmmio.
+Proof. Time exact_no_check (compile_f_ok rhw_Pr [] gid1 0 (sig_at rhw_src 0) (body_at rhw_src 0) eq_refl eq_refl (no_callees rhw_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma rhw_ok1 : callee_ok rhw_Pr (gid1 1) (cbz 1) (sig_at rhw_src 1) rhw.
+Proof.
+  Time exact_no_check (compile_f_ok rhw_Pr [existT ftype (sig_at rhw_src 0) rmmio] gid1 1 (sig_at rhw_src 1) (body_at rhw_src 1) eq_refl eq_refl
+    (all_ok_callees rhw_Pr gid1 [existT ftype (sig_at rhw_src 0) rmmio] (conj rhw_ok0 Logic.I)) eq_refl eq_refl).
+Time Qed.
+Print Assumptions rhw_ok1.
 
 (* ---------------------------------------------------------------- functions given that name the caller's variables *)
 (* [rcap] (loops' first line): the function given to [rfold] names the caller's number [b] and its memory [s]; [rfind] (its
