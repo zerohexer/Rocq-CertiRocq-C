@@ -429,12 +429,12 @@ Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option 
         | Some (o, n) => if Nat.eqb (length args) n then option_map (fun l => SHwf o (to_sexps l)) (opt_all (map (reify fuel ctx) args)) else None
         | None => None
         end
-      else if Kername.eqb kn kn_rd || Kername.eqb kn kn_rd32 then
+      else if Kername.eqb kn kn_rd || Kername.eqb kn kn_rd32 || Kername.eqb kn kn_rd8 then
         match args with
         | [h; i; tRel m] =>
             if is_ent CMem ctx m then
               match reify fuel ctx h, reify fuel ctx i with
-              | Some x, Some y => Some (if Kername.eqb kn kn_rd then SRd x y else SRd32 x y)
+              | Some x, Some y => Some (if Kername.eqb kn kn_rd then SRd x y else if Kername.eqb kn kn_rd32 then SRd32 x y else SRd8 x y)
               | _, _ => None
               end
             else None
@@ -620,11 +620,11 @@ Fixpoint reify_m (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
   | tRel i => if is_ent CMem ctx i then Some MCur else None
   | tConst kn _ => match hb kn with Some b => reify_m fuel ctx b | None => None end
   | tApp (tConst kn _) args =>
-      if Kername.eqb kn kn_upd || Kername.eqb kn kn_upd32 then
+      if Kername.eqb kn kn_upd || Kername.eqb kn kn_upd32 || Kername.eqb kn kn_upd8 then
         match args with
         | [h; i; v; m] =>
             match reify fuel ctx h, reify fuel ctx i, reify fuel ctx v, reify_m fuel ctx m with
-            | Some a, Some b, Some c, Some d => Some (if Kername.eqb kn kn_upd then MUpd a b c d else MUpd32 a b c d)
+            | Some a, Some b, Some c, Some d => Some (if Kername.eqb kn kn_upd then MUpd a b c d else if Kername.eqb kn kn_upd32 then MUpd32 a b c d else MUpd8 a b c d)
             | _, _, _, _ => None
             end
         | _ => None
@@ -1430,7 +1430,7 @@ Definition add_s (x : string) (l : list string) : list string := if existsb (fun
 (** the constants the syntax reads: the integer operations and comparisons, [rd], [upd], the program's functions *)
 Definition known_const (fns : list kername) (kn : kername) : bool :=
   (eq_mp (fst kn) prim_mp && (match binop_v (snd kn), cmp_v (snd kn) with None, None => false | _, _ => true end))
-  || Kername.eqb kn kn_rd || Kername.eqb kn kn_upd || Kername.eqb kn kn_rd32 || Kername.eqb kn kn_upd32
+  || Kername.eqb kn kn_rd || Kername.eqb kn kn_upd || Kername.eqb kn kn_rd32 || Kername.eqb kn kn_upd32 || Kername.eqb kn kn_rd8 || Kername.eqb kn kn_upd8
   || Kername.eqb kn kn_kq_nat || existsb (Kername.eqb kn) fns || Kername.eqb kn kn_ksize
   || existsb (fun e => Kername.eqb (fst (fst e)) kn) hw_table || existsb (fun e => Kername.eqb (fst (fst e)) kn) hwf_table
   || Kername.eqb kn kn_andb || Kername.eqb kn kn_orb || Kername.eqb kn kn_negb
@@ -1846,12 +1846,24 @@ Definition hlt_Pr := mkprog (funs_of 0 hlt_src) [].
 Time Lemma hlt_ok_r : callee_ok hlt_Pr (gid1 0) (cbz 0) (sig_at hlt_src 0) hlt.
 Proof. Time exact_no_check (compile_f_ok hlt_Pr [] gid1 0 (sig_at hlt_src 0) (body_at hlt_src 0) eq_refl eq_refl (no_callees hlt_Pr gid1) eq_refl eq_refl). Time Qed.
 
-(* a byte ([rd8]) is left for one byte access, as the translator makes it, not shifts of a 4-byte cell: not read yet *)
-Definition hb8 (i : i63) (s : mem) : i63 := KQ.KQRun.rd8 1 i s.
+(* a byte ([rd8]) is one byte access, as the translator makes it, not shifts of a 4-byte cell (step 15); a halfword ([rd16])
+   is written out over two; a byte written ([upd8]) is one byte store *)
+Definition hb8 (i : i63) (s : mem) : i63 := PrimInt63.add (KQ.KQRun.rd8 1 i s) (KQ.KQRun.rd16 1 i s).
+Definition hb8w (i : i63) (s : mem) : mem := KQ.KQRun.upd16 1 i 513 (KQ.KQRun.upd8 1 i 7 s).
 Definition hb8_src := ltac:(run_template_program (tmQuoteRec hb8)
-  (fun q => let r := eval vm_compute in (reify_prog q) in exact r)).
-Check (eq_refl : hb8_src = None).
-Eval vm_compute in ltac:(run_template_program (tmQuoteRec hb8) (fun q => let r := eval vm_compute in (reify_why q) in exact r)).
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Definition hb8w_src := ltac:(run_template_program (tmQuoteRec hb8w)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Eval vm_compute in map snd hb8_src.
+Eval vm_compute in map snd hb8w_src.
+Definition hb8_Pr := mkprog (funs_of 0 hb8_src ++ funs_of 1 hb8w_src) [].
+Time Lemma hb8_ok_r : callee_ok hb8_Pr (gid1 0) (cbz 0) (sig_at hb8_src 0) hb8.
+Proof. Time exact_no_check (compile_f_ok hb8_Pr [] gid1 0 (sig_at hb8_src 0) (body_at hb8_src 0) eq_refl eq_refl (no_callees hb8_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma hb8w_ok_r : callee_ok hb8_Pr (gid1 1) (cbz 1) (sig_at hb8w_src 0) hb8w.
+Proof.
+  Time exact_no_check (compile_f_ok hb8_Pr [existT ftype (sig_at hb8_src 0) hb8] gid1 1 (sig_at hb8w_src 0) (body_at hb8w_src 0) eq_refl eq_refl
+    (all_ok_callees hb8_Pr gid1 [existT ftype (sig_at hb8_src 0) hb8] (conj hb8_ok_r Logic.I)) eq_refl eq_refl).
+Time Qed.
 
 (* ---------------------------------------------------------------- a let of a counter, from the user's text *)
 (* a counter written as a number and a budget bound by lets in a memory function, a counter variable bound in a number
