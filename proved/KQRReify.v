@@ -58,7 +58,7 @@ Definition cmp_v (s : ident) : option cmpop :=
     versions of the memory), a counter (a [nat] parameter, or the predecessor a match on a counter inside the body binds),
     the predecessor of the first counter that the match a recursive function starts with binds (a counter too, and the one
     its recursive call is given first), the function itself, a boolean *)
-Inductive cent := CNum | CMem | CDead | CCnt | CPred | CSelf | CBool | CFn (p : nat) (t : term).
+Inductive cent := CNum | CMem | CDead | CCnt | CPred | CSelf | CBool | CFn (p : nat) (t : term) | CRec.
 (* CFn p t: the function parameter number p of a template's copy, bound to the function t given (a closed term) *)
 
 (** a newer memory is bound: every memory before it is dead *)
@@ -83,6 +83,15 @@ Fixpoint cnt_index (ctx : list cent) (i : nat) : option nat :=
   | [], _ => None
   end.
 
+(** the syntax index of the record at place [i] of the context: the records nearer than it *)
+Fixpoint rec_index (ctx : list cent) (i : nat) : option nat :=
+  match ctx, i with
+  | CRec :: _, O => Some O
+  | _ :: _, O => None
+  | c :: r, S i => option_map (fun j => match c with CRec => S j | _ => j end) (rec_index r i)
+  | [], _ => None
+  end.
+
 (** the syntax index of the boolean at place [i] of the context: the booleans nearer than it *)
 Fixpoint bool_index (ctx : list cent) (i : nat) : option nat :=
   match ctx, i with
@@ -103,11 +112,12 @@ Definition is_ent (e : cent) (ctx : list cent) (i : nat) : bool :=
   end.
 
 Fixpoint to_sexps (l : list sexp) : sexps := match l with [] => SNil | e :: l => SCons e (to_sexps l) end.
-Fixpoint to_args (l : list (option (sexp + sbool))) : option sexps :=
+Fixpoint to_args (l : list (option (sexp + (sbool + srec)))) : option sexps :=
   match l with
   | [] => Some SNil
   | Some (inl e) :: r => option_map (SCons e) (to_args r)
-  | Some (inr b) :: r => option_map (SConsB b) (to_args r)
+  | Some (inr (inl b)) :: r => option_map (SConsB b) (to_args r)
+  | Some (inr (inr x)) :: r => option_map (SConsR x) (to_args r)
   | None :: _ => None
   end.
 Fixpoint to_scnts (l : list scnt) : scnts := match l with [] => CNil | c :: l => CCons c (to_scnts l) end.
@@ -200,6 +210,72 @@ Fixpoint drop_fns (ctx : list cent) (fd : list (option nat)) (l : list term) : o
   | None :: fd', a :: l' => option_map (cons a) (drop_fns ctx fd' l')
   end.
 
+Fixpoint teq (fuel : nat) (t u : term) : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      match t, u with
+      | tRel i, tRel j => Nat.eqb i j
+      | tInt a, tInt b => PrimInt63.eqb a b
+      | tConst k _, tConst k' _ => Kername.eqb k k'
+      | tInd i _, tInd i' _ => Kername.eqb (inductive_mind i) (inductive_mind i') && Nat.eqb (inductive_ind i) (inductive_ind i')
+      | tConstruct i n _, tConstruct i' n' _ =>
+          Kername.eqb (inductive_mind i) (inductive_mind i') && Nat.eqb (inductive_ind i) (inductive_ind i') && Nat.eqb n n'
+      | tApp f l, tApp f' l' =>
+          teq fuel f f' && Nat.eqb (length l) (length l') && forallb (fun q => teq fuel (fst q) (snd q)) (combine l l')
+      | tLambda _ a b, tLambda _ a' b' | tProd _ a b, tProd _ a' b' => teq fuel a a' && teq fuel b b'
+      | tLetIn _ a ty b, tLetIn _ a' ty' b' => teq fuel a a' && teq fuel ty ty' && teq fuel b b'
+      | tCase _ _ c brs, tCase _ _ c' brs' =>
+          teq fuel c c' && Nat.eqb (length brs) (length brs') && forallb (fun q => teq fuel (bbody (fst q)) (bbody (snd q))) (combine brs brs')
+      | tSort _, tSort _ => true
+      | _, _ => false
+      end
+  end.
+Definition teqs (l l' : list term) : bool :=
+  Nat.eqb (length l) (length l') && forallb (fun q => teq 1000 (fst q) (snd q)) (combine l l').
+
+
+(** a record type of numbers (§12.V step 12): an inductive with one constructor, whose fields are numbers or parameters that
+    are numbers ([prod int int]); an entry of the program's record table: its type, its inductive, its number of fields, its
+    parameters *)
+Definition rentry := (term * inductive * nat * list term)%type.
+Definition rec_shape (Σ : global_env) (t : term) : option rentry :=
+  let '(h, ps) := match t with tApp (tInd i _) ps => (Some i, ps) | tInd i _ => (Some i, []) | _ => (None, []) end in
+  match h with
+  | Some i =>
+      match lookup_env Σ (inductive_mind i) with
+      | Some (InductiveDecl mib) =>
+          match ind_bodies mib with
+          | [oib] =>
+              match ind_ctors oib with
+              | [cb] =>
+                  let args := rev (cstr_args cb) in
+                  let fok := forallb (fun jd => is_ty kn_int (decl_type (snd jd))
+                                                || match decl_type (snd jd) with tRel k => Nat.leb (fst jd) k | _ => false end)
+                                     (combine (seq 0 (length args)) args) in
+                  if Nat.eqb (length ps) (ind_npars mib) && forallb (is_ty kn_int) ps && Nat.eqb (inductive_ind i) 0 && fok
+                  then Some (t, i, length args, ps) else None
+              | _ => None
+              end
+          | _ => None
+          end
+      | _ => None
+      end
+  | None => None
+  end.
+(** the index of a record type in the table, and of the record a constructor applied to these arguments builds (with its
+    number of parameters) *)
+Fixpoint rindex (t : term) (rt : list rentry) (i : nat) : option nat :=
+  match rt with [] => None | (u, _, _, _) :: r => if teq 1000 t u then Some i else rindex t r (S i) end.
+Fixpoint cindex (ind : inductive) (args : list term) (rt : list rentry) (i : nat) : option (nat * nat) :=
+  match rt with
+  | [] => None
+  | (_, j, n, qs) :: r =>
+      if Kername.eqb (inductive_mind ind) (inductive_mind j) && Nat.eqb (inductive_ind ind) (inductive_ind j)
+         && Nat.eqb (length args) (length qs + n) && teqs (firstn (length qs) args) qs
+      then Some (i, length qs) else cindex ind args r (S i)
+  end.
+
 Section R.
 Variable callees : list (kername * sig).   (* the program's functions read so far, callees first *)
 Variable fm : bool.                        (* the function being read takes a memory *)
@@ -209,6 +285,7 @@ Variable hb : kername -> option term.      (* the helpers: a definition written 
 Variable tc : kername -> list term -> option (kername * list term).
                                            (* a call of a template given functions: its copy and the other arguments *)
 Variable fd : list (option nat).           (* the function parameters the recursive call passes on (a copy) *)
+Variable rt : list rentry.                 (* the program's record types *)
 
 Definition tcall (kn : kername) (args : list term) : kername * list term :=
   match tc kn args with Some p => p | None => (kn, args) end.
@@ -250,7 +327,8 @@ Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option 
   | O => None
   | S fuel =>
   let reify_args (l : list term) : option sexps :=
-    to_args (map (fun a => match reify fuel ctx a with Some e => Some (inl e) | None => option_map inr (reify_b fuel ctx a) end) l) in
+    to_args (map (fun a => match reify fuel ctx a with Some e => Some (inl e) | None =>
+                            match reify_b fuel ctx a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel ctx a) end end) l) in
   let reify_cs (l : list term) : option scnts := option_map to_scnts (opt_all (map (reify_c fuel ctx) l)) in
   match t with
   | tRel i => option_map SVar (num_index ctx i)
@@ -342,7 +420,16 @@ Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option 
         match reify_b fuel ctx b, reify fuel (CBool :: ctx) body with Some x, Some y => Some (SLetB x y) | _, _ => None end
       else if is_nat ty then
         match reify_c fuel ctx b, reify fuel (CCnt :: ctx) body with Some x, Some y => Some (SLetC x y) | _, _ => None end
-      else None
+      else match reify_r fuel ctx b, reify fuel (CRec :: ctx) body with Some x, Some y => Some (SLetR x y) | _, _ => None end
+  | tCase ci p c0 [br] =>
+      (* a record taken apart; a helper giving one back is written out first, and the lets it starts with come first *)
+      let c := match c0 with tApp (tConst kn _) args => match hb kn with Some hbd => wout hbd args | None => c0 end | _ => c0 end in
+      match lets_first ci p c [br] with Some t' => reify fuel ctx t' | None =>
+        match reify_r fuel ctx c, reify fuel (repeat CNum (length (bcontext br)) ++ ctx) (bbody br) with
+        | Some x, Some e => Some (SMatchR x e)
+        | _, _ => None
+        end
+      end
   | _ => None
   end
   end
@@ -363,6 +450,21 @@ with reify_c (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sc
       else match hb kn with Some b => reify_c fuel ctx (wout b args) | None => None end
   | _ => None
   end
+  end
+(** a record: a record variable, or the constructor of a record type applied to numbers *)
+with reify_r (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option srec :=
+  match fuel with
+  | O => None
+  | S fuel =>
+      match t with
+      | tRel i => option_map RVar (rec_index ctx i)
+      | tApp (tConstruct ind 0 _) args =>
+          match cindex ind args rt 0 with
+          | Some (ri, np) => option_map (fun es => RMk ri (to_sexps es)) (opt_all (map (reify fuel ctx) (skipn np args)))
+          | None => None
+          end
+      | _ => None
+      end
   end
 with reify_b (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sbool :=
   match fuel with
@@ -402,7 +504,8 @@ Fixpoint reify_m (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
   | O => None
   | S fuel =>
   let reify_args (l : list term) : option sexps :=
-    to_args (map (fun a => match reify fuel ctx a with Some e => Some (inl e) | None => option_map inr (reify_b fuel ctx a) end) l) in
+    to_args (map (fun a => match reify fuel ctx a with Some e => Some (inl e) | None =>
+                            match reify_b fuel ctx a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel ctx a) end end) l) in
   let reify_cs (l : list term) : option scnts := option_map to_scnts (opt_all (map (reify_c fuel ctx) l)) in
   match t with
   | tRel i => if is_ent CMem ctx i then Some MCur else None
@@ -512,7 +615,8 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
   | S fuel =>
   let fallback := option_map XRet (reify fuel ctx t) in
   let reify_args (c : list cent) (l : list term) : option sexps :=
-    to_args (map (fun a => match reify fuel c a with Some e => Some (inl e) | None => option_map inr (reify_b fuel c a) end) l) in
+    to_args (map (fun a => match reify fuel c a with Some e => Some (inl e) | None =>
+                            match reify_b fuel c a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel c a) end end) l) in
   let reify_cs (c : list cent) (l : list term) : option scnts := option_map to_scnts (opt_all (map (reify_c fuel c) l)) in
   match t with
   | tLetIn _ b ty body =>
@@ -633,23 +737,24 @@ Fixpoint lead_nats (tys : list term) : nat * list term :=
 
 (** a signature off the parameter types and the result type: counters first, numbers, a memory last or not, a memory or a
     number as the result *)
-Definition kind_ty (t : term) : option kind := if is_ty kn_int t then Some KNum else if is_bool t then Some KBool else None.
-Definition read_sig (tys : list term) (ret : term) : option sig :=
+Definition kind_ty (rt : list rentry) (t : term) : option kind :=
+  if is_ty kn_int t then Some KNum else if is_bool t then Some KBool else option_map KRec (rindex t rt 0).
+Definition read_sig (rt : list rentry) (tys : list term) (ret : term) : option sig :=
   let '(c, rest) := lead_nats tys in
   let m := match rev rest with t :: _ => is_ty kn_mem t | [] => false end in
   let nums := if m then removelast rest else rest in
   let r := is_ty kn_mem ret in
-  match opt_all (map kind_ty nums) with
+  match opt_all (map (kind_ty rt) nums) with
   | Some ks => if r || is_ty kn_int ret then Some (mksig c ks m r false) else None
   | None => None
   end.
 
-Definition cent_of (k : kind) : cent := match k with KNum => CNum | KBool => CBool end.
+Definition cent_of (k : kind) : cent := match k with KNum => CNum | KBool => CBool | KRec _ => CRec end.
 Definition fun_ctx (gs : sig) : list cent := (if sm gs then [CMem] else []) ++ rev (map cent_of (sk gs)) ++ repeat CCnt (sn gs).
 
 (** one function of the program, given the ones before it, as its text reads: a recursive function starts with a match
     on its first counter *)
-Definition read_fun (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term))
+Definition read_fun (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
   (callees : list (kername * sig)) (kn : kername) : option (sig * fbody) :=
   match lookup_env Σ kn with
   | Some (ConstantDecl cb) =>
@@ -657,25 +762,25 @@ Definition read_fun (Σ : global_env) (hb : kername -> option term) (tc : kernam
       | Some (tFix [d] 0) =>
           if Nat.eqb (rarg d) 0 then
             let '(tys, body) := lams (dbody d) in
-            match read_sig tys (ret_ty (dtype d)), body with
+            match read_sig rt tys (ret_ty (dtype d)), body with
             | Some gs, tCase ci _ (tRel cnt) [b0; b1] =>
                 let nx := Nat.pred (sn gs) in
                 if negb (Nat.eqb (sn gs) 0) && Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_nat)
                    && Nat.eqb cnt ((if sm gs then 1 else 0) + length (sk gs) + nx) then
                   let ctx := fun_ctx gs ++ [CSelf] in
                   if sr gs then
-                    match reify_m callees (sm gs) nx hb tc [] 100000 ctx (bbody b0), reify_m callees (sm gs) nx hb tc [] 100000 (CPred :: ctx) (bbody b1) with
+                    match reify_m callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_m callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
                     | Some m0, Some m1 => Some (gs, FRecM m0 m1)
                     | _, _ => None
                     end
                   else
-                    match reify callees (sm gs) nx hb tc [] 100000 ctx (bbody b0), reify callees (sm gs) nx hb tc [] 100000 (CPred :: ctx) (bbody b1) with
+                    match reify callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
                     | Some e0, Some e1 => Some (gs, FRec e0 e1)
                     | _, _ =>
                         (* a number made after memories in both branches: a loop that writes and gives back a number *)
                         if sm gs then
-                          match reify_x callees (sm gs) nx hb tc [] 100000 ctx (bbody b0),
-                                reify_x callees (sm gs) nx hb tc [] 100000 (CPred :: ctx) (bbody b1) with
+                          match reify_x callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0),
+                                reify_x callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
                           | Some x0, Some x1 => Some (mksig (sn gs) (sk gs) true false true, FRecX x0 x1)
                           | _, _ => None
                           end
@@ -687,15 +792,15 @@ Definition read_fun (Σ : global_env) (hb : kername -> option term) (tc : kernam
           else None
       | Some b =>
           let '(tys, body) := lams b in
-          match read_sig tys (ret_ty (cst_type cb)) with
+          match read_sig rt tys (ret_ty (cst_type cb)) with
           | Some gs =>
               let nx := Nat.pred (sn gs) in
-              if sr gs then option_map (fun m => (gs, FPlainM m)) (reify_m callees (sm gs) nx hb tc [] 100000 (fun_ctx gs) body)
-              else match reify callees (sm gs) nx hb tc [] 100000 (fun_ctx gs) body with
+              if sr gs then option_map (fun m => (gs, FPlainM m)) (reify_m callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body)
+              else match reify callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body with
                    | Some e => Some (gs, FPlain e)
                    | None => if sm gs then
                                option_map (fun x => (mksig (sn gs) (sk gs) true false true, FPlainX x))
-                                          (reify_x callees (sm gs) nx hb tc [] 100000 (fun_ctx gs) body)
+                                          (reify_x callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body)
                              else None
                    end
           | None => None
@@ -705,11 +810,15 @@ Definition read_fun (Σ : global_env) (hb : kername -> option term) (tc : kernam
   | _ => None
   end.
 
+(** record types with these numbers of fields and nothing else: well-formedness reads only a record type's number of fields *)
+Definition arity_recs (ars : list nat) : RecTypes :=
+  {| RT := fun _ => unit; RO := fun i => mkrops (nth i ars O) (fun _ => tt) (fun P _ k => k []); Rd := fun _ => tt |}.
+
 (** ... kept when it is well formed, the condition of [compile_f_ok]: a program read is a program compiled *)
-Definition reify_fun (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term))
+Definition reify_fun (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
   (callees : list (kername * sig)) (kn : kername) : option (sig * fbody) :=
-  match read_fun Σ hb tc callees kn with
-  | Some (gs, b) => if wf_f (map snd callees) gs b then Some (gs, b) else None
+  match read_fun Σ hb tc rt callees kn with
+  | Some (gs, b) => if @wf_f (arity_recs (map (fun e => snd (fst e)) rt)) (map snd callees) gs b then Some (gs, b) else None
   | None => None
   end.
 
@@ -794,7 +903,10 @@ Definition reach (fuel : nat) (Σ : global_env) (mp : modpath) (root kn : kernam
     ([KQRun.v]) or of [Uint63] that is not a function of the program and has no fixpoint.  Bytes and halfwords ([rd8],
     [upd8], and so [rd16], [upd16] over them) are left for one byte access each, as the translator makes them, not shifts of
     4-byte cells; a 64-bit operation is one instruction; a budget ([kq_nat]) is a counter of its own *)
+Definition kn_fst := kn_of <% @fst %>.
+Definition kn_snd := kn_of <% @snd %>.
 Definition helper_of (Σ : global_env) (mp : modpath) (fns : list kername) (kn : kername) : option term :=
+  if Kername.eqb kn kn_fst || Kername.eqb kn kn_snd then body_of Σ kn else
   if Kername.eqb kn kn_rd8 || Kername.eqb kn kn_upd8 || Kername.eqb kn kn_w64_op || Kername.eqb kn kn_kq_nat
      || existsb (Kername.eqb kn) fns then None
   else if eq_mp (fst kn) mp || eq_mp (fst kn) kit_mp || eq_mp (fst kn) uint63_mp then
@@ -821,30 +933,6 @@ Definition nonfn_args (tys args : list term) : list term := map snd (filter (fun
 
 (** two functions given are the same copy when they are the same term (a structural comparison: MetaRocq's generic one is
     slow under [vm_compute], F2) *)
-Fixpoint teq (fuel : nat) (t u : term) : bool :=
-  match fuel with
-  | O => false
-  | S fuel =>
-      match t, u with
-      | tRel i, tRel j => Nat.eqb i j
-      | tInt a, tInt b => PrimInt63.eqb a b
-      | tConst k _, tConst k' _ => Kername.eqb k k'
-      | tInd i _, tInd i' _ => Kername.eqb (inductive_mind i) (inductive_mind i') && Nat.eqb (inductive_ind i) (inductive_ind i')
-      | tConstruct i n _, tConstruct i' n' _ =>
-          Kername.eqb (inductive_mind i) (inductive_mind i') && Nat.eqb (inductive_ind i) (inductive_ind i') && Nat.eqb n n'
-      | tApp f l, tApp f' l' =>
-          teq fuel f f' && Nat.eqb (length l) (length l') && forallb (fun q => teq fuel (fst q) (snd q)) (combine l l')
-      | tLambda _ a b, tLambda _ a' b' | tProd _ a b, tProd _ a' b' => teq fuel a a' && teq fuel b b'
-      | tLetIn _ a ty b, tLetIn _ a' ty' b' => teq fuel a a' && teq fuel ty ty' && teq fuel b b'
-      | tCase _ _ c brs, tCase _ _ c' brs' =>
-          teq fuel c c' && Nat.eqb (length brs) (length brs') && forallb (fun q => teq fuel (bbody (fst q)) (bbody (snd q))) (combine brs brs')
-      | tSort _, tSort _ => true
-      | _, _ => false
-      end
-  end.
-Definition teqs (l l' : list term) : bool :=
-  Nat.eqb (length l) (length l') && forallb (fun q => teq 1000 (fst q) (snd q)) (combine l l').
-
 (** the copies made: the template, the functions given, the copy's name, its meaning (the template applied to them) *)
 Definition copytab := list (kername * list term * kername * term).
 Definition find_copy (T : kername) (fargs : list term) (tbl : copytab) : option kername :=
@@ -937,14 +1025,14 @@ Fixpoint tdrop (tys : list term) (p : nat) : list (option nat) :=
 
 (** a template's copy, read as a recursive function: its signature without the function parameters; the recursive call
     passes them on, and they are dropped *)
-Definition read_tmpl (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term))
+Definition read_tmpl (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
   (callees : list (kername * sig)) (kn : kername) (fargs : list term) : option (sig * fbody) :=
   match lookup_env Σ kn with
   | Some (ConstantDecl cb) =>
       match cst_body cb with
       | Some (tFix [d] 0) =>
           let '(tys, body) := lams (dbody d) in
-          match read_sig (filter (fun t => negb (is_prod t)) tys) (ret_ty (dtype d)), body with
+          match read_sig rt (filter (fun t => negb (is_prod t)) tys) (ret_ty (dtype d)), body with
           | Some gs, tCase ci _ (tRel cnt) [b0; b1] =>
               let nx := Nat.pred (sn gs) in
               let fd := tdrop (tl tys) 0 in
@@ -952,19 +1040,19 @@ Definition read_tmpl (Σ : global_env) (hb : kername -> option term) (tc : kerna
                  && Nat.eqb cnt (Nat.pred (length tys)) && is_nat (hd (tRel 0) tys) then
                 let ctx := rev (tkinds tys fargs 0) ++ [CSelf] in
                 if sr gs then
-                  match reify_m callees (sm gs) nx hb tc fd 100000 ctx (bbody b0),
-                        reify_m callees (sm gs) nx hb tc fd 100000 (CPred :: ctx) (bbody b1) with
+                  match reify_m callees (sm gs) nx hb tc fd rt 100000 ctx (bbody b0),
+                        reify_m callees (sm gs) nx hb tc fd rt 100000 (CPred :: ctx) (bbody b1) with
                   | Some m0, Some m1 => Some (gs, FRecM m0 m1)
                   | _, _ => None
                   end
                 else
-                  match reify callees (sm gs) nx hb tc fd 100000 ctx (bbody b0),
-                        reify callees (sm gs) nx hb tc fd 100000 (CPred :: ctx) (bbody b1) with
+                  match reify callees (sm gs) nx hb tc fd rt 100000 ctx (bbody b0),
+                        reify callees (sm gs) nx hb tc fd rt 100000 (CPred :: ctx) (bbody b1) with
                   | Some e0, Some e1 => Some (gs, FRec e0 e1)
                   | _, _ =>
                       if sm gs then
-                        match reify_x callees (sm gs) nx hb tc fd 100000 ctx (bbody b0),
-                              reify_x callees (sm gs) nx hb tc fd 100000 (CPred :: ctx) (bbody b1) with
+                        match reify_x callees (sm gs) nx hb tc fd rt 100000 ctx (bbody b0),
+                              reify_x callees (sm gs) nx hb tc fd rt 100000 (CPred :: ctx) (bbody b1) with
                         | Some x0, Some x1 => Some (mksig (sn gs) (sk gs) true false true, FRecX x0 x1)
                         | _, _ => None
                         end
@@ -981,7 +1069,7 @@ Definition read_tmpl (Σ : global_env) (hb : kername -> option term) (tc : kerna
 Definition callees_of (es : list (kername * sig * fbody)) : list (kername * sig) := map (fun x => (fst (fst x), snd (fst x))) es.
 
 (** the copy for a call site, made (with the copies its functions need) if it is not yet, before the functions that call it *)
-Fixpoint ensure (fuel : nat) (Σ : global_env) (mp : modpath) (hb : kername -> option term) (th tms : list kername) (site : kername * list term)
+Fixpoint ensure (fuel : nat) (Σ : global_env) (mp : modpath) (hb : kername -> option term) (rt : list rentry) (th tms : list kername) (site : kername * list term)
   (st : option (list (kername * sig * fbody) * copytab)) {struct fuel} : option (list (kername * sig * fbody) * copytab) :=
   match fuel, st with
   | O, _ => None
@@ -995,10 +1083,10 @@ Fixpoint ensure (fuel : nat) (Σ : global_env) (mp : modpath) (hb : kername -> o
           | None => None
           | Some tys =>
               let nested := fold_left (fun a f => sites 1000 Σ tms hb th f a) fargs [] in
-              match fold_left (fun st s => ensure fuel Σ mp hb th tms s st) (rev nested) st with
+              match fold_left (fun st s => ensure fuel Σ mp hb rt th tms s st) (rev nested) st with
               | Some (es, tbl) =>
                   let ckn := (MPfile ["kqcopy"%bs], snd T ^ "__c" ^ string_of_nat (length tbl)) in
-                  match read_tmpl Σ hb (tc_of Σ mp tbl) (callees_of es) T fargs with
+                  match read_tmpl Σ hb (tc_of Σ mp tbl) rt (callees_of es) T fargs with
                   | Some (gs, b) => if wf_f (map snd (callees_of es)) gs b
                                     then Some (es ++ [(ckn, gs, b)], tbl ++ [(T, fargs, ckn, copy_meaning T tys fargs)])
                                     else None
@@ -1012,12 +1100,39 @@ Fixpoint ensure (fuel : nat) (Σ : global_env) (mp : modpath) (hb : kername -> o
 
 (** the whole program: its functions callees first (a template's copies in its place), each with its signature and body;
     and the meaning of each copy *)
+(** the program's record types: those of the reached functions' parameters and results, each once *)
+Fixpoint prod_tys (t : term) : list term := match t with tProd _ a b => a :: prod_tys b | _ => [t] end.
+Definition rtab_of (Σ : global_env) (kns : list kername) : list rentry :=
+  fold_left (fun rt kn =>
+    match lookup_env Σ kn with
+    | Some (ConstantDecl cb) =>
+        fold_left (fun rt t => match rec_shape Σ t with
+                               | Some e => match rindex t rt 0 with Some _ => rt | None => rt ++ [e] end
+                               | None => rt end) (prod_tys (cst_type cb)) rt
+    | _ => rt
+    end) kns [].
+(** for kitc.py: each record type's text, its constructor's name, its number of fields *)
+Definition rec_text (Σ : global_env) (e : rentry) : string * string * nat :=
+  let '(t, i, n, ps) := e in
+  let nm := snd (inductive_mind i) in
+  let ty := match ps with [] => nm | _ => "(" ^ nm ^ fold_left (fun a _ => a ^ " PrimInt63.int") ps "" ^ ")" end in
+  let cn := match lookup_env Σ (inductive_mind i) with
+            | Some (InductiveDecl mib) => match ind_bodies mib with oib :: _ => match ind_ctors oib with cb :: _ => cstr_name cb | [] => "" end | [] => "" end
+            | _ => "" end in
+  (ty, cn, n).
+Definition rec_info (p : program) : list (string * string * nat) :=
+  match p with
+  | (Σ, tConst root _) => let mp := fst root in map (rec_text Σ) (rtab_of Σ (reach 1000 Σ mp root root []))
+  | _ => []
+  end.
+
 Definition reify_prog2 (p : program) : option (list (kername * sig * fbody) * list (string * term)) :=
   match p with
   | (Σ, tConst root _) =>
       let mp := fst root in
       let kns := reach 1000 Σ mp root root [] in
       let hb := helper_of Σ mp kns in
+      let rt := rtab_of Σ kns in
       let tms := filter (is_tmpl Σ mp) kns in
       let th := tmpl_helpers Σ hb tms kns in
       let st := fold_left (fun st kn =>
@@ -1026,11 +1141,11 @@ Definition reify_prog2 (p : program) : option (list (kername * sig * fbody) * li
                   | Some _ =>
                       if existsb (Kername.eqb kn) tms then st else
                       let st := match tms, body_of Σ kn with
-                                | _ :: _, Some b => fold_left (fun st s => ensure 50 Σ mp hb th tms s st) (rev (sites 1000 Σ tms hb th b [])) st
+                                | _ :: _, Some b => fold_left (fun st s => ensure 50 Σ mp hb rt th tms s st) (rev (sites 1000 Σ tms hb th b [])) st
                                 | _, _ => st
                                 end in
                       match st with
-                      | Some (es, tbl) => match reify_fun Σ hb (tc_of Σ mp tbl) (callees_of es) kn with
+                      | Some (es, tbl) => match reify_fun Σ hb (tc_of Σ mp tbl) rt (callees_of es) kn with
                                           | Some (gs, b) => Some (es ++ [(kn, gs, b)], tbl)
                                           | None => None
                                           end
@@ -1171,9 +1286,9 @@ Fixpoint helpers_in (fuel : nat) (hb : kername -> option term) (t : term) (seen 
   end.
 
 (** a function's reasons: its signature, its recursion, its constructs, their places *)
-Definition why_fun (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term))
+Definition why_fun (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
   (fns bad : list kername) (callees : list (kername * sig)) (kn : kername) : list string :=
-  if match read_fun Σ hb tc callees kn with Some _ => true | None => false end then
+  if match read_fun Σ hb tc rt callees kn with Some _ => true | None => false end then
     ["read, but not well formed: a recursive call given a counter grown by S (it would have no bound), a call given fewer"
      ^ " arguments than its function takes, a counter more than 2^20 successors deep, a let of a counter grown by S over a"
      ^ " variable (above the function's bound), or a call of a number function that writes the memory, or of the function"
@@ -1194,8 +1309,8 @@ Definition why_fun (Σ : global_env) (hb : kername -> option term) (tc : kername
           let texts := inner :: flat_map (fun k => match hb k with Some b => [b] | None => [] end) hs in
           let nohb := fun _ : kername => @None term in
           let odd := fold_left (fun a t => if is_ty kn_int t || is_ty kn_mem t || is_nat t then a else add_s (head_name t) a)
-                               (filter (fun t => negb (is_bool t)) tys ++ [ret_ty ty]) [] in
-          let sigr := match read_sig tys (ret_ty ty), odd with
+                               (filter (fun t => negb (is_bool t) && match rindex t rt 0 with Some _ => false | None => true end) tys ++ [ret_ty ty]) [] in
+          let sigr := match read_sig rt tys (ret_ty ty), odd with
                       | Some _, _ => []
                       | None, [] => ["parameters in an order not read (a counter after a number, or the memory not last)"]
                       | None, x :: r => ["a parameter or result of type " ^ fold_left (fun a y => a ^ ", " ^ y) r x]
@@ -1225,21 +1340,22 @@ Definition reify_why (p : program) : list (string * list string) :=
       let mp := fst root in
       let kns := reach 1000 Σ mp root root [] in
       let hb := helper_of Σ mp kns in
+      let rt := rtab_of Σ kns in
       let tms := filter (is_tmpl Σ mp) kns in
       let th := tmpl_helpers Σ hb tms kns in
       let '(_, _, _, out) :=
         fold_left (fun '(es, tbl, bad, out) kn =>
           if existsb (Kername.eqb kn) tms then (es, tbl, bad, out) else
           let ss := match tms, body_of Σ kn with _ :: _, Some b => rev (sites 1000 Σ tms hb th b []) | _, _ => [] end in
-          match fold_left (fun st s => ensure 50 Σ mp hb th tms s st) ss (Some (es, tbl)) with
+          match fold_left (fun st s => ensure 50 Σ mp hb rt th tms s st) ss (Some (es, tbl)) with
           | None =>
               let tr := flat_map (fun s => filter (fun r => negb (r == "a parameter or result of type a function"))
-                                               (why_fun Σ hb (tc_of Σ mp tbl) kns bad (callees_of es) (fst s))) ss in
+                                               (why_fun Σ hb (tc_of Σ mp tbl) rt kns bad (callees_of es) (fst s))) ss in
               (es, tbl, bad ++ [kn], out ++ [(snd kn, "gives functions to a recursive function whose copy for them is not read" :: tr)])
           | Some (es', tbl') =>
-              match reify_fun Σ hb (tc_of Σ mp tbl') (callees_of es') kn with
+              match reify_fun Σ hb (tc_of Σ mp tbl') rt (callees_of es') kn with
               | Some (gs, b) => (es' ++ [(kn, gs, b)], tbl', bad, out)
-              | None => (es', tbl', bad ++ [kn], out ++ [(snd kn, why_fun Σ hb (tc_of Σ mp tbl') kns bad (callees_of es') kn)])
+              | None => (es', tbl', bad ++ [kn], out ++ [(snd kn, why_fun Σ hb (tc_of Σ mp tbl') rt kns bad (callees_of es') kn)])
               end
           end) kns ([], [], [], []) in
       out
@@ -1247,7 +1363,9 @@ Definition reify_why (p : program) : list (string * list string) :=
   end.
 
 (** what [kitc.py --reflect] reads of a program: each function's name and signature, in order *)
-Definition kletters (ks : list kind) : string := fold_right (fun k a => (match k with KNum => "I" | KBool => "B" end) ^ a) ""%bs ks.
+Definition rletter (i : nat) : string := nth i ["a"; "b"; "c"; "d"; "e"; "f"; "g"; "h"]%bs "z"%bs.
+Definition kletters (ks : list kind) : string :=
+  fold_right (fun k a => (match k with KNum => "I" | KBool => "B" | KRec i => rletter i end) ^ a) ""%bs ks.
 Definition info_of (l : list (kername * sig * fbody)) :=
   map (fun x : kername * sig * fbody => let '(kn, g, _) := x in (snd kn, sn g, kletters (sk g), sm g, sr g, sw g)) l.
 
@@ -1284,7 +1402,7 @@ Definition hl_src := ltac:(run_template_program (tmQuoteRec loop)
 Check (eq_refl : map (fun x => (snd (fst x), snd x)) hl_src = [(loop_g, loop_wb)]).
 
 (* the KQL program made from the reified functions, in order: function i is [gid1 i] *)
-Fixpoint funs_of (i : nat) (l : list (kername * sig * fbody)) : list (positive * fn) :=
+Fixpoint funs_of {RTs : RecTypes} (i : nat) (l : list (kername * sig * fbody)) : list (positive * fn) :=
   match l with [] => [] | (_, gs, b) :: r => (gid1 i, compile_f gid1 i gs b) :: funs_of (S i) r end.
 Definition sig_at (l : list (kername * sig * fbody)) (i : nat) : sig :=
   match nth_error l i with Some (_, gs, _) => gs | None => mksig 0 (nk 0) false false false end.
@@ -1712,6 +1830,75 @@ Proof.
   Time exact_no_check (compile_f_ok rbcall_Pr [existT ftype (sig_at rbcall_src 0) rbcount] gid1 1 (sig_at rbcall_src 1) (body_at rbcall_src 1)
     eq_refl eq_refl (all_ok_callees rbcall_Pr gid1 [existT ftype (sig_at rbcall_src 0) rbcount] (conj rbcount_ok Logic.I)) eq_refl eq_refl).
 Time Qed.
+
+(* ---------------------------------------------------------------- records and pairs *)
+(* a pair as a loop's state (the text of KQR.v's [pinner] / [pouter]): its type is the program's record type 0; [fst] and
+   [snd] are written out, so a field is the pair taken apart *)
+Fixpoint rpinner (fuel : nat) (i : i63) (p : i63 * i63) (s : mem) : i63 :=
+  match fuel with
+  | O => PrimInt63.add (fst p) (snd p)
+  | S f => let x := KQ.KQRun.rd 0 i s in
+           rpinner f (PrimInt63.add i 1) (PrimInt63.add (fst p) x, PrimInt63.land (PrimInt63.add (snd p) x) 255) s
+  end.
+Definition rpouter (n : nat) (a : i63) (s : mem) : i63 := rpinner n 0 (0%uint63, a) s.
+Definition rpair_src := ltac:(run_template_program (tmQuoteRec rpouter)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Eval vm_compute in ltac:(run_template_program (tmQuoteRec rpouter) (fun q => let r := eval vm_compute in (rec_info q) in exact r)).
+Check (eq_refl : map (fun x => (snd (fst x), snd x)) rpair_src =
+  [(mksig 1 [KNum; KRec 0] true false false,
+    FRec (SOp Badd (SMatchR (RVar 0) (SVar 1)) (SMatchR (RVar 0) (SVar 0)))
+      (SLet (SRd (SInt 0) (SVar 0)) (SRec CNil (SCons (SOp Badd (SVar 1) (SInt 1))
+         (SConsR (RMk 0 (SCons (SOp Badd (SMatchR (RVar 0) (SVar 1)) (SVar 0))
+                          (SCons (SOp Bland (SOp Badd (SMatchR (RVar 0) (SVar 0)) (SVar 0)) (SInt 255)) SNil))) SNil)))));
+   (mksig 1 [KNum] true false false,
+    FPlain (SCall 0 (CCons (CVar 0) CNil) (SCons (SInt 0) (SConsR (RMk 0 (SCons (SInt 0) (SCons (SVar 0) SNil))) SNil))))]).
+Section RPair.
+#[local] Instance rpair_recs : RecTypes | 0 :=
+  {| RT := fun _ => (i63 * i63)%type;
+     RO := fun _ => mkrops 2 (fun l => (nth 0 l 0%uint63, nth 1 l 0%uint63)) (fun P v k => match v with (a, b) => k [a; b] end);
+     Rd := fun _ => (0%uint63, 0%uint63) |}.
+#[local] Instance rpair_laws : RecLaws.
+Proof. split; [intros i [a b] P k; reflexivity | intros i [a b]; reflexivity | intros i [|a [|b [|c l]]] L; try discriminate; reflexivity]. Qed.
+Definition rpair_Pr := mkprog (funs_of 0 rpair_src) [].
+Time Lemma rpinner_ok : callee_ok rpair_Pr (gid1 0) (cbz 0) (sig_at rpair_src 0) rpinner.
+Proof. Time exact_no_check (@compile_f_ok rpair_recs rpair_laws rpair_Pr [] gid1 0 (sig_at rpair_src 0) (body_at rpair_src 0) eq_refl eq_refl (no_callees rpair_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma rpouter_ok : callee_ok rpair_Pr (gid1 1) (cbz 1) (sig_at rpair_src 1) rpouter.
+Proof.
+  Time exact_no_check (@compile_f_ok rpair_recs rpair_laws rpair_Pr [existT ftype (sig_at rpair_src 0) rpinner] gid1 1 (sig_at rpair_src 1) (body_at rpair_src 1)
+    eq_refl eq_refl (all_ok_callees rpair_Pr gid1 [existT ftype (sig_at rpair_src 0) rpinner] (conj rpinner_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
+Print Assumptions rpouter_ok.
+End RPair.
+
+(* a record of the program's own type as a loop's state (rec_state's shape): its projections are the program's helpers,
+   written out, so a field is the record taken apart *)
+Record rst := mkrst { racc : i63; rcnt : i63 }.
+Fixpoint rsinner (fuel : nat) (i : i63) (r : rst) (s : mem) : i63 :=
+  match fuel with
+  | O => PrimInt63.add (racc r) (rcnt r)
+  | S f => let x := KQ.KQRun.rd 0 i s in
+           rsinner f (PrimInt63.add i 1) (mkrst (PrimInt63.add (racc r) x) (if PrimInt63.ltb x 500 then PrimInt63.add (rcnt r) 1 else rcnt r)) s
+  end.
+Definition rsouter (n : nat) (a : i63) (s : mem) : i63 := rsinner n 0 (mkrst 0%uint63 a) s.
+Definition rst_src := ltac:(run_template_program (tmQuoteRec rsouter)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Eval vm_compute in ltac:(run_template_program (tmQuoteRec rsouter) (fun q => let r := eval vm_compute in (rec_info q) in exact r)).
+Section RSt.
+#[local] Instance rst_recs : RecTypes | 0 :=
+  {| RT := fun _ => rst;
+     RO := fun _ => mkrops 2 (fun l => mkrst (nth 0 l 0%uint63) (nth 1 l 0%uint63)) (fun P v k => match v with mkrst a b => k [a; b] end);
+     Rd := fun _ => mkrst 0%uint63 0%uint63 |}.
+#[local] Instance rst_laws : RecLaws.
+Proof. split; [intros i [a b] P k; reflexivity | intros i [a b]; reflexivity | intros i [|a [|b [|c l]]] L; try discriminate; reflexivity]. Qed.
+Definition rst_Pr := mkprog (funs_of 0 rst_src) [].
+Time Lemma rsinner_ok : callee_ok rst_Pr (gid1 0) (cbz 0) (sig_at rst_src 0) rsinner.
+Proof. Time exact_no_check (@compile_f_ok rst_recs rst_laws rst_Pr [] gid1 0 (sig_at rst_src 0) (body_at rst_src 0) eq_refl eq_refl (no_callees rst_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma rsouter_ok : callee_ok rst_Pr (gid1 1) (cbz 1) (sig_at rst_src 1) rsouter.
+Proof.
+  Time exact_no_check (@compile_f_ok rst_recs rst_laws rst_Pr [existT ftype (sig_at rst_src 0) rsinner] gid1 1 (sig_at rst_src 1) (body_at rst_src 1)
+    eq_refl eq_refl (all_ok_callees rst_Pr gid1 [existT ftype (sig_at rst_src 0) rsinner] (conj rsinner_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
+End RSt.
 
 (* linearity: a memory used after a newer one was made has no tree *)
 Definition dup (s : mem) : mem := let s2 := KQ.KQRun.upd 0 0 1 s in KQ.KQRun.upd 0 1 (KQ.KQRun.rd 0 0 s) s2.

@@ -372,16 +372,17 @@ def reflect(name, entry, prog, no_proof):
     f0 = os.path.join(GEN, f"{name}_r.v")
     open(f0, "w").write(HDR + "From KQC Require KQR KQRReify.\n" + prog
         + f"\nDefinition {name}_res := ltac:(run_template_program (tmQuoteRec {entry})\n"
-        + "  (fun q => let r := eval vm_compute in (KQRReify.reify_prog2 q, KQRReify.reify_why q) in exact r)).\n"
-        + f"Definition {name}_src := option_map fst (fst {name}_res).\n"
-        + f"Definition {name}_mts := match fst {name}_res with Some x => snd x | None => [] end.\n"
+        + "  (fun q => let r := eval vm_compute in (KQRReify.reify_prog2 q, KQRReify.reify_why q, KQRReify.rec_info q) in exact r)).\n"
+        + f"Definition {name}_src := option_map fst (fst (fst {name}_res)).\n"
+        + f"Definition {name}_mts := match fst (fst {name}_res) with Some x => snd x | None => [] end.\n"
         + f'Redirect "{name}_rinfo" Eval vm_compute in (option_map KQRReify.info_of {name}_src).\n'
-        + f'Redirect "{name}_rwhy" Eval vm_compute in (snd {name}_res).\n'
+        + f'Redirect "{name}_rwhy" Eval vm_compute in (snd (fst {name}_res)).\n'
+        + f'Redirect "{name}_rrec" Eval vm_compute in (snd {name}_res).\n'
         # a copy of a recursive function for the functions it is given: its meaning, the function applied to them (step 10)
         + f"MetaRocq Run (monad_iter (fun p => tmMkDefinition (fst p) (snd p)) {name}_mts).\n")
     rc, out = coqc(f0)
     info = open(os.path.join(GEN, f"{name}_rinfo.out")).read() if rc == 0 and os.path.exists(os.path.join(GEN, f"{name}_rinfo.out")) else ""
-    fs = re.findall(r'\("([^"]+)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([IB]*)"(?:%bs)?,\s*(true|false),\s*(true|false),\s*(true|false)\)', info)
+    fs = re.findall(r'\("([^"]+)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([IBa-h]*)"(?:%bs)?,\s*(true|false),\s*(true|false),\s*(true|false)\)', info)
     if rc != 0 or not fs or "= None" in info:
         wp = os.path.join(GEN, f"{name}_rwhy.out")
         why = open(wp).read() if os.path.exists(wp) else ""
@@ -389,12 +390,39 @@ def reflect(name, entry, prog, no_proof):
         print(name, "reflect: not read by the verified compiler's reifier (" + ("; ".join(rs) if rs else "the reifier did not run")
               + "); the translator follows", flush=True)
         return None
-    # the kinds of the parameters after the counters: I a number, B a boolean
-    kl = lambda f: "[" + "; ".join("KQR.KNum" if c == "I" else "KQR.KBool" for c in f[2]) + "]"
+    # the kinds of the parameters after the counters: I a number, B a boolean, a .. h a record of the program's type 0 .. 7
+    kc = lambda c: "KQR.KNum" if c == "I" else "KQR.KBool" if c == "B" else f"(KQR.KRec {ord(c) - ord('a')})"
+    kl = lambda f: "[" + "; ".join(kc(c) for c in f[2]) + "]"
     sig = lambda f: f"(KQR.mksig {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]})"
     t = HDR + "From KQC Require KQR KQRReify.\nImport ListNotations.\n" + f"From KQG Require Import {name}_r.\n"
+    # the program's record types (step 12): each its type, its constructor and match, a value of it; the laws by a fixed script
+    rp = os.path.join(GEN, f"{name}_rrec.out")
+    recs = re.findall(r'\("([^"]*)"(?:%bs)?,\s*"([^"]*)"(?:%bs)?,\s*(\d+)(?:%nat)?\)', open(rp).read()) if os.path.exists(rp) else []
+    if recs:
+        inst, laws = f"{name}_recs", f"{name}_laws"
+        pat = lambda j: "S (" * j + "O" + ")" * j
+        t_rt = " | ".join(f"{pat(j)} => {ty}" for j, (ty, cn, n) in enumerate(recs))
+        t += f"Definition {name}_rt (i : nat) : Type := match i with {t_rt} | _ => unit end.\n"
+        def ro(cn, n):
+            n = int(n); xs = [f"x{q}" for q in range(n)]
+            mk = f"(fun l => {cn} " + " ".join(f"(nth {q}%nat l 0%uint63)" for q in range(n)) + ")" if n else f"(fun _ => {cn})"
+            lst = "".join(f"(cons {x} " for x in xs) + "nil" + ")" * n
+            return f"KQR.mkrops {n}%nat {mk} (fun P v k => match v with {cn} {' '.join(xs)} => k {lst} end)"
+        t_ro = " | ".join(f"{pat(j)} => {ro(cn, n)}" for j, (ty, cn, n) in enumerate(recs))
+        t += (f"Definition {name}_ro (i : nat) : KQR.rops ({name}_rt i) :=\n  match i as i0 return KQR.rops ({name}_rt i0) with {t_ro}\n"
+              f"  | _ => KQR.mkrops 0%nat (fun _ => tt) (fun P _ k => k nil) end.\n")
+        t_rd = " | ".join(f"{pat(j)} => {cn}" + "".join(" 0%uint63" for _ in range(int(n))) for j, (ty, cn, n) in enumerate(recs))
+        t += f"Definition {name}_rd (i : nat) : {name}_rt i := match i as i0 return {name}_rt i0 with {t_rd} | _ => tt end.\n"
+        t += f"#[local] Instance {inst} : KQR.RecTypes | 0 := {{| KQR.RT := {name}_rt; KQR.RO := {name}_ro; KQR.Rd := {name}_rd |}}.\n"
+        dpat = "".join("[|" for _ in range(len(recs))) + "i" + "]" * len(recs)
+        t += (f"#[local] Instance {laws} : @KQR.RecLaws {inst}.\nProof. split.\n"
+              f"- intros i x P k. destruct i as {dpat}; destruct x; reflexivity.\n"
+              f"- intros i x. destruct i as {dpat}; destruct x; reflexivity.\n"
+              f"- intros i l L. destruct i as {dpat}; cbn in L; repeat (destruct l as [|? l]; try discriminate L); reflexivity.\nQed.\n")
+    else:
+        inst, laws = "KQR.no_recs", "KQR.no_recs_laws"
     t += f"Definition {name}_funs := match {name}_src with Some l => l | None => [] end.\n"
-    t += f"Definition {name}_prog := KQL.mkprog (KQRReify.funs_of 0 {name}_funs) [].\n"
+    t += f"Definition {name}_prog := KQL.mkprog (@KQRReify.funs_of {inst} 0 {name}_funs) [].\n"
     # the program's functions are unfolded last when the kernel compares a function with the meaning of its syntax tree: a
     # function applied to a written counter (f 20 ..) would otherwise be worked out round by round (F50).  The order of
     # unfolding only: nothing that converts stops converting
@@ -402,9 +430,9 @@ def reflect(name, entry, prog, no_proof):
     t += "Strategy opaque [" + " ".join([f[0] for f in fs if "__c" not in f[0]] + tmpls) + "].\n"   # a copy is unfolded first
     if not no_proof:
         for j, f in enumerate(fs):
-            cs = "[" + "; ".join(f"existT KQR.ftype {sig(g)} {g[0]}" for g in fs[:j]) + "]"
+            cs = "[" + "; ".join(f"existT (@KQR.ftype {inst}) {sig(g)} {g[0]}" for g in fs[:j]) + "]"
             oks = "".join(f"(conj {name}_rok{i} " for i in range(j)) + "Logic.I" + ")" * j
-            t += f"Lemma {name}_rok{j} : KQR.callee_ok {name}_prog (KQR.gid1 {j}) (KQR.cbz {j}) {sig(f)} {f[0]}.\n"
+            t += f"Lemma {name}_rok{j} : @KQR.callee_ok {inst} {name}_prog (KQR.gid1 {j}) (KQR.cbz {j}) {sig(f)} {f[0]}.\n"
             if "__c" in f[0]:
                 # a copy: not a fix over its counter, so its statement comes from its two equations, each by conversion
                 # (a copy that writes the memory and gives back a number has a memory: no memory argument)
@@ -412,12 +440,12 @@ def reflect(name, entry, prog, no_proof):
                                    ("compile_f_okrx", "KQR.fx0", "KQR.fx1", "") if f[5] == "true" else
                                    ("compile_f_okr", "KQR.fr0", "KQR.fr1", f" {f[3]}"))
                 b = f"(KQRReify.body_at {name}_funs {j})"
-                t += (f"Proof. exact_no_check (KQR.{thm} {name}_prog {cs} KQR.gid1 {j} {int(f[1]) - 1} {kl(f)}{mm} ({p0} {b}) ({p1} {b})"
-                      f" {f[0]} eq_refl eq_refl (KQR.all_ok_callees {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl eq_refl"
+                t += (f"Proof. exact_no_check (@KQR.{thm} {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {int(f[1]) - 1} {kl(f)}{mm} ({p0} {b}) ({p1} {b})"
+                      f" {f[0]} eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl eq_refl"
                       f" (fun n => eq_refl)). Qed.\n")
             else:
-                t += (f"Proof. exact_no_check (KQR.compile_f_ok {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j})"
-                      f" eq_refl eq_refl (KQR.all_ok_callees {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl). Qed.\n")
+                t += (f"Proof. exact_no_check (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j})"
+                      f" eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl). Qed.\n")
     t += c_print(name)
     f1 = os.path.join(GEN, f"{name}_rp.v")
     open(f1, "w").write(t)
@@ -427,6 +455,9 @@ def reflect(name, entry, prog, no_proof):
         return None
     idx = [f[0] for f in fs].index(entry) if entry in [f[0] for f in fs] else len(fs) - 1
     e = fs[idx]
+    if any(c not in "IB" for c in e[2]):   # an entry taking a record: main gives numbers only
+        print(name, "reflect: the entry takes a record; the translator follows", flush=True)
+        return None
     kinds = "N" * int(e[1]) + "I" * len(e[2]) + ("M" if e[3] == "true" else "")   # a boolean is passed as a number, 1 or 0
     return 1000 + idx, kinds, "M" if e[4] == "true" else "I", len(fs)
 
