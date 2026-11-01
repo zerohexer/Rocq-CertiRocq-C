@@ -2797,6 +2797,16 @@ the walk alone, 10 gaps (770 proved).  The gate with `KQ_REFLECT=1` on `97b3ece`
 examples 27 / 27; corpus 36 / 36; the five kernels (10 / 10 / 10 / 13 / 11 s); **71 programs through the verified compiler,
 0 refused, 0 not read**.
 
+**Step 22, booleans chosen by a test or by a counter's match — the design (2026-11-02).**  Three of the 29 cells proved only
+by the walk (`P_bool_if`, `P_bool_if_call`, `P_bool_match_nat`) write out a helper giving a boolean that its body chooses by a
+test (`if a <? b then hb a b else hb b a`) or by a match on its counter (`match n with O => true | S _ => false end`), and
+test it.  So `BIfCmp c a b x y` and `BMatchCnt c x0 x1` among the booleans (the names `BIf` / `BMatch` are the records'),
+meaning the user's test and match; compiled in each of the three forms a boolean is compiled to — a jump, a value, a choice of
+two atoms — as `SIf`'s jump and `SMatch` are (the continuations in both branches); one proof case each in each of the three.
+The reifier reads a boolean-valued test of one comparison and a boolean-valued match on a counter variable.  *Expected*: the
+three cells.  Not in this step: a function giving back a boolean (5 of the 29), which needs the recursive call's meaning to
+give one.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
