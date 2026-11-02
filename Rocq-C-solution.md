@@ -56,10 +56,10 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** (the other 4: 3 gaps and 1 program that is not Rocq) — a program the reifier does not read is refused with its
+   cells** (the other 3: 2 gaps and 1 program that is not Rocq) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
-   against.  Next: the 3 gaps as constructs of `S` (a local `fix` naming the caller's variables, a pair of pairs given back by
-   recursion, a sum of counters given to a callee).
+   against.  Next: the 2 gaps as constructs of `S` (a pair of pairs given back by recursion, a sum of counters given to a
+   callee).
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -1594,6 +1594,8 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F54 | A copy of a recursive function for the functions it is given (step 10) set to be unfolded last, like the program's functions: comparing a caller's text (`wfix2_go (kq_nat (..)) F a b`) with the copy's call, the kernel unfolded the template on `kq_nat (..)` rather than the copy, and the check did not end in 10 minutes (2026-11-01, `wfix`) | the templates are unfolded last, the copies first (a copy is a definition that unfolds to its caller's text in one step) |
 | F55 | A bound written as a `nat` literal (`1048576` in `nat`, in the first version of step 12 part 3's `wfr`) is elaborated as a computation (`Nat.of_num_uint ..`), not a numeral: `lia` treats it as an unknown and fails ("Cannot find witness") (2026-11-01) | bounds in `Z` (`Z.of_nat x <= 1048576`), as the rest of `KQR.v` writes them |
 | F56 | The reasons tally after step 12 counted `loops` under "calls of writing functions inside expressions": the reason scan (`writes`) flags a number function whose text mentions a function that writes, and `loops`' `solve` does make a memory with `loop_up_m`; read part by part, that part is read and the blocker is a function given to a template that names the caller's variables (a closure), which the scan does not name (2026-11-01) | step 13 is captures; a program's blocker is confirmed by reading its parts apart before a step is chosen for it |
+| F57 | The reifier's structural comparison `teq` (the copies' keys) had no case for a fixpoint: a local fixpoint's key was never equal to itself, so its copy was made and its call never found (2026-11-02) | the case added (step 31) — the hole F16 found in the translator's `term_same`, met again in the reifier |
+| F58 | Step 31's first version made the kernels' build 2–3 s slower (the reifier's step on `HWP_kernel` 5.5 s against 2.5 s), the C unchanged: a helper of the program's file was scanned in full for a local fixpoint at every call, before the bounded scan that decides most helpers | the same test in the other order; back to step 30's times.  A test the reifier runs at every call goes cheapest first (as F45) |
 | F38 | MetaRocq's formal evaluation (`EWcbvEval.eval`, `PCUICWcbvEval`) has rules for primitive values only, none for primitive operations: `PrimInt63.add` has no body, `eval_delta` cannot fire, every program here is stuck in it | the verified compiler is built by reflection over our own syntax instead (D26, §1.12) (read in the image's MetaRocq sources, 2026-10-30) |
 | F37 | CakeML's architecture is ours: a proof-producing translator from the logic's functions on top, one verified compiler below; Pancake is verified through a proof-producing decompiler.  The difference is that CakeML builds each proof by construction while ours searches | D25, §1.11 (read in the CakeML repository, 2026-10-30) |
 
@@ -3137,6 +3139,35 @@ out, a fixpoint applied is no construct of `S`.  A local fixpoint is a template 
   with a `let` of a function read as its body with the function put in, as the readers read it.
 `KQR.v` unchanged.  *Expected*: the cell.
 
+**Step 31 done (2026-11-02): a local `fix` naming the caller's variables.**  Built as designed, in the reifier (`KQR.v`
+unchanged):
+- *Reading*: a local fixpoint of one body applied is read, at the head of the six readers (`head_r`), as a call of a reserved
+  name (`kn_lfix`) with the fixpoint first; the call look-up (`tc_of`) gives its copy and the arguments in the copy's order (the
+  counters, the captured numbers and booleans, the others, the captured memory).  The copy is made as a template's
+  (`ensure`, the sites in its own body first), read by the template's reader taken over the fixpoint's body (`read_def`),
+  its meaning the fixpoint with the captured variables as parameters (`lfix_meaning`, over `copy_meaning_h`); its key is
+  the fixpoint with its captured variables numbered the last first (`lfix_key`), so that, read with them after its own
+  parameters (`rev capk`, as a template's copy is read), each is the parameter of its kind.  The call sites (`sites`) gain
+  the fixpoint applied, and a `let` of a function read by zeta, as the readers read it; the helpers looked through for them
+  include those with a local fixpoint (`has_lfix`, a scan that counts no fuel left as none).  A definition of the program's
+  file whose fixpoints are local is a helper.
+- *Found on the way* (F57): `teq`, the structural comparison of the copies' keys, had no case for a fixpoint — a key with one
+  never equal to itself, so the copy was made and its call not found.  Fixed (the hole F16 found in the translator's
+  `term_same`).
+- *`kitc.py`*: the copies' templates are held back in the check (`Strategy opaque`) except `kqlfix`, which is no constant.
+- *Tests* (`KQRReify.v`): `lf_go` (the cell's shape through a helper written out, called twice with different variables
+  captured: one copy), `lf_m` (a captured number and the memory): trees pinned, the copies' meanings
+  `fun n b x => (fix g m x := .. x + b ..) n x` and `fun n b i acc s => (fix g ..) n i acc`, each copy by `compile_f_okr` from its
+  equations, each caller by `compile_f_ok`, in milliseconds; `Print Assumptions` the same base.
+- *A slowdown found by the gate and removed* (F58): the first version's kernels built in 12 / 12 / 12 / 15 / 15 s (step 30: 10 /
+  10 / 11 / 13 / 12 s), the C unchanged; the reifier's step on `HWP_kernel` 5.5 s against 2.5 s: a helper of the program's file
+  was scanned in full for a local fixpoint at every call before the bounded scan.  The same test in the other order
+  (`c48dc6c`): 2.6 / 2.1 / 1.8 s on `HWP_kernel` / `HWP_own` / `HWP_irqnow` (step 30's 2.5 / 1.9 / 1.7 s).
+- The C: 63 of 63 byte-identical.  The construct table (on `446e1c2`): **777 of 780 through the verified compiler** (was 776),
+  2 gaps (`A_par_nat_mul`, `P_pairp_rec`) and `A_par_nat_arith`, not Rocq; the follow-up computes the same test, so the table
+  stands for it.  The gate on the follow-up, the walk switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the
+  five kernels (10 / 10 / 10 / 13 / 12 s); **71 programs through the verified compiler, 0 refused**; the trusted base unchanged.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3310,11 +3341,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `d61d943` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `c48dc6c` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 31's design (a local `fix` naming the caller's variables) |
+| (this commit) | §12.V: step 31 done (a local `fix` naming the caller's variables: the construct table 777 of 780), F57, F58, the C, the gate |
+| `c48dc6c` | `proved/KQRReify.v`: a helper's full scan for a local fixpoint only where the bounded scan finds one (F58) |
+| `446e1c2` | `proved/KQRReify.v` + `kitc.py` step 31: a local fixpoint read as a copy whose parameters are its captured variables (`kn_lfix`, `lfix_key`, `lfix_meaning`, `read_def`); `teq` compares fixpoints (F57) |
+| `92c32ab` | §12.V: step 31's design (a local `fix` naming the caller's variables) |
 | `c70baa5` | §12.V: step 30 done (comparisons of counters and the predecessor: the construct table 776 of 780), the C, the gate |
 | `d61d943` | `proved/KQR.v` + `KQRReify.v` step 30: `BCmpC`, `CPred` (`cmpn_ofn`, `ofn_pred_sel`); the reifier reads `Nat.eqb`, `Nat.ltb`, `Nat.leb`, `Nat.pred` of counters |
 | `9f75ef1` | §12.V: step 30's design (comparisons of counters and the predecessor) |
