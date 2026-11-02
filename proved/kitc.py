@@ -435,7 +435,43 @@ def reflect(name, entry, prog, no_proof):
         pat = lambda j: "S (" * j + "O" + ")" * j
         t_rt = " | ".join(f"{pat(j)} => {ty}" for j, (ty, cn, n, wd) in enumerate(recs))
         t += f"Definition {name}_rt (i : nat) : Type := match i with {t_rt} | _ => unit end.\n"
+        def shape(sh):
+            # a record holding records (step 32): "pair(pair(i,i),i)" -> ("pair", ["i", ...]), a field "i" or an inner record
+            pos = [0]
+            def node():
+                j = sh.index("(", pos[0]); cn = sh[pos[0]:j]; pos[0] = j + 1; fs = []
+                while True:
+                    if sh[pos[0]] == "i": fs.append("i"); pos[0] += 1
+                    else: fs.append(node())
+                    c = sh[pos[0]]; pos[0] += 1
+                    if c == ")": return (cn, fs)
+            return node()
+        def width(nd): return sum(1 if f == "i" else width(f) for f in nd[1])
+        def lst(vs): return "".join(f"(cons {v} " for v in vs) + "nil" + ")" * len(vs)
+        def nested_ro(sh, n):
+            root = shape(sh)
+            def build(nd, start):   # the outer numbers first, then each inner record's fields, depth first
+                cn, fs = nd; k = start + sum(1 for f in fs if f == "i"); q = start; parts = []
+                for f in fs:
+                    if f == "i": parts.append(f"(nth {q}%nat l 0%uint63)"); q += 1
+                    else: parts.append(build(f, k)); k += width(f)
+                return f"({cn} " + " ".join(parts) + ")"
+            cnt = [0]
+            def elim(nd, var):      # the matches nest for nest, in the fields' order, depth first
+                cn, fs = nd; vs = []
+                for _ in fs: cnt[0] += 1; vs.append(f"v{cnt[0]}")
+                o, c, leaves = f"match {var} with {cn} {' '.join(vs)} => ", " end", [v for v, f in zip(vs, fs) if f == "i"]
+                for v, f in zip(vs, fs):
+                    if f != "i":
+                        o2, c2, l2 = elim(f, v); o += o2; c = c2 + c; leaves += l2
+                return o, c, leaves
+            o, c, leaves = elim(root, "v")
+            return f"KQR.mkrops {n}%nat None (fun l => {build(root, 0)}) (fun P v k => {o}k {lst(leaves)}{c})"
+        def nested_rd(sh):
+            def rd(nd): return f"({nd[0]} " + " ".join("0%uint63" if f == "i" else rd(f) for f in nd[1]) + ")"
+            return rd(shape(sh))
         def ro(cn, n, wd):
+            if wd.startswith("N:"): return nested_ro(wd[2:], int(n))
             n = int(n); xs = [f"x{q}" for q in range(n)]
             if not wd.strip():
                 mk = f"(fun l => {cn} " + " ".join(f"(nth {q}%nat l 0%uint63)" for q in range(n)) + ")" if n else f"(fun _ => {cn})"
@@ -455,6 +491,7 @@ def reflect(name, entry, prog, no_proof):
             return (f"KQR.mkrops {n}%nat (Some {wl}) (fun l => {mk}) (fun P v k => match v with "
                     + " | ".join(arm(c) for c in range(len(cns))) + " end)")
         def rd0(cn, n, wd):
+            if wd.startswith("N:"): return nested_rd(wd[2:])
             if not wd.strip(): return f"{cn}" + "".join(" 0%uint63" for _ in range(int(n)))
             return f"{cn.split()[0]}" + "".join(" 0%uint63" for _ in range(int(wd.split()[0])))
         t_ro = " | ".join(f"{pat(j)} => {ro(cn, n, wd)}" for j, (ty, cn, n, wd) in enumerate(recs))
@@ -465,8 +502,8 @@ def reflect(name, entry, prog, no_proof):
         t += f"#[local] Instance {inst} : KQR.RecTypes | 0 := {{| KQR.RT := {name}_rt; KQR.RO := {name}_ro; KQR.Rd := {name}_rd |}}.\n"
         dpat = "".join("[|" for _ in range(len(recs))) + "i" + "]" * len(recs)
         t += (f"#[local] Instance {laws} : @KQR.RecLaws {inst}.\nProof. split.\n"
-              f"- intros i x P k. destruct i as {dpat}; destruct x; reflexivity.\n"
-              f"- intros i x. destruct i as {dpat}; destruct x; reflexivity.\n"
+              f"- intros i x P k. destruct i as {dpat}; destruct x; first [reflexivity | cbn; repeat match goal with |- context [match ?v with _ => _ end] => destruct v end; reflexivity].\n"
+              f"- intros i x. destruct i as {dpat}; destruct x; first [reflexivity | cbn; repeat match goal with |- context [match ?v with _ => _ end] => destruct v end; reflexivity].\n"
               f"- intros i l E L. destruct i as {dpat}; cbn in E, L; try discriminate E; repeat (destruct l as [|? l]; try discriminate L); reflexivity.\n"
               f"- intros i ws c rest E Lc Lr Hz. destruct i as {dpat}; cbn in E; try discriminate E; injection E as <-; KQR.kq_tag_case.\nQed.\n")
     else:
