@@ -1825,15 +1825,21 @@ Definition arity_recs (ars : list (nat * option (list nat))) : RecTypes :=
 (** ... kept when it is well formed, the condition of [compile_f_ok]: a program read is a program compiled *)
 Definition own_bound : Z := (1152921504606846976 + 1048576 + 1)%Z.
 Definition reify_fun (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
-  (callees : list (kername * sig)) (kn : kername) : option (sig * fbody) :=
+  (callees : list (kername * sig)) (kn : kername) (bt : kername -> option Z) (chk : bool) : option (sig * fbody) :=
   match read_fun Σ hb tc rt callees kn with
   | Some (gs, b) =>
       let wfok := fun gs => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt)) (map snd callees) gs b in
+      if negb chk then Some (gs, b) else
+      (* a bound worked out from the call graph (step 34) *)
+      match bt kn with
+      | Some bd => let gs' := mksig7 (sn gs) (sk gs) (sm gs) (sr gs) (sw gs) (sq gs) (Some bd) in if wfok gs' then Some (gs', b) else None
+      | None =>
       if wfok gs then Some (gs, b) else
       (* well formed only with a bound of its own (step 33): the smallest, which suits a function no other calls -- the entry,
          whose counters come from kq_nat; a caller's wf_f checks what it gives against it *)
       let gs' := mksig7 (sn gs) (sk gs) (sm gs) (sr gs) (sw gs) (sq gs) (Some own_bound) in
       if wfok gs' then Some (gs', b) else None
+      end
   | None => None
   end.
 
@@ -2398,7 +2404,7 @@ Definition rec_info (p : program) : list (string * string * nat * string) :=
   | _ => []
   end.
 
-Definition reify_prog2 (p : program) : option (list (kername * sig * fbody) * list (string * term)) :=
+Definition reify_prog2b (bt : kername -> option Z) (chk : bool) (p : program) : option (list (kername * sig * fbody) * list (string * term)) :=
   match p with
   | (Σ, tConst root _) =>
       let mp := fst root in
@@ -2445,11 +2451,11 @@ Definition reify_prog2 (p : program) : option (list (kername * sig * fbody) * li
                                     end
                                 | None => None
                                 end
-                              else match reify_fun Σ hb (tc_of Σ mp tbl) rt (callees_of es) kn with
+                              else match reify_fun Σ hb (tc_of Σ mp tbl) rt (callees_of es) kn bt chk with
                                    | Some (gs, b) => Some (es ++ [(kn, gs, b)], tbl)
                                    | None => None
                                    end
-                          | _ => match reify_fun Σ hb (tc_of Σ mp tbl) rt (callees_of es) kn with
+                          | _ => match reify_fun Σ hb (tc_of Σ mp tbl) rt (callees_of es) kn bt chk with
                                  | Some (gs, b) => Some (es ++ [(kn, gs, b)], tbl)
                                  | None => None
                                  end
@@ -2459,6 +2465,172 @@ Definition reify_prog2 (p : program) : option (list (kername * sig * fbody) * li
                   end) kns (Some ([], [])) in
       option_map (fun et => (fst et, map (fun e => (snd (snd (fst e)), snd e)) (snd et))) st
   | _ => None
+  end.
+(** the calls of a function's tree, each its callee and the counters it is given (step 34): the shape of KQR's shared-block
+    check, [sh_*] *)
+Fixpoint cl_e (e : sexp) {struct e} : list (nat * scnts) :=
+  match e with
+  | SVar _ | SInt _ | SFld _ _ => []
+  | SOp _ a b | SLet a b | SRd a b => cl_e a ++ cl_e b
+  | SRd32 a b | SRd8 a b => cl_e a ++ cl_e b
+  | SIf _ a b t f => cl_e a ++ cl_e b ++ cl_e t ++ cl_e f
+  | SRec ccs args => cl_cs ccs ++ cl_es args
+  | SCall f ccs args => (f, ccs) :: cl_cs ccs ++ cl_es args
+  | SMatch _ e0 e1 => cl_e e0 ++ cl_e e1
+  | SIfB b t f => cl_b b ++ cl_e t ++ cl_e f
+  | SLetB b e => cl_b b ++ cl_e e
+  | SLetC c e => cl_c c ++ cl_e e
+  | SLetR x e | SMatchR x e => cl_r x ++ cl_e e
+  | SHwf _ args => cl_es args
+  | SSize h => cl_e h
+  end
+with cl_es (es : sexps) {struct es} : list (nat * scnts) :=
+  match es with
+  | SNil => []
+  | SCons e r => cl_e e ++ cl_es r
+  | SConsB b r => cl_b b ++ cl_es r
+  | SConsR x r => cl_r x ++ cl_es r
+  end
+with cl_c (c : scnt) {struct c} : list (nat * scnts) :=
+  match c with CVar _ | CO => [] | CS c | KQR.CPred c => cl_c c | CAdd a b => cl_c a ++ cl_c b | CNat e => cl_e e end
+with cl_cs (cs : scnts) {struct cs} : list (nat * scnts) :=
+  match cs with CNil => [] | CCons c r => cl_c c ++ cl_cs r end
+with cl_b (b : sbool) {struct b} : list (nat * scnts) :=
+  match b with
+  | BCmp _ x y => cl_e x ++ cl_e y
+  | BVar _ | BTrue | BFalse => []
+  | BAnd x y | BOr x y => cl_b x ++ cl_b y
+  | BNot x => cl_b x
+  | BIfCmp _ a b x y => cl_e a ++ cl_e b ++ cl_b x ++ cl_b y
+  | BMatchCnt _ x0 x1 => cl_b x0 ++ cl_b x1
+  | BCall f ccs args => (f, ccs) :: cl_cs ccs ++ cl_es args
+  | BCmpC _ x y => cl_c x ++ cl_c y
+  end
+with cl_r (x : srec) {struct x} : list (nat * scnts) :=
+  match x with
+  | RVar _ => []
+  | RMk _ es => cl_es es
+  | RCall _ f ccs args => (f, ccs) :: cl_cs ccs ++ cl_es args
+  | RW64 _ _ a b => cl_r a ++ cl_r b
+  | RLet e x => cl_e e ++ cl_r x
+  | RLetR y x => cl_r y ++ cl_r x
+  | RIf _ _ a b x y => cl_e a ++ cl_e b ++ cl_r x ++ cl_r y
+  | RMatchR _ x y => cl_r x ++ cl_r y
+  end.
+Fixpoint cl_m (m : smem) {struct m} : list (nat * scnts) :=
+  match m with
+  | MCur => []
+  | MUpd h i v m => cl_e h ++ cl_e i ++ cl_e v ++ cl_m m
+  | MUpd32 h i v m | MUpd8 h i v m => cl_e h ++ cl_e i ++ cl_e v ++ cl_m m
+  | MLet e m => cl_e e ++ cl_m m
+  | MLetM m1 m2 => cl_m m1 ++ cl_m m2
+  | MIf _ a b m1 m2 => cl_e a ++ cl_e b ++ cl_m m1 ++ cl_m m2
+  | MRec ccs args m => cl_cs ccs ++ cl_es args ++ cl_m m
+  | MCall f ccs args m => (f, ccs) :: cl_cs ccs ++ cl_es args ++ cl_m m
+  | MMatch _ m0 m1 => cl_m m0 ++ cl_m m1
+  | MIfB b m1 m2 => cl_b b ++ cl_m m1 ++ cl_m m2
+  | MLetB b m => cl_b b ++ cl_m m
+  | MLetC c m => cl_c c ++ cl_m m
+  | MHw _ args m => cl_es args ++ cl_m m
+  | MLetR x m | MMatchR x m => cl_r x ++ cl_m m
+  end.
+Fixpoint cl_pv (p : spv) {struct p} : list (nat * scnts) :=
+  match p with
+  | PvMk e m => cl_e e ++ cl_m m
+  | PvCall f ccs args m => (f, ccs) :: cl_cs ccs ++ cl_es args ++ cl_m m
+  | PvRec ccs args m => cl_cs ccs ++ cl_es args ++ cl_m m
+  | PvLet e p => cl_e e ++ cl_pv p
+  | PvLetB c p => cl_b c ++ cl_pv p
+  | PvLetC c p => cl_c c ++ cl_pv p
+  | PvLetR x p | PvMatchR x p => cl_r x ++ cl_pv p
+  | PvLetM m p => cl_m m ++ cl_pv p
+  | PvIf _ x y t f => cl_e x ++ cl_e y ++ cl_pv t ++ cl_pv f
+  | PvIfB c t f => cl_b c ++ cl_pv t ++ cl_pv f
+  | PvMatch _ p0 p1 => cl_pv p0 ++ cl_pv p1
+  | PvMatchP p q => cl_pv p ++ cl_pv q
+  end.
+Fixpoint cl_x (x : sx) {struct x} : list (nat * scnts) :=
+  match x with
+  | XRet e => cl_e e
+  | XLetM m x => cl_m m ++ cl_x x
+  | XLet e x => cl_e e ++ cl_x x
+  | XLetB b x => cl_b b ++ cl_x x
+  | XIf _ a b x1 x2 => cl_e a ++ cl_e b ++ cl_x x1 ++ cl_x x2
+  | XIfB b x1 x2 => cl_b b ++ cl_x x1 ++ cl_x x2
+  | XMatch _ x0 x1 => cl_x x0 ++ cl_x x1
+  | XLetC c x => cl_c c ++ cl_x x
+  | XRec ccs args m => cl_cs ccs ++ cl_es args ++ cl_m m
+  | XCall f ccs args m => (f, ccs) :: cl_cs ccs ++ cl_es args ++ cl_m m
+  | XLetR r x | XMatchR r x => cl_r r ++ cl_x x
+  | XMatchP p x | XLetP p x => cl_pv p ++ cl_x x
+  end.
+Fixpoint cl_br (b : sbr) {struct b} : list (nat * scnts) :=
+  match b with
+  | BRet x => cl_r x
+  | BRec ccs args => cl_cs ccs ++ cl_es args
+  | BMatchRec ccs args b | BLetRec ccs args b => cl_cs ccs ++ cl_es args ++ cl_br b
+  | BLet e b => cl_e e ++ cl_br b
+  | BLetB c b => cl_b c ++ cl_br b
+  | BLetC c b => cl_c c ++ cl_br b
+  | BLetR x b | BMatchR x b => cl_r x ++ cl_br b
+  | BIf _ x y t f => cl_e x ++ cl_e y ++ cl_br t ++ cl_br f
+  | BIfB c t f => cl_b c ++ cl_br t ++ cl_br f
+  | BMatch _ b0 b1 => cl_br b0 ++ cl_br b1
+  end.
+Fixpoint cl_bb (b : sbb) {struct b} : list (nat * scnts) :=
+  match b with
+  | BbRet x => cl_b x
+  | BbRec ccs args | BbNotRec ccs args => cl_cs ccs ++ cl_es args
+  | BbLet e b => cl_e e ++ cl_bb b
+  | BbLetB c b => cl_b c ++ cl_bb b
+  | BbLetC c b => cl_c c ++ cl_bb b
+  | BbLetR x b | BbMatchR x b => cl_r x ++ cl_bb b
+  | BbIf _ x y t f => cl_e x ++ cl_e y ++ cl_bb t ++ cl_bb f
+  | BbIfB c t f => cl_b c ++ cl_bb t ++ cl_bb f
+  | BbMatch _ b0 b1 => cl_bb b0 ++ cl_bb b1
+  end.
+Definition cl_f (b : fbody) : list (nat * scnts) :=
+  match b with
+  | FRec e0 e1 => cl_e e0 ++ cl_e e1
+  | FPlain e => cl_e e
+  | FRecM m0 m1 => cl_m m0 ++ cl_m m1
+  | FPlainM m => cl_m m
+  | FPlainX x => cl_x x
+  | FRecX x0 x1 => cl_x x0 ++ cl_x x1
+  | FRecR b0 b1 => cl_br b0 ++ cl_br b1
+  | FPlainR b => cl_br b
+  | FRecB b0 b1 => cl_bb b0 ++ cl_bb b1
+  | FPlainB b => cl_bb b
+  | FRecP p0 p1 => cl_pv p0 ++ cl_pv p1
+  | FPlainP p => cl_pv p
+  end.
+
+(** counter bounds worked out from the call graph (step 34): from the entry down -- the functions come callees first -- each
+    function's bound above the largest counter any caller gives it, at least the smallest ([own_bound]); a bound above 2^62 is
+    refused by [wf_f] *)
+Fixpoint cmaxs (B : Z) (ccs : scnts) : Z := match ccs with CNil => 0%Z | CCons c r => Z.max (cmax B c) (cmaxs B r) end.
+Fixpoint upd_max (l : list Z) (f : nat) (v : Z) : list Z :=
+  match l, f with [], _ => [] | x :: r, O => Z.max x v :: r | x :: r, S f => x :: upd_max r f v end.
+Fixpoint find_kn (kn : kername) (l : list (kername * sig * fbody)) (i : nat) : option nat :=
+  match l with [] => None | e :: r => if Kername.eqb kn (fst (fst e)) then Some i else find_kn kn r (S i) end.
+Definition bounds_tab (es : list (kername * sig * fbody)) : kername -> option Z :=
+  let n := length es in
+  let bs := fold_left (fun bs i =>
+              let Bi := nth i bs own_bound in
+              match nth_error es i with
+              | Some e => fold_left (fun bs' fc => upd_max bs' (fst fc) (cmaxs Bi (snd fc) + 1)%Z) (cl_f (snd e)) bs
+              | None => bs
+              end) (rev (seq 0 n)) (repeat own_bound n) in
+  fun kn => match find_kn kn es 0 with Some i => Some (nth i bs own_bound) | None => None end.
+(** the program: read with the bounds of the index and the smallest own bound; failing that, read without the check, the bounds
+    worked out from its calls, and read again with them (step 34) *)
+Definition reify_prog2 (p : program) : option (list (kername * sig * fbody) * list (string * term)) :=
+  match reify_prog2b (fun _ => None) true p with
+  | Some r => Some r
+  | None => match reify_prog2b (fun _ => None) false p with
+            | Some (es, _) => reify_prog2b (bounds_tab es) true p
+            | None => None
+            end
   end.
 Definition reify_prog (p : program) : option (list (kername * sig * fbody)) := option_map fst (reify_prog2 p).
 Definition meaning_of (l : list (string * term)) (nm : string) : term :=
@@ -2666,7 +2838,7 @@ Definition reify_why (p : program) : list (string * list string) :=
                                                (why_fun Σ hb (tc_of Σ mp tbl) rt kns bad (callees_of es) (fst (fst s)))) ss in
               (es, tbl, bad ++ [kn], out ++ [(snd kn, "gives functions to a recursive function whose copy for them is not read" :: tr)])
           | Some (es', tbl') =>
-              match reify_fun Σ hb (tc_of Σ mp tbl') rt (callees_of es') kn with
+              match reify_fun Σ hb (tc_of Σ mp tbl') rt (callees_of es') kn (fun _ => None) true with
               | Some (gs, b) => (es' ++ [(kn, gs, b)], tbl', bad, out)
               | None => (es', tbl', bad ++ [kn], out ++ [(snd kn, why_fun Σ hb (tc_of Σ mp tbl') rt kns bad (callees_of es') kn)])
               end
@@ -4070,3 +4242,28 @@ Proof.
     eq_refl eq_refl (all_ok_callees w33_Pr gid1 [existT ftype (sig_at w33_src 0) w33k] (conj w33k_ok Logic.I)) eq_refl eq_refl).
 Time Qed.
 Print Assumptions w33go_ok.
+
+(* ---- counter bounds worked out from the call graph (step 34): [w34k2] gives [w34k] a sum and is given a successor by the entry
+   (A_par_nat_add_called_succ's shape): the entry the smallest bound, [w34k2] one more, [w34k] twice that and one *)
+Fixpoint w34k (n : nat) (x : i63) : i63 := match n with O => x | S m => w34k m (PrimInt63.add x 1) end.
+Fixpoint w34k2 (r n : nat) (x : i63) : i63 := match r with O => w34k (n + n) x | S q => w34k2 q n (PrimInt63.add x 1) end.
+Definition w34go (n : nat) (a b : i63) (s : mem) : i63 := w34k2 n (S n) a.
+Definition w34_src := ltac:(run_template_program (tmQuoteRec w34go)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : map (fun x => sb (snd (fst x))) w34_src = [Some (2 * own_bound + 1)%Z; Some (own_bound + 1)%Z; Some own_bound]).
+Definition w34_Pr := mkprog (funs_of 0 w34_src) [].
+Time Lemma w34k_ok : callee_ok w34_Pr (gid1 0) (fbound (sig_at w34_src 0) 0) (sig_at w34_src 0) w34k.
+Proof. Time exact_no_check (compile_f_ok w34_Pr [] gid1 0 (sig_at w34_src 0) (body_at w34_src 0) eq_refl eq_refl (no_callees w34_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma w34k2_ok : callee_ok w34_Pr (gid1 1) (fbound (sig_at w34_src 1) 1) (sig_at w34_src 1) w34k2.
+Proof.
+  Time exact_no_check (compile_f_ok w34_Pr [existT ftype (sig_at w34_src 0) w34k] gid1 1 (sig_at w34_src 1) (body_at w34_src 1)
+    eq_refl eq_refl (all_ok_callees w34_Pr gid1 [existT ftype (sig_at w34_src 0) w34k] (conj w34k_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
+Time Lemma w34go_ok : callee_ok w34_Pr (gid1 2) (fbound (sig_at w34_src 2) 2) (sig_at w34_src 2) w34go.
+Proof.
+  Time exact_no_check (compile_f_ok w34_Pr [existT ftype (sig_at w34_src 0) w34k; existT ftype (sig_at w34_src 1) w34k2] gid1 2
+    (sig_at w34_src 2) (body_at w34_src 2) eq_refl eq_refl
+    (all_ok_callees w34_Pr gid1 [existT ftype (sig_at w34_src 0) w34k; existT ftype (sig_at w34_src 1) w34k2] (conj w34k_ok (conj w34k2_ok Logic.I)))
+    eq_refl eq_refl).
+Time Qed.
+Print Assumptions w34go_ok.
