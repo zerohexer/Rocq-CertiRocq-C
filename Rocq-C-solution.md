@@ -3212,6 +3212,20 @@ through the slot block) serves it, and `KQR.v` is unchanged (a record type is an
   examples 27 / 27; corpus 36 / 36; the five kernels (10 / 11 / 11 / 13 / 12 s); **71 programs through the verified compiler, 0
   refused**; the trusted base unchanged.
 
+**Step 33, a sum of counters given to a callee — the design (2026-11-02).**  The last gap, `A_par_nat_mul`: `k (n + n) a`.  Two
+parts.  (1) `CAdd a b` among the counters (`Nat.add` of two counters), an addition of their machine numbers — exact, since every
+counter of a function is below `2^62`.  (2) The bound.  Function `j` is proved for counters below `cbz j = 2^62 - j·2^20`, and a
+callee is used at its own bound; `wf` lets a caller give a callee counters at most `2^20` successors over its own (`shallow`),
+which `cbz`'s fall of `2^20` per function covers.  A sum of two counters can reach twice the caller's bound, which no bound
+falling with the function's index covers.  So the bound becomes **per function and per program**: a table of bounds, one per
+function, given to `compile_f_ok` (as the callees are) and worked out by the reifier — the entry's at least `2^60 + 2^20` (its
+counters come from `kq_nat`), each callee's above every counter its callers give it; a counter expression's largest value for
+a bound `B` of its variables is `cmax B c` (a variable `B - 1`, a successor one more, a sum the sum, a budget `2^60`, a
+predecessor its argument's).  `wf`'s call condition becomes `cmax (the caller's bound) c < the callee's bound` in place of
+`shallow`; the table's range (each bound in `[2^60 + 2^20, 2^62]`) is checked by computation; a recursive call's counters stay
+flat, as now.  Nothing is added to what is trusted: the bounds are checked, not assumed.  *Expected*: the cell, and the C of
+every program unchanged (the bounds are in the statements, not in the code).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3389,7 +3403,8 @@ Pushed to the public repository up to `1dcf4f8` (2026-11-02); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 32 done (records holding records: the construct table 778 of 780), the C, the gate |
+| (this commit) | §12.V: step 33's design (a sum of counters given to a callee: counter bounds per function) |
+| `2956187` | §12.V: step 32 done (records holding records: the construct table 778 of 780), the C, the gate |
 | `1dcf4f8` | `proved/KQRReify.v` + `kitc.py` step 32: the record table's fields' widths, `rbr`, constructors flattened; `kitc.py`'s instance from the shape |
 | `7a8bde8` | §12.V: step 32's design (records holding records) |
 | `29ca4e5` | §12.V: step 31 done (a local `fix` naming the caller's variables: the construct table 777 of 780), F57, F58, the C, the gate |
