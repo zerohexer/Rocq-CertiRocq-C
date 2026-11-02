@@ -3386,6 +3386,30 @@ test on a boolean, a boolean let inside a record.  The constructs, each the coun
 *Expected*: those cells and step 35's five gaps, `P_int_if_and_let`.  *Not in this step*: the relational bound (step 37,
 `A_par_nat_rec_succ`).
 
+**Step 37, counters grown by the recursion: a bound on a weighted sum — the design (2026-11-03).**  `A_par_nat_rec_succ`:
+`k (n m : nat) x := match n with O => x | S p => k p (S m) (x + 1) end` — an index counting up while the budget counts down, the
+ordinary way to walk positions with `nat`.  The recursive call's counters must stay below the function's bound at every round;
+`S m` is not below `m`'s bound, but `p + S m = n + m`: the sum does not grow.  So a function whose recursion grows a counter is
+proved for counters whose **weighted sum** is below its bound, and the recursion keeps the weighted sum from growing:
+- *Signature*: `sig` gains the weights `sv : list nat` (none: each counter below the bound, as today; else one weight of at least 1
+  per counter, the first the recursion's).  `callee_ok`'s premise on the counters given is `cfits gs B cvs`: each below `B`, or
+  `Σ wᵢ·cᵢ < B` — which gives each below `B` (weights at least 1), so the body's invariant is as today plus the weighted sum.
+- *The recursion*: its counters after the first may be any counter expressions whose weighted sum, with the predecessor first,
+  is at most the current one: with each counter variable in scope carrying a linear upper bound over the function's counters
+  (a parameter itself, a let its expression's, a match's predecessor its variable's less one), `wf` checks coefficient by
+  coefficient that `Σᵢ≥₂ wᵢ·lin(c′ᵢ) ≤ w₁ + Σᵢ≥₂ wᵢ·mᵢ`.  `k p (S m)` takes weights `[1; 1]`, `k p (m + 2)` `[2; 1]`, two counters
+  swapped equal weights.  A counter grown by the predecessor itself (`k p (m + p)`) grows quadratically: no weighted sum bounds
+  it; with a budget from the data it outgrows a machine number (§0.5's second reason), with a written budget it does not — not in
+  this step, a cell of its own.
+- *A call of such a function*: `wf` asks `Σ wᵢ·cmaxv(cᵢ)` below the callee's bound (the call-graph bounds, step 34, the same).
+- *Proof*: the invariant gains the parameters' values (the bottom of the counter environment) and, per counter variable, its
+  value below its linear bound evaluated at them; the recursive call's premise from the coefficient check; `compile_f_ok`'s
+  induction on the first counter with `cfits` in place of each-below.
+- *The reifier*: a function not well formed only because its recursion grows a counter is read again with weights, the smallest
+  satisfying the check (a small linear search: the constraints are `wⱼ ≥ Σᵢ wᵢ·coefᵢⱼ`, `w₁ ≥ Σ wᵢ·constᵢ`); `kitc.py` prints them.
+*Expected*: `A_par_nat_rec_succ`, and cells for `k p (m + 2)`, a swap, a let-bound successor given to the recursion; the cell of a
+growth by the predecessor refused (its own step).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3565,7 +3589,8 @@ Pushed to the public repository up to `e79f85f` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 35 done (a bound for each counter variable: the construct table 792 of 815), the C, the gate, the kernels timed apart |
+| (this commit) | §12.V: step 37's design (counters grown by the recursion: a bound on a weighted sum) |
+| `0c899f9` | §12.V: step 35 done (a bound for each counter variable: the construct table 792 of 815), the C, the gate, the kernels timed apart |
 | `e79f85f` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 35: per-variable counter bounds in `wf` and the invariant, `let_scrut`, the call-graph bounds through lets; 11 cells |
 | `e4a1b37` | §12.V: step 36's design (the boolean and record sorts given the constructs of the number sort) |
 | `adf1658` | §12.V: step 35's design (a bound for each counter variable); `gen.py`: a match on a sum, the recursive call given a successor |
