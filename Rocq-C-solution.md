@@ -62,10 +62,10 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** (the other one a program Rocq itself refuses: **no gap left**) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them **781 of 802, 20 gaps** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
-   against.  The construct table's gaps are closed (§12.V steps 30–33); what is open of them: counter bounds worked out
-   top-down from the call graph (step 33 gives an own bound only to a function that needs one), then §12's next items.
+   against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
+   (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -3279,7 +3279,12 @@ a caller gives counters on as they are), 19 are refused — gaps, to be closed a
 counter (sums and successors anywhere, top-down), the parameters in any order, captures of every kind, records holding records as
 values, memory functions taking a number-and-memory pair apart, mutual blocks of any signatures, templates giving back records,
 writing functions inside expressions, lets inside later operands.  A function from another file (§3.7) needs a generator that
-writes two files: not yet a cell.
+writes two files: not yet a cell.  **The full table on `7252fa8`: 802 cells, 781 through the verified compiler, 20 gaps, 1 not
+Rocq** — the gaps are these cells (the sum given by a called function whose caller gives it a successor, a sum bound by a let or
+compared, a let of a successor; a capture of a counter, of a record, of a match-bound variable; a writing function inside an
+expression and its recursive call inside one; a let in a later operand of `&&`; a record holding records used as a value, taken
+apart later, given on; a memory function taking a number-and-memory pair apart, and the pair as a parameter; mutual blocks of any
+signature and giving back a memory; a template giving back a record; the counter not first, the memory not last).
 
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
@@ -3456,7 +3461,7 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `dfd4832` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `7252fa8` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
