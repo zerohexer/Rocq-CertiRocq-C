@@ -56,10 +56,9 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** (the other 3: 2 gaps and 1 program that is not Rocq) — a program the reifier does not read is refused with its
+   cells** (the other 2: 1 gap and 1 program that is not Rocq) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
-   against.  Next: the 2 gaps as constructs of `S` (a pair of pairs given back by recursion, a sum of counters given to a
-   callee).
+   against.  Next: the last gap as a construct of `S` (a sum of counters given to a callee: counter bounds per function).
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -3188,6 +3187,31 @@ through the slot block) serves it, and `KQR.v` is unchanged (a record type is an
   texts the reifier gives (`rec_text`); the laws' script also destructs the values a match in the goal takes apart.
 *Expected*: the cell.
 
+**Step 32 done (2026-11-02): records holding records.**  Built as designed, in the reifier and `kitc.py` (`KQR.v` unchanged):
+- *The record table*: each entry carries its fields' widths (`rentry`'s sixth part; empty for a data type); `rec_shape` takes a
+  field that is a number, a parameter that is a number or a record, or a record type of its own, each of at least one number
+  (a `True` field is no record field: it made `w5bnd` — step 25's test — a record of the table, and its reading changed; the
+  test caught it).  Records holding records come into the table **from the functions' signatures only**: built and taken
+  apart in a body they need nothing (step 25), and taking them from the bodies changed how step 25's test was read (`fst (fst
+  p)` on a pair of pairs built in place) — the test caught that too.
+- *Reading*: `rbr` reads a record taken apart, with its inner records at once in its fields' order, depth first, as the
+  readers' entries (a number an entry, an inner record's own variable unusable after it), in the seven places a record match is
+  read; a constructor whose inner records are built in place is `RMk` on the flat numbers (the outer numbers, then the inner
+  records' fields).  An inner record used as a value (`fst (fst r)` on such a record) is not read: no eta for `prod`.
+- *`kitc.py`*: the instance of such a type from the shape the reifier gives (`rec_text`: `N:pair(pair(i,i),i)`) — the
+  constructor on the flat list, the match nest for nest, a value of it; the laws' script also unfolds the descriptors and
+  destructs what a match takes apart where `reflexivity` alone does not close a law (the existing programs' laws close as
+  before).
+- *Tests* (`KQRReify.v`): `pp_f` / `pp_go` (the cell's shape): the record table and its texts, the trees pinned (`z` the nearest
+  number, then `x`, `y`), the instance as `kitc.py` writes it, both theorems in milliseconds; `Print Assumptions` the same base.
+- *The reifier's step on the kernels' programs*: `HWP_own` 2.0–2.1 s with both step 31's reifier and this one, `HWP_kernel`
+  2.6–2.7 s against 2.7–3.4 s (the same session, interleaved: within the spread or up to half a second); the body types'
+  record shape is worked out once per type.
+- The C: 63 of 63 byte-identical.  The construct table (on `1dcf4f8`): **778 of 780 through the verified compiler** (was 777), 1
+  gap (`A_par_nat_mul`) and `A_par_nat_arith`, not Rocq.  The gate on `1dcf4f8`, the walk switched off: `make.sh` `core-ok`;
+  examples 27 / 27; corpus 36 / 36; the five kernels (10 / 11 / 11 / 13 / 12 s); **71 programs through the verified compiler, 0
+  refused**; the trusted base unchanged.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3361,11 +3385,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `c48dc6c` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `1dcf4f8` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 32's design (records holding records) |
+| (this commit) | §12.V: step 32 done (records holding records: the construct table 778 of 780), the C, the gate |
+| `1dcf4f8` | `proved/KQRReify.v` + `kitc.py` step 32: the record table's fields' widths, `rbr`, constructors flattened; `kitc.py`'s instance from the shape |
+| `7a8bde8` | §12.V: step 32's design (records holding records) |
 | `29ca4e5` | §12.V: step 31 done (a local `fix` naming the caller's variables: the construct table 777 of 780), F57, F58, the C, the gate |
 | `c48dc6c` | `proved/KQRReify.v`: a helper's full scan for a local fixpoint only where the bounded scan finds one (F58) |
 | `446e1c2` | `proved/KQRReify.v` + `kitc.py` step 31: a local fixpoint read as a copy whose parameters are its captured variables (`kn_lfix`, `lfix_key`, `lfix_meaning`, `read_def`); `teq` compares fixpoints (F57) |
