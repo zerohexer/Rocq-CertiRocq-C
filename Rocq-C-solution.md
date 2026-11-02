@@ -3521,6 +3521,31 @@ per round beside one grown by one (`k p (c + 2) (S d)`), two grown apart beside 
 `e` swapped each round), each given its counters by the entry.  *Not in this step*: growth by the predecessor
 from a written budget (`A_par_nat_rec_add_pred_lit`, quadratic: its bound is not linear in the counters).
 
+**Step 39, counters grown by other counters: polynomial weighted sums — the design (2026-11-03).**  The last cells of the
+counter family (the record of 2026-11-02's first item): `A_par_nat_rec_add_pred_lit`, `k (n m : nat) x := match n with O => x |
+S p => k p (m + p) (x + 1) end` from a written budget (`k 100 0 a`): `m` grows by the predecessor, about `n²/2` in all.  No
+weighted sum of the counters bounds it (a sum grown by `p` each round), but `2m + n² + n` never grows: with `n = p + 1`,
+`2m + (p + 1)² + (p + 1) − (2(m + p) + p² + p) = 2`.  So the weights become polynomials:
+- *Signature*: each weight vector becomes a polynomial in the counters — monomials, each a coefficient (a natural number) and
+  the counters it multiplies (a list of indices); a degree-1 polynomial is step 38's vector.  `cfits`: each polynomial at the
+  counters below the bound; every counter has a degree-1 monomial of coefficient at least 1 in one polynomial (so it is below
+  the bound).
+- *The recursion*: for each polynomial `Φ`, `Φ(old) − Φ(new) ≥ 0` coefficient by coefficient over the predecessor and the
+  other counters, all at least 0: the old first counter `p + 1`, each new counter at most its linear bound (`Φ` has no
+  coefficient below 0, so it grows with each argument); the products expanded (`pmul`, `padd`), equal monomials cancelled
+  (`pnonneg`).  Step 38's `pot_ok` is the degree-1 case.
+- *A call*: each polynomial at the largest values of the counters given (`cmaxv`) below the callee's bound.
+- *Proof*: `peval` of a sum and a product; `Φ` monotone in each counter; the check's soundness (`pnonneg p = true -> 0 <= peval
+  p pv` for counters at least 0); the invariant's premise per polynomial; `cfits_forall` through a degree-1 monomial.
+- *The reifier*: for each counter its polynomial by rounds from its unit vector, as step 38, and when a round asks a weight on the
+  first counter (a counter grown by the predecessor), the polynomial gains the first counter's square times that weight's need
+  (and degree 3 for a counter grown by a counter grown by the predecessor, and so on, up to a small degree); the result checked
+  by `wf_f`.
+*Expected*: `A_par_nat_rec_add_pred_lit`; `A_par_nat_rec_add_pred` refused (from the data `2m + n² + n` passes 2^62: the counter
+outgrows a machine number, §0.5's second reason) and, with its control read, moved to `DESIGN_CELLS`; cells for growth by the
+predecessor in a mutual block and in a template, a counter grown by a counter grown by the predecessor (degree 3) from a written
+budget, and a growth by the predecessor's successor.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
