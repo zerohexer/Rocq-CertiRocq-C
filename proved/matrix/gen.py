@@ -350,6 +350,14 @@ addA("par_nat_rec_add_pred_mutual", "", "ev 100 0 a",
 addA("par_nat_rec_add_pred_fn", "", "k 100 0 a (fun y => y + 1)",
      "Fixpoint k (n m : nat) (x : int) (g : int -> int) : int := match n with O => x | S p => k p (m + p) (g x) g end.\n")
 # a recursive function passing on small written counters to one whose polynomial grows (its bound below kq_nat's 2^60)
+# a function's bound from what its callers give it, however small (step 40): a template in between, a let of a written budget in
+# a function with a small bound
+addA("par_nat_rec_add_pred_tmpl", "", "kt 3 100 0 a (fun y => y + 1)",
+     "Fixpoint k (n m : nat) (x : int) : int := match n with O => x | S p => k p (m + p) (x + 1) end.\n"
+     "Fixpoint kt (r n m : nat) (x : int) (g : int -> int) : int := match r with O => k n m (g x) | S q => kt q n m (g x) g end.\n")
+addA("par_nat_small_let_budget", "", "kb 3 100 a",
+     "Fixpoint k (n m : nat) (x : int) : int := match n with O => x | S p => k p (m + p) (x + 1) end.\n"
+     "Fixpoint kb (r n : nat) (x : int) : int := match r with O => k n 0 x | S q => let w : nat := 7%nat in kb q w (x + 1) end.\n")
 addA("par_nat_rec_add_pred_pass", "", "kpass 3 100 0 a",
      "Fixpoint k (n m : nat) (x : int) : int := match n with O => x | S p => k p (m + p) (x + 1) end.\n"
      "Fixpoint kpass (r n m : nat) (x : int) : int := match r with O => k n m x | S q => kpass q n m (x + 1) end.\n")

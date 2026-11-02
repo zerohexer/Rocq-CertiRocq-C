@@ -1477,9 +1477,11 @@ Definition pushc (sigs : wfctx) (o : cbe) : wfctx :=
 (** a let of a counter: below the function's bound when [letc_ok] says so (step 9) of a counter whose variables are below it,
     else below its own *)
 Definition lbnd (sigs : wfctx) (c : scnt) : option Z :=
-  if letc_ok c && pvars (snd (snd sigs)) c then None else Some (cmaxv (ub sigs) (snd (snd sigs)) c + 1)%Z.
+  if letc_ok c && pvars (snd (snd sigs)) c && (cmaxv (ub sigs) (snd (snd sigs)) c <? ub sigs)%Z then None
+  else Some (cmaxv (ub sigs) (snd (snd sigs)) c + 1)%Z.
 Definition letc_okv (sigs : wfctx) (c : scnt) : bool :=
-  (letc_ok c && pvars (snd (snd sigs)) c) || (cmaxv (ub sigs) (snd (snd sigs)) c + 1 <=? 4611686018427387904)%Z.
+  (letc_ok c && pvars (snd (snd sigs)) c && (cmaxv (ub sigs) (snd (snd sigs)) c <? ub sigs)%Z)
+  || (cmaxv (ub sigs) (snd (snd sigs)) c + 1 <=? 4611686018427387904)%Z.
 (** what a let of a counter pushes: its bound ([lbnd]) and its linear bound; what a match on a counter pushes for the
     predecessor: the matched variable's, less one *)
 Definition cpush_let (sigs : wfctx) (c : scnt) : cbe := (lbnd sigs c, clinf (snd (snd sigs)) c).
@@ -1533,7 +1535,8 @@ Definition ppot_ok (P : poly) (bs : list cbe) (ccs : scnts) : bool :=
     function's counters (its linear bound); with them, keeping each polynomial from growing; each a machine number *)
 Definition rec_ok (sigs : wfctx) (ccs : scnts) : bool :=
   match snd (fst (snd sigs)) with
-  | [] => all_c (fun c => (flat c && pvars (snd (snd sigs)) c || lin1 (clinf (snd (snd sigs)) c))
+  | [] => all_c (fun c => (flat c && pvars (snd (snd sigs)) c && (cmaxv (ub sigs) (snd (snd sigs)) c <? ub sigs)%Z
+                           || lin1 (clinf (snd (snd sigs)) c))
                           && (cmaxv (ub sigs) (snd (snd sigs)) c <? 9223372036854775808)%Z) ccs
   | vs => forallb (fun P => ppot_ok P (snd (snd sigs)) ccs) vs
           && all_c (fun c => (cmaxv (ub sigs) (snd (snd sigs)) c <? 9223372036854775808)%Z) ccs
@@ -1908,10 +1911,10 @@ Definition sh_ok (sh : list i63) (b : fbody) : bool :=
 (** the types of a function's record parameters, the last one first (as the meaning binds them) *)
 Definition rk0 (ks : list kind) : list nat := rev (flat_map (fun k => match k with KRec ri => [ri] | _ => [] end) ks).
 
-(** a function's own bound, when it has one (step 33): above every budget and let-bound counter, a machine number's room
-    above it *)
+(** a function's own bound, when it has one (step 33; step 40: from what its callers give it, however small): at least 1, a
+    machine number's room above it *)
 Definition bok (o : option Z) : bool :=
-  match o with Some b => (1152921504606846976 + 1048576 <? b)%Z && (b <=? 4611686018427387904)%Z | None => true end.
+  match o with Some b => (0 <? b)%Z && (b <=? 4611686018427387904)%Z | None => true end.
 (** what [wf] starts a body with: the callees, the own bound and weights; in a recursive body the first counter's predecessor,
     its linear bound the first counter's less one (step 37) *)
 Definition wctx (sigs : list sig) (gs : sig) (rc : bool) : wfctx :=
@@ -3447,8 +3450,16 @@ Hypothesis Hpv0 : hp = true -> cws = [] -> Forall (fun v => (Z.of_nat v < cbj)%Z
 (** [wf]'s first argument (step 35): the callees' signatures, the own bound, the bounds of the counters in scope *)
 Let sigsv (cbs : list cbe) : wfctx := (map (@projT1 _ _) cs, ((cbo, cws), cbs)).
 
-Lemma cbz_big : (1152921504606846976 + 1048576 < cbj)%Z.
+Lemma cbj_pos : (0 < cbj)%Z.
 Proof. unfold cbj. destruct cbo as [b|]; [unfold bok in Hbok; apply andb_true_iff in Hbok as [H1 _]; apply Z.ltb_lt in H1; lia | unfold cbz; lia]. Qed.
+(** a bound left to the index has the budgets' room; a written one may be smaller (step 40), and it is the bound [wf] checks
+    against *)
+Lemma cbz_big : cbo = None -> (1152921504606846976 + 1048576 < cbj)%Z.
+Proof. intros E. unfold cbj. rewrite E. unfold cbz; lia. Qed.
+Lemma cbo_cases : unit -> (exists b, cbo = Some b) \/ cbo = None.
+Proof. intros _. destruct cbo as [b|]; [left; exists b; reflexivity | right; reflexivity]. Qed.
+Lemma ub_cbj : forall cbs b, cbo = Some b -> ub (sigsv cbs) = cbj.
+Proof. intros cbs b E. unfold ub, sigsv, cbj. cbn [fst snd]. rewrite E. reflexivity. Qed.
 
 Lemma cbz_small : (cbj + 1048576 < wB)%Z.
 Proof.
@@ -3546,14 +3557,22 @@ Lemma cbj_le : (cbj <= 4611686018427387904)%Z.
 Proof. unfold cbj. destruct cbo as [b|]; [unfold bok in Hbok; apply andb_true_iff in Hbok as [_ H2]; apply Z.leb_le in H2; lia | unfold cbz; lia]. Qed.
 
 (** a counter [letc_ok] takes (step 9) is below the function's bound when its variables are *)
-Lemma letc_cmax : forall c, letc_ok c = true -> (cmax cbj c < cbj)%Z.
+Lemma letc_cmax : forall c, (1152921504606846976 + 1048576 < cbj)%Z -> letc_ok c = true -> (cmax cbj c < cbj)%Z.
 Proof.
-  intros c L. pose proof cbz_big. unfold letc_ok in L. apply orb_true_iff in L as [L | L].
+  intros c Big L. unfold letc_ok in L. apply orb_true_iff in L as [L | L].
   - unfold flat in L. apply andb_true_iff in L as [L NA]. apply Nat.eqb_eq in L. pose proof (cmax_depth cbj c NA ltac:(lia)) as D. rewrite L in D. lia.
   - apply andb_true_iff in L as [F Sh]. unfold shallow in Sh. apply andb_true_iff in Sh as [Sh NA]. apply Z.leb_le in Sh.
     pose proof (cmax_free cbj c F NA). lia.
 Qed.
 
+(** a counter [letc_ok] takes whose variables are at the function's bound and whose largest value is below it (step 40): below
+    the function's bound *)
+Lemma fits_cbj : forall cbs c, letc_ok c && pvars cbs c = true -> (cmaxv (ub (sigsv cbs)) cbs c < ub (sigsv cbs))%Z -> (cmaxv cbj cbs c < cbj)%Z.
+Proof.
+  intros cbs c L U. destruct (cbo_cases tt) as [(b & Eo) | Eo].
+  - rewrite (ub_cbj cbs b Eo) in U. exact U.
+  - apply andb_true_iff in L as [E1 E2]. pose proof (cbz_big Eo) as Bg. rewrite (cmaxv_cmax cbj cbs c ltac:(lia) E2). exact (letc_cmax c Bg E1).
+Qed.
 (** a counter bound by a let (step 35): below the bound [lbnd] gives it, which has room *)
 (** what a match on a counter pushes for the predecessor, and a let of a counter *)
 Lemma match_push_ok1 : forall cbs c cenv p, cboundv cbj cbs pv cenv -> nth c cenv O = S p ->
@@ -3569,10 +3588,10 @@ Lemma lbnd_bound : forall cbs c cenv benv renv denv M, letc_okv (sigsv cbs) c = 
   (Z.of_nat (denote_c cs rec cenv benv renv denv M c) < cbv cbj (lbnd (sigsv cbs) c) <= 4611686018427387904)%Z.
 Proof.
   intros cbs c cenv benv renv denv M L Cb. pose proof (cmaxv_bound cbj cbs pv c cs rec cenv benv renv denv M Cb) as D.
-  pose proof (cmaxv_mono cbs c _ _ (ub_ge cbs)) as Mo. pose proof cbj_le. pose proof cbz_big.
+  pose proof (cmaxv_mono cbs c _ _ (ub_ge cbs)) as Mo. pose proof cbj_le.
   unfold letc_okv, lbnd in *. change (snd (snd (sigsv cbs))) with cbs in *.
-  destruct (letc_ok c && pvars cbs c) eqn:E.
-  - apply andb_true_iff in E as [E1 E2]. rewrite (cmaxv_cmax cbj cbs c ltac:(lia) E2) in D. pose proof (letc_cmax c E1). cbn [cbv]. lia.
+  destruct (letc_ok c && pvars cbs c && (cmaxv (ub (sigsv cbs)) cbs c <? ub (sigsv cbs))%Z) eqn:E.
+  - apply andb_true_iff in E as [E1 E2]. apply Z.ltb_lt in E2. pose proof (fits_cbj cbs c E1 E2). cbn [cbv]. lia.
   - cbn [orb] in L. apply Z.leb_le in L. cbn [cbv]. lia.
 Qed.
 Lemma let_push_ok1 : forall cbs c cenv benv renv denv M, letc_okv (sigsv cbs) c = true -> cboundv cbj cbs pv cenv ->
@@ -3583,31 +3602,20 @@ Lemma let_push_ok2 : forall cbs c cenv benv renv denv M, cboundv cbj cbs pv cenv
 Proof. intros. exact (clinf_bound cbj cbs pv c cs rec cenv benv renv denv M H). Qed.
 Lemma letc_okv_wb : forall cbs c, letc_okv (sigsv cbs) c = true -> (cmaxv cbj cbs c < wB)%Z.
 Proof.
-  intros cbs c L. pose proof (cmaxv_mono cbs c _ _ (ub_ge cbs)) as Mo. pose proof cbj_le. pose proof cbz_big. rewrite KQMAuto.wB_num.
+  intros cbs c L. pose proof (cmaxv_mono cbs c _ _ (ub_ge cbs)) as Mo. pose proof cbj_le. rewrite KQMAuto.wB_num.
   unfold letc_okv in L. change (snd (snd (sigsv cbs))) with cbs in L. apply orb_true_iff in L as [L | L].
-  - apply andb_true_iff in L as [E1 E2]. rewrite (cmaxv_cmax cbj cbs c ltac:(lia) E2). pose proof (letc_cmax c E1). lia.
+  - apply andb_true_iff in L as [E1 E2]. apply Z.ltb_lt in E2. pose proof (fits_cbj cbs c E1 E2). lia.
   - apply Z.leb_le in L. lia.
 Qed.
 
-(** the recursive call's counters: no successor, no sum, their variables below the function's bound *)
-Lemma flatv_cmax : forall cbs c, flat c && pvars cbs c = true -> (cmaxv cbj cbs c < cbj)%Z.
+(** the recursive call's counters: no successor, no sum, their variables at the function's bound and their largest value below
+    it (step 40) *)
+Lemma flatv_cmax : forall cbs c, flat c && pvars cbs c = true -> (cmaxv (ub (sigsv cbs)) cbs c < ub (sigsv cbs))%Z -> (cmaxv cbj cbs c < cbj)%Z.
 Proof.
-  intros cbs c F. apply andb_true_iff in F as [F Pv]. pose proof cbz_big. rewrite (cmaxv_cmax cbj cbs c ltac:(lia) Pv).
-  unfold flat in F. apply andb_true_iff in F as [F NA]. apply Nat.eqb_eq in F. pose proof (cmax_depth cbj c NA ltac:(lia)) as D. rewrite F in D. lia.
-Qed.
-Lemma flatv_wb : forall cbs c, flat c && pvars cbs c = true -> (cmaxv cbj cbs c < wB)%Z.
-Proof. intros cbs c F. pose proof (flatv_cmax cbs c F). pose proof cbj_le. rewrite KQMAuto.wB_num. lia. Qed.
-Lemma cs_flat_bound : forall cbs ccs cenv benv renv denv M, all_c (fun c => flat c && pvars (snd (snd (sigsv cbs))) c) ccs = true ->
-  cboundv cbj cbs pv cenv -> Forall (fun c => (Z.of_nat c < cbj)%Z) (denote_cs cs rec cenv benv renv denv M ccs).
-Proof.
-  intros cbs. induction ccs as [|c ccs IH]; intros cenv benv renv denv M F B; cbn [all_c denote_cs] in *; constructor.
-  - apply andb_true_iff in F as [F1 F2]. pose proof (flatv_cmax cbs c F1). pose proof (cmaxv_bound cbj cbs pv c cs rec cenv benv renv denv M B). lia.
-  - apply andb_true_iff in F as [F1 F2]. apply IH; auto.
-Qed.
-Lemma all_flat_wb : forall cbs ccs, all_c (fun c => flat c && pvars (snd (snd (sigsv cbs))) c) ccs = true -> all_c (fun c => (cmaxv cbj cbs c <? wB)%Z) ccs = true.
-Proof.
-  intros cbs. induction ccs as [|c ccs IH]; cbn [all_c]; auto. intros F. apply andb_true_iff in F as [F1 F2]. rewrite IH by auto.
-  pose proof (flatv_cmax cbs c F1). pose proof cbj_le. rewrite KQMAuto.wB_num. apply andb_true_iff; split; [apply Z.ltb_lt; lia | reflexivity].
+  intros cbs c F U. destruct (cbo_cases tt) as [(b & Eo) | Eo].
+  - rewrite (ub_cbj cbs b Eo) in U. exact U.
+  - apply andb_true_iff in F as [F Pv]. pose proof (cbz_big Eo). rewrite (cmaxv_cmax cbj cbs c ltac:(lia) Pv).
+    unfold flat in F. apply andb_true_iff in F as [F NA]. apply Nat.eqb_eq in F. pose proof (cmax_depth cbj c NA ltac:(lia)) as D. rewrite F in D. lia.
 Qed.
 
 (** the counters given to a callee are below its bound (step 33: what [wf] checks of them, through [cmaxv]) *)
@@ -3662,12 +3670,13 @@ Qed.
 (** the recursive call's counters without weights (step 37): a flat variable at the function's bound, or at most one of the
     function's counters -- each below the bound *)
 Lemma rec0_fits : forall cbs c cenv benv renv denv M, hp = true -> cws = [] ->
-  (flat c && pvars cbs c || lin1 (clinf cbs c)) = true -> cboundv cbj cbs pv cenv ->
+  (flat c && pvars cbs c && (cmaxv (ub (sigsv cbs)) cbs c <? ub (sigsv cbs))%Z || lin1 (clinf cbs c)) = true -> cboundv cbj cbs pv cenv ->
   (Z.of_nat (denote_c cs rec cenv benv renv denv M c) < cbj)%Z.
 Proof.
   intros cbs c cenv benv renv denv M Hh Hw F Cb. apply orb_true_iff in F as [F | F].
-  - pose proof (flatv_cmax cbs c F). pose proof (cmaxv_bound cbj cbs pv c cs rec cenv benv renv denv M Cb). lia.
-  - pose proof (clinf_bound cbj cbs pv c cs rec cenv benv renv denv M Cb). pose proof cbz_big.
+  - apply andb_true_iff in F as [F U]. apply Z.ltb_lt in U.
+    pose proof (flatv_cmax cbs c F U). pose proof (cmaxv_bound cbj cbs pv c cs rec cenv benv renv denv M Cb). lia.
+  - pose proof (clinf_bound cbj cbs pv c cs rec cenv benv renv denv M Cb). pose proof cbj_pos.
     pose proof (lin1_lt _ pv cbj F (Hpv0 Hh Hw) ltac:(lia)). lia.
 Qed.
 Lemma all_c_and_r : forall (p q : scnt -> bool) ccs, all_c (fun c => p c && q c) ccs = true -> all_c q ccs = true.
@@ -4148,7 +4157,7 @@ Proof.
     + cbn [aval]. rewrite PTree.gss. cbn [cmp_sem binop_sem]. f_equal. apply ofn_pred_sel. lia.
   - (* CAdd *) intros a IHa b IHb cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W D Iv Rt HK. simpl in *.
     apply andb_true_iff in W as [Wa Wb].
-    pose proof Iv as (_ & _ & _ & _ & _ & _ & Cb & _). pose proof cbz_big as Bg.
+    pose proof Iv as (_ & _ & _ & _ & _ & _ & Cb & _). pose proof cbj_pos as Bg.
     pose proof (cmaxv_bound cbj cbs pv a cs rec cenv benv renv denv M Cb) as Da. pose proof (cmaxv_bound cbj cbs pv b cs rec cenv benv renv denv M Cb) as Db.
     pose proof (cmaxv_nonneg cbj cbs a) as Na. pose proof (cmaxv_nonneg cbj cbs b) as Nb.
     apply IHa with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto. { lia. }
@@ -9137,7 +9146,9 @@ Check (eq_refl : wf_f [] (mksig7 2 (nk 1) false false false None (Some 230584300
                        (FRec (SVar 0) (SRec (CCons (CAdd (CVar 1) (CVar 1)) CNil) (SCons (SVar 0) SNil))) = false).
 Check (eq_refl : wf_f [] (mksig7 1 (nk 2) false false false None (Some 2305843009213693952%Z))
                        (FPlain (SIfB (BCmpC Ceq (CAdd (CVar 0) (CVar 0)) CO) (SVar 1) (SVar 0))) = true).
-Check (eq_refl : wf_f [] (mksig7 1 (nk 1) false false false None (Some 1000%Z)) ka_b = false).
+Check (eq_refl : wf_f [] (mksig7 1 (nk 1) false false false None (Some 0%Z)) ka_b = false).
+(* a small bound (step 40): the function's counters below it -- taken *)
+Check (eq_refl : wf_f [] (mksig7 1 (nk 1) false false false None (Some 1000%Z)) ka_b = true).
 Time Fail Definition kgo_wrong : kgo = denote_f [existT ftype ka_g ka] kgo_g
   (FPlain (SCall 0 (CCons (CS (CVar 0)) CNil) (SCons (SVar 1) SNil))) := eq_refl.
 
@@ -9277,3 +9288,31 @@ Check (eq_refl : wf_f [krq_g] (mksig7 1 (nk 1) false false false None (Some 2305
                        (FPlain (SCall 0 (CCons (CVar 0) (CCons (CVar 0) CNil)) (SCons (SVar 0) SNil))) = false).
 Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 2305843009213693952%Z) [lpoly [1; 1]]%nat) krq_b = false).
 Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 2305843009213693952%Z) [[(1, [0; 0]); (1, [0])]]%nat) krq_b = false).
+
+(* ---- a function's bound from what its callers give it, however small (step 40): a recursive function passing small written
+   counters on to one whose polynomial grows; its own bound 101, the callee's above its polynomial there (10300) *)
+Fixpoint kpas (r n m : nat) (x : i63) : i63 := match r with O => krq n m x | S q => kpas q n m (PrimInt63.add x 1) end.
+Definition kpasg (a : i63) : i63 := kpas (KQ.KQRun.kq_nat 3) (KQ.KQRun.kq_nat 100) O a.
+Definition krq40_g := mksig8 2 (nk 1) false false false None (Some 20000%Z) [krq_pol].
+Definition kpas_g := mksig7 3 (nk 1) false false false None (Some 101%Z).
+Definition kpasg_g := mksig7 0 (nk 1) false false false None (Some 2305843009213693952%Z).
+Definition kpas_b := FRec (SCall 0 (CCons (CVar 1) (CCons (CVar 0) CNil)) (SCons (SVar 0) SNil))
+                          (SRec (CCons (CVar 2) (CCons (CVar 1) CNil)) (SCons (SOp Badd (SVar 0) (SInt 1)) SNil)).
+Definition kpasg_b := FPlain (SCall 1 (CCons (CNat (SInt 3)) (CCons (CNat (SInt 100)) (CCons CO CNil))) (SCons (SVar 0) SNil)).
+Definition k40_P := mkprog [(gid1 0, compile_f gid1 0 krq40_g krq_b); (gid1 1, compile_f gid1 1 kpas_g kpas_b);
+                            (gid1 2, compile_f gid1 2 kpasg_g kpasg_b)] [].
+Time Lemma krq40_ok : callee_ok k40_P (gid1 0) 20000%Z krq40_g krq.
+Proof. Time exact_no_check (compile_f_ok k40_P [] gid1 0 krq40_g krq_b eq_refl eq_refl (no_callees k40_P gid1) eq_refl eq_refl). Time Qed.
+Definition k40_cs := [existT ftype krq40_g krq].
+Time Lemma kpas_ok : callee_ok k40_P (gid1 1) 101%Z kpas_g kpas.
+Proof. Time exact_no_check (compile_f_ok k40_P k40_cs gid1 1 kpas_g kpas_b eq_refl eq_refl (all_ok_callees k40_P gid1 k40_cs (conj krq40_ok Logic.I)) eq_refl eq_refl). Time Qed.
+Definition k40_cs2 := [existT ftype krq40_g krq; existT ftype kpas_g kpas].
+Time Lemma kpasg_ok : callee_ok k40_P (gid1 2) 2305843009213693952%Z kpasg_g kpasg.
+Proof. Time exact_no_check (compile_f_ok k40_P k40_cs2 gid1 2 kpasg_g kpasg_b eq_refl eq_refl (all_ok_callees k40_P gid1 k40_cs2 (conj krq40_ok (conj kpas_ok Logic.I))) eq_refl eq_refl). Time Qed.
+Print Assumptions kpasg_ok.
+(* refused: a written budget above a small bound given to the recursion or bound by a let, a caller giving more than the bound *)
+Check (eq_refl : wf_f [] (mksig7 2 (nk 1) false false false None (Some 50%Z))
+                       (FRec (SVar 0) (SRec (CCons (CNat (SInt 100)) CNil) (SCons (SVar 0) SNil))) = false).
+Check (eq_refl : wf_f [] (mksig7 2 (nk 1) false false false None (Some 50%Z))
+                       (FRec (SVar 0) (SLetC (CNat (SInt 100)) (SRec (CCons (CVar 0) CNil) (SCons (SVar 0) SNil)))) = false).
+Check (eq_refl : wf_f [krq40_g; kpas_g] kpasg_g (FPlain (SCall 1 (CCons (CNat (SInt 3)) (CCons (CNat (SInt 101)) (CCons CO CNil))) (SCons (SVar 0) SNil))) = false).

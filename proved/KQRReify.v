@@ -2769,13 +2769,13 @@ Definition reify_prog2b (bt : kername -> option Z) (chk : bool) (p : program) : 
   | _ => None
   end.
 (** counter bounds worked out from the call graph (step 34): from the entry down -- the functions come callees first -- each
-    function's bound above the largest counter any caller gives it, at least the smallest ([own_bound]); a bound above 2^62 is
-    refused by [wf_f] *)
+    function's bound above the largest counter any caller gives it, at least the smallest ([own_bound]) or, [small] (step 40),
+    at least 1 for a function that is not the entry; a bound above 2^62 is refused by [wf_f] *)
 Fixpoint upd_max (l : list Z) (f : nat) (v : Z) : list Z :=
   match l, f with [], _ => [] | x :: r, O => Z.max x v :: r | x :: r, S f => x :: upd_max r f v end.
 Fixpoint find_kn (kn : kername) (l : list (kername * sig * fbody)) (i : nat) : option nat :=
   match l with [] => None | e :: r => if Kername.eqb kn (fst (fst e)) then Some i else find_kn kn r (S i) end.
-Definition bounds_tab (es : list (kername * sig * fbody)) : kername -> option Z :=
+Definition bounds_tab (small : bool) (es : list (kername * sig * fbody)) : kername -> option Z :=
   let n := length es in
   let sns := map (fun e : kername * sig * fbody => sn (snd (fst e))) es in
   let wss := map (fun e : kername * sig * fbody => wts_of (sn (snd (fst e))) (snd e)) es in
@@ -2785,15 +2785,19 @@ Definition bounds_tab (es : list (kername * sig * fbody)) : kername -> option Z 
               match nth_error es i with
               | Some e => fold_left (fun bs' fc => upd_max bs' (fst fc) (need (fst fc) (snd fc))) (cl_calls Bi (sn (snd (fst e))) (snd e)) bs
               | None => bs
-              end) (rev (seq 0 n)) (map (fun i => match nth i wss [] with [] => own_bound | ws => if Nat.eqb (S i) n then own_w (nth i sns O) ws else own_bound end) (seq 0 n)) in
+              end) (rev (seq 0 n)) (map (fun i => if Nat.eqb (S i) n then match nth i wss [] with [] => own_bound | ws => own_w (nth i sns O) ws end
+                                             else if small then 1%Z else own_bound) (seq 0 n)) in
   fun kn => match find_kn kn es 0 with Some i => Some (nth i bs own_bound) | None => None end.
 (** the program: read with the bounds of the index and the smallest own bound; failing that, read without the check, the bounds
-    worked out from its calls, and read again with them (step 34) *)
+    worked out from its calls, and read again with them (step 34); failing that, with the bounds worked out from 1 (step 40) *)
 Definition reify_prog2 (p : program) : option (list (kername * sig * fbody) * list (string * term)) :=
   match reify_prog2b (fun _ => None) true p with
   | Some r => Some r
   | None => match reify_prog2b (fun _ => None) false p with
-            | Some (es, _) => reify_prog2b (bounds_tab es) true p
+            | Some (es, _) => match reify_prog2b (bounds_tab false es) true p with
+                              | Some r => Some r
+                              | None => reify_prog2b (bounds_tab true es) true p
+                              end
             | None => None
             end
   end.
@@ -4667,3 +4671,28 @@ Print Assumptions w39go_ok_r.
 Definition w39d (n : nat) (a b : i63) (s : mem) : i63 := w39q n n a.
 Definition w39d_src := ltac:(run_template_program (tmQuoteRec w39d) (fun q => let r := eval vm_compute in (reify_prog q) in exact r)).
 Check (eq_refl : w39d_src = None).
+
+(* ---------------------------------------------------------------- a function's bound from its callers, however small (step 40) *)
+(* a recursive function passing small written counters on to one whose polynomial grows: its bound 101, its callee's above the
+   polynomial at 100 *)
+Fixpoint w40p (r n m : nat) (x : i63) : i63 := match r with O => w39q n m x | S q => w40p q n m (PrimInt63.add x 1) end.
+Definition w40go (n : nat) (a b : i63) (s : mem) : i63 := w40p 3 100 0 a.
+Definition w40_src := ltac:(run_template_program (tmQuoteRec w40go)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : map (fun x => sb (snd (fst x))) w40_src = [Some 10101%Z; Some 101%Z; Some own_bound]).
+Definition w40_Pr := mkprog (funs_of 0 w40_src) [].
+Time Lemma w40q_ok_r : callee_ok w40_Pr (gid1 0) (fbound (sig_at w40_src 0) 0) (sig_at w40_src 0) w39q.
+Proof. Time exact_no_check (compile_f_ok w40_Pr [] gid1 0 (sig_at w40_src 0) (body_at w40_src 0) eq_refl eq_refl (no_callees w40_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma w40p_ok_r : callee_ok w40_Pr (gid1 1) (fbound (sig_at w40_src 1) 1) (sig_at w40_src 1) w40p.
+Proof.
+  Time exact_no_check (compile_f_ok w40_Pr [existT ftype (sig_at w40_src 0) w39q] gid1 1 (sig_at w40_src 1) (body_at w40_src 1)
+    eq_refl eq_refl (all_ok_callees w40_Pr gid1 [existT ftype (sig_at w40_src 0) w39q] (conj w40q_ok_r Logic.I)) eq_refl eq_refl).
+Time Qed.
+Time Lemma w40go_ok_r : callee_ok w40_Pr (gid1 2) (fbound (sig_at w40_src 2) 2) (sig_at w40_src 2) w40go.
+Proof.
+  Time exact_no_check (compile_f_ok w40_Pr [existT ftype (sig_at w40_src 0) w39q; existT ftype (sig_at w40_src 1) w40p] gid1 2
+    (sig_at w40_src 2) (body_at w40_src 2) eq_refl eq_refl
+    (all_ok_callees w40_Pr gid1 [existT ftype (sig_at w40_src 0) w39q; existT ftype (sig_at w40_src 1) w40p] (conj w40q_ok_r (conj w40p_ok_r Logic.I)))
+    eq_refl eq_refl).
+Time Qed.
+Print Assumptions w40go_ok_r.
