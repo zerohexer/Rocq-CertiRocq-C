@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **807 of 825, 17 gaps** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **823 of 843, 19 gaps** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1604,6 +1604,9 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F56 | The reasons tally after step 12 counted `loops` under "calls of writing functions inside expressions": the reason scan (`writes`) flags a number function whose text mentions a function that writes, and `loops`' `solve` does make a memory with `loop_up_m`; read part by part, that part is read and the blocker is a function given to a template that names the caller's variables (a closure), which the scan does not name (2026-11-01) | step 13 is captures; a program's blocker is confirmed by reading its parts apart before a step is chosen for it |
 | F57 | The reifier's structural comparison `teq` (the copies' keys) had no case for a fixpoint: a local fixpoint's key was never equal to itself, so its copy was made and its call never found (2026-11-02) | the case added (step 31) — the hole F16 found in the translator's `term_same`, met again in the reifier |
 | F58 | Step 31's first version made the kernels' build 2–3 s slower (the reifier's step on `HWP_kernel` 5.5 s against 2.5 s), the C unchanged: a helper of the program's file was scanned in full for a local fixpoint at every call, before the bounded scan that decides most helpers | the same test in the other order; back to step 30's times.  A test the reifier runs at every call goes cheapest first (as F45) |
+| F59 | A fix made by hand in a file that an edit script regenerates is lost at the next regeneration: step 37's rewrite of `pot_ok` (made in the file, its proofs written against it) vanished when the core was made again from its script, and a proof term fixed by hand the same way (2026-11-03) | every fix goes into the script; the work files are made again from the scripts alone and compared byte for byte before a build counts |
+| F60 | Three of the reifier's ways of reading a function — a template's copy, a local fixpoint's copy, a mutual block and its members — checked `wf_f` with the signature as read only: the call graph's bounds (step 34) and the smallest own bound (step 33) never reached them, and the copies' theorems took no bound at all (found by step 37's cells of a template and of a mutual block, 2026-11-03) | one function gives every way of reading its signature (`wf_sig`); the copies' theorems take any bound and weights |
+| F61 | A written budget's largest value was `kq_nat`'s bound, 2^60, whatever was written: a mutual block's selector (given as a written number) counted 2^60 in a weighted sum, and the block's bound passed 2^62 (2026-11-03) | `cnat_max`: a written number in `kq_nat`'s range is its own largest value, in `cmax`, `cmaxv` and `clinf` |
 | F38 | MetaRocq's formal evaluation (`EWcbvEval.eval`, `PCUICWcbvEval`) has rules for primitive values only, none for primitive operations: `PrimInt63.add` has no body, `eval_delta` cannot fire, every program here is stuck in it | the verified compiler is built by reflection over our own syntax instead (D26, §1.12) (read in the image's MetaRocq sources, 2026-10-30) |
 | F37 | CakeML's architecture is ours: a proof-producing translator from the logic's functions on top, one verified compiler below; Pancake is verified through a proof-producing decompiler.  The difference is that CakeML builds each proof by construction while ours searches | D25, §1.11 (read in the CakeML repository, 2026-10-30) |
 
@@ -3446,6 +3449,57 @@ proved for counters whose **weighted sum** is below its bound, and the recursion
 *Expected*: `A_par_nat_rec_succ`, and cells for `k p (m + 2)`, a swap, a let-bound successor given to the recursion; the cell of a
 growth by the predecessor refused (its own step).
 
+**Step 37 done (2026-11-03): counters grown by the recursion, bound by a weighted sum.**  Built as designed, and in the general
+form at the places its cells found narrow:
+- *`KQR.v`*: `sig` gains the weights `sv` (`mksig8`; `mksig7` is a signature without them).  `callee_ok`'s premise on the counters
+  given is `cfits` (each below the bound, or `Σ wᵢ·cᵢ` below it); `wf_f` asks one weight per counter, each at least 1 (`swok`).
+  Each counter variable in scope carries, beside its bound, a linear bound over the function's counters (`cbe`, `linf`: a
+  parameter its own unit, a let its expression's `clinf`, a match's predecessor its variable's less one; a recursive body starts
+  with the first counter's predecessor, `wctx`).  The recursion's counters (`rec_ok`): with weights, `pot_ok` coefficient by
+  coefficient (`Σᵢ≥₂ wᵢ·lin(c′ᵢ)` against the weights, none on the first counter, the constant at most `w₁`), each below 2^63;
+  without weights, a flat variable at the function's bound (step 35) **or at most one of the function's counters** (`lin1`: no
+  coefficient below 0, their sum at most 1, no constant above 0 — `k p (S p)`), each below 2^63.  A call of a function with
+  weights asks `Σ wᵢ·cmaxv(cᵢ)` below the callee's bound (`cfits_b`).  A written budget's largest value is its own (`cnat_max`,
+  in `cmax`, `cmaxv` and `clinf`; a mutual block's selector is one).  The proof: the invariant `cboundv cbj cbs pv cenv` holds
+  the parameters' values `pv` (the bottom of the counter environment) and each variable's value below its linear bound at them;
+  the recursion's premise (`rec_ok_fits`) from `pot_sound` (with weights: the weighted sum given at most the current one) or
+  `lin1_lt` (without: below the largest of the function's counters); `compile_f_ok`'s induction on the first counter with `cfits`
+  in place of each-below (`cfits_forall`: weights at least 1 put each counter below the bound).  The copies' theorems
+  (`compile_f_okr`, `okrm`, `okrx`) take any bound and any weights; they took neither, so a copy with a bound had no theorem.
+  No new hypothesis; `Print Assumptions` the same base.  Tests: `krs` (`k p (S m)`, weights `[1; 1]`), `krt` (`k p (m + 2)`,
+  `[2; 1]`), `krw` (a swap with a growth, `[1; 1; 1]`), `krl` (a let-bound successor), `krg` (a call giving `n n`, its weighted
+  sum below the callee's bound), `krp` (`k p (S p)`, no weights); refused: the growth without weights, weights too small, a zero
+  weight, weights of the wrong number, `k p (m + p)` with any weights, a call whose weighted sum passes the callee's bound, the
+  predecessor's second successor, a tree that is not the text; each theorem in milliseconds.
+- *The reifier*: the call-graph walk (step 34) runs on the new bound lists and collects the recursive calls (`cl_f`, `site`);
+  `wts_of` gives no weights when each recursive call's counters pass without them, else the smallest satisfying `pot_ok`, by
+  rounds from all ones (each weight raised to what the calls' linear bounds ask of it; none when the rounds do not settle).  The
+  entry's bound with weights covers each counter at the smallest bound's value (`own_w`); the call-graph bounds ask a callee
+  with weights the weighted sum of what it is given and start only the entry at `own_w`.  Every way a function is read — a
+  function, a template's copy, a local fixpoint's copy, a mutual block and its members — takes its signature from one function
+  (`wf_sig`: as read, the call graph's bound, the smallest own bound, weights); before, the copies and the blocks were tried as
+  read only (narrow since steps 33 and 34).  `info_of` gives the weights; `kitc.py` prints `mksig8` with them and gives a copy's
+  theorem its bound and weights.  Tests: `grow` (refused since step 9; read with `[1; 1]`, its theorem), `w37go` (the four
+  shapes called with their weighted sums: `[1; 1]`, `[2; 1]`, `[1; 1; 1]`, `[1; 1]`, bounds from the call graph), `w37p`
+  (`k p (S p)`, no weights), `w37q` (`k p (m + p)`, refused with its reason); each theorem in milliseconds.
+- *Found on the way*: F59, F60, F61.
+- *Cells*: 18 more (843): a counter grown by the recursion in every result kind's place (a boolean, a memory, a pair, a record
+  of three, a pair of pairs, a number and a memory, a number function that writes the memory); grown by a constant, swapped,
+  through a let, two grown, under a match on another counter, the function called by a recursion, a template, a mutual block;
+  the predecessor's successor; grown by the predecessor (`k p (m + p)`) from the data and from a written budget.  Run alone:
+  15 proved, with them `A_par_nat_rec_succ`; 3 refused: `A_par_nat_rec_two_succ` (`k p (S c) (S d)` given `n n n` by the entry:
+  its weights add to at least 4, and a weighted sum of three counters at 2^60 passes 2^62 while the counters stay below 2^61 —
+  one weighted sum per grown counter bounds it: the next step), `A_par_nat_rec_add_pred_lit` (quadratic growth from a written
+  budget: bounded, not read: a step of its own), `A_par_nat_rec_add_pred` (the same from the data: the counter outgrows a
+  machine number, §0.5's second reason; by design once its control, the written-budget cell, is read, §3.6).
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest; step 36's files /
+  step 37's): `HWP_kernel` 2.93 / 2.99 s, `HWP_own` 2.31 / 2.25, `HWP_irqnow` 1.90 / 1.93 — the same (the machine was loaded: the
+  rounds spread from 2.9 to 4.6 s).
+- The C: 63 of 63 byte-identical.  The construct table (on `6f87d43`): **823 of 843 through the verified compiler** (was 807 of
+  825: fifteen of the eighteen new cells and `A_par_nat_rec_succ`), 19 gaps, 1 not Rocq.  The gate on `6f87d43`, the walk switched
+  off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (11 / 11 / 12 / 14 / 12 s); **71 programs through
+  the verified compiler, 0 refused**; the trusted base unchanged.
+
 **Step 38, counters grown apart: several weighted sums — the design (2026-11-03).**  `A_par_nat_rec_two_succ`:
 `k (n c d : nat) x := match n with O => x | S p => k p (S c) (S d) (x + 1) end`, given `n n n` by the entry.  One weighted sum
 needs `w₁ ≥ w₂ + w₃`, so its weights add to at least 4, and three counters at `kq_nat`'s 2^60 give a sum past a machine number's
@@ -3642,11 +3696,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `c764f08` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `6f87d43` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 36 done (the boolean and record sorts given the number sort's constructs: the construct table 807 of 825), the C, the gate |
+| (this commit) | §12.V: step 37 done (counters grown by the recursion, bound by a weighted sum: the construct table 823 of 843), the C, the gate |
+| `6f87d43` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` step 37: weights `sv`, linear bounds, `pot_ok`, `lin1`, `cnat_max`, the copies' theorems for any bound; `wts_of`, `wf_sig`; 18 cells |
+| `2c4dfc3` | §12.V: step 36 done (the boolean and record sorts given the number sort's constructs: the construct table 807 of 825), the C, the gate |
 | `c764f08` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 36: `BxIfB` .. `BxMatchR`, `RIfB` .. `RMatchCnt`; the boolean and record readers; 10 cells |
 | `2c1bde4` | §12.V: step 37's design (counters grown by the recursion: a bound on a weighted sum) |
 | `0c899f9` | §12.V: step 35 done (a bound for each counter variable: the construct table 792 of 815), the C, the gate, the kernels timed apart |
