@@ -56,9 +56,10 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** (the other 2: 1 gap and 1 program that is not Rocq) — a program the reifier does not read is refused with its
+   cells** (the other one a program Rocq itself refuses: **no gap left**) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
-   against.  Next: the last gap as a construct of `S` (a sum of counters given to a callee: counter bounds per function).
+   against.  The construct table's gaps are closed (§12.V steps 30–33); what is open of them: counter bounds worked out
+   top-down from the call graph (step 33 gives an own bound only to a function that needs one), then §12's next items.
 3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
    memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
    vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
@@ -3226,6 +3227,37 @@ predecessor its argument's).  `wf`'s call condition becomes `cmax (the caller's 
 flat, as now.  Nothing is added to what is trusted: the bounds are checked, not assumed.  *Expected*: the cell, and the C of
 every program unchanged (the bounds are in the statements, not in the code).
 
+**Step 33 done (2026-11-02): a sum of counters given to a callee; counter bounds per function.**  Built as designed, with one
+part narrower than the design (said below):
+- *`KQR.v`*: `CAdd a b` among the counters (`Nat.add`), compiled to one addition of the machine numbers.  `sig` carries an
+  optional bound (`sb`; the constructor `mksig7`, and `mksig` keeps the six arguments with no bound, so every signature written
+  before is unchanged); `fbound gs j` is the own bound or the index's (`cbz j`).  `wf`'s first argument is the callees'
+  signatures with the function's own bound (`ub`: the own bound, or `cbz` of the callees' number, which is at least the
+  function's index); its call condition is the largest value of each counter given (`cmax`: a variable the bound less one,
+  a successor one more, a sum the sum, a budget 2^60, a predecessor its argument's) below the callee's `fbound`, which is at
+  most 2^62 — in place of `shallow`; for every program before this step it accepts what `shallow` did.  `wf_f` checks the
+  range of an own bound (`bok`: above 2^60 + 2^20, at most 2^62).  `shallow` and `flat` ask for no sum (`noadd`).  The proof:
+  the section's bound is the own one (`cbj`), `cbz_big` / `cbz_small` hold of it, `ub_ge` (it is at most `ub`) and
+  `cs_fit_bound` (the counters given are below the callee's bound) replace `cbz_mono`; `cexp_all`'s counter part carries
+  `cmax cbj c < wB` in place of the depth (`shallow_wb`, `letc_wb`, `all_flat_wb`, `all_fit_wb`), the sum's case by
+  `ofn_add`; `cmax_bound`, `cmax_mono`, `cmax_depth`, `cmax_nonneg`; `compile_f_ok` and its per-kind parts stated at
+  `fbound gs j` for a signature with any bound.  No new hypothesis; `Print Assumptions` the same base.  Tests: `ka` (proved for
+  counters up to 2^62) and `kgo` (its own up to 2^61, giving `ka` `n + n`), the KQL one addition and the call; refused: the
+  call at the index's bound, a sum given to the recursive call, a sum compared, a bound out of its range, the tree without the
+  sum.  (Found on the way: `lia` does not prove `2^62 - j·2^20 <= 2^62 - l·2^20` from `l <= j` in that context; the
+  monotonicity lemmas do.)
+- *The reifier*: `Nat.add` of two counters read as `CAdd`; a function well formed only with a bound of its own is given the
+  smallest (`own_bound`, 2^60 + 2^20 + 1), which suits a function no other calls — the entry, whose counters come from
+  `kq_nat`.  **Narrower than the design**: the design works the bounds out top-down from the call graph (each callee above
+  every counter its callers give it); what is built gives an own bound only to a function that needs one, at the smallest,
+  so a function that passes a sum of counters and is itself called is not read yet — the general form stays open.  Nothing of
+  soundness rests on this: each caller's `wf_f` checks what it gives against its callee's bound.  Test `w33go` (the cell's
+  shape): its tree with the sum, its own bound, both theorems in milliseconds.
+- *`kitc.py`*: a function's signature printed with its bound, its theorem stated at it.
+- The C: 63 of 63 byte-identical.  The construct table (on `dfd4832`): **779 of 780 through the verified compiler** (was 778), **0 gaps**; the one left, `A_par_nat_arith`, is not Rocq (Rocq refuses it: `k (m + 0)` is not a smaller argument).  The gate on `dfd4832`, the walk switched off: `make.sh`
+  `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (11 / 11 / 11 / 13 / 13; step 32's 10 / 11 / 11 / 13 / 12: at most a second more, within the spread these runs have shown s); **71 programs through the verified compiler, 0
+  refused**; the trusted base unchanged.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3399,11 +3431,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `1dcf4f8` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `dfd4832` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 33's design (a sum of counters given to a callee: counter bounds per function) |
+| (this commit) | §12.V: step 33 done (a sum of counters, counter bounds per function: the construct table 779 of 780, no gap), the C, the gate |
+| `dfd4832` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 33: `CAdd`, `sig.sb` / `fbound`, `wf`'s call condition by `cmax`, `bok`; the reifier's `Nat.add` and own bound |
+| `7879d05` | §12.V: step 33's design (a sum of counters given to a callee: counter bounds per function) |
 | `2956187` | §12.V: step 32 done (records holding records: the construct table 778 of 780), the C, the gate |
 | `1dcf4f8` | `proved/KQRReify.v` + `kitc.py` step 32: the record table's fields' widths, `rbr`, constructors flattened; `kitc.py`'s instance from the shape |
 | `7a8bde8` | §12.V: step 32's design (records holding records) |
