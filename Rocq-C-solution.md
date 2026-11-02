@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **827 of 846, 18 gaps** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **831 of 851, 18 gaps, 1 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -3572,6 +3572,44 @@ outgrows a machine number, §0.5's second reason) and, with its control read, mo
 predecessor in a mutual block and in a template, a counter grown by a counter grown by the predecessor (degree 3) from a written
 budget, and a growth by the predecessor's successor.
 
+**Step 39 done (2026-11-03): counters grown by other counters, polynomial weighted sums.**  Built as designed:
+- *`KQR.v`*: the weights are polynomials in the counters (`poly`: monomials, each a coefficient and the counters it multiplies);
+  `swok` asks every counter a monomial of its own with a coefficient of at least 1; `cfits` asks each polynomial at the counters
+  below the bound (`pevalz`); the recursion's check `ppot_ok`: the polynomial at the body's start (the first counter the
+  predecessor's successor) less the polynomial at the recursive call's counters' linear bounds (`zlin`), expanded over the
+  predecessor and the other counters (`zsubst`, `zmul`), equal monomials summed once their counters are sorted (`zcoef`), no
+  coefficient below 0 (`znonneg`); a call asks each polynomial at the counters' largest values below the callee's bound.  Step 37's
+  check of the weights' number is gone: a monomial of a counter the function does not have multiplies 0 at both ends, so no
+  theorem needs it (§3.6's rule), and that test is now accepted.  The proof: `ppot_sound` from `znonneg_sound` (the coefficients
+  summed over sorted monomials, `prodz_isort`), `pevalz_zsubst`, `pevalz_mono` (a polynomial with no coefficient below 0 grows
+  with each counter) and `zeval_zlin` (a linear bound over the body's start as a polynomial in the predecessor and the other
+  counters); `rec_ok_fits` takes the recursive call's number of counters (checked where it is used); `cfits_forall` through the
+  counter's own monomial (`pevalz_unit`).  No new hypothesis; `Print Assumptions` the same base.  Steps 37 and 38's tests take
+  their vectors as polynomials of degree 1 (`lpoly`).  Tests: `krq` (`k p (m + p)`, the polynomial `2m + n² + n`) called from a
+  written budget (`krqg`, 100); refused: the same given `n n` at 2^61, a polynomial of degree 1, a counter with no monomial of its
+  own; each theorem in milliseconds.
+- *The reifier*: each counter's polynomial is step 38's vector when the check takes it, else `c + n·G` with `G` the counter's
+  growth per round — the recursive calls' linear bounds (the largest coefficient of each), the first counter's coefficient for
+  the predecessor, a positive constant, each other counter replaced by its own polynomial — in the order the counters depend on
+  each other (`ppoly`; none for a counter grown by itself by more than one per round, or a cycle); the entry's own bound and the
+  call-graph bounds take the largest polynomial value (`wmax`, `own_w` with the number of counters).  `kitc.py` reads the weights
+  to the end of each function's tuple (by bracket matching) and prints the polynomials.  Tests: step 38's pins as polynomials;
+  `w39go` (`k p (m + p)` from 100: `m + n²`; a counter grown by it from 50: `q + n·m + n³`; each function the smallest own bound),
+  `w39d` (the same from the data: refused); each theorem in milliseconds.
+- *Cells*: 5 more (851): growth by the predecessor's successor, a counter grown by one grown by the predecessor (degree 3), growth
+  by the predecessor in a mutual block and in a template, a recursive function passing small written counters on.  Run alone: 3
+  proved, and with them `A_par_nat_rec_add_pred_lit`; 2 refused: `A_par_nat_rec_add_pred_mutual` and `_pass` — the function in
+  between (a block's member, a recursive function) has a bound of at least 2^60 + 2^20 (`bok`: every bound holds a budget, up to
+  2^60), so its callee's polynomial at its counters passes 2^62; a function's bound below that, from what its callers give it, is
+  the next step.  `A_par_nat_rec_add_pred` (from the data) is by design: the counter reaches about n²/2, beyond a machine number
+  (§0.5, second reason); its control is the written-budget cell (`DESIGN_CELLS` in `classify.py`).
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest; step 38's files /
+  step 39's): `HWP_kernel` 2.73 / 2.71 s, `HWP_own` 2.07 / 2.05, `HWP_irqnow` 1.74 / 1.77 — the same.
+- The C: 63 of 63 byte-identical.  The construct table (on `7fb6b50`): **831 of 851 through the verified compiler**, 1 by design
+  (`A_par_nat_rec_add_pred`), 18 gaps, 1 not Rocq (was 827 of 846: three of the five new cells and `A_par_nat_rec_add_pred_lit`).
+  The gate on `7fb6b50`, the walk switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels
+  (11 / 11 / 11 / 13 / 13 s); **71 programs through the verified compiler, 0 refused**; the trusted base unchanged.
+
 **Step 40, a function's bound from what its callers give it, however small — the design (2026-11-03).**
 `A_par_nat_rec_add_pred_mutual`, `A_par_nat_rec_add_pred_pass`: a function between the entry's written counters and one whose
 polynomial grows (a mutual block's member, a recursive function passing its counters on) gets a bound of at least 2^60 + 2^20,
@@ -3763,11 +3801,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `03f83e9` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `7fb6b50` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 38 done (counters grown apart, several weighted sums: the construct table 827 of 846), the C, the gate |
+| (this commit) | §12.V: step 39 done (counters grown by other counters, polynomial weighted sums: the construct table 831 of 851, 1 by design), the C, the gate |
+| `f818f93` | §12.V: step 40's design (a function's bound from what its callers give it, however small) |
+| `7fb6b50` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` + `classify.py` step 39: polynomial weights, `ppot_ok` / `ppot_sound`, `ppoly`; the first by-design cell; 5 cells |
+| `4ab85fb` | §12.V: step 38 done (counters grown apart, several weighted sums: the construct table 827 of 846), the C, the gate |
 | `e731b81` | §12.V: step 39's design (counters grown by other counters: polynomial weighted sums) |
 | `03f83e9` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` step 38: weights a list of vectors, coverage, one vector per counter in the reifier; 3 cells |
 | `d6a0025` | §12.V: step 37 done (counters grown by the recursion, bound by a weighted sum: the construct table 823 of 843), the C, the gate |
