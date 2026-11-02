@@ -3266,6 +3266,21 @@ part narrower than the design (said below):
   `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (11 / 11 / 11 / 13 / 13; step 32's 10 / 11 / 11 / 13 / 12: at most a second more, within the spread these runs have shown s); **71 programs through the verified compiler, 0
   refused**; the trusted base unchanged.
 
+**The places §12.V's steps left unread, as cells (2026-11-02).**  Completeness is strict (owner; `CLAUDE.md`): every place a step
+left unread gets a cell, so the table shows it.  22 cells added to `gen.py` (802 in all): a sum of counters given by a function that
+is itself called (`A_par_nat_add_called`; its caller giving it a successor, `_called_succ`), under a successor, bound by a let,
+compared; a let of a successor of a counter variable (step 9); a record holding records used as a value, taken apart later, given
+on (step 32); a number and a memory taken apart by a function giving back a memory, and as a parameter (step 26); a mutual block of
+members of different signatures, and of members giving back a memory (step 17); a capture of a counter, of a record, of a variable
+bound by a match on a record (step 13); a template giving back a record (step 12); a number function that writes, called inside an
+expression, and its recursive call inside one (step 11); a let in a later operand of `&&` (step 8); the counter not first and the
+memory not last (§3.7).  Run alone: 3 are read already (`A_par_nat_add_called`, `_add_succ`: the reifier's own bound cascades when
+a caller gives counters on as they are), 19 are refused — gaps, to be closed as constructs of `S`, in this order: counter bounds per
+counter (sums and successors anywhere, top-down), the parameters in any order, captures of every kind, records holding records as
+values, memory functions taking a number-and-memory pair apart, mutual blocks of any signatures, templates giving back records,
+writing functions inside expressions, lets inside later operands.  A function from another file (§3.7) needs a generator that
+writes two files: not yet a cell.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3445,7 +3460,8 @@ Pushed to the public repository up to `dfd4832` (2026-11-02); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | `CLAUDE.md` + READ THIS FIRST, §0.9, §13.7, §13.8: completeness is strict -- a construct is done only in its general form (owner) |
+| (this commit) | `proved/matrix/gen.py`: 22 cells for the places §12.V's steps left unread (802 cells) |
+| `86e704b` | `CLAUDE.md` + READ THIS FIRST, §0.9, §13.7, §13.8: completeness is strict -- a construct is done only in its general form (owner) |
 | `dfa6958` | §12.V: step 33 done (a sum of counters, counter bounds per function: the construct table 779 of 780, no gap), the C, the gate |
 | `dfd4832` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 33: `CAdd`, `sig.sb` / `fbound`, `wf`'s call condition by `cmax`, `bok`; the reifier's `Nat.add` and own bound |
 | `7879d05` | §12.V: step 33's design (a sum of counters given to a callee: counter bounds per function) |

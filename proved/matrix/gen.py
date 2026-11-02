@@ -202,6 +202,8 @@ add("mem_nontail_helper", "mem", ffix("mem", "match n with O => s | S m => hm a 
 add("mem_two_blocks", "mem", fdef("mem", "upd 1 b a (upd 0 a b s)"))
 add("mem_u8", "mem", fdef("mem", "upd8 0 a b s"))
 add("mem_u32", "mem", fdef("mem", "upd32 0 a b s"))
+add("int_if_and_let", "int", fdef("int", "if (a <? b) && (let c := a + 1 in c <? 10) then a else b"))   # step 8
+add("int_write_nontail", "int", ffix("int", "match n with O => rd 0 0 s | S m => f m a b (upd 0 a b s) + 1 end"))   # step 11
 add("mem_grow", "mem", fdef("mem", "kq_grow 2 a s"))
 add("mem_dup", "mem", fdef("mem", "let t := upd 0 a b s in upd 0 b a s"))      # old memory used after being handed on
 add("mem_hof", "mem", fdef("mem", "twice_m (fun t => upd 0 a b t) s"), "Definition twice_m (f : mem -> mem) (s : mem) : mem := f (f s).\n")
@@ -266,6 +268,49 @@ addA("par_typeclass", "", "cadd a b", "Class Ad (A : Type) := { ad : A -> A -> A
 addA("par_dep_record", "", "k a", "Record bnd := mkb { bv : int; bok : True }.\nDefinition k (x : int) : int := bv (mkb x I).\n")
 addA("par_string", "", "a", "")
 addA("par_float", "", "a", "")
+
+# ---------------------------------------------------------------- the places §12.V's steps left unread (2026-11-02): one cell each,
+# so the table shows them until they are read (completeness is strict: CLAUDE.md, Rocq-C-solution.md §0.9)
+# a sum of counters: given by a function that is itself called (step 33), under a successor, bound by a let, compared
+addA("par_nat_add_called", "", "k2 n n a", "Fixpoint k (n : nat) (x : int) : int := match n with O => x | S m => k m (x + 1) end.\nFixpoint k2 (r n : nat) (x : int) : int := match r with O => k (n + n) x | S q => k2 q n (x + 1) end.\n")
+addA("par_nat_add_called_succ", "", "k2 n (S n) a", "Fixpoint k (n : nat) (x : int) : int := match n with O => x | S m => k m (x + 1) end.\nFixpoint k2 (r n : nat) (x : int) : int := match r with O => k (n + n) x | S q => k2 q n (x + 1) end.\n")
+addA("par_nat_add_succ", "", "k (S (n + n)) a", "Fixpoint k (n : nat) (x : int) : int := match n with O => x | S m => k m (x + 1) end.\n")
+addA("par_nat_let_add", "", "let w := (n + n)%nat in k w a", "Fixpoint k (n : nat) (x : int) : int := match n with O => x | S m => k m (x + 1) end.\n")
+addA("par_nat_eqb_add", "", "if Nat.eqb (n + n) 4 then a else b", "")
+# a let of a successor of a counter variable (step 9)
+addA("par_nat_let_succ", "", "let w := S n in k w a", "Fixpoint k (n : nat) (x : int) : int := match n with O => x | S m => k m (x + 1) end.\n")
+# a record holding records (step 32): an inner record used as a value, taken apart later, given on
+addA("par_pairp_proj", "", "let r := k n a b in fst (fst r) + snd (fst r) + snd r", "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => k m y x end.\n")
+addA("par_pairp_late", "", "let '(p, z) := k n a b in let w := z + 1 in let '(x, y) := p in x + y + w", "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => k m y x end.\n")
+addA("par_pairp_pass", "", "let '(p, z) := k n a b in pf n p + z",
+     "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => k m y x end.\nFixpoint pf (n : nat) (p : int * int) : int := match n with O => fst p | S m => pf m (snd p, fst p) end.\n")
+# a number and a memory (step 26): taken apart by a function giving back a memory; as a parameter
+addA("par_intmem_mem_fn", "", "rd 0 0 (wm n a s)",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\n"
+     "Fixpoint wm (n : nat) (x : int) (t : mem) : mem := match n with O => t | S m => let '(y, t2) := g n x t in wm m y (upd 1 y y t2) end.\n")
+addA("par_intmem_param", "", "k n (a, s)",
+     "Fixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\n")
+# a mutual block (step 17): members of different signatures; members giving back a memory
+addA("par_mutual_sig", "", "ev n a",
+     "Fixpoint ev (n : nat) (x : int) : int := match n with O => x | S m => od m (x + 1) 3 end\n"
+     "with od (n : nat) (x y : int) : int := match n with O => x + y | S m => ev m (x + y) end.\n")
+addA("par_mutual_mem", "", "rd 0 0 (wa n s)",
+     "Fixpoint wa (n : nat) (t : mem) : mem := match n with O => t | S m => wb m (upd 0 1 1 t) end\n"
+     "with wb (n : nat) (t : mem) : mem := match n with O => t | S m => wa m (upd 0 2 2 t) end.\n")
+# a capture (step 13): of a counter, of a record, of a variable bound by a match on a record
+addA("par_capture_nat", "", "fold n 0 a (fun i acc => match n with O => acc | S _ => acc + i end)", "")
+addA("par_capture_rec", "", "let w := mk3 a b 1 in fold n 0 a (fun i acc => acc + f1 w)", "")
+addA("par_capture_match", "", "kr n (mk3 a b 1) a",
+     "Fixpoint kr (n : nat) (w : r3) (x : int) : int := match n with O => x | S m => match w with mk3 p q r => kr m w (fold m 0 x (fun i acc => acc + p)) end end.\n")
+# a template giving back a record (step 12)
+addA("par_fun_rec_pair", "", "let '(x, y) := foldp n (a, b) (fun z => z + 1) in x + y",
+     "Fixpoint foldp (n : nat) (p : int * int) (g : int -> int) : int * int := match n with O => p | S m => foldp m (g (fst p), snd p + 1) g end.\n")
+# a number function that writes, called inside an expression (step 11)
+addA("par_write_fn_expr", "", "wr n s + 1",
+     "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\n")
+# the translator's own conventions (§3.7): the counter not first, the memory not last
+addA("par_conv_nat_second", "", "k a n", "Fixpoint k (x : int) (n : nat) : int := match n with O => x | S m => k (x + 1) m end.\n")
+addA("par_conv_mem_first", "", "k n s a", "Fixpoint k (n : nat) (t : mem) (x : int) : int := match n with O => x + rd 0 0 t | S m => k m t (x + 1) end.\n")
 
 # ---------------------------------------------------------------- family N: every nesting of a small core
 # contexts with a hole (HOLE) of result kind int; the core is a producer of int
