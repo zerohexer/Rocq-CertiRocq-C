@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **792 of 815, 22 gaps** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **807 of 825, 17 gaps** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -3386,6 +3386,42 @@ test on a boolean, a boolean let inside a record.  The constructs, each the coun
 *Expected*: those cells and step 35's five gaps, `P_int_if_and_let`.  *Not in this step*: the relational bound (step 37,
 `A_par_nat_rec_succ`).
 
+**Step 36 done (2026-11-03): the boolean and record sorts given the constructs of the number sort.**  Built as designed:
+- *`KQR.v`*: `BxIfB`, `BxLet`, `BxLetB`, `BxLetC`, `BxLetR`, `BxMatchR` among the booleans and `RIfB`, `RLetB`, `RLetC`, `RMatchCnt`
+  among the records, each with the meaning of its number counterpart (the records' choices inside one record value, as `RIf`'s),
+  its KQL in the boolean's three forms (a test on a boolean is the test's jumps, then the branch's form; a let is the value's code,
+  then the boolean's) and in the record's, well-formedness (a counter let pushes its bound, step 35; a record match on a counter
+  pushes the matched variable's), the shared-block rule.  Proof: one case each in each of the three parts of `cexp_all`'s boolean
+  statement and in its record part, `denote_nomem`, `denote_rec_ext`, `kind_denote_r` (its induction now generalizes the
+  environments and the bounds).  No new hypothesis; `Print Assumptions` the same base.  Tests (`x36_P`): `xbif` (a test on a
+  boolean, as a choice), `xbifj` (as jumps), `xblet` (a number let in a later operand of `&&`), `xbletb` (a boolean let, as the
+  boolean's value), `xbletc` (a counter let, its bound pushed), `xbmr` / `xbletr` (a record taken apart, a record let, in a
+  boolean), `xrifb` / `xrletb` / `xrmc` / `xrletc` (a record chosen by a test on a boolean, a boolean let in a record, a record
+  chosen by a counter match, a counter let in a record); refused: records of two types in a test on a boolean, a counter let at
+  the index's bound, a test's branches the other way round; each theorem in milliseconds.
+- *The reifier*: the boolean reader starts as the number reader does (`head_r`: lets read by zeta, constructor lets, iota) and reads
+  a match on a value of a data type as a test chain on its tag (step 28), lets of every kind, a test on a boolean, a match on a
+  counter expression (`let_scrut`), a record taken apart; the record reader reads the tag chain (its type off the match's
+  return type), boolean and counter lets, a test on a boolean, a match on a counter; the call collection has the new nodes'
+  bounds.  Test `x36go` (the seven shapes of the construct table, helpers written out): the tree pinned, the theorem in
+  milliseconds.
+- *Found on the way*: `Fail Check (eq_refl : f = denote_f ..)` on a tree whose test has its branches the other way round made
+  Rocq raise `Anomaly ""` instead of failing; `Fail Definition .. := eq_refl` refuses the same tree normally (the form the other
+  tests use).
+- *Cells*: 10 more (825): a boolean chosen by a test on a boolean, a number let in a later operand of `&&`, a record taken apart
+  and a match on an `option` in a boolean, a pair and a record of three chosen by a test on a boolean, a boolean let and a counter
+  let in a pair, a match on an `option` giving a pair and a record of three.  Run alone: all 10 proved, and with them four of the
+  five step 35 left (`P_bool_match_add`, `P_pair_match_nat`, `P_pair_match_add`, `P_rec3_match_nat`) and step 8's `P_int_if_and_let`.
+  `P_pairp_match_nat` stays refused: a record holding records comes into the record table from the signatures only (step 32), so a
+  pair of pairs chosen by a counter match inside a body is the records-as-values step's.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, settled rounds; step 35's files / step 36's):
+  `HWP_kernel` 2.74 / 2.65 / 2.76 s against 2.81 / 2.90 / 2.89 s, `HWP_own` 2.10 / 2.02 / 2.04 against 2.14 / 2.17 / 2.14, `HWP_irqnow`
+  1.80 / 1.68 / 1.70 against 1.77 / 1.77 / 1.72 — about 0.15 s (5 %) more on `HWP_kernel`, within the spread step 32 recorded.
+- The C: 63 of 63 byte-identical.  The construct table (on `c764f08`): **807 of 825 through the verified compiler** (was 792 of
+  815: the ten new cells, four of step 35's five and `P_int_if_and_let`), 17 gaps, 1 not Rocq.  The gate on `c764f08`, the walk
+  switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (11 / 11 / 12 / 14 / 13 s); **71 programs
+  through the verified compiler, 0 refused**; the trusted base unchanged.
+
 **Step 37, counters grown by the recursion: a bound on a weighted sum — the design (2026-11-03).**  `A_par_nat_rec_succ`:
 `k (n m : nat) x := match n with O => x | S p => k p (S m) (x + 1) end` — an index counting up while the budget counts down, the
 ordinary way to walk positions with `nat`.  The recursive call's counters must stay below the function's bound at every round;
@@ -3585,11 +3621,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `e79f85f` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `c764f08` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 37's design (counters grown by the recursion: a bound on a weighted sum) |
+| (this commit) | §12.V: step 36 done (the boolean and record sorts given the number sort's constructs: the construct table 807 of 825), the C, the gate |
+| `c764f08` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 36: `BxIfB` .. `BxMatchR`, `RIfB` .. `RMatchCnt`; the boolean and record readers; 10 cells |
+| `2c1bde4` | §12.V: step 37's design (counters grown by the recursion: a bound on a weighted sum) |
 | `0c899f9` | §12.V: step 35 done (a bound for each counter variable: the construct table 792 of 815), the C, the gate, the kernels timed apart |
 | `e79f85f` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 35: per-variable counter bounds in `wf` and the invariant, `let_scrut`, the call-graph bounds through lets; 11 cells |
 | `e4a1b37` | §12.V: step 36's design (the boolean and record sorts given the constructs of the number sort) |
