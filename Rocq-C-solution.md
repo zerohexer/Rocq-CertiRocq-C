@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them **782 of 802, 19 gaps** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **792 of 815, 22 gaps** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -3326,6 +3326,42 @@ cannot hold both `n` and `n + n`.  So each counter variable carries its own boun
 (`A_par_nat_rec_succ`, `k p (S m)`): its value stays below the sum of the two counters' starting values, which no bound of one
 variable says — it needs a bound relating two counters (step 36).
 
+**Step 35 done (2026-11-03): a bound for each counter variable.**  Built as designed, in `proved/KQR.v` and the reifier:
+- *`KQR.v`*: `wf`'s first argument carries the bounds of the counters in scope (`list sig * (option Z * list (option Z))`: the
+  callees, the own bound, the counters' bounds, the nearest first; `None` a counter below the function's bound).  `cmaxv B bs c`
+  is a counter's largest value, each variable below its own bound (`cbv`); a call checks `cmaxv` of its counters below the
+  callee's bound; the recursive call's counters are flat with their variables at the function's bound (`pvars`); a let of a
+  counter pushes `lbnd` (none when step 9's `letc_ok` holds of a counter whose variables are at the function's bound, else
+  `cmaxv + 1`, at most 2^62: `letc_okv`); a match on a counter pushes the matched variable's bound for the predecessor; a
+  comparison of counters asks `cmaxv < wB`.  For every program read before, every bound pushed is `None`, so `wf` accepts what
+  it accepted.  The proof: the invariant's bound is one per variable (`cboundv cbj cbs cenv`: each counter below its own bound,
+  each bound at most 2^62); the mutual lemma's motives, the memory, tail and pair lemmas quantify the bounds (`sigsv cbs`), a
+  let and a match push theirs (`inv_clet`, `inv_cpush`, `lbnd_bound`); the merged calls' lemmas take one bound list (a nested
+  section: a chain of tests binds no counter); `compile_f_ok` starts from none (`cboundv_nil`).  No new hypothesis; `Print
+  Assumptions` the same base.  Tests: `klet` (a sum bound by a let, given to a callee), `kls` (a let of `S n` at the index's
+  bound), `kcmp` (a sum compared, at the index's bound), `kmt` (a match on a sum), each theorem in milliseconds; refused: a let of
+  a sum at the index's bound, the recursive call given a let-bound sum, a let-bound sum given to a callee whose bound it passes,
+  a tree that is not the text.  Step 33's test of a sum compared, refused then, is accepted.
+- *The reifier*: a match on a counter that is not a variable is read as a let of it and a match on the variable (`let_scrut`,
+  the same term up to zeta) in the six readers that have a counter let; the call-graph bounds (step 34) track the counters'
+  bounds as `wf` does (`cl_*` take the function's bound and the bounds in scope and give each call's largest counter,
+  `cmaxsv`, a let's bound `lbndv` = `lbnd`).  Tests: `w35go` (the four cells' shapes, small helpers written out into one
+  function, read with the smallest own bound), `w35b` (a function binding `n + n` and given `S n` by the entry: its callee's
+  bound worked out through the let's), `lcbad` (step 9's let of `S n`, refused then, read now); every theorem in milliseconds.
+- *Cells*: 11 more (815): a match on a counter in every result kind's place — on a sum for a boolean in a test, a boolean given
+  back, a memory, a number made after memories, a pair, a record given back, a number and a memory given back; on a counter
+  variable for a pair, a record of three, a pair of pairs, a number and a memory (the table had none).  Run alone: 6 proved, 5
+  refused — a boolean-valued match on a sum inside a test (the boolean sort has no counter let), a pair or a record chosen by a
+  counter match, on a variable or a sum (the record sort has no counter match): the next step.
+- *The reifier's step on the kernels' programs* (one machine, interleaved, step 34's files / step 35's): `HWP_kernel` 2.84 / 3.07 s
+  against 2.83 / 2.88 s, `HWP_own` 2.31 / 2.18 against 2.19 / 2.20, `HWP_irqnow` 1.86 / 2.57 against 1.97 / 1.87 — the same.
+- The C: 63 of 63 byte-identical.  The construct table (on `e79f85f`): **792 of 815 through the verified compiler** (was 782 of
+  802: the four step-35 cells and six of the eleven new), 22 gaps (the five new cells refused, `A_par_nat_rec_succ`, the sixteen
+  left before), 1 not Rocq.  The gate on `e79f85f`, the walk switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36;
+  the five kernels (11 / 11 / 11 / 18 / 13 s on the work machine — measured apart, one machine, cold, interleaved, on one core:
+  `HWP_kernel` 11.62 / 10.76 s with step 34's files and 10.92 / 10.87 s with step 35's, `HWP_own` 11.50 / 11.34 and 11.26 / 11.15 s:
+  the same; the work machine's runs vary); **71 programs through the verified compiler, 0 refused**; the trusted base unchanged.
+
 **Step 36, the boolean and record sorts given the constructs of the number sort — the design (2026-11-03).**  The number sort has, for
 each way a value can be made, a node: a test on a comparison or on a boolean, a let of each kind (number, boolean, counter, record), a
 match on a counter, a record taken apart.  The boolean sort (`sbool`) has the test on a comparison (`BIfCmp`) and the counter match
@@ -3525,11 +3561,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `ca1ff4f` (2026-11-02); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `e79f85f` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 36's design (the boolean and record sorts given the constructs of the number sort) |
+| (this commit) | §12.V: step 35 done (a bound for each counter variable: the construct table 792 of 815), the C, the gate, the kernels timed apart |
+| `e79f85f` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 35: per-variable counter bounds in `wf` and the invariant, `let_scrut`, the call-graph bounds through lets; 11 cells |
+| `e4a1b37` | §12.V: step 36's design (the boolean and record sorts given the constructs of the number sort) |
 | `adf1658` | §12.V: step 35's design (a bound for each counter variable); `gen.py`: a match on a sum, the recursive call given a successor |
 | `ef85399` | §12.V: step 34 done (counter bounds from the call graph: 782 of 802), the C, the gate, the kernels timed apart |
 | `ca1ff4f` | `proved/KQRReify.v` step 34: `bounds_tab`, `cl_*`, the reading again with the bounds |
