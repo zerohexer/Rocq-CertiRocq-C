@@ -895,6 +895,14 @@ with reify_r (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sr
         to_args (map (fun a => match reify fuel ctx a with Some e => Some (inl e) | None =>
                                 match reify_b fuel ctx a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel ctx a) end end) l) in
       match head_r t with Some t' => reify_r fuel ctx t' | None =>
+      (* a record chosen by a match on a value of a data type (step 36): taken apart, a test chain on its tag *)
+      match tag_parts t, (match t with tCase _ p _ _ => rindex (preturn p) rt 0 | _ => None end) with
+      | Some (_, ws, c, bs), Some ri' =>
+          match reify_r fuel ctx c, opt_all (map (reify_r fuel (repeat CNum (S (tag_w ws)) ++ ctx)) bs) with
+          | Some x, Some es => option_map (RMatchR ri' x) (tag_chain (fun k e r => RIf ri' Ceq (fst (tag_test ws k)) (snd (tag_test ws k)) e r) es 0)
+          | _, _ => None
+          end
+      | _, _ =>
       match t with
       | tRel i => option_map RVar (rec_index ctx i)
       | tApp (tConstruct ind c _) args =>
@@ -947,7 +955,22 @@ with reify_r (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sr
                 | Some x, Some y, Some t1, Some t2 => Some (RIf ri cmp x y t1 t2)
                 | _, _, _, _ => None
                 end
+            | Some ri, None =>     (* a test on a boolean (step 36) *)
+                match reify_b fuel ctx c0, reify_r fuel ctx (bbody b0), reify_r fuel ctx (bbody b1) with
+                | Some x, Some t1, Some t2 => Some (RIfB ri x t1 t2)
+                | _, _, _ => None
+                end
             | _, _ => None
+            end
+          (* a record chosen by a match on a counter (step 36) *)
+          else if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_nat) then
+            match c0 with
+            | tRel i =>
+                match rindex (preturn p) rt 0, cnt_index ctx i, reify_r fuel ctx (bbody b0), reify_r fuel (CCnt :: ctx) (bbody b1) with
+                | Some ri, Some x, Some t0, Some t1 => Some (RMatchCnt ri x t0 t1)
+                | _, _, _, _ => None
+                end
+            | _ => match known_branch c0 b0 b1 with Some t => reify_r fuel ctx t | None => reify_r fuel ctx (let_scrut ci p c0 b0 b1) end
             end
           else None
       (* a record built from a record taken apart (step 21): its type the match's *)
@@ -963,7 +986,9 @@ with reify_r (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sr
       | tLetIn _ b ty body =>
           if is_ty kn_int ty then
             match reify fuel ctx b, reify_r fuel (CNum :: ctx) body with Some e, Some x => Some (RLet e x) | _, _ => None end
-          else if is_bool ty || is_nat ty || is_ty kn_mem ty then None
+          else if is_bool ty then match reify_b fuel ctx b, reify_r fuel (CBool :: ctx) body with Some y, Some x => Some (RLetB y x) | _, _ => None end
+          else if is_nat ty then match reify_c fuel ctx b, reify_r fuel (CCnt :: ctx) body with Some c, Some x => Some (RLetC c x) | _, _ => None end
+          else if is_ty kn_mem ty then None
           else match reify_r fuel ctx b, reify_r fuel (CRec :: ctx) body with Some y, Some x => Some (RLetR y x) | _, _ => None end
       | tApp (tConst kn _) args =>
           (* a 64-bit operation: [u64] a record type of the program *)
@@ -994,11 +1019,21 @@ with reify_r (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sr
       | _ => None
       end
       end
+      end
   end
 with reify_b (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sbool :=
   match fuel with
   | O => None
   | S fuel =>
+  match head_r t with Some t' => reify_b fuel ctx t' | None =>
+  (* a match on a value of a data type (step 28), in a boolean (step 36): taken apart, a test chain on its tag *)
+  match tag_parts t with
+  | Some (ri, ws, c, bs) =>
+      match reify_r fuel ctx c, opt_all (map (reify_b fuel (repeat CNum (S (tag_w ws)) ++ ctx)) bs) with
+      | Some x, Some es => option_map (BxMatchR x) (tag_chain (fun k e r => BIfCmp Ceq (fst (tag_test ws k)) (snd (tag_test ws k)) e r) es 0)
+      | _, _ => None
+      end
+  | None =>
   match t with
   | tRel i => option_map BVar (bool_index ctx i)
   | tConstruct i 0 _ => if Kername.eqb (inductive_mind i) (inductive_mind ind_bool) then Some BTrue else None
@@ -1057,7 +1092,11 @@ with reify_b (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sb
             | Some x, Some y, Some t1, Some t2 => Some (BIfCmp cmp x y t1 t2)
             | _, _, _, _ => None
             end
-        | None => None
+        | None =>     (* a test on a boolean (step 36) *)
+            match reify_b fuel ctx c0, reify_b fuel ctx (bbody b0), reify_b fuel ctx (bbody b1) with
+            | Some x, Some t1, Some t2 => Some (BxIfB x t1 t2)
+            | _, _, _ => None
+            end
         end
       else if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_nat) then
         match c0 with
@@ -1066,10 +1105,28 @@ with reify_b (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sb
             | Some x, Some t0, Some t1 => Some (BMatchCnt x t0 t1)
             | _, _, _ => None
             end
-        | _ => None
+        | _ => match known_branch c0 b0 b1 with Some t => reify_b fuel ctx t | None => reify_b fuel ctx (let_scrut ci p c0 b0 b1) end
         end
       else None
+  (* a record taken apart (step 36): a helper giving one back written out first, the lets it starts with first *)
+  | tCase ci p c0 [br] =>
+      let c := match c0 with tApp (tConst kn _) args => match hb kn with Some hbd => wout hbd args | None => c0 end | _ => c0 end in
+      match lets_first ci p c [br] with Some t' => reify_b fuel ctx t' | None =>
+        match reify_r fuel ctx c, (match rbr ci p br with Some (es0, bd0) => reify_b fuel (es0 ++ ctx) bd0 | None => None end) with
+        | Some x, Some e => Some (BxMatchR x e)
+        | _, _ => match iota_pair ci p c br with Some t' => reify_b fuel ctx t' | None => None end
+        end
+      end
+  (* lets of every kind (step 36) *)
+  | tLetIn _ b ty body =>
+      if is_ty kn_int ty then match reify fuel ctx b, reify_b fuel (CNum :: ctx) body with Some e, Some x => Some (BxLet e x) | _, _ => None end
+      else if is_bool ty then match reify_b fuel ctx b, reify_b fuel (CBool :: ctx) body with Some y, Some x => Some (BxLetB y x) | _, _ => None end
+      else if is_nat ty then match reify_c fuel ctx b, reify_b fuel (CCnt :: ctx) body with Some c, Some x => Some (BxLetC c x) | _, _ => None end
+      else if is_ty kn_mem ty then None
+      else match reify_r fuel ctx b, reify_b fuel (CRec :: ctx) body with Some y, Some x => Some (BxLetR y x) | _, _ => None end
   | _ => None
+  end
+  end
   end
   end.
 
@@ -2515,6 +2572,11 @@ with cl_b (B : Z) (bs : list (option Z)) (b : sbool) {struct b} : list (nat * Z)
   | BMatchCnt c x0 x1 => cl_b B bs x0 ++ cl_b B (nth c bs None :: bs) x1
   | BCall f ccs args => (f, cmaxsv B bs ccs) :: cl_cs B bs ccs ++ cl_es B bs args
   | BCmpC _ x y => cl_c B bs x ++ cl_c B bs y
+  | BxIfB b x y => cl_b B bs b ++ cl_b B bs x ++ cl_b B bs y
+  | BxLet e x => cl_e B bs e ++ cl_b B bs x
+  | BxLetB b x => cl_b B bs b ++ cl_b B bs x
+  | BxLetC c x => cl_c B bs c ++ cl_b B (lbndv B bs c :: bs) x
+  | BxLetR y x | BxMatchR y x => cl_r B bs y ++ cl_b B bs x
   end
 with cl_r (B : Z) (bs : list (option Z)) (x : srec) {struct x} : list (nat * Z) :=
   match x with
@@ -2526,6 +2588,10 @@ with cl_r (B : Z) (bs : list (option Z)) (x : srec) {struct x} : list (nat * Z) 
   | RLetR y x => cl_r B bs y ++ cl_r B bs x
   | RIf _ _ a b x y => cl_e B bs a ++ cl_e B bs b ++ cl_r B bs x ++ cl_r B bs y
   | RMatchR _ x y => cl_r B bs x ++ cl_r B bs y
+  | RIfB _ b x y => cl_b B bs b ++ cl_r B bs x ++ cl_r B bs y
+  | RLetB b x => cl_b B bs b ++ cl_r B bs x
+  | RLetC c x => cl_c B bs c ++ cl_r B (lbndv B bs c :: bs) x
+  | RMatchCnt _ c x y => cl_r B bs x ++ cl_r B (nth c bs None :: bs) y
   end.
 Fixpoint cl_m (B : Z) (bs : list (option Z)) (m : smem) {struct m} : list (nat * Z) :=
   match m with
@@ -4331,3 +4397,56 @@ Proof.
     eq_refl eq_refl).
 Time Qed.
 Print Assumptions w35go2_ok.
+
+(* ---- the constructs of the number sort in the boolean and record sorts (step 36): the construct table's shapes -- a boolean chosen
+   by a test on a boolean, a number let in a later operand of [&&], a record taken apart in a test, a boolean-valued match on a sum;
+   a pair chosen by a counter match, by a test on a boolean, by a match on a sum -- helpers written out where they are used *)
+Definition x36_bif (n : nat) (a b : i63) : bool := if andb (PrimInt63.ltb a b) (PrimInt63.ltb b 10) then PrimInt63.eqb a b else false.
+Definition x36_blet (n : nat) (a b : i63) : bool := andb (PrimInt63.ltb a b) (let c := PrimInt63.add a 1 in PrimInt63.ltb c 10).
+Definition x36_bmr (n : nat) (a b : i63) : bool := let '(x, y) := (PrimInt63.add a 1, b) in PrimInt63.ltb x y.
+Definition x36_badd (n : nat) (a b : i63) : bool := match (n + n)%nat with O => true | S _ => PrimInt63.ltb a b end.
+Definition x36_pmc (n : nat) (a b : i63) : i63 * i63 := match n with O => (a, b) | S _ => (b, a) end.
+Definition x36_pif (n : nat) (a b : i63) : i63 * i63 := if andb (PrimInt63.ltb a b) (PrimInt63.ltb b 10) then (a, b) else (b, a).
+Definition x36_padd (n : nat) (a b : i63) : i63 * i63 := match (n + n)%nat with O => (a, b) | S _ => (b, a) end.
+Definition x36go (n : nat) (a b : i63) (s : mem) : i63 :=
+  PrimInt63.add (PrimInt63.add (if x36_bif n a b then 1 else 0) (if x36_blet n a b then 2 else 0))
+   (PrimInt63.add (PrimInt63.add (if x36_bmr n a b then 4 else 0) (if x36_badd n a b then 8 else 0))
+     (PrimInt63.add (let '(p, q) := x36_pmc n a b in PrimInt63.sub q p)
+        (PrimInt63.add (let '(p, q) := x36_pif n a b in PrimInt63.sub q p) (let '(p, q) := x36_padd n a b in PrimInt63.sub q p)))).
+Definition x36_src := ltac:(run_template_program (tmQuoteRec x36go)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : map (fun x => snd x) x36_src = [FPlain
+  (SOp Badd
+     (SOp Badd
+        (SIfB (BxIfB (BAnd (BCmp Clt (SVar 1) (SVar 0)) (BCmp Clt (SVar 0) (SInt 10))) (BCmp Ceq (SVar 1) (SVar 0)) BFalse) (SInt 1) (SInt 0))
+        (SIfB (BAnd (BCmp Clt (SVar 1) (SVar 0)) (BxLet (SOp Badd (SVar 1) (SInt 1)) (BCmp Clt (SVar 0) (SInt 10)))) (SInt 2) (SInt 0)))
+     (SOp Badd
+        (SOp Badd
+           (SIfB (BxMatchR (RMk 0 (SCons (SOp Badd (SVar 1) (SInt 1)) (SCons (SVar 0) SNil))) (BCmp Clt (SVar 1) (SVar 0))) (SInt 4) (SInt 0))
+           (SIfB (BxLetC (CAdd (CVar 0) (CVar 0)) (BMatchCnt 0 BTrue (BCmp Clt (SVar 1) (SVar 0)))) (SInt 8) (SInt 0)))
+        (SOp Badd
+           (SMatchR (RMatchCnt 0 0 (RMk 0 (SCons (SVar 1) (SCons (SVar 0) SNil))) (RMk 0 (SCons (SVar 0) (SCons (SVar 1) SNil))))
+              (SOp Bsub (SVar 0) (SVar 1)))
+           (SOp Badd
+              (SMatchR (RIfB 0 (BAnd (BCmp Clt (SVar 1) (SVar 0)) (BCmp Clt (SVar 0) (SInt 10)))
+                          (RMk 0 (SCons (SVar 1) (SCons (SVar 0) SNil))) (RMk 0 (SCons (SVar 0) (SCons (SVar 1) SNil))))
+                 (SOp Bsub (SVar 0) (SVar 1)))
+              (SMatchR (RLetC (CAdd (CVar 0) (CVar 0))
+                          (RMatchCnt 0 0 (RMk 0 (SCons (SVar 1) (SCons (SVar 0) SNil))) (RMk 0 (SCons (SVar 0) (SCons (SVar 1) SNil)))))
+                 (SOp Bsub (SVar 0) (SVar 1)))))))]).
+Check (eq_refl : map (fun x => sb (snd (fst x))) x36_src = [Some own_bound]).
+Section X36.
+#[local] Instance x36_recs : RecTypes | 0 :=
+  {| RT := fun _ => (i63 * i63)%type;
+     RO := fun _ => mkrops 2 None (fun l => (nth 0 l 0%uint63, nth 1 l 0%uint63)) (fun P v k => match v with (a, b) => k [a; b] end);
+     Rd := fun _ => (0%uint63, 0%uint63) |}.
+#[local] Instance x36_laws : RecLaws.
+Proof. split; [intros i [a b] P k; reflexivity | intros i [a b]; reflexivity | intros i [|a [|b [|c l]]] E L; try discriminate; reflexivity | intros i ws c rest E; discriminate E]. Qed.
+Definition x36_Pr := mkprog (funs_of 0 x36_src) [].
+Time Lemma x36go_ok : callee_ok x36_Pr (gid1 0) (fbound (sig_at x36_src 0) 0) (sig_at x36_src 0) x36go.
+Proof.
+  Time exact_no_check (@compile_f_ok x36_recs x36_laws x36_Pr [] gid1 0 (sig_at x36_src 0) (body_at x36_src 0) eq_refl eq_refl
+    (no_callees x36_Pr gid1) eq_refl eq_refl).
+Time Qed.
+Print Assumptions x36go_ok.
+End X36.

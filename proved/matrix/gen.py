@@ -220,6 +220,18 @@ add("rec3_rec_match_add", "rec3", ffix("rec3", "match n with O => mk3 a b 0 | S 
 add("pairp_match_nat", "pairp", fdef("pairp", "match n with O => ((a, b), 0) | S _ => ((b, a), 1) end"))
 add("intmem_match_nat", "intmem", fdef("intmem", "match n with O => (a, s) | S _ => (b, upd 0 a b s) end"))
 add("intmem_rec_match_add", "intmem", ffix("intmem", "match n with O => (a, s) | S m => match (m + m)%nat with O => (b, s) | S _ => f m (a + 1) b (upd 0 a b s) end end"))
+# the constructs of the number sort in the boolean and record sorts (step 36): a test on a boolean, lets of every kind, a record
+# taken apart, a match on a value of a data type
+add("bool_if_bool", "bool", fdef("bool", "if (a <? b) && (b <? 100) then a =? b else false"))
+add("bool_let_late", "bool", fdef("bool", "(a <? b) && (let c := a + 1 in c <? 10)"))
+add("bool_match_rec", "bool", fdef("bool", "let '(x, y) := hp a b in x <? y"))
+add("bool_match_option", "bool", fdef("bool", "match (if a <? b then Some a else None) with Some x => x <? 10 | None => false end"))
+add("pair_if_bool", "pair", fdef("pair", "if (a <? b) && (b <? 100) then (a, b) else (b, a)"))
+add("rec3_if_bool", "rec3", fdef("rec3", "if (a <? b) && (b <? 100) then mk3 a b 0 else mk3 b a 1"))
+add("pair_let_bool", "pair", fdef("pair", "let c := a <? b in if c then (a, b) else (b, a)"))
+add("pair_let_cnt", "pair", fdef("pair", "let w := S n in match w with O => (a, b) | S _ => (b, a) end"))
+add("pair_match_option", "pair", fdef("pair", "match (if a <? b then Some a else None) with Some x => (x, b) | None => (b, a) end"))
+add("rec3_match_option", "rec3", fdef("rec3", "match (if a <? b then Some a else None) with Some x => mk3 x b 0 | None => mk3 b a 1 end"))
 
 # ---------------------------------------------------------------- family A: parameters
 A = []
