@@ -2044,11 +2044,13 @@ Definition cl_f (B : Z) (n : nat) (b : fbody) : list site :=
 (** each call's callee and the largest values of the counters it is given *)
 Definition cl_calls (B : Z) (n : nat) (b : fbody) : list (nat * list Z) :=
   flat_map (fun q : site => match fst q with Some f => [(f, map (cmaxv B (fst (snd q))) (lc (snd (snd q))))] | None => [] end) (cl_f B n b).
-(** the weights of a function whose recursion grows a counter (step 37): none when each recursive call gives counters that are
-    flat variables at the function's bound (step 35) or at most one of the function's counters (each below its bound); else the smallest satisfying [pot_ok] at every
-    recursive call, by rounds from all ones -- each weight raised to what the calls' linear bounds ask of it (a counter after
-    the first: the coefficient of its variable; the first: the constant) -- or none when the rounds do not settle: a counter
-    grown by itself or by the first has no weights.  [wf_f] checks what this gives *)
+(** the weights of a function whose recursion grows counters (steps 37, 38): none when each recursive call gives counters that
+    are flat variables at the function's bound (step 35) or at most one of the function's counters (each below its bound);
+    else one vector per counter, each the smallest satisfying [pot_ok] at every recursive call above that counter's unit
+    vector, by rounds -- each weight raised to what the calls' linear bounds ask of it (a counter after the first: the
+    coefficient of its variable; the first: the constant) -- or none when the rounds of one do not settle: a counter grown by
+    itself or by the first has no weights.  Each vector is at most the one step 37 took from all ones.  [wf_f] checks what
+    this gives *)
 Definition w_ask (n : nat) (ws : list Z) (q : list cbe * scnts) : list Z :=
   let tot := fold_right ladd lzero (map (fun x => lscale (fst x) (snd x)) (combine (tl ws) (map (clinf (fst q)) (lc (snd q))))) in
   map (fun j => if Nat.eqb j 0 then Z.max (nth 0 ws 1%Z) (snd tot) else Z.max (nth j ws 1%Z) (nth (n - 1 - j) (fst tot) 0%Z)) (seq 0 n).
@@ -2057,26 +2059,35 @@ Fixpoint w_rounds (k n : nat) (rs : list (list cbe * scnts)) (ws : list Z) : opt
   if forallb (fun z => z <=? 65536)%Z ws' then
     (if list_eq_dec Z.eq_dec ws' ws then Some ws else match k with O => None | S k' => w_rounds k' n rs ws' end)
   else None.
-Definition wts_of (n : nat) (b : fbody) : list nat :=
+Definition wts_of (n : nat) (b : fbody) : list (list nat) :=
   let rs := flat_map (fun q : site => match fst q with None => [snd q] | Some _ => [] end) (cl_f own_bound n b) in
   if forallb (fun q => all_c (fun c => flat c && pvars (fst q) c || lin1 (clinf (fst q) c)) (snd q)) rs then [] else
-  match w_rounds (4 * n + 4) n rs (repeat 1%Z n) with Some ws => map Z.to_nat ws | None => [] end.
-(** a function with weights is given its counters by its callers (their weighted sum below its bound, worked out from the
+  let unit c := map (fun j => if Nat.eqb j c then 1%Z else 0%Z) (seq 0 n) in
+  match opt_all (map (fun c => w_rounds (4 * n + 4) n rs (unit c)) (seq 0 n)) with
+  | Some vs => nodup (list_eq_dec Nat.eq_dec) (map (map Z.to_nat) vs)
+  | None => []
+  end.
+(** a function with weights is given its counters by its callers (each weighted sum below its bound, worked out from the
     call graph) or, the entry, by [kq_nat] (each at most 2^60): the entry's own bound covers each counter at the smallest
     bound's value *)
-Definition own_w (ws : list nat) : Z := (wdot ws (repeat (own_bound - 1)%Z (length ws)) + 1)%Z.
+Definition wmax (vs : list (list nat)) (l : list Z) : Z := fold_right Z.max 0%Z (map (fun ws => wdot ws l) vs).
+Definition own_w (vs : list (list nat)) : Z := (wmax vs (repeat (own_bound - 1)%Z (length (hd [] vs))) + 1)%Z.
 (** a function's signature as [wf_f] takes it: as read; with the bound the call graph worked out for it (step 34); with the
     smallest bound of its own (step 33); with weights when its recursion grows a counter, at the call graph's bound or their
-    own (step 37).  Every way a function is read -- a function, a template's copy, a local fixpoint's copy, a mutual block and
+    own (steps 37, 38).  Every way a function is read -- a function, a template's copy, a local fixpoint's copy, a mutual block and
     its members -- takes its signature from here *)
 Definition wf_sig (wfok : sig -> bool) (gs : sig) (b : fbody) (bd : option Z) : option sig :=
-  let ws := wts_of (sn gs) b in
   let gb bd := mksig7 (sn gs) (sk gs) (sm gs) (sr gs) (sw gs) (sq gs) (Some bd) in
-  let gw bd := mksig8 (sn gs) (sk gs) (sm gs) (sr gs) (sw gs) (sq gs) (Some bd) ws in
-  let wtry bd := match ws with [] => None | _ => if wfok (gw bd) then Some (gw bd) else None end in
+  (* the weights worked out only when the signature without them is refused *)
+  let wtry (obd : option Z) :=
+    match wts_of (sn gs) b with
+    | [] => None
+    | ws => let g := mksig8 (sn gs) (sk gs) (sm gs) (sr gs) (sw gs) (sq gs) (Some (match obd with Some x => x | None => own_w ws end)) ws in
+            if wfok g then Some g else None
+    end in
   match bd with
-  | Some bd => if wfok (gb bd) then Some (gb bd) else wtry bd
-  | None => if wfok gs then Some gs else if wfok (gb own_bound) then Some (gb own_bound) else wtry (own_w ws)
+  | Some bd => if wfok (gb bd) then Some (gb bd) else wtry (Some bd)
+  | None => if wfok gs then Some gs else if wfok (gb own_bound) then Some (gb own_bound) else wtry None
   end.
 
 
@@ -2730,7 +2741,7 @@ Fixpoint find_kn (kn : kername) (l : list (kername * sig * fbody)) (i : nat) : o
 Definition bounds_tab (es : list (kername * sig * fbody)) : kername -> option Z :=
   let n := length es in
   let wss := map (fun e : kername * sig * fbody => wts_of (sn (snd (fst e))) (snd e)) es in
-  let need f l := match nth f wss [] with [] => (fold_right Z.max 0 l + 1)%Z | ws => (wdot ws l + 1)%Z end in
+  let need f l := match nth f wss [] with [] => (fold_right Z.max 0 l + 1)%Z | vs => (wmax vs l + 1)%Z end in
   let bs := fold_left (fun bs i =>
               let Bi := nth i bs own_bound in
               match nth_error es i with
@@ -2887,7 +2898,7 @@ Definition why_fun (Σ : global_env) (hb : kername -> option term) (tc : kername
   (fns bad : list kername) (callees : list (kername * sig)) (kn : kername) : list string :=
   if match read_fun Σ hb tc rt callees kn with Some _ => true | None => false end then
     ["read, but not well formed: a recursive call given counters that no weights keep from growing (a counter grown by"
-     ^ " itself or by the first counter: it would have no bound, or whose weighted sum can pass 2^62 at the counters given), a call given fewer"
+     ^ " itself or by the first counter: it would have no bound, or whose weighted sums can pass 2^62 at the counters given), a call given fewer"
      ^ " arguments than its function takes, a counter more than 2^20 successors deep, a let of a counter grown by S over a"
      ^ " variable (above the function's bound), or a call of a number function that writes the memory, or of the function"
      ^ " itself when it writes, inside an expression (not yet: the caller's memory would not be the text's)"]
@@ -3085,9 +3096,9 @@ Print Assumptions cnt_all_ok_r.
    sum of its counters below its bound -- the entry's own, each counter at the smallest bound's value *)
 Definition grow_src := ltac:(run_template_program (tmQuoteRec grow)
   (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
-Check (eq_refl : map (fun x => snd (fst x)) grow_src = [mksig8 2 (nk 1) false false false None (Some (own_w [1; 1]%nat)) [1; 1]%nat]).
+Check (eq_refl : map (fun x => snd (fst x)) grow_src = [mksig8 2 (nk 1) false false false None (Some (own_w [[1; 0]; [1; 1]]%nat)) [[1; 0]; [1; 1]]%nat]).
 Definition grow_Pr := mkprog (funs_of 0 grow_src) [].
-Time Lemma grow_ok_r : callee_ok grow_Pr (gid1 0) (own_w [1; 1]%nat) (sig_at grow_src 0) grow.
+Time Lemma grow_ok_r : callee_ok grow_Pr (gid1 0) (own_w [[1; 0]; [1; 1]]%nat) (sig_at grow_src 0) grow.
 Proof. Time exact_no_check (compile_f_ok grow_Pr [] gid1 0 (sig_at grow_src 0) (body_at grow_src 0) eq_refl eq_refl (no_callees grow_Pr gid1) eq_refl eq_refl). Time Qed.
 
 (* ---------------------------------------------------------------- booleans, from the user's text *)
@@ -4509,8 +4520,9 @@ Definition w37go (n : nat) (a b : i63) (s : mem) : i63 :=
 Definition w37_src := ltac:(run_template_program (tmQuoteRec w37go)
   (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
 Check (eq_refl : map (fun x => (sv (snd (fst x)), sb (snd (fst x)))) w37_src =
-  [([1; 1]%nat, Some (own_w [1; 1]%nat)); ([2; 1]%nat, Some (own_w [2; 1]%nat)); ([1; 1; 1]%nat, Some (own_w [1; 1; 1]%nat));
-   ([1; 1]%nat, Some (own_w [1; 1]%nat)); ([], Some own_bound)]).
+  [([[1; 0]; [1; 1]]%nat, Some (own_w [[1; 0]; [1; 1]]%nat)); ([[1; 0]; [2; 1]]%nat, Some (own_w [[1; 0]; [2; 1]]%nat));
+   ([[1; 0; 0]; [1; 1; 1]]%nat, Some (own_w [[1; 0; 0]; [1; 1; 1]]%nat)); ([[1; 0]; [1; 1]]%nat, Some (own_w [[1; 0]; [1; 1]]%nat));
+   ([], Some own_bound)]).
 Check (eq_refl : map (fun x => snd x) w37_src =
   [FRec (SVar 0) (SRec (CCons (CS (CVar 1)) CNil) (SCons (SOp Badd (SVar 0) (SInt 1)) SNil));
    FRec (SVar 0) (SRec (CCons (CAdd (CVar 1) (CS (CS CO))) CNil) (SCons (SOp Badd (SVar 0) (SInt 1)) SNil));
@@ -4561,3 +4573,22 @@ Check (eq_refl : map (fun x => (sv (snd (fst x)), snd x)) w37p_src =
 Definition w37p_Pr := mkprog (funs_of 0 w37p_src) [].
 Time Lemma w37p_ok_r : callee_ok w37p_Pr (gid1 0) (fbound (sig_at w37p_src 0) 0) (sig_at w37p_src 0) w37p.
 Proof. Time exact_no_check (compile_f_ok w37p_Pr [] gid1 0 (sig_at w37p_src 0) (body_at w37p_src 0) eq_refl eq_refl (no_callees w37p_Pr gid1) eq_refl eq_refl). Time Qed.
+
+(* ---------------------------------------------------------------- counters grown apart (step 38) *)
+(* two counters grown by one each round, given n n n by the entry: one vector per counter ([1; 0; 0], [1; 1; 0], [1; 0; 1]),
+   each weighted sum at the entry's counters twice the smallest bound's value, where one sum of the three would pass 2^62 *)
+Fixpoint w38d (n c d : nat) (x : i63) : i63 := match n with O => x | S p => w38d p (S c) (S d) (PrimInt63.add x 1) end.
+Definition w38go (n : nat) (a b : i63) (s : mem) : i63 := w38d n n n a.
+Definition w38_src := ltac:(run_template_program (tmQuoteRec w38go)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : map (fun x => (sv (snd (fst x)), sb (snd (fst x)))) w38_src =
+  [([[1; 0; 0]; [1; 1; 0]; [1; 0; 1]]%nat, Some (2 * own_bound - 1)%Z); ([], Some own_bound)]).
+Definition w38_Pr := mkprog (funs_of 0 w38_src) [].
+Time Lemma w38d_ok_r : callee_ok w38_Pr (gid1 0) (fbound (sig_at w38_src 0) 0) (sig_at w38_src 0) w38d.
+Proof. Time exact_no_check (compile_f_ok w38_Pr [] gid1 0 (sig_at w38_src 0) (body_at w38_src 0) eq_refl eq_refl (no_callees w38_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma w38go_ok_r : callee_ok w38_Pr (gid1 1) (fbound (sig_at w38_src 1) 1) (sig_at w38_src 1) w38go.
+Proof.
+  Time exact_no_check (compile_f_ok w38_Pr [existT ftype (sig_at w38_src 0) w38d] gid1 1 (sig_at w38_src 1) (body_at w38_src 1)
+    eq_refl eq_refl (all_ok_callees w38_Pr gid1 [existT ftype (sig_at w38_src 0) w38d] (conj w38d_ok_r Logic.I)) eq_refl eq_refl).
+Time Qed.
+Print Assumptions w38go_ok_r.

@@ -334,6 +334,11 @@ addA("par_nat_rec_succ_mutual", "", "ev n n a",
      "with od (n m : nat) (x : int) : int := match n with O => x * 2 | S p => ev p (S m) (x + 2) end.\n")
 addA("par_nat_rec_succ_pred", "", "k n n a", "Fixpoint k (n m : nat) (x : int) : int := match n with O => x | S p => k p (S p) (x + 1) end.\n")
 addA("par_nat_rec_add_pred", "", "k n n a", "Fixpoint k (n m : nat) (x : int) : int := match n with O => x | S p => k p (m + p) (x + 1) end.\n")
+# counters grown apart (step 38): several weighted sums -- three grown, one by two beside one by one, two grown beside a swap,
+# each given its counters by the entry
+addA("par_nat_rec_three_succ", "", "k n n n n a", "Fixpoint k (n c d e : nat) (x : int) : int := match n with O => x | S p => k p (S c) (S d) (S e) (x + 1) end.\n")
+addA("par_nat_rec_add2_succ", "", "k n n n a", "Fixpoint k (n c d : nat) (x : int) : int := match n with O => x | S p => k p (c + 2) (S d) (x + 1) end.\n")
+addA("par_nat_rec_succ_swap", "", "k n n n n a", "Fixpoint k (n c d e : nat) (x : int) : int := match n with O => x | S p => k p (S c) (S e) d (x + 1) end.\n")
 addA("par_nat_rec_add_pred_lit", "", "k 100 0 a", "Fixpoint k (n m : nat) (x : int) : int := match n with O => x | S p => k p (m + p) (x + 1) end.\n")   # the same from a written budget: bounded
 # a record holding records (step 32): an inner record used as a value, taken apart later, given on
 addA("par_pairp_proj", "", "let r := k n a b in fst (fst r) + snd (fst r) + snd r", "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => k m y x end.\n")

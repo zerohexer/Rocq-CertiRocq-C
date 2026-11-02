@@ -205,9 +205,10 @@ Inductive smem : Type :=
     with some memory, not the one it was given); or a value of another kind as the result ([sq = Some k]): a record of type
     [ri] ([Some (KRec ri)]: a number function whose KQL returns the record's first field and writes the others into the slot
     block), or a boolean ([Some KBool], step 24: its KQL returns 1 or 0) *)
-Record sig := mksig8 { sn : nat; sk : list kind; sm : bool; sr : bool; sw : bool; sq : option kind; sb : option Z; sv : list nat }.
-(* sv (step 37): none, each counter below the function's bound; else a weight per counter, at least 1, and the counters' weighted
-   sum below the bound -- for a function whose recursion grows a counter *)
+Record sig := mksig8 { sn : nat; sk : list kind; sm : bool; sr : bool; sw : bool; sq : option kind; sb : option Z; sv : list (list nat) }.
+(* sv (steps 37, 38): none, each counter below the function's bound; else weight vectors, each a weight per counter, every counter
+   with a weight of at least 1 in one of them, and each vector's weighted sum of the counters below the bound -- for a function
+   whose recursion grows counters *)
 Definition mksig7 (x : nat) (k : list kind) (m r w : bool) (q : option kind) (b : option Z) : sig := mksig8 x k m r w q b [].
 (* sb: the bound on the function's counters when it is given (step 33: per function, worked out for the program); none, the
    bound of its index ([cbz]) *)
@@ -1452,7 +1453,7 @@ Fixpoint clinf (bs : list cbe) (c : scnt) : linf :=
   | CNat e => ([], cnat_max e)
   | CPred c => clinf bs c | CAdd a b => ladd (clinf bs a) (clinf bs b)
   end.
-Definition wfctx : Type := (list sig * ((option Z * list nat) * list cbe))%type.
+Definition wfctx : Type := (list sig * ((option Z * list (list nat)) * list cbe))%type.
 Definition ub (sigs : wfctx) : Z :=
   match fst (fst (snd sigs)) with Some b => b | None => cbz (length (fst sigs)) end.
 Definition cbv (B : Z) (o : option Z) : Z := match o with Some b => b | None => B end.
@@ -1493,20 +1494,21 @@ Definition pot_ok (ws : list nat) (bs : list cbe) (ccs : scnts) : bool :=
 Definition lin1 (l : linf) : bool :=
   forallb (fun z => (0 <=? z)%Z) (fst l) && (fold_right Z.add 0%Z (fst l) <=? 1)%Z && (snd l <=? 0)%Z.
 (** the recursive call's counters: without weights, each a flat variable at the function's bound or at most one of the
-    function's counters (its linear bound); with them, keeping their weighted sum from growing; each a machine number *)
+    function's counters (its linear bound); with them, keeping each weighted sum from growing; each a machine number *)
 Definition rec_ok (sigs : wfctx) (ccs : scnts) : bool :=
   match snd (fst (snd sigs)) with
   | [] => all_c (fun c => (flat c && pvars (snd (snd sigs)) c || lin1 (clinf (snd (snd sigs)) c))
                           && (cmaxv (ub sigs) (snd (snd sigs)) c <? 9223372036854775808)%Z) ccs
-  | ws => pot_ok ws (snd (snd sigs)) ccs && all_c (fun c => (cmaxv (ub sigs) (snd (snd sigs)) c <? 9223372036854775808)%Z) ccs
+  | vs => forallb (fun ws => pot_ok ws (snd (snd sigs)) ccs) vs
+          && all_c (fun c => (cmaxv (ub sigs) (snd (snd sigs)) c <? 9223372036854775808)%Z) ccs
   end.
-(** a call (step 37): each counter given below the callee's bound, or their weighted sum *)
+(** a call (steps 37, 38): each counter given below the callee's bound, or each of its weighted sums, each counter a machine number *)
 Fixpoint wdot (ws : list nat) (zs : list Z) : Z := match ws, zs with w :: ws', z :: zs' => (Z.of_nat w * z + wdot ws' zs')%Z | _, _ => 0%Z end.
 Definition cfits_b (gs : sig) (B : Z) (sigs : wfctx) (ccs : scnts) : bool :=
   match sv gs with
   | [] => all_c (fun c => (cmaxv (ub sigs) (snd (snd sigs)) c <? B)%Z && (B <=? 4611686018427387904)%Z) ccs
-  | ws => Nat.eqb (len_c ccs) (length ws) && forallb (Nat.leb 1) ws
-          && (wdot ws (map (cmaxv (ub sigs) (snd (snd sigs))) (lc ccs)) <? B)%Z && (B <=? 4611686018427387904)%Z
+  | vs => forallb (fun ws => (wdot ws (map (cmaxv (ub sigs) (snd (snd sigs))) (lc ccs)) <? B)%Z) vs
+          && all_c (fun c => (cmaxv (ub sigs) (snd (snd sigs)) c <? 9223372036854775808)%Z) ccs && (B <=? 4611686018427387904)%Z
   end.
 Fixpoint wf (sigs : wfctx) (r mok : bool) (nx : nat) (k : list kind) (rk : list nat) (e : sexp) {struct e} : bool :=
   match e with
@@ -1878,7 +1880,11 @@ Definition bok (o : option Z) : bool :=
     its linear bound the first counter's less one (step 37) *)
 Definition wctx (sigs : list sig) (gs : sig) (rc : bool) : wfctx :=
   (sigs, ((sb gs, sv gs), if rc then [(None, lshift (-1) (lunit (Nat.pred (sn gs))))] else [])).
-Definition swok (gs : sig) : bool := match sv gs with [] => true | ws => Nat.eqb (length ws) (sn gs) && forallb (Nat.leb 1) ws end.
+Definition swok (gs : sig) : bool :=
+  match sv gs with
+  | [] => true
+  | vs => forallb (fun ws => Nat.eqb (length ws) (sn gs)) vs && forallb (fun i => existsb (fun ws => Nat.leb 1 (nth i ws O)) vs) (seq 0 (sn gs))
+  end.
 Definition wf_f (sigs : list sig) (gs : sig) (b : fbody) : bool :=
   bok (sb gs) && swok gs &&
   match sq gs with
@@ -1991,7 +1997,7 @@ Definition slot_room : Prop :=
 (** the counters given to a function (step 37): each below its bound, or their weighted sum *)
 Fixpoint dotw (ws cvs : list nat) : nat := match ws, cvs with w :: ws', c :: cvs' => w * c + dotw ws' cvs' | _, _ => O end.
 Definition cfits (gs : sig) (B : Z) (cvs : list nat) : Prop :=
-  match sv gs with [] => Forall (fun c => (Z.of_nat c < B)%Z) cvs | ws => (Z.of_nat (dotw ws cvs) < B)%Z end.
+  match sv gs with [] => Forall (fun c => (Z.of_nat c < B)%Z) cvs | vs => Forall (fun ws => (Z.of_nat (dotw ws cvs) < B)%Z) vs end.
 Definition callee_ok (P : prog) (id : ident) (B : Z) (gs : sig) (h : ftype gs) : Prop :=
   slot_room -> forall cvs vs M, length cvs = sn gs -> map kind_of vs = sk gs -> cfits gs B cvs ->
     if sw gs then exists M', runk P id (map ofn cvs ++ flat_map vflat vs) M (calln gs h cvs vs M) M'
@@ -3143,6 +3149,15 @@ Proof.
 Qed.
 Lemma list_cases_nat : forall (l : list nat), l = [] \/ exists x r, l = x :: r.
 Proof. intros [|x r]; [left; reflexivity | right; eauto]. Qed.
+Lemma list_cases_ln : forall (l : list (list nat)), l = [] \/ exists x r, l = x :: r.
+Proof. intros [|x r]; [left; reflexivity | right; eauto]. Qed.
+(** a counter whose weight is at least 1 is at most the weighted sum (step 38) *)
+Lemma dotw_ge_nth : forall ws cvs i, (1 <= nth i ws O)%nat -> (nth i cvs O <= dotw ws cvs)%nat.
+Proof.
+  induction ws as [|w ws IH]; intros cvs i L; [destruct i; cbn [nth] in L; lia|].
+  destruct cvs as [|c cvs]; [destruct i; cbn [nth]; lia|]. destruct i as [|i]; cbn [nth dotw] in *; [nia|].
+  specialize (IH cvs i L). lia.
+Qed.
 Lemma len_lc : forall ccs, length (lc ccs) = len_c ccs.
 Proof. induction ccs as [|c ccs IH]; cbn [lc len_c length]; congruence. Qed.
 Lemma all_c_forall : forall p ccs, all_c p ccs = forallb p (lc ccs).
@@ -3201,11 +3216,11 @@ Variable cbo : option Z.
 Let cbj := match cbo with Some b => b | None => cbz j end.
 (** the function's own weights (step 37: none, each counter below the bound; else their weighted sum), and its counters as the
     environment holds them below what the body binds *)
-Variable cws : list nat.
+Variable cws : list (list nat).
 Variable pv : list nat.
 (** what the recursive call's counters (after the first, the predecessor) must satisfy *)
 Let rfits (cvs : list nat) : Prop :=
-  match cws with [] => Forall (fun c => (Z.of_nat c < cbj)%Z) cvs | ws => (Z.of_nat (dotw ws (cm :: cvs)) < cbj)%Z end.
+  match cws with [] => Forall (fun c => (Z.of_nat c < cbj)%Z) cvs | vs => Forall (fun ws => (Z.of_nat (dotw ws (cm :: cvs)) < cbj)%Z) vs end.
 (** the recursive call, where it is allowed, computes [rec] (or [recm], giving back a memory) on counters below the bound;
     the callees compute their meanings on counters below theirs; this function comes after its callees and is not one of
     the last 2^40 *)
@@ -3226,9 +3241,10 @@ Hypothesis Hj : (Z.of_nat j < 1099511627776)%Z.
 Hypothesis Hslot : slot_room.
 (** the function's own bound, when its signature gives one (step 33), in its range *)
 Hypothesis Hbok : bok cbo = true.
-(** a recursive body of a function with weights: its counters' weighted sum below the bound, the first of them the predecessor's
-    successor *)
-Hypothesis Hpv : hp = true -> cws <> [] -> length pv = length cws /\ (evc (map Z.of_nat (rev cws)) pv < cbj)%Z /\ exists prest, pv = prest ++ [S cm].
+(** a recursive body of a function with weights: each weighted sum of its counters below the bound, the first counter the
+    predecessor's successor *)
+Hypothesis Hpv : hp = true -> cws <> [] -> (exists prest, pv = prest ++ [S cm]) /\
+  Forall (fun ws => length pv = length ws /\ (evc (map Z.of_nat (rev ws)) pv < cbj)%Z) cws.
 (** ... and without weights: its counters each below the bound *)
 Hypothesis Hpv0 : hp = true -> cws = [] -> Forall (fun v => (Z.of_nat v < cbj)%Z) pv.
 
@@ -3429,22 +3445,17 @@ Lemma cs_fit_bound : forall cbs ccs cenv benv renv denv M gs B', cfits_b gs B' (
 Proof.
   intros cbs ccs cenv benv renv denv M gs B' F Cb. unfold cfits_b, cfits in *. destruct (sv gs) as [|w ws].
   - eapply cs_fit_each; eauto.
-  - apply andb_true_iff in F as [F _]. apply andb_true_iff in F as [_ F3]. apply Z.ltb_lt in F3.
-    change (snd (snd (sigsv cbs))) with cbs in F3.
-    eapply Z.le_lt_trans; [| exact F3]. apply dotw_le_wdot. apply cs_le_cmaxv; exact Cb.
+  - apply andb_true_iff in F as [F _]. apply andb_true_iff in F as [F _]. change (snd (snd (sigsv cbs))) with cbs in F.
+    rewrite forallb_forall in F. apply Forall_forall. intros ws' Hw. specialize (F ws' Hw). apply Z.ltb_lt in F.
+    eapply Z.le_lt_trans; [| exact F]. apply dotw_le_wdot. apply cs_le_cmaxv; exact Cb.
 Qed.
 Lemma all_fit_wb : forall cbs ccs gs B', cfits_b gs B' (sigsv cbs) ccs = true -> all_c (fun c => (cmaxv cbj cbs c <? wB)%Z) ccs = true.
 Proof.
   intros cbs ccs gs B' F. unfold cfits_b in F. destruct (sv gs) as [|w ws].
   - eapply all_fit_each; eauto.
-  - apply andb_true_iff in F as [F F4]. apply andb_true_iff in F as [F F3]. apply andb_true_iff in F as [Ln Wg].
-    apply Z.ltb_lt in F3. apply Z.leb_le in F4. apply Nat.eqb_eq in Ln. change (snd (snd (sigsv cbs))) with cbs in F3.
-    assert (Nn : Forall (fun z => (0 <= z)%Z) (map (cmaxv (ub (sigsv cbs)) cbs) (lc ccs))).
-    { apply Forall_forall. intros z Hz. apply in_map_iff in Hz as (c & <- & _). apply cmaxv_nonneg. }
-    pose proof (wdot_ge_each (w :: ws) _ Wg Nn ltac:(rewrite length_map, len_lc; exact Ln)) as G.
-    rewrite all_c_forall. apply forallb_forall. intros c Hc. rewrite Forall_forall in G.
-    specialize (G (cmaxv (ub (sigsv cbs)) cbs c) (in_map _ _ _ Hc)). pose proof (cmaxv_mono cbs c _ _ (ub_ge cbs)).
-    rewrite KQMAuto.wB_num. apply Z.ltb_lt. lia.
+  - apply andb_true_iff in F as [F _]. apply andb_true_iff in F as [_ F]. change (snd (snd (sigsv cbs))) with cbs in F.
+    rewrite all_c_forall in F |- *. rewrite forallb_forall in F |- *. intros c Hc. specialize (F c Hc). apply Z.ltb_lt in F.
+    pose proof (cmaxv_mono cbs c _ _ (ub_ge cbs)). rewrite KQMAuto.wB_num. apply Z.ltb_lt. lia.
 Qed.
 (** the recursive call's counters without weights (step 37): a flat variable at the function's bound, or at most one of the
     function's counters -- each below the bound *)
@@ -3464,7 +3475,7 @@ Proof. intros p0 q. induction ccs as [|c ccs IH]; cbn [all_c]; auto. intros F. a
 Lemma rec_ok_wb : forall cbs ccs, rec_ok (sigsv cbs) ccs = true -> all_c (fun c => (cmaxv cbj cbs c <? wB)%Z) ccs = true.
 Proof.
   intros cbs ccs R. unfold rec_ok in R. change (snd (fst (snd (sigsv cbs)))) with cws in R.
-  destruct (list_cases_nat cws) as [E | (w & ws & E)]; rewrite E in R; cbv beta iota in R;
+  destruct (list_cases_ln cws) as [E | (w & ws & E)]; rewrite E in R; cbv beta iota in R;
     [apply all_c_and_r in R | apply andb_true_iff in R as [_ R]]; change (snd (snd (sigsv cbs))) with cbs in R;
     rewrite all_c_forall in R |- *; rewrite forallb_forall in R |- *; intros c Hc; specialize (R c Hc); apply Z.ltb_lt in R;
     pose proof (cmaxv_mono cbs c _ _ (ub_ge cbs)); rewrite KQMAuto.wB_num; apply Z.ltb_lt; lia.
@@ -3473,15 +3484,18 @@ Lemma rec_ok_fits : forall cbs ccs cenv benv renv denv M, hp = true -> rec_ok (s
   rfits (denote_cs cs rec cenv benv renv denv M ccs).
 Proof.
   intros cbs ccs cenv benv renv denv M Hh R Cb. unfold rec_ok in R. change (snd (fst (snd (sigsv cbs)))) with cws in R. unfold rfits.
-  destruct (list_cases_nat cws) as [E | (w & ws & E)]; rewrite E in R |- *; cbv beta iota in R |- *.
+  destruct (list_cases_ln cws) as [E | (w & ws & E)]; rewrite E in R |- *; cbv beta iota in R |- *.
   - change (snd (snd (sigsv cbs))) with cbs in R. revert R. induction ccs as [|c ccs IH]; cbn [all_c denote_cs]; intros R; constructor.
     + apply andb_true_iff in R as [R _]. apply andb_true_iff in R as [R _]. exact (rec0_fits cbs c cenv benv renv denv M Hh E R Cb).
     + apply andb_true_iff in R as [_ R]. exact (IH R).
   - apply andb_true_iff in R as [Pk _]. change (snd (snd (sigsv cbs))) with cbs in Pk.
-    destruct (Hpv Hh ltac:(rewrite E; discriminate)) as (Lpv & Spv & prest & Epv). rewrite E in Lpv, Spv.
+    destruct (Hpv Hh ltac:(rewrite E; discriminate)) as ((prest & Epv) & Fv). rewrite E in Fv.
     pose proof (clinf_bounds cbj cbs pv ccs cs rec cenv benv renv denv M Cb) as F. rewrite Epv in F.
-    assert (Lp : length prest = length ws) by (rewrite Epv, length_app in Lpv; cbn [length] in Lpv; lia).
-    pose proof (pot_sound (w :: ws) cbs ccs _ prest cm Pk ltac:(cbn [length]; lia) Lp F) as Pt.
+    rewrite forallb_forall in Pk. rewrite Forall_forall in Fv. apply Forall_forall. intros ws' Hw.
+    specialize (Pk ws' Hw). destruct (Fv ws' Hw) as (Lpv & Spv).
+    destruct ws' as [|w0 ws0]; [cbn [dotw]; pose proof cbz_big; lia|].
+    assert (Lp : length prest = length ws0) by (rewrite Epv, length_app in Lpv; cbn [length] in Lpv; lia).
+    pose proof (pot_sound (w0 :: ws0) cbs ccs _ prest cm Pk ltac:(cbn [length]; lia) Lp F) as Pt.
     rewrite <- Epv in Pt. lia.
 Qed.
 Lemma ub_le : forall cbs, (ub (sigsv cbs) <= 4611686018427387904)%Z.
@@ -3491,7 +3505,7 @@ Lemma rec_ok_items : forall cbs ccs, rec_ok (sigsv cbs) ccs = true ->
   all_c (fun c => (cmaxv (ub (sigsv cbs)) (snd (snd (sigsv cbs))) c <? 9223372036854775808)%Z) ccs = true.
 Proof.
   intros cbs ccs R. unfold rec_ok in R. change (snd (fst (snd (sigsv cbs)))) with cws in R.
-  destruct (list_cases_nat cws) as [E | (w & ws & E)]; rewrite E in R; cbv beta iota in R.
+  destruct (list_cases_ln cws) as [E | (w & ws & E)]; rewrite E in R; cbv beta iota in R.
   - exact (all_c_and_r _ _ ccs R).
   - apply andb_true_iff in R as [_ R]. exact R.
 Qed.
@@ -6481,16 +6495,14 @@ Qed.
 Lemma cbj_le4 : forall bo j, bok bo = true -> ((match bo with Some b0 => b0 | None => cbz j end) <= 4611686018427387904)%Z.
 Proof. intros bo j H. destruct bo as [b0|]; [unfold bok in H; apply andb_true_iff in H as [_ H2]; apply Z.leb_le in H2; exact H2 | unfold cbz; lia]. Qed.
 
-(** the counters given (step 37): each below the bound, from their weighted sum when the weights are at least 1 *)
+(** the counters given (steps 37, 38): each below the bound, through a weighted sum where its weight is at least 1 *)
 Lemma cfits_forall : forall gs B cvs, swok gs = true -> length cvs = sn gs -> cfits gs B cvs -> Forall (fun c => (Z.of_nat c < B)%Z) cvs.
 Proof.
-  intros gs B cvs Sw L C. unfold swok, cfits in *. destruct (sv gs) as [|w ws]; [exact C|].
-  apply andb_true_iff in Sw as [Lw Wg]. apply Nat.eqb_eq in Lw.
-  assert (G : Forall (fun z => (z <= wdot (w :: ws) (map Z.of_nat cvs))%Z) (map Z.of_nat cvs)).
-  { apply wdot_ge_each; [exact Wg | apply Forall_forall; intros z Hz; apply in_map_iff in Hz as (c & <- & _); lia | rewrite length_map; lia]. }
-  assert (D : forall l cs0, (Z.of_nat (dotw l cs0) = wdot l (map Z.of_nat cs0))%Z).
-  { clear. induction l as [|v vs IH]; intros [|c cs0]; cbn [dotw wdot map]; try lia. rewrite <- IH. lia. }
-  apply Forall_forall. intros c Hc. rewrite Forall_forall in G. specialize (G (Z.of_nat c) (in_map _ _ _ Hc)). rewrite <- D in G. lia.
+  intros gs B cvs Sw L C. unfold swok, cfits in *. destruct (sv gs) as [|v vs]; [exact C|].
+  apply andb_true_iff in Sw as [_ Cv]. rewrite forallb_forall in Cv. rewrite Forall_forall in C.
+  apply Forall_forall. intros c Hc. apply (In_nth cvs c O) in Hc as (i & Hi & <-).
+  specialize (Cv i ltac:(apply in_seq; lia)). apply existsb_exists in Cv as (ws & Hw & W1). apply Nat.leb_le in W1.
+  specialize (C ws Hw). pose proof (dotw_ge_nth ws cvs i W1). lia.
 Qed.
 Lemma evc_rev_dotw : forall ws cvs, length ws = length cvs -> evc (map Z.of_nat (rev ws)) (rev cvs) = Z.of_nat (dotw ws cvs).
 Proof.
@@ -6501,13 +6513,14 @@ Qed.
 (** a recursive body of a function with weights: what the body's proof assumes of its counters *)
 Lemma hpv_rec : forall (hp : bool) gs B n' rest x', swok gs = true -> sn gs = S x' -> length rest = x' -> cfits gs B (S n' :: rest) ->
   hp = true -> sv gs <> [] ->
-  length (rev rest ++ [S n']) = length (sv gs) /\ (evc (map Z.of_nat (rev (sv gs))) (rev rest ++ [S n']) < B)%Z /\
-  exists prest, rev rest ++ [S n'] = prest ++ [S n'].
+  (exists prest, rev rest ++ [S n'] = prest ++ [S n']) /\
+  Forall (fun ws => length (rev rest ++ [S n']) = length ws /\ (evc (map Z.of_nat (rev ws)) (rev rest ++ [S n']) < B)%Z) (sv gs).
 Proof.
-  intros hp gs B n' rest x' Sw Sn L C _ Ne. unfold swok, cfits in *. destruct (sv gs) as [|w ws]; [contradiction|].
-  apply andb_true_iff in Sw as [Lw _]. apply Nat.eqb_eq in Lw. rewrite Sn in Lw.
-  split; [rewrite length_app, length_rev; cbn [length] in *; lia|]. split; [|exists (rev rest); reflexivity].
-  change (rev rest ++ [S n']) with (rev (S n' :: rest)). rewrite evc_rev_dotw by (cbn [length] in *; lia). exact C.
+  intros hp gs B n' rest x' Sw Sn L C _ Ne. unfold swok, cfits in *. destruct (sv gs) as [|v vs]; [contradiction|].
+  apply andb_true_iff in Sw as [Lw _]. rewrite forallb_forall in Lw. rewrite Sn in Lw.
+  split; [exists (rev rest); reflexivity|]. rewrite Forall_forall in C |- *. intros ws Hw. specialize (Lw ws Hw). apply Nat.eqb_eq in Lw.
+  split; [rewrite length_app, length_rev; cbn [length] in *; lia|].
+  change (rev rest ++ [S n']) with (rev (S n' :: rest)). rewrite evc_rev_dotw by (cbn [length] in *; lia). exact (C ws Hw).
 Qed.
 (** the predecessor of the first counter, below its linear bound *)
 Lemma pred_lin : forall n' rest x', length rest = x' -> (Z.of_nat n' <= leval (lshift (-1) (lunit x')) (rev rest ++ [S n']))%Z.
@@ -7217,7 +7230,7 @@ Proof.
       assert (Bn : (Z.of_nat (S n') < (match bo with Some b0 => b0 | None => cbz j end))%Z) by (pose proof (cfits_forall _ _ (S n' :: rest) Hsw ltac:(cbn [length sn] in *; lia) Bd) as BdF'; inversion BdF'; auto).
       assert (HR : true = true -> forall cvs vs' M', length cvs = x' -> map kind_of vs' = k ->
                      match vw with [] => Forall (fun c => (Z.of_nat c < (match bo with Some b0 => b0 | None => cbz j end))%Z) cvs
-                     | ws => (Z.of_nat (dotw ws (n' :: cvs)) < (match bo with Some b0 => b0 | None => cbz j end))%Z end ->
+                     | vs0 => Forall (fun ws => (Z.of_nat (dotw ws (n' :: cvs)) < (match bo with Some b0 => b0 | None => cbz j end))%Z) vs0 end ->
                      exists M2, runk P (gidf j) (ofn n' :: map ofn cvs ++ flat_map vflat vs') M'
                                      ((fun cvs args s' => appn k true false (appc x' _ (dfn n') cvs) args s') cvs vs' M') M2).
       { intros _ cvs vs' M' Lc' Lv' Bd'. assert (Bn' : (Z.of_nat n' < (match bo with Some b0 => b0 | None => cbz j end))%Z) by lia.
@@ -8964,7 +8977,7 @@ Check (eq_refl : wf_f [mksig7 1 (nk 1) false false false None (Some 230584300921
 Time Fail Definition klet_wrong : klet = denote_f k35_cs k61_g
   (FPlain (SLetC (CS (CVar 0)) (SCall 0 (CCons (CVar 0) CNil) (SCons (SVar 1) SNil)))) := eq_refl.
 
-(* ---- counters grown by the recursion (step 37): A_par_nat_rec_succ's shape and its kin; the function's weights [sv] bound the
+(* ---- counters grown by the recursion (step 37): A_par_nat_rec_succ's shape and its kin; the function's weights [sv] (one vector here) bound the
    counters' weighted sum, the recursion keeps it from growing (coefficient by coefficient on the counters' linear bounds) *)
 Fixpoint krs (n m : nat) (x : i63) : i63 := match n with O => x | S p => krs p (S m) (PrimInt63.add x 1) end.
 Fixpoint krt (n m : nat) (x : i63) : i63 := match n with O => x | S p => krt p (m + 2) (PrimInt63.add x 1) end.
@@ -8972,10 +8985,10 @@ Fixpoint krw (n a b : nat) (x : i63) : i63 := match n with O => x | S p => krw p
 Fixpoint krl (n m : nat) (x : i63) : i63 := match n with O => x | S p => let q := S m in krl p q (PrimInt63.add x 1) end.
 Definition krg (n : nat) (a : i63) : i63 := krs n n a.
 Fixpoint krp (n m : nat) (x : i63) : i63 := match n with O => x | S p => krp p (S p) (PrimInt63.add x 1) end.
-Definition krs_g := mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [1; 1]%nat.
-Definition krt_g := mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [2; 1]%nat.
-Definition krw_g := mksig8 3 (nk 1) false false false None (Some 4611686018427387904%Z) [1; 1; 1]%nat.
-Definition krl_g := mksig8 2 (nk 1) false false false None (Some 2305843009213693952%Z) [1; 1]%nat.
+Definition krs_g := mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [[1; 1]]%nat.
+Definition krt_g := mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [[2; 1]]%nat.
+Definition krw_g := mksig8 3 (nk 1) false false false None (Some 4611686018427387904%Z) [[1; 1; 1]]%nat.
+Definition krl_g := mksig8 2 (nk 1) false false false None (Some 2305843009213693952%Z) [[1; 1]]%nat.
 Definition krg_g := mksig7 1 (nk 1) false false false None (Some 2305843009213693952%Z).
 Definition krp_g := mksig7 2 (nk 1) false false false None (Some 4611686018427387904%Z).
 Definition krs_b := FRec (SVar 0) (SRec (CCons (CS (CVar 1)) CNil) (SCons (SOp Badd (SVar 0) (SInt 1)) SNil)).
@@ -9007,14 +9020,35 @@ Print Assumptions krs_ok.
    whose weighted sum passes the callee's bound, the predecessor's second successor (above the first counter), and a tree that is
    not the text *)
 Check (eq_refl : wf_f [] (mksig7 2 (nk 1) false false false None (Some 4611686018427387904%Z)) krs_b = false).
-Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [1; 1]%nat) krt_b = false).
-Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [0; 1]%nat) krs_b = false).
-Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [1; 1; 1]%nat) krs_b = false).
-Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [1; 1]%nat)
+Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [[1; 1]]%nat) krt_b = false).
+Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [[0; 1]]%nat) krs_b = false).
+Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [[1; 1; 1]]%nat) krs_b = false).
+Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [[1; 1]]%nat)
                        (FRec (SVar 0) (SRec (CCons (CAdd (CVar 1) (CVar 0)) CNil) (SCons (SVar 0) SNil))) = false).
-Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [5; 1]%nat)
+Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [[5; 1]]%nat)
                        (FRec (SVar 0) (SRec (CCons (CAdd (CVar 1) (CVar 0)) CNil) (SCons (SVar 0) SNil))) = false).
 Check (eq_refl : wf_f [krs_g] (mksig7 1 (nk 1) false false false None (Some 4611686018427387904%Z)) krg_b = false).
 Check (eq_refl : wf_f [] krp_g (FRec (SVar 0) (SRec (CCons (CS (CS (CVar 0))) CNil) (SCons (SVar 0) SNil))) = false).
 Time Fail Definition krs_wrong : krs = denote_f [] krs_g
   (FRec (SVar 0) (SRec (CCons (CVar 1) CNil) (SCons (SOp Badd (SVar 0) (SInt 1)) SNil))) := eq_refl.
+
+(* ---- counters grown apart (step 38): several weighted sums, every counter with a weight of at least 1 in one; given n n n by a
+   caller at the smallest bound's value, each sum fits where one weighted sum of the three would not *)
+Fixpoint krd (n c d : nat) (x : i63) : i63 := match n with O => x | S p => krd p (S c) (S d) (PrimInt63.add x 1) end.
+Definition krdg (n : nat) (a : i63) : i63 := krd n n n a.
+Definition krd_g := mksig8 3 (nk 1) false false false None (Some 4611686018427387904%Z) [[1; 1; 0]; [1; 0; 1]]%nat.
+Definition krdg_g := mksig7 1 (nk 1) false false false None (Some 2305843009213693952%Z).
+Definition krd_b := FRec (SVar 0) (SRec (CCons (CS (CVar 2)) (CCons (CS (CVar 1)) CNil)) (SCons (SOp Badd (SVar 0) (SInt 1)) SNil)).
+Definition krdg_b := FPlain (SCall 0 (CCons (CVar 0) (CCons (CVar 0) (CCons (CVar 0) CNil))) (SCons (SVar 0) SNil)).
+Definition k38_P := mkprog [(gid1 0, compile_f gid1 0 krd_g krd_b); (gid1 1, compile_f gid1 1 krdg_g krdg_b)] [].
+Time Lemma krd_ok : callee_ok k38_P (gid1 0) 4611686018427387904%Z krd_g krd.
+Proof. Time exact_no_check (compile_f_ok k38_P [] gid1 0 krd_g krd_b eq_refl eq_refl (no_callees k38_P gid1) eq_refl eq_refl). Time Qed.
+Definition k38_cs := [existT ftype krd_g krd].
+Time Lemma krdg_ok : callee_ok k38_P (gid1 1) 2305843009213693952%Z krdg_g krdg.
+Proof. Time exact_no_check (compile_f_ok k38_P k38_cs gid1 1 krdg_g krdg_b eq_refl eq_refl (all_ok_callees k38_P gid1 k38_cs (conj krd_ok Logic.I)) eq_refl eq_refl). Time Qed.
+Print Assumptions krdg_ok.
+(* refused: one weighted sum of the three (its weights add to 4: n n n at the caller's bound passes the callee's), a counter no
+   vector covers, a vector whose sum grows *)
+Check (eq_refl : wf_f [mksig8 3 (nk 1) false false false None (Some 4611686018427387904%Z) [[2; 1; 1]]%nat] krdg_g krdg_b = false).
+Check (eq_refl : wf_f [] (mksig8 3 (nk 1) false false false None (Some 4611686018427387904%Z) [[1; 1; 0]]%nat) krd_b = false).
+Check (eq_refl : wf_f [] (mksig8 3 (nk 1) false false false None (Some 4611686018427387904%Z) [[1; 1; 0]; [0; 0; 1]]%nat) krd_b = false).
