@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **831 of 851, 18 gaps, 1 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **835 of 853, 16 gaps, 1 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -3626,6 +3626,28 @@ passes 2^62.  The bound the call graph works out for it (step 34) is 101; nothin
 *Expected*: the two cells; the bounds of programs read before unchanged (the first reading succeeds); cells for a function in
 between that is a template, and for a let of a budget in a function with a small bound.
 
+**Step 40 done (2026-11-03): a function's bound from what its callers give it, however small.**  Built as designed:
+- *`KQR.v`*: `bok` asks a written bound to be at least 1 (it asked more than 2^60 + 2^20); a let of a counter takes the function's
+  bound only when its largest value is below it as well (`lbnd`, `letc_okv`), and the recursion's flat counter likewise (`rec_ok`).
+  The proof: `cbz_big` holds of a bound left to the index only; a written bound is the one `wf` checks against (`ub_cbj`), so the
+  checks give the theorem's bound (`fits_cbj`, `flatv_cmax`); the counters at most one of the function's counters need only a bound
+  above 0 (`cbj_pos`).  With the budgets' room the new checks always hold, so every program read before is read the same.  No new
+  hypothesis; `Print Assumptions` the same base.  Tests: `kpas` (a recursive function passing 100 and 0 on, its bound 101) and
+  `krq` (its bound 20000, above its polynomial at 100: 10300), `kpasg`; a bound of 1000 taken (refused before, a test of step 33);
+  refused: a bound of 0, a written budget above a small bound given to the recursion or bound by a let, a caller giving more than
+  the bound; each theorem in milliseconds.
+- *The reifier*: when the call-graph bounds (step 34) fail, the program is read once more with them worked out from 1 for every
+  function but the entry (`bounds_tab true`); programs read before keep their bounds.  Test `w40go` (`w40p`, a recursive function
+  passing 100 and 0 on: its bound 101; `w39q`'s 10101; the entry the smallest own bound); each theorem in milliseconds.
+- *Cells*: 2 more (853): a template in between, a let of a written budget in a function with a small bound.  Run alone: both
+  proved, and with them `A_par_nat_rec_add_pred_mutual` and `_pass`.  The counter family has no gap left.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest; step 39's files /
+  step 40's): `HWP_kernel` 2.66 / 2.55 s, `HWP_own` 2.05 / 1.97, `HWP_irqnow` 1.72 / 1.66 — the same.
+- The C: 63 of 63 byte-identical.  The construct table (on `3dcc757`): **835 of 853 through the verified compiler**, 1 by design,
+  16 gaps, 1 not Rocq (was 831 of 851: the two new cells, `A_par_nat_rec_add_pred_mutual` and `_pass`).  The gate on `3dcc757`, the
+  walk switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (11 / 12 / 12 / 14 / 12 s); **71 programs
+  through the verified compiler, 0 refused**; the trusted base unchanged.
+
 **Step 41, parameters in any order — the design (2026-11-03).**  The second item of the record of 2026-11-02's order (§3.7):
 `A_par_conv_nat_second` (`k (x : int) (n : nat)`, the recursion on the second parameter) and `A_par_conv_mem_first` (the memory
 before a number).  The reader asks the counters first, the recursion on the first parameter and the memory last — conventions no
@@ -3823,11 +3845,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `7fb6b50` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `3dcc757` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 39 done (counters grown by other counters, polynomial weighted sums: the construct table 831 of 851, 1 by design), the C, the gate |
+| (this commit) | §12.V: step 40 done (a function's bound from what its callers give it: the construct table 835 of 853, 1 by design), the C, the gate |
+| `0d03935` | §12.V: step 41's design (parameters in any order) |
+| `3dcc757` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 40: written bounds from 1, the let and flat rules checked against them; the call-graph bounds from 1; 2 cells |
+| `7626def` | §12.V: step 39 done (counters grown by other counters, polynomial weighted sums: the construct table 831 of 851, 1 by design), the C, the gate |
 | `f818f93` | §12.V: step 40's design (a function's bound from what its callers give it, however small) |
 | `7fb6b50` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` + `classify.py` step 39: polynomial weights, `ppot_ok` / `ppot_sound`, `ppoly`; the first by-design cell; 5 cells |
 | `4ab85fb` | §12.V: step 38 done (counters grown apart, several weighted sums: the construct table 827 of 846), the C, the gate |
