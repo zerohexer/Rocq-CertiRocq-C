@@ -232,6 +232,15 @@ add("pair_let_bool", "pair", fdef("pair", "let c := a <? b in if c then (a, b) e
 add("pair_let_cnt", "pair", fdef("pair", "let w := S n in match w with O => (a, b) | S _ => (b, a) end"))
 add("pair_match_option", "pair", fdef("pair", "match (if a <? b then Some a else None) with Some x => (x, b) | None => (b, a) end"))
 add("rec3_match_option", "rec3", fdef("rec3", "match (if a <? b then Some a else None) with Some x => mk3 x b 0 | None => mk3 b a 1 end"))
+# a counter grown by the recursion (step 37), in every result kind's place: the function's counters bound by a weighted sum
+K37 = "Fixpoint k (n m : nat) "
+add("bool_rec_succ", "bool", K37 + "(x : int) : bool := match n with O => x <? 5 | S p => k p (S m) (x + 1) end.\n" + fdef("bool", "k n n a"))
+add("mem_rec_succ", "mem", K37 + "(x : int) (t : mem) : mem := match n with O => t | S p => k p (S m) (x + 1) (upd 0 x x t) end.\n" + fdef("mem", "k n n a s"))
+add("pair_rec_succ", "pair", K37 + "(x y : int) : int * int := match n with O => (x, y) | S p => k p (S m) y x end.\n" + fdef("pair", "k n n a b"))
+add("rec3_rec_succ", "rec3", K37 + "(x y : int) : r3 := match n with O => mk3 x y 0 | S p => k p (S m) y x end.\n" + fdef("rec3", "k n n a b"))
+add("pairp_rec_succ", "pairp", K37 + "(x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S p => k p (S m) y x end.\n" + fdef("pairp", "k n n a b"))
+add("intmem_rec_succ", "intmem", K37 + "(x : int) (t : mem) : int * mem := match n with O => (x, t) | S p => k p (S m) (x + 1) (upd 0 x x t) end.\n" + fdef("intmem", "k n n a s"))
+add("int_write_rec_succ", "int", K37 + "(x : int) (t : mem) : int := match n with O => rd 0 0 t | S p => k p (S m) (x + 1) (upd 0 x x t) end.\n" + fdef("int", "k n n a s"))
 
 # ---------------------------------------------------------------- family A: parameters
 A = []
@@ -306,6 +315,26 @@ addA("par_nat_eqb_add", "", "if Nat.eqb (n + n) 4 then a else b", "")
 addA("par_nat_match_add", "", "match (n + n)%nat with O => a | S p => k p a end", "Fixpoint k (n : nat) (x : int) : int := match n with O => x | S m => k m (x + 1) end.\n")   # a match on a sum
 addA("par_nat_rec_succ", "", "k n n a", "Fixpoint k (n m : nat) (x : int) : int := match n with O => x | S p => k p (S m) (x + 1) end.\n")   # the recursive call given a successor: bounded by the sum of the two
 addA("par_nat_let_succ", "", "let w := S n in k w a", "Fixpoint k (n : nat) (x : int) : int := match n with O => x | S m => k m (x + 1) end.\n")
+# a counter grown by the recursion (step 37): by a constant, swapped with another, through a let, two grown, under a match on
+# another counter, the function called by a recursion, a template, a mutual block; grown by the first counter's predecessor:
+# its successor (each counter below the first's start) and a sum with it (quadratic: no weighted sum bounds it)
+addA("par_nat_rec_add2", "", "k n n a", "Fixpoint k (n m : nat) (x : int) : int := match n with O => x | S p => k p (m + 2) (x + 1) end.\n")
+addA("par_nat_rec_swap_succ", "", "k n 1 n a", "Fixpoint k (n c d : nat) (x : int) : int := match n with O => x | S p => k p (S d) c (x + 1) end.\n")
+addA("par_nat_rec_let_succ", "", "k n n a", "Fixpoint k (n m : nat) (x : int) : int := match n with O => x | S p => let q := S m in k p q (x + 1) end.\n")
+addA("par_nat_rec_two_succ", "", "k n n n a", "Fixpoint k (n c d : nat) (x : int) : int := match n with O => x | S p => k p (S c) (S d) (x + 1) end.\n")
+addA("par_nat_rec_match_succ", "", "k n n a",
+     "Fixpoint k (n m : nat) (x : int) : int := match n with O => x | S p => match m with O => k p 1 x | S q => k p (S (S q)) (x + 1) end end.\n")
+addA("par_nat_rec_succ_called", "", "k2 n a",
+     "Fixpoint k (n m : nat) (x : int) : int := match n with O => x | S p => k p (S m) (x + 1) end.\n"
+     "Fixpoint k2 (r : nat) (x : int) : int := match r with O => x | S q => k2 q (k r r x) end.\n")
+addA("par_nat_rec_succ_fn", "", "k n n a (fun y => y + 1)",
+     "Fixpoint k (n m : nat) (x : int) (g : int -> int) : int := match n with O => x | S p => k p (S m) (g x) g end.\n")
+addA("par_nat_rec_succ_mutual", "", "ev n n a",
+     "Fixpoint ev (n m : nat) (x : int) : int := match n with O => x | S p => od p (S m) (x + 1) end\n"
+     "with od (n m : nat) (x : int) : int := match n with O => x * 2 | S p => ev p (S m) (x + 2) end.\n")
+addA("par_nat_rec_succ_pred", "", "k n n a", "Fixpoint k (n m : nat) (x : int) : int := match n with O => x | S p => k p (S p) (x + 1) end.\n")
+addA("par_nat_rec_add_pred", "", "k n n a", "Fixpoint k (n m : nat) (x : int) : int := match n with O => x | S p => k p (m + p) (x + 1) end.\n")
+addA("par_nat_rec_add_pred_lit", "", "k 100 0 a", "Fixpoint k (n m : nat) (x : int) : int := match n with O => x | S p => k p (m + p) (x + 1) end.\n")   # the same from a written budget: bounded
 # a record holding records (step 32): an inner record used as a value, taken apart later, given on
 addA("par_pairp_proj", "", "let r := k n a b in fst (fst r) + snd (fst r) + snd r", "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => k m y x end.\n")
 addA("par_pairp_late", "", "let '(p, z) := k n a b in let w := z + 1 in let '(x, y) := p in x + y + w", "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => k m y x end.\n")

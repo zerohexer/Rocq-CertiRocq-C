@@ -395,7 +395,7 @@ def reflect(name, entry, prog, no_proof):
     rc, out = coqc(f0)
     info = open(os.path.join(GEN, f"{name}_rinfo.out")).read() if rc == 0 and os.path.exists(os.path.join(GEN, f"{name}_rinfo.out")) else ""
     fs = re.findall(r'\("([^"]+)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([IBa-h]*)"(?:%bs)?,\s*(true|false),\s*(true|false),\s*(true|false),'
-                    r'\s*"([a-hBP]?)"(?:%bs)?,\s*(?:None|Some\s*\(?(\d+)(?:%Z)?\)?)\)', info)
+                    r'\s*"([a-hBP]?)"(?:%bs)?,\s*(?:None|Some\s*\(?(\d+)(?:%Z)?\)?),\s*\[([^\]]*)\]\)', info)
     if rc != 0:
         # the file did not compile: the program is not Rocq (Rocq's own error, the first of them), or the reifier failed
         m = re.search(r"Error:\s*(.*?)(?:\n\n|$)", out, re.S)
@@ -424,7 +424,11 @@ def reflect(name, entry, prog, no_proof):
     # or none
     rq = lambda f: ("None" if f[6] == "" else "(Some KQR.KBool)" if f[6] == "B" else "(Some KQR.KNum)" if f[6] == "P"
                     else f"(Some (KQR.KRec {ord(f[6]) - ord('a')}))")
-    sig = lambda f: (f"(KQR.mksig {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)})" if not f[7]
+    # the weights of a function whose recursion grows a counter (step 37): its counters' weighted sum below its bound
+    ws = lambda f: "[" + "; ".join(re.findall(r"\d+", f[8])) + "]%nat"
+    bo = lambda f: "None" if not f[7] else f"(Some {f[7]}%Z)"
+    sig = lambda f: (f"(KQR.mksig8 {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)} {ws(f)})" if re.search(r"\d", f[8])
+                     else f"(KQR.mksig {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)})" if not f[7]
                      else f"(KQR.mksig7 {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} (Some {f[7]}%Z))")
     bnd = lambda f, j: f"(KQR.cbz {j})" if not f[7] else f"{f[7]}%Z"
     t = HDR + "From KQC Require KQR KQRReify.\nImport ListNotations.\n" + f"From KQG Require Import {name}_r.\n"
@@ -531,7 +535,7 @@ def reflect(name, entry, prog, no_proof):
                                    ("compile_f_okr", "KQR.fr0", "KQR.fr1", f" {f[3]}"))
                 b = f"(KQRReify.body_at {name}_funs {j})"
                 t += (f"Proof. exact_no_check (@KQR.{thm} {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {int(f[1]) - 1} {kl(f)}{mm} ({p0} {b}) ({p1} {b})"
-                      f" {f[0]} eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl eq_refl"
+                      f" {bo(f)} {ws(f)} {f[0]} eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl eq_refl"
                       f" (fun n => eq_refl)). Qed.\n")
             else:
                 t += (f"Proof. exact_no_check (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j})"
