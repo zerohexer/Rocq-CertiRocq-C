@@ -2059,22 +2059,59 @@ Fixpoint w_rounds (k n : nat) (rs : list (list cbe * scnts)) (ws : list Z) : opt
   if forallb (fun z => z <=? 65536)%Z ws' then
     (if list_eq_dec Z.eq_dec ws' ws then Some ws else match k with O => None | S k' => w_rounds k' n rs ws' end)
   else None.
-Definition wts_of (n : nat) (b : fbody) : list (list nat) :=
+(** a counter grown by other counters (step 39): its polynomial [c + n·G], [n] the first counter and [G] its growth per round
+    -- the recursive calls' linear bounds, the largest coefficient of each, with the first counter for the predecessor and
+    each other counter given its own polynomial (a vector when step 38's rounds give one the check takes) -- in the order the
+    counters depend on each other: none for a counter grown by itself by more than one per round, or a cycle *)
+Definition fl (n : nat) (l : linf) : list Z * Z :=
+  (map (fun i => if Nat.eqb i O then nth (Nat.pred n) (fst l) 0%Z else nth (Nat.sub (Nat.pred n) i) (fst l) 0%Z) (seq 0 n), snd l).
+Definition flmax (a b : list Z * Z) : list Z * Z := (map (fun xy => Z.max (fst xy) (snd xy)) (combine (fst a) (fst b)), Z.max (snd a) (snd b)).
+Definition lmax_j (n : nat) (rs : list (list cbe * scnts)) (j : nat) : list Z * Z :=
+  match map (fun q => match nth_error (lc (snd q)) (Nat.pred j) with Some c => fl n (clinf (fst q) c) | None => (repeat 0%Z n, 0%Z) end) rs with
+  | [] => (repeat 0%Z n, 0%Z)
+  | l0 :: ls => fold_left flmax ls l0
+  end.
+Fixpoint ppoly (fuel n : nat) (rs : list (list cbe * scnts)) (lin : nat -> option poly) (j : nat) : option poly :=
+  match lin j with
+  | Some P => Some P
+  | None =>
+      match fuel with
+      | O => None
+      | S f =>
+          let L := lmax_j n rs j in
+          if (2 <=? nth j (fst L) 0)%Z then None else
+          let deps := filter (fun i => negb (Nat.eqb i j) && (0 <? nth i (fst L) 0)%Z) (seq 1 (Nat.pred n)) in
+          match opt_all (map (fun i => option_map (fun P => (i, P)) (ppoly f n rs lin i)) deps) with
+          | None => None
+          | Some ps =>
+              let G := (Z.to_nat (nth 0 (fst L) 0%Z), [O]) :: (Z.to_nat (Z.max 0 (snd L)), []) ::
+                       flat_map (fun iP => map (fun m => (Nat.mul (Z.to_nat (nth (fst iP) (fst L) 0%Z)) (fst m), snd m)) (snd iP)) ps in
+              Some ((1, [j]) :: map (fun m => (fst m, O :: snd m)) G)
+          end
+      end
+  end.
+Definition mono_eq_dec : forall x y : nat * list nat, {x = y} + {x <> y}.
+Proof. decide equality; [apply (list_eq_dec Nat.eq_dec) | apply Nat.eq_dec]. Defined.
+Definition wts_of (n : nat) (b : fbody) : list poly :=
   let rs := flat_map (fun q : site => match fst q with None => [snd q] | Some _ => [] end) (cl_f own_bound n b) in
   if forallb (fun q => all_c (fun c => flat c && pvars (fst q) c || lin1 (clinf (fst q) c)) (snd q)) rs then [] else
   let unit c := map (fun j => if Nat.eqb j c then 1%Z else 0%Z) (seq 0 n) in
-  match opt_all (map (fun c => w_rounds (4 * n + 4) n rs (unit c)) (seq 0 n)) with
-  | Some vs => nodup (list_eq_dec Nat.eq_dec) (map (map Z.to_nat) vs)
+  let lin c := match w_rounds (4 * n + 4) n rs (unit c) with
+               | Some ws => let P := lpoly (map Z.to_nat ws) in if forallb (fun q => ppot_ok P (fst q) (snd q)) rs then Some P else None
+               | None => None
+               end in
+  match opt_all (map (ppoly n n rs lin) (seq 0 n)) with
+  | Some vs => nodup (list_eq_dec mono_eq_dec) vs
   | None => []
   end.
 (** a function with weights is given its counters by its callers (each weighted sum below its bound, worked out from the
     call graph) or, the entry, by [kq_nat] (each at most 2^60): the entry's own bound covers each counter at the smallest
     bound's value *)
-Definition wmax (vs : list (list nat)) (l : list Z) : Z := fold_right Z.max 0%Z (map (fun ws => wdot ws l) vs).
-Definition own_w (vs : list (list nat)) : Z := (wmax vs (repeat (own_bound - 1)%Z (length (hd [] vs))) + 1)%Z.
+Definition wmax (vs : list poly) (l : list Z) : Z := fold_right Z.max 0%Z (map (fun P => pevalz P l) vs).
+Definition own_w (n : nat) (vs : list poly) : Z := (wmax vs (repeat (own_bound - 1)%Z n) + 1)%Z.
 (** a function's signature as [wf_f] takes it: as read; with the bound the call graph worked out for it (step 34); with the
     smallest bound of its own (step 33); with weights when its recursion grows a counter, at the call graph's bound or their
-    own (steps 37, 38).  Every way a function is read -- a function, a template's copy, a local fixpoint's copy, a mutual block and
+    own (steps 37 to 39).  Every way a function is read -- a function, a template's copy, a local fixpoint's copy, a mutual block and
     its members -- takes its signature from here *)
 Definition wf_sig (wfok : sig -> bool) (gs : sig) (b : fbody) (bd : option Z) : option sig :=
   let gb bd := mksig7 (sn gs) (sk gs) (sm gs) (sr gs) (sw gs) (sq gs) (Some bd) in
@@ -2082,7 +2119,7 @@ Definition wf_sig (wfok : sig -> bool) (gs : sig) (b : fbody) (bd : option Z) : 
   let wtry (obd : option Z) :=
     match wts_of (sn gs) b with
     | [] => None
-    | ws => let g := mksig8 (sn gs) (sk gs) (sm gs) (sr gs) (sw gs) (sq gs) (Some (match obd with Some x => x | None => own_w ws end)) ws in
+    | ws => let g := mksig8 (sn gs) (sk gs) (sm gs) (sr gs) (sw gs) (sq gs) (Some (match obd with Some x => x | None => own_w (sn gs) ws end)) ws in
             if wfok g then Some g else None
     end in
   match bd with
@@ -2740,6 +2777,7 @@ Fixpoint find_kn (kn : kername) (l : list (kername * sig * fbody)) (i : nat) : o
   match l with [] => None | e :: r => if Kername.eqb kn (fst (fst e)) then Some i else find_kn kn r (S i) end.
 Definition bounds_tab (es : list (kername * sig * fbody)) : kername -> option Z :=
   let n := length es in
+  let sns := map (fun e : kername * sig * fbody => sn (snd (fst e))) es in
   let wss := map (fun e : kername * sig * fbody => wts_of (sn (snd (fst e))) (snd e)) es in
   let need f l := match nth f wss [] with [] => (fold_right Z.max 0 l + 1)%Z | vs => (wmax vs l + 1)%Z end in
   let bs := fold_left (fun bs i =>
@@ -2747,7 +2785,7 @@ Definition bounds_tab (es : list (kername * sig * fbody)) : kername -> option Z 
               match nth_error es i with
               | Some e => fold_left (fun bs' fc => upd_max bs' (fst fc) (need (fst fc) (snd fc))) (cl_calls Bi (sn (snd (fst e))) (snd e)) bs
               | None => bs
-              end) (rev (seq 0 n)) (map (fun i => match nth i wss [] with [] => own_bound | ws => if Nat.eqb (S i) n then own_w ws else own_bound end) (seq 0 n)) in
+              end) (rev (seq 0 n)) (map (fun i => match nth i wss [] with [] => own_bound | ws => if Nat.eqb (S i) n then own_w (nth i sns O) ws else own_bound end) (seq 0 n)) in
   fun kn => match find_kn kn es 0 with Some i => Some (nth i bs own_bound) | None => None end.
 (** the program: read with the bounds of the index and the smallest own bound; failing that, read without the check, the bounds
     worked out from its calls, and read again with them (step 34) *)
@@ -3096,9 +3134,9 @@ Print Assumptions cnt_all_ok_r.
    sum of its counters below its bound -- the entry's own, each counter at the smallest bound's value *)
 Definition grow_src := ltac:(run_template_program (tmQuoteRec grow)
   (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
-Check (eq_refl : map (fun x => snd (fst x)) grow_src = [mksig8 2 (nk 1) false false false None (Some (own_w [[1; 0]; [1; 1]]%nat)) [[1; 0]; [1; 1]]%nat]).
+Check (eq_refl : map (fun x => snd (fst x)) grow_src = [mksig8 2 (nk 1) false false false None (Some (own_w 2 (map lpoly [[1; 0]; [1; 1]]%nat))) (map lpoly [[1; 0]; [1; 1]]%nat)]).
 Definition grow_Pr := mkprog (funs_of 0 grow_src) [].
-Time Lemma grow_ok_r : callee_ok grow_Pr (gid1 0) (own_w [[1; 0]; [1; 1]]%nat) (sig_at grow_src 0) grow.
+Time Lemma grow_ok_r : callee_ok grow_Pr (gid1 0) (own_w 2 (map lpoly [[1; 0]; [1; 1]]%nat)) (sig_at grow_src 0) grow.
 Proof. Time exact_no_check (compile_f_ok grow_Pr [] gid1 0 (sig_at grow_src 0) (body_at grow_src 0) eq_refl eq_refl (no_callees grow_Pr gid1) eq_refl eq_refl). Time Qed.
 
 (* ---------------------------------------------------------------- booleans, from the user's text *)
@@ -4520,8 +4558,10 @@ Definition w37go (n : nat) (a b : i63) (s : mem) : i63 :=
 Definition w37_src := ltac:(run_template_program (tmQuoteRec w37go)
   (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
 Check (eq_refl : map (fun x => (sv (snd (fst x)), sb (snd (fst x)))) w37_src =
-  [([[1; 0]; [1; 1]]%nat, Some (own_w [[1; 0]; [1; 1]]%nat)); ([[1; 0]; [2; 1]]%nat, Some (own_w [[1; 0]; [2; 1]]%nat));
-   ([[1; 0; 0]; [1; 1; 1]]%nat, Some (own_w [[1; 0; 0]; [1; 1; 1]]%nat)); ([[1; 0]; [1; 1]]%nat, Some (own_w [[1; 0]; [1; 1]]%nat));
+  [(map lpoly [[1; 0]; [1; 1]]%nat, Some (own_w 2 (map lpoly [[1; 0]; [1; 1]]%nat)));
+   (map lpoly [[1; 0]; [2; 1]]%nat, Some (own_w 2 (map lpoly [[1; 0]; [2; 1]]%nat)));
+   (map lpoly [[1; 0; 0]; [1; 1; 1]]%nat, Some (own_w 3 (map lpoly [[1; 0; 0]; [1; 1; 1]]%nat)));
+   (map lpoly [[1; 0]; [1; 1]]%nat, Some (own_w 2 (map lpoly [[1; 0]; [1; 1]]%nat)));
    ([], Some own_bound)]).
 Check (eq_refl : map (fun x => snd x) w37_src =
   [FRec (SVar 0) (SRec (CCons (CS (CVar 1)) CNil) (SCons (SOp Badd (SVar 0) (SInt 1)) SNil));
@@ -4582,7 +4622,7 @@ Definition w38go (n : nat) (a b : i63) (s : mem) : i63 := w38d n n n a.
 Definition w38_src := ltac:(run_template_program (tmQuoteRec w38go)
   (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
 Check (eq_refl : map (fun x => (sv (snd (fst x)), sb (snd (fst x)))) w38_src =
-  [([[1; 0; 0]; [1; 1; 0]; [1; 0; 1]]%nat, Some (2 * own_bound - 1)%Z); ([], Some own_bound)]).
+  [(map lpoly [[1; 0; 0]; [1; 1; 0]; [1; 0; 1]]%nat, Some (2 * own_bound - 1)%Z); ([], Some own_bound)]).
 Definition w38_Pr := mkprog (funs_of 0 w38_src) [].
 Time Lemma w38d_ok_r : callee_ok w38_Pr (gid1 0) (fbound (sig_at w38_src 0) 0) (sig_at w38_src 0) w38d.
 Proof. Time exact_no_check (compile_f_ok w38_Pr [] gid1 0 (sig_at w38_src 0) (body_at w38_src 0) eq_refl eq_refl (no_callees w38_Pr gid1) eq_refl eq_refl). Time Qed.
@@ -4592,3 +4632,38 @@ Proof.
     eq_refl eq_refl (all_ok_callees w38_Pr gid1 [existT ftype (sig_at w38_src 0) w38d] (conj w38d_ok_r Logic.I)) eq_refl eq_refl).
 Time Qed.
 Print Assumptions w38go_ok_r.
+
+(* ---------------------------------------------------------------- counters grown by other counters (step 39) *)
+(* from written budgets: a counter grown by the predecessor (m + n^2), a counter grown by it (q + n m + n^3); their polynomials
+   worked out by the reifier, each function's bound from what its caller gives it *)
+Fixpoint w39q (n m : nat) (x : i63) : i63 := match n with O => x | S p => w39q p (m + p) (PrimInt63.add x 1) end.
+Fixpoint w39c (n m q : nat) (x : i63) : i63 := match n with O => x | S p => w39c p (m + p) (q + m) (PrimInt63.add x 1) end.
+Definition w39go (n : nat) (a b : i63) (s : mem) : i63 := PrimInt63.add (w39q 100 0 a) (w39c 50 0 0 b).
+Definition w39_src := ltac:(run_template_program (tmQuoteRec w39go)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : map (fun x => (sv (snd (fst x)), sb (snd (fst x)))) w39_src =
+  [([lpoly [1; 0]; [(1, [1]); (1, [0; 0]); (0, [0])]]%nat, Some own_bound);
+   ([lpoly [1; 0; 0]; [(1, [1]); (1, [0; 0]); (0, [0])]; [(1, [2]); (0, [0; 0]); (0, [0]); (1, [0; 1]); (1, [0; 0; 0]); (0, [0; 0])]]%nat,
+    Some own_bound);
+   ([], Some own_bound)]).
+Definition w39_Pr := mkprog (funs_of 0 w39_src) [].
+Time Lemma w39q_ok_r : callee_ok w39_Pr (gid1 0) (fbound (sig_at w39_src 0) 0) (sig_at w39_src 0) w39q.
+Proof. Time exact_no_check (compile_f_ok w39_Pr [] gid1 0 (sig_at w39_src 0) (body_at w39_src 0) eq_refl eq_refl (no_callees w39_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma w39c_ok_r : callee_ok w39_Pr (gid1 1) (fbound (sig_at w39_src 1) 1) (sig_at w39_src 1) w39c.
+Proof.
+  Time exact_no_check (compile_f_ok w39_Pr [existT ftype (sig_at w39_src 0) w39q] gid1 1 (sig_at w39_src 1) (body_at w39_src 1)
+    eq_refl eq_refl (all_ok_callees w39_Pr gid1 [existT ftype (sig_at w39_src 0) w39q] (conj w39q_ok_r Logic.I)) eq_refl eq_refl).
+Time Qed.
+Time Lemma w39go_ok_r : callee_ok w39_Pr (gid1 2) (fbound (sig_at w39_src 2) 2) (sig_at w39_src 2) w39go.
+Proof.
+  Time exact_no_check (compile_f_ok w39_Pr [existT ftype (sig_at w39_src 0) w39q; existT ftype (sig_at w39_src 1) w39c] gid1 2
+    (sig_at w39_src 2) (body_at w39_src 2) eq_refl eq_refl
+    (all_ok_callees w39_Pr gid1 [existT ftype (sig_at w39_src 0) w39q; existT ftype (sig_at w39_src 1) w39c] (conj w39q_ok_r (conj w39c_ok_r Logic.I)))
+    eq_refl eq_refl).
+Time Qed.
+Print Assumptions w39go_ok_r.
+(* the same growth given n n from the data: the polynomial passes 2^62 at the entry's counters (the counter outgrows a machine
+   number), refused *)
+Definition w39d (n : nat) (a b : i63) (s : mem) : i63 := w39q n n a.
+Definition w39d_src := ltac:(run_template_program (tmQuoteRec w39d) (fun q => let r := eval vm_compute in (reify_prog q) in exact r)).
+Check (eq_refl : w39d_src = None).

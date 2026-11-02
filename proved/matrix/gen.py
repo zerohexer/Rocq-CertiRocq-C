@@ -340,6 +340,19 @@ addA("par_nat_rec_three_succ", "", "k n n n n a", "Fixpoint k (n c d e : nat) (x
 addA("par_nat_rec_add2_succ", "", "k n n n a", "Fixpoint k (n c d : nat) (x : int) : int := match n with O => x | S p => k p (c + 2) (S d) (x + 1) end.\n")
 addA("par_nat_rec_succ_swap", "", "k n n n n a", "Fixpoint k (n c d e : nat) (x : int) : int := match n with O => x | S p => k p (S c) (S e) d (x + 1) end.\n")
 addA("par_nat_rec_add_pred_lit", "", "k 100 0 a", "Fixpoint k (n m : nat) (x : int) : int := match n with O => x | S p => k p (m + p) (x + 1) end.\n")   # the same from a written budget: bounded
+# counters grown by other counters (step 39), from written budgets: by the predecessor's successor, a counter grown by one grown
+# by the predecessor (degree 3), in a mutual block, in a template
+addA("par_nat_rec_add_succ_pred", "", "k 100 0 a", "Fixpoint k (n m : nat) (x : int) : int := match n with O => x | S p => k p (m + S p) (x + 1) end.\n")
+addA("par_nat_rec_add_pred2", "", "k 50 0 0 a", "Fixpoint k (n m q : nat) (x : int) : int := match n with O => x | S p => k p (m + p) (q + m) (x + 1) end.\n")
+addA("par_nat_rec_add_pred_mutual", "", "ev 100 0 a",
+     "Fixpoint ev (n m : nat) (x : int) : int := match n with O => x | S p => od p (m + p) (x + 1) end\n"
+     "with od (n m : nat) (x : int) : int := match n with O => x * 2 | S p => ev p (m + p) (x + 2) end.\n")
+addA("par_nat_rec_add_pred_fn", "", "k 100 0 a (fun y => y + 1)",
+     "Fixpoint k (n m : nat) (x : int) (g : int -> int) : int := match n with O => x | S p => k p (m + p) (g x) g end.\n")
+# a recursive function passing on small written counters to one whose polynomial grows (its bound below kq_nat's 2^60)
+addA("par_nat_rec_add_pred_pass", "", "kpass 3 100 0 a",
+     "Fixpoint k (n m : nat) (x : int) : int := match n with O => x | S p => k p (m + p) (x + 1) end.\n"
+     "Fixpoint kpass (r n m : nat) (x : int) : int := match r with O => k n m x | S q => kpass q n m (x + 1) end.\n")
 # a record holding records (step 32): an inner record used as a value, taken apart later, given on
 addA("par_pairp_proj", "", "let r := k n a b in fst (fst r) + snd (fst r) + snd r", "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => k m y x end.\n")
 addA("par_pairp_late", "", "let '(p, z) := k n a b in let w := z + 1 in let '(x, y) := p in x + y + w", "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => k m y x end.\n")

@@ -205,10 +205,13 @@ Inductive smem : Type :=
     with some memory, not the one it was given); or a value of another kind as the result ([sq = Some k]): a record of type
     [ri] ([Some (KRec ri)]: a number function whose KQL returns the record's first field and writes the others into the slot
     block), or a boolean ([Some KBool], step 24: its KQL returns 1 or 0) *)
-Record sig := mksig8 { sn : nat; sk : list kind; sm : bool; sr : bool; sw : bool; sq : option kind; sb : option Z; sv : list (list nat) }.
-(* sv (steps 37, 38): none, each counter below the function's bound; else weight vectors, each a weight per counter, every counter
-   with a weight of at least 1 in one of them, and each vector's weighted sum of the counters below the bound -- for a function
-   whose recursion grows counters *)
+(** a polynomial in a function's counters (step 39): monomials, each a coefficient and the counters it multiplies (their
+    positions, the first counter 0) *)
+Definition poly : Type := list (nat * list nat).
+Record sig := mksig8 { sn : nat; sk : list kind; sm : bool; sr : bool; sw : bool; sq : option kind; sb : option Z; sv : list poly }.
+(* sv (steps 37 to 39): none, each counter below the function's bound; else polynomials in the counters, every counter a
+   monomial of its own with a coefficient of at least 1 in one of them, and each polynomial at the counters below the bound --
+   for a function whose recursion grows counters *)
 Definition mksig7 (x : nat) (k : list kind) (m r w : bool) (q : option kind) (b : option Z) : sig := mksig8 x k m r w q b [].
 (* sb: the bound on the function's counters when it is given (step 33: per function, worked out for the program); none, the
    bound of its index ([cbz]) *)
@@ -1453,7 +1456,7 @@ Fixpoint clinf (bs : list cbe) (c : scnt) : linf :=
   | CNat e => ([], cnat_max e)
   | CPred c => clinf bs c | CAdd a b => ladd (clinf bs a) (clinf bs b)
   end.
-Definition wfctx : Type := (list sig * ((option Z * list (list nat)) * list cbe))%type.
+Definition wfctx : Type := (list sig * ((option Z * list poly) * list cbe))%type.
 Definition ub (sigs : wfctx) : Z :=
   match fst (fst (snd sigs)) with Some b => b | None => cbz (length (fst sigs)) end.
 Definition cbv (B : Z) (o : option Z) : Z := match o with Some b => b | None => B end.
@@ -1493,21 +1496,54 @@ Definition pot_ok (ws : list nat) (bs : list cbe) (ccs : scnts) : bool :=
 (** a linear bound at most one of the function's counters: no coefficient below 0, their sum at most 1, no constant above 0 *)
 Definition lin1 (l : linf) : bool :=
   forallb (fun z => (0 <=? z)%Z) (fst l) && (fold_right Z.add 0%Z (fst l) <=? 1)%Z && (snd l <=? 0)%Z.
+(** a polynomial at numbers; a weight vector as a polynomial of degree 1 *)
+Fixpoint prodz (xs : list Z) (l : list nat) : Z := match l with [] => 1%Z | i :: l' => (nth i xs 0%Z * prodz xs l')%Z end.
+Definition pevalz (P : poly) (xs : list Z) : Z := fold_right (fun m a => (Z.of_nat (fst m) * prodz xs (snd m) + a)%Z) 0%Z P.
+Definition lpoly (ws : list nat) : poly := map (fun iw => (snd iw, [fst iw])) (combine (seq 0 (length ws)) ws).
+(** polynomials with integer coefficients over the recursion's variables (step 39): the predecessor (variable 0) and the
+    other counters (variable [j] the counter [j]); a polynomial in the counters at polynomials, expanded *)
+Definition zpoly : Type := list (Z * list nat).
+Definition zeval (A : zpoly) (v : list Z) : Z := fold_right (fun m a => (fst m * prodz v (snd m) + a)%Z) 0%Z A.
+Definition zmul (A B : zpoly) : zpoly := flat_map (fun a => map (fun b => ((fst a * fst b)%Z, snd a ++ snd b)) B) A.
+Definition zprod (As : list zpoly) : zpoly := fold_right zmul [(1%Z, [])] As.
+Definition zsubst (P : poly) (s : nat -> zpoly) : zpoly := flat_map (fun m => zmul [(Z.of_nat (fst m), [])] (zprod (map s (snd m)))) P.
+Definition zneg (A : zpoly) : zpoly := map (fun m => ((- fst m)%Z, snd m)) A.
+(** a linear bound over the counters at the body's start (the other counters, the last first, then the first counter) as a
+    polynomial in the recursion's variables: the first counter is the predecessor's successor *)
+Definition zlin (n : nat) (l : linf) : zpoly :=
+  (snd l, []) :: flat_map (fun ia : nat * Z => if Nat.ltb (fst ia) (Nat.pred n) then [(snd ia, [(Nat.pred n - fst ia)%nat])]
+                                     else if Nat.eqb (fst ia) (Nat.pred n) then [(snd ia, [O]); (snd ia, [])] else [])
+                          (combine (seq 0 (length (fst l))) (fst l)).
+(** no coefficient below 0 once equal monomials are summed (each monomial's counters sorted) *)
+Fixpoint ins (x : nat) (l : list nat) : list nat := match l with [] => [x] | y :: l' => if Nat.leb x y then x :: l else y :: ins x l' end.
+Fixpoint isort (l : list nat) : list nat := match l with [] => [] | x :: l' => ins x (isort l') end.
+Definition zcoef (A : zpoly) (k : list nat) : Z :=
+  fold_right (fun m a => if list_eq_dec Nat.eq_dec (isort (snd m)) k then (fst m + a)%Z else a) 0%Z A.
+Definition znonneg (A : zpoly) : bool :=
+  forallb (fun k => (0 <=? zcoef A k)%Z) (nodup (list_eq_dec Nat.eq_dec) (map (fun m => isort (snd m)) A)).
+(** the recursion keeps a polynomial from growing (step 39): at the start of the body against the recursive call's counters,
+    the first counter the predecessor's successor and each other counter given at most its linear bound -- the difference
+    expanded over the predecessor and the other counters, no coefficient below 0 *)
+Definition ppot_ok (P : poly) (bs : list cbe) (ccs : scnts) : bool :=
+  let n := S (len_c ccs) in
+  let sold i := if Nat.eqb i O then [(1%Z, [O]); (1%Z, [])] else if Nat.ltb i n then [(1%Z, [i])] else [] in
+  let snew i := if Nat.eqb i O then [(1%Z, [O])] else match nth_error (lc ccs) (Nat.pred i) with Some c => zlin n (clinf bs c) | None => [] end in
+  znonneg (zsubst P sold ++ zneg (zsubst P snew)).
 (** the recursive call's counters: without weights, each a flat variable at the function's bound or at most one of the
-    function's counters (its linear bound); with them, keeping each weighted sum from growing; each a machine number *)
+    function's counters (its linear bound); with them, keeping each polynomial from growing; each a machine number *)
 Definition rec_ok (sigs : wfctx) (ccs : scnts) : bool :=
   match snd (fst (snd sigs)) with
   | [] => all_c (fun c => (flat c && pvars (snd (snd sigs)) c || lin1 (clinf (snd (snd sigs)) c))
                           && (cmaxv (ub sigs) (snd (snd sigs)) c <? 9223372036854775808)%Z) ccs
-  | vs => forallb (fun ws => pot_ok ws (snd (snd sigs)) ccs) vs
+  | vs => forallb (fun P => ppot_ok P (snd (snd sigs)) ccs) vs
           && all_c (fun c => (cmaxv (ub sigs) (snd (snd sigs)) c <? 9223372036854775808)%Z) ccs
   end.
-(** a call (steps 37, 38): each counter given below the callee's bound, or each of its weighted sums, each counter a machine number *)
+(** a call (steps 37 to 39): each counter given below the callee's bound, or each of its polynomials at them, each counter a machine number *)
 Fixpoint wdot (ws : list nat) (zs : list Z) : Z := match ws, zs with w :: ws', z :: zs' => (Z.of_nat w * z + wdot ws' zs')%Z | _, _ => 0%Z end.
 Definition cfits_b (gs : sig) (B : Z) (sigs : wfctx) (ccs : scnts) : bool :=
   match sv gs with
   | [] => all_c (fun c => (cmaxv (ub sigs) (snd (snd sigs)) c <? B)%Z && (B <=? 4611686018427387904)%Z) ccs
-  | vs => forallb (fun ws => (wdot ws (map (cmaxv (ub sigs) (snd (snd sigs))) (lc ccs)) <? B)%Z) vs
+  | vs => forallb (fun P => (pevalz P (map (cmaxv (ub sigs) (snd (snd sigs))) (lc ccs)) <? B)%Z) vs
           && all_c (fun c => (cmaxv (ub sigs) (snd (snd sigs)) c <? 9223372036854775808)%Z) ccs && (B <=? 4611686018427387904)%Z
   end.
 Fixpoint wf (sigs : wfctx) (r mok : bool) (nx : nat) (k : list kind) (rk : list nat) (e : sexp) {struct e} : bool :=
@@ -1883,7 +1919,7 @@ Definition wctx (sigs : list sig) (gs : sig) (rc : bool) : wfctx :=
 Definition swok (gs : sig) : bool :=
   match sv gs with
   | [] => true
-  | vs => forallb (fun ws => Nat.eqb (length ws) (sn gs)) vs && forallb (fun i => existsb (fun ws => Nat.leb 1 (nth i ws O)) vs) (seq 0 (sn gs))
+  | vs => forallb (fun i => existsb (fun P => existsb (fun m => Nat.leb 1 (fst m) && list_eq_dec Nat.eq_dec (snd m) [i]) P) vs) (seq 0 (sn gs))
   end.
 Definition wf_f (sigs : list sig) (gs : sig) (b : fbody) : bool :=
   bok (sb gs) && swok gs &&
@@ -1997,7 +2033,7 @@ Definition slot_room : Prop :=
 (** the counters given to a function (step 37): each below its bound, or their weighted sum *)
 Fixpoint dotw (ws cvs : list nat) : nat := match ws, cvs with w :: ws', c :: cvs' => w * c + dotw ws' cvs' | _, _ => O end.
 Definition cfits (gs : sig) (B : Z) (cvs : list nat) : Prop :=
-  match sv gs with [] => Forall (fun c => (Z.of_nat c < B)%Z) cvs | vs => Forall (fun ws => (Z.of_nat (dotw ws cvs) < B)%Z) vs end.
+  match sv gs with [] => Forall (fun c => (Z.of_nat c < B)%Z) cvs | vs => Forall (fun P => (pevalz P (map Z.of_nat cvs) < B)%Z) vs end.
 Definition callee_ok (P : prog) (id : ident) (B : Z) (gs : sig) (h : ftype gs) : Prop :=
   slot_room -> forall cvs vs M, length cvs = sn gs -> map kind_of vs = sk gs -> cfits gs B cvs ->
     if sw gs then exists M', runk P id (map ofn cvs ++ flat_map vflat vs) M (calln gs h cvs vs M) M'
@@ -3178,6 +3214,166 @@ Proof.
   destruct F as [|v z vals zs Hv F]; cbn [dotw wdot]; [lia|]. specialize (IH vals zs F). nia.
 Qed.
 
+Lemma list_cases_any : forall {A : Type} (l : list A), l = [] \/ exists x r, l = x :: r.
+Proof. intros A [|x r]; [left; reflexivity | right; eauto]. Qed.
+(** polynomials (step 39): evaluation of sums, products, substitutions *)
+Lemma prodz_app : forall xs l1 l2, prodz xs (l1 ++ l2) = (prodz xs l1 * prodz xs l2)%Z.
+Proof. intros xs l1 l2. induction l1 as [|i l1 IH]; cbn [app prodz]; [ring|]. rewrite IH. ring. Qed.
+Lemma zeval_nil : forall v, zeval [] v = 0%Z.
+Proof. reflexivity. Qed.
+Lemma zeval_cons : forall m A v, zeval (m :: A) v = (fst m * prodz v (snd m) + zeval A v)%Z.
+Proof. reflexivity. Qed.
+Lemma zeval_app : forall A B v, zeval (A ++ B) v = (zeval A v + zeval B v)%Z.
+Proof. intros A B v. induction A as [|m A IH]; [reflexivity|]. cbn [app]. rewrite !zeval_cons, IH. ring. Qed.
+Lemma zeval_map_mul : forall c l B v, zeval (map (fun b => ((c * fst b)%Z, l ++ snd b)) B) v = (c * prodz v l * zeval B v)%Z.
+Proof.
+  intros c l B v. induction B as [|b B IH]; cbn [map]; [rewrite !zeval_nil; ring|].
+  rewrite !zeval_cons, IH. cbn [fst snd]. rewrite prodz_app. ring.
+Qed.
+Lemma zeval_zmul : forall A B v, zeval (zmul A B) v = (zeval A v * zeval B v)%Z.
+Proof.
+  intros A B v. unfold zmul. induction A as [|a A IH]; cbn [flat_map]; [rewrite !zeval_nil; ring|].
+  rewrite zeval_app, IH, zeval_cons, (zeval_map_mul (fst a) (snd a) B v). ring.
+Qed.
+Lemma zeval_zprod : forall As v, zeval (zprod As) v = fold_right Z.mul 1%Z (map (fun A => zeval A v) As).
+Proof.
+  intros As v. induction As as [|A As IH]; [cbn; ring|]. unfold zprod in *. cbn [fold_right map].
+  rewrite zeval_zmul, IH. reflexivity.
+Qed.
+Lemma zeval_zneg : forall A v, zeval (zneg A) v = (- zeval A v)%Z.
+Proof. intros A v. induction A as [|m A IH]; [reflexivity|]. unfold zneg in *. cbn [map]. rewrite !zeval_cons, IH. cbn [fst snd]. ring. Qed.
+Lemma prodz_ext : forall l xs (f : nat -> Z), (forall i, nth i xs 0%Z = f i) -> prodz xs l = fold_right Z.mul 1%Z (map f l).
+Proof. induction l as [|i l IH]; intros xs f H; cbn [prodz map fold_right]; [reflexivity|]. rewrite H, (IH xs f H). reflexivity. Qed.
+Lemma pevalz_zsubst : forall P s v xs, (forall i, nth i xs 0%Z = zeval (s i) v) -> zeval (zsubst P s) v = pevalz P xs.
+Proof.
+  intros P s v xs H. unfold zsubst, pevalz. induction P as [|m P IH]; cbn [flat_map fold_right]; [reflexivity|].
+  rewrite zeval_app, IH, zeval_zmul, zeval_zprod, map_map, zeval_cons, zeval_nil. cbn [fst snd prodz].
+  rewrite (prodz_ext (snd m) xs (fun i => zeval (s i) v) H). ring.
+Qed.
+(** a polynomial with no coefficient below 0 grows with each counter *)
+Lemma prodz_mono : forall l xs ys, (forall i, (0 <= nth i xs 0 <= nth i ys 0)%Z) -> (0 <= prodz xs l <= prodz ys l)%Z.
+Proof. induction l as [|i l IH]; intros xs ys H; cbn [prodz]; [lia|]. specialize (IH xs ys H). specialize (H i). nia. Qed.
+Lemma pevalz_mono : forall P xs ys, (forall i, (0 <= nth i xs 0 <= nth i ys 0)%Z) -> (0 <= pevalz P xs <= pevalz P ys)%Z.
+Proof. intros P xs ys H. unfold pevalz. induction P as [|m P IH]; cbn [fold_right]; [lia|]. pose proof (prodz_mono (snd m) xs ys H). nia. Qed.
+(** a counter whose monomial has a coefficient of at least 1 is at most the polynomial *)
+Lemma pevalz_unit : forall P c i xs, In (c, [i]) P -> (1 <= c)%nat -> (forall j, (0 <= nth j xs 0)%Z) -> (nth i xs 0 <= pevalz P xs)%Z.
+Proof.
+  intros P c i xs Hin Hc H. unfold pevalz.
+  assert (N : forall Q, (0 <= fold_right (fun m a => (Z.of_nat (fst m) * prodz xs (snd m) + a)%Z) 0%Z Q)%Z).
+  { induction Q as [|m' Q IHQ]; cbn [fold_right]; [lia|]. pose proof (prodz_mono (snd m') xs xs ltac:(intros j; split; [apply H | lia])). nia. }
+  induction P as [|m P IH]; [destruct Hin|]. cbn [fold_right].
+  destruct Hin as [-> | Hin].
+  - cbn [fst snd prodz]. specialize (N P). specialize (H i). nia.
+  - specialize (IH Hin). pose proof (prodz_mono (snd m) xs xs ltac:(intros j; split; [apply H | lia])). nia.
+Qed.
+(** the check: equal monomials summed (each one's counters sorted), no coefficient below 0, gives a sum at least 0 *)
+Lemma prodz_ins : forall xs x l, prodz xs (ins x l) = prodz xs (x :: l).
+Proof. intros xs x l. induction l as [|y l IH]; cbn [ins]; [reflexivity|]. destruct (Nat.leb x y); [reflexivity|]. cbn [prodz] in *. rewrite IH. ring. Qed.
+Lemma prodz_isort : forall xs l, prodz xs (isort l) = prodz xs l.
+Proof. intros xs l. induction l as [|x l IH]; cbn [isort]; [reflexivity|]. rewrite prodz_ins. cbn [prodz]. rewrite IH. reflexivity. Qed.
+Definition ksum (K : list (list nat)) (A : zpoly) (v : list Z) : Z := fold_right (fun k a => (zcoef A k * prodz v k + a)%Z) 0%Z K.
+Lemma ksum_nil : forall K v, ksum K [] v = 0%Z.
+Proof. intros K v. unfold ksum. induction K as [|k K IH]; cbn [fold_right]; [reflexivity|]. rewrite IH. change (zcoef [] k) with 0%Z. ring. Qed.
+Lemma ksum_split : forall K m A v, ksum K (m :: A) v =
+  (fold_right (fun k a => ((if list_eq_dec Nat.eq_dec (isort (snd m)) k then fst m else 0) * prodz v k + a)%Z) 0%Z K + ksum K A v)%Z.
+Proof.
+  intros K m A v. unfold ksum. induction K as [|k K IH]; cbn [fold_right]; [reflexivity|]. rewrite IH.
+  unfold zcoef at 1. cbn [fold_right]. fold (zcoef A k). destruct (list_eq_dec Nat.eq_dec (isort (snd m)) k); ring.
+Qed.
+Lemma ksum_one : forall K x c v, NoDup K -> In x K ->
+  fold_right (fun k a => ((if list_eq_dec Nat.eq_dec x k then c else 0) * prodz v k + a)%Z) 0%Z K = (c * prodz v x)%Z.
+Proof.
+  induction K as [|k K IH]; intros x c v ND Hin; [destruct Hin|]. inversion ND as [|? ? Nk ND']; subst. cbn [fold_right].
+  destruct (list_eq_dec Nat.eq_dec x k) as [<- | Ne].
+  - assert (Z0 : forall K', ~ In x K' -> fold_right (fun k a => ((if list_eq_dec Nat.eq_dec x k then c else 0) * prodz v k + a)%Z) 0%Z K' = 0%Z).
+    { induction K' as [|k' K' IHK]; intros Nx; cbn [fold_right]; [reflexivity|].
+      destruct (list_eq_dec Nat.eq_dec x k') as [<- | _]; [exfalso; apply Nx; left; reflexivity|].
+      rewrite IHK by (intros Hx; apply Nx; right; exact Hx). ring. }
+    rewrite (Z0 K Nk). ring.
+  - destruct Hin as [-> | Hin]; [contradiction|]. rewrite (IH x c v ND' Hin). ring.
+Qed.
+Lemma zeval_ksum : forall A K v, NoDup K -> (forall m, In m A -> In (isort (snd m)) K) -> zeval A v = ksum K A v.
+Proof.
+  induction A as [|m A IH]; intros K v ND HK; [rewrite ksum_nil; reflexivity|].
+  rewrite zeval_cons, ksum_split, <- (IH K v ND) by (intros m' Hm'; apply HK; right; exact Hm').
+  rewrite (ksum_one K (isort (snd m)) (fst m) v ND (HK m (or_introl eq_refl))), prodz_isort. ring.
+Qed.
+Lemma znonneg_sound : forall A v, znonneg A = true -> (forall j, (0 <= nth j v 0)%Z) -> (0 <= zeval A v)%Z.
+Proof.
+  intros A v Nn Hv. set (K := nodup (list_eq_dec Nat.eq_dec) (map (fun m => isort (snd m)) A)).
+  rewrite (zeval_ksum A K v (NoDup_nodup _ _)) by (intros m Hm; apply nodup_In; apply in_map_iff; exists m; split; [reflexivity | exact Hm]).
+  unfold znonneg in Nn. fold K in Nn. rewrite forallb_forall in Nn. unfold ksum.
+  assert (G : forall K', (forall x, In x K' -> In x K) -> (0 <= fold_right (fun k a => (zcoef A k * prodz v k + a)%Z) 0%Z K')%Z).
+  { induction K' as [|k K' IH]; intros Inc; cbn [fold_right]; [lia|].
+    pose proof (Nn k (Inc k (or_introl eq_refl))) as C. apply Z.leb_le in C.
+    pose proof (prodz_mono k v v ltac:(intros j; split; [apply Hv | lia])) as Pm.
+    specialize (IH (fun x Hx => Inc x (or_intror Hx))). nia. }
+  apply G. intros x Hx; exact Hx.
+Qed.
+(** a linear bound at the counters at the body's start, as a polynomial in the predecessor and the other counters *)
+Lemma skipn_nth_cons : forall (l : list nat) k, (k < length l)%nat -> skipn k l = nth k l O :: skipn (S k) l.
+Proof. induction l as [|x l IH]; intros [|k] H; cbn [length skipn nth] in *; try lia; [reflexivity|]. apply IH. lia. Qed.
+Lemma nth_ofnat_nonneg : forall l j, (0 <= nth j (map Z.of_nat l) 0)%Z.
+Proof. induction l as [|x l IH]; intros [|j]; cbn [map nth]; try lia; auto. Qed.
+Lemma nth_ofnat : forall l j, nth j (map Z.of_nat l) 0%Z = Z.of_nat (nth j l O).
+Proof. induction l as [|x l IH]; intros [|j]; cbn [map nth]; auto. Qed.
+Lemma zeval_zlin_from : forall cs k rest cm,
+  zeval (flat_map (fun ia : nat * Z => if Nat.ltb (fst ia) (Nat.pred (S (length rest))) then [(snd ia, [(Nat.pred (S (length rest)) - fst ia)%nat])]
+                          else if Nat.eqb (fst ia) (Nat.pred (S (length rest))) then [(snd ia, [O]); (snd ia, [])] else [])
+         (combine (seq k (length cs)) cs)) (map Z.of_nat (cm :: rest)) = evc cs (skipn k (rev rest ++ [S cm])).
+Proof.
+  assert (Ec : forall c, evc c [] = 0%Z) by (intros [|? ?]; reflexivity).
+  induction cs as [|a cs IH]; intros k rest cm; [cbn [length seq combine flat_map]; rewrite zeval_nil; reflexivity|].
+  cbn [length seq combine flat_map]. rewrite zeval_app, IH. cbn [Nat.pred fst snd].
+  assert (Lpv : length (rev rest ++ [S cm]) = S (length rest)) by (rewrite length_app, length_rev; cbn [length]; lia).
+  destruct (Nat.lt_ge_cases k (S (length rest))) as [Hk | Hk].
+  - rewrite (skipn_nth_cons (rev rest ++ [S cm]) k) by lia. cbn [evc].
+    destruct (Nat.ltb k (length rest)) eqn:E1.
+    + apply Nat.ltb_lt in E1. cbv beta iota. rewrite zeval_cons, zeval_nil. cbn [fst snd prodz].
+      rewrite app_nth1 by (rewrite length_rev; lia). rewrite rev_nth by lia.
+      replace (length rest - k)%nat with (S (length rest - S k)) by lia. cbn [map nth]. rewrite nth_ofnat. ring.
+    + apply Nat.ltb_ge in E1. assert (Ek : k = length rest) by lia. subst k. rewrite Nat.eqb_refl. cbv beta iota.
+      rewrite !zeval_cons, zeval_nil. cbn [fst snd prodz map nth].
+      rewrite app_nth2 by (rewrite length_rev; lia). rewrite length_rev, Nat.sub_diag. cbn [nth]. rewrite Nat2Z.inj_succ. ring.
+  - rewrite !skipn_all2 by lia. rewrite Ec.
+    destruct (Nat.ltb k (length rest)) eqn:E1; [apply Nat.ltb_lt in E1; lia|].
+    destruct (Nat.eqb k (length rest)) eqn:E2; [apply Nat.eqb_eq in E2; lia|]. cbv beta iota. rewrite zeval_nil. reflexivity.
+Qed.
+Lemma zeval_zlin : forall l rest cm, zeval (zlin (S (length rest)) l) (map Z.of_nat (cm :: rest)) = leval l (rev rest ++ [S cm]).
+Proof.
+  intros l rest cm. unfold zlin, leval. rewrite zeval_cons. cbn [fst snd prodz].
+  rewrite (zeval_zlin_from (fst l) 0 rest cm). cbn [skipn]. ring.
+Qed.
+(** the recursion keeps a polynomial from growing *)
+Lemma nth_map_err : forall (g : scnt -> Z) l j, nth j (map g l) 0%Z = match nth_error l j with Some c => g c | None => 0%Z end.
+Proof. intros g l. induction l as [|c l IH]; intros [|j]; cbn [map nth nth_error]; auto. Qed.
+Lemma Forall2_nth_le : forall (vals : list nat) (cs : list scnt) (g : scnt -> Z), Forall2 (fun v c => (Z.of_nat v <= g c)%Z) vals cs ->
+  forall j, (0 <= nth j (map Z.of_nat vals) 0 <= nth j (map g cs) 0)%Z.
+Proof. intros vals cs g. induction 1 as [|v c vals cs H F IH]; intros [|j]; cbn [map nth]; try lia; auto. Qed.
+Lemma ppot_sound : forall P bs ccs vals rest cm, ppot_ok P bs ccs = true -> length rest = len_c ccs ->
+  Forall2 (fun v c => (Z.of_nat v <= leval (clinf bs c) (rev rest ++ [S cm]))%Z) vals (lc ccs) ->
+  (pevalz P (map Z.of_nat (cm :: vals)) <= pevalz P (map Z.of_nat (S cm :: rest)))%Z.
+Proof.
+  intros P bs ccs vals rest cm Pk Lr F. unfold ppot_ok in Pk. cbv zeta in Pk.
+  set (v := map Z.of_nat (cm :: rest)) in *.
+  pose proof (znonneg_sound _ v Pk (nth_ofnat_nonneg (cm :: rest))) as N.
+  rewrite zeval_app, zeval_zneg in N.
+  set (us := Z.of_nat cm :: map (fun c => leval (clinf bs c) (rev rest ++ [S cm])) (lc ccs)).
+  rewrite (pevalz_zsubst P _ v (map Z.of_nat (S cm :: rest))) in N.
+  2:{ intros [|i]; unfold v; cbn [Nat.eqb map nth]; [rewrite !zeval_cons, zeval_nil; cbn [fst snd prodz map nth]; lia|].
+      destruct (Nat.ltb (S i) (S (len_c ccs))) eqn:E.
+      - apply Nat.ltb_lt in E. rewrite zeval_cons, zeval_nil. cbn [fst snd prodz map nth]. ring.
+      - apply Nat.ltb_ge in E. rewrite zeval_nil. apply nth_overflow. rewrite length_map. lia. }
+  rewrite (pevalz_zsubst P _ v us) in N.
+  2:{ intros [|i]; unfold us; cbn [Nat.eqb nth Nat.pred]; [unfold v; rewrite zeval_cons, zeval_nil; cbn [fst snd prodz map nth]; ring|].
+      rewrite nth_map_err. destruct (nth_error (lc ccs) i) as [c|]; [|reflexivity].
+      unfold v. rewrite <- Lr. symmetry. apply zeval_zlin. }
+  pose proof (pevalz_mono P (map Z.of_nat (cm :: vals)) us) as M.
+  assert (Hm : forall i, (0 <= nth i (map Z.of_nat (cm :: vals)) 0 <= nth i us 0)%Z).
+  { intros [|i]; unfold us; cbn [map nth]; [lia|]. exact (Forall2_nth_le vals (lc ccs) _ F i). }
+  specialize (M Hm). lia.
+Qed.
+
 (** counters below [wB] compare as their machine numbers do (step 30) *)
 Lemma cmpn_ofn : forall c a b, match c with Ceq | Clt | Cle => true | _ => false end = true ->
   (Z.of_nat a < wB)%Z -> (Z.of_nat b < wB)%Z -> cmp_sem c (ofn a) (ofn b) = cmpn c a b.
@@ -3216,11 +3412,11 @@ Variable cbo : option Z.
 Let cbj := match cbo with Some b => b | None => cbz j end.
 (** the function's own weights (step 37: none, each counter below the bound; else their weighted sum), and its counters as the
     environment holds them below what the body binds *)
-Variable cws : list (list nat).
+Variable cws : list poly.
 Variable pv : list nat.
 (** what the recursive call's counters (after the first, the predecessor) must satisfy *)
 Let rfits (cvs : list nat) : Prop :=
-  match cws with [] => Forall (fun c => (Z.of_nat c < cbj)%Z) cvs | vs => Forall (fun ws => (Z.of_nat (dotw ws (cm :: cvs)) < cbj)%Z) vs end.
+  match cws with [] => Forall (fun c => (Z.of_nat c < cbj)%Z) cvs | vs => Forall (fun P => (pevalz P (map Z.of_nat (cm :: cvs)) < cbj)%Z) vs end.
 (** the recursive call, where it is allowed, computes [rec] (or [recm], giving back a memory) on counters below the bound;
     the callees compute their meanings on counters below theirs; this function comes after its callees and is not one of
     the last 2^40 *)
@@ -3241,10 +3437,10 @@ Hypothesis Hj : (Z.of_nat j < 1099511627776)%Z.
 Hypothesis Hslot : slot_room.
 (** the function's own bound, when its signature gives one (step 33), in its range *)
 Hypothesis Hbok : bok cbo = true.
-(** a recursive body of a function with weights: each weighted sum of its counters below the bound, the first counter the
+(** a recursive body of a function with weights: each polynomial at its counters below the bound, the first counter the
     predecessor's successor *)
-Hypothesis Hpv : hp = true -> cws <> [] -> (exists prest, pv = prest ++ [S cm]) /\
-  Forall (fun ws => length pv = length ws /\ (evc (map Z.of_nat (rev ws)) pv < cbj)%Z) cws.
+Hypothesis Hpv : hp = true -> cws <> [] -> exists rest0, pv = rev rest0 ++ [S cm] /\ length rest0 = nx /\
+  Forall (fun P => (pevalz P (map Z.of_nat (S cm :: rest0)) < cbj)%Z) cws.
 (** ... and without weights: its counters each below the bound *)
 Hypothesis Hpv0 : hp = true -> cws = [] -> Forall (fun v => (Z.of_nat v < cbj)%Z) pv.
 
@@ -3433,6 +3629,12 @@ Proof.
   pose proof (cmaxv_mono cbs c _ _ (ub_ge cbs)).
   rewrite KQMAuto.wB_num. apply andb_true_iff; split; [apply Z.ltb_lt; lia | reflexivity].
 Qed.
+Lemma cs_le_cmaxv2 : forall cbs ccs cenv benv renv denv M, cboundv cbj cbs pv cenv ->
+  Forall2 (fun v c => (Z.of_nat v <= cmaxv (ub (sigsv cbs)) cbs c)%Z) (denote_cs cs rec cenv benv renv denv M ccs) (lc ccs).
+Proof.
+  intros cbs. induction ccs as [|c ccs IH]; intros cenv benv renv denv M Cb; cbn [denote_cs lc]; constructor; [|apply IH; exact Cb].
+  pose proof (cmaxv_bound cbj cbs pv c cs rec cenv benv renv denv M Cb). pose proof (cmaxv_mono cbs c _ _ (ub_ge cbs)). lia.
+Qed.
 Lemma cs_le_cmaxv : forall cbs ccs cenv benv renv denv M, cboundv cbj cbs pv cenv ->
   Forall2 (fun v z => (Z.of_nat v <= z)%Z) (denote_cs cs rec cenv benv renv denv M ccs) (map (cmaxv (ub (sigsv cbs)) cbs) (lc ccs)).
 Proof.
@@ -3446,8 +3648,8 @@ Proof.
   intros cbs ccs cenv benv renv denv M gs B' F Cb. unfold cfits_b, cfits in *. destruct (sv gs) as [|w ws].
   - eapply cs_fit_each; eauto.
   - apply andb_true_iff in F as [F _]. apply andb_true_iff in F as [F _]. change (snd (snd (sigsv cbs))) with cbs in F.
-    rewrite forallb_forall in F. apply Forall_forall. intros ws' Hw. specialize (F ws' Hw). apply Z.ltb_lt in F.
-    eapply Z.le_lt_trans; [| exact F]. apply dotw_le_wdot. apply cs_le_cmaxv; exact Cb.
+    rewrite forallb_forall in F. apply Forall_forall. intros P0 Hw. specialize (F P0 Hw). apply Z.ltb_lt in F.
+    eapply Z.le_lt_trans; [| exact F]. apply pevalz_mono. apply Forall2_nth_le. apply cs_le_cmaxv2; exact Cb.
 Qed.
 Lemma all_fit_wb : forall cbs ccs gs B', cfits_b gs B' (sigsv cbs) ccs = true -> all_c (fun c => (cmaxv cbj cbs c <? wB)%Z) ccs = true.
 Proof.
@@ -3475,28 +3677,25 @@ Proof. intros p0 q. induction ccs as [|c ccs IH]; cbn [all_c]; auto. intros F. a
 Lemma rec_ok_wb : forall cbs ccs, rec_ok (sigsv cbs) ccs = true -> all_c (fun c => (cmaxv cbj cbs c <? wB)%Z) ccs = true.
 Proof.
   intros cbs ccs R. unfold rec_ok in R. change (snd (fst (snd (sigsv cbs)))) with cws in R.
-  destruct (list_cases_ln cws) as [E | (w & ws & E)]; rewrite E in R; cbv beta iota in R;
+  destruct (list_cases_any cws) as [E | (w & ws & E)]; rewrite E in R; cbv beta iota in R;
     [apply all_c_and_r in R | apply andb_true_iff in R as [_ R]]; change (snd (snd (sigsv cbs))) with cbs in R;
     rewrite all_c_forall in R |- *; rewrite forallb_forall in R |- *; intros c Hc; specialize (R c Hc); apply Z.ltb_lt in R;
     pose proof (cmaxv_mono cbs c _ _ (ub_ge cbs)); rewrite KQMAuto.wB_num; apply Z.ltb_lt; lia.
 Qed.
-Lemma rec_ok_fits : forall cbs ccs cenv benv renv denv M, hp = true -> rec_ok (sigsv cbs) ccs = true -> cboundv cbj cbs pv cenv ->
-  rfits (denote_cs cs rec cenv benv renv denv M ccs).
+Lemma rec_ok_fits : forall cbs ccs cenv benv renv denv M, hp = true -> len_c ccs = nx -> rec_ok (sigsv cbs) ccs = true ->
+  cboundv cbj cbs pv cenv -> rfits (denote_cs cs rec cenv benv renv denv M ccs).
 Proof.
-  intros cbs ccs cenv benv renv denv M Hh R Cb. unfold rec_ok in R. change (snd (fst (snd (sigsv cbs)))) with cws in R. unfold rfits.
-  destruct (list_cases_ln cws) as [E | (w & ws & E)]; rewrite E in R |- *; cbv beta iota in R |- *.
-  - change (snd (snd (sigsv cbs))) with cbs in R. revert R. induction ccs as [|c ccs IH]; cbn [all_c denote_cs]; intros R; constructor.
+  intros cbs ccs cenv benv renv denv M Hh Lc R Cb. unfold rec_ok in R. change (snd (fst (snd (sigsv cbs)))) with cws in R. unfold rfits.
+  destruct (list_cases_any cws) as [E | (w & ws & E)]; rewrite E in R |- *; cbv beta iota in R |- *.
+  - change (snd (snd (sigsv cbs))) with cbs in R. clear Lc. revert R. induction ccs as [|c ccs IH]; cbn [all_c denote_cs]; intros R; constructor.
     + apply andb_true_iff in R as [R _]. apply andb_true_iff in R as [R _]. exact (rec0_fits cbs c cenv benv renv denv M Hh E R Cb).
     + apply andb_true_iff in R as [_ R]. exact (IH R).
   - apply andb_true_iff in R as [Pk _]. change (snd (snd (sigsv cbs))) with cbs in Pk.
-    destruct (Hpv Hh ltac:(rewrite E; discriminate)) as ((prest & Epv) & Fv). rewrite E in Fv.
+    destruct (Hpv Hh ltac:(rewrite E; discriminate)) as (rest0 & Epv & Lr0 & Fv). rewrite E in Fv.
     pose proof (clinf_bounds cbj cbs pv ccs cs rec cenv benv renv denv M Cb) as F. rewrite Epv in F.
-    rewrite forallb_forall in Pk. rewrite Forall_forall in Fv. apply Forall_forall. intros ws' Hw.
-    specialize (Pk ws' Hw). destruct (Fv ws' Hw) as (Lpv & Spv).
-    destruct ws' as [|w0 ws0]; [cbn [dotw]; pose proof cbz_big; lia|].
-    assert (Lp : length prest = length ws0) by (rewrite Epv, length_app in Lpv; cbn [length] in Lpv; lia).
-    pose proof (pot_sound (w0 :: ws0) cbs ccs _ prest cm Pk ltac:(cbn [length]; lia) Lp F) as Pt.
-    rewrite <- Epv in Pt. lia.
+    rewrite forallb_forall in Pk. rewrite Forall_forall in Fv. apply Forall_forall. intros P0 Hw.
+    specialize (Pk P0 Hw). specialize (Fv P0 Hw).
+    pose proof (ppot_sound P0 cbs ccs _ rest0 cm Pk ltac:(lia) F) as Pt. lia.
 Qed.
 Lemma ub_le : forall cbs, (ub (sigsv cbs) <= 4611686018427387904)%Z.
 Proof. intros cbs. unfold ub, sigsv. cbn [fst snd]. destruct cbo as [b|]; [unfold bok in Hbok; apply andb_true_iff in Hbok as [_ H2]; apply Z.leb_le in H2; exact H2 | unfold cbz; lia]. Qed.
@@ -3505,7 +3704,7 @@ Lemma rec_ok_items : forall cbs ccs, rec_ok (sigsv cbs) ccs = true ->
   all_c (fun c => (cmaxv (ub (sigsv cbs)) (snd (snd (sigsv cbs))) c <? 9223372036854775808)%Z) ccs = true.
 Proof.
   intros cbs ccs R. unfold rec_ok in R. change (snd (fst (snd (sigsv cbs)))) with cws in R.
-  destruct (list_cases_ln cws) as [E | (w & ws & E)]; rewrite E in R; cbv beta iota in R.
+  destruct (list_cases_any cws) as [E | (w & ws & E)]; rewrite E in R; cbv beta iota in R.
   - exact (all_c_and_r _ _ ccs R).
   - apply andb_true_iff in R as [_ R]. exact R.
 Qed.
@@ -3740,7 +3939,7 @@ Proof.
     destruct (Hrec Wr (denote_cs cs rec cenv benv renv denv M ccs) (denote_es cs rec cenv benv renv denv M args) M) as (fg & rho' & F & B & EV).
     { rewrite len_denote_cs. apply Nat.eqb_eq; auto. }
     { erewrite kinds_denote_es by eassumption. apply kinds_eqb_eq; auto. }
-    { destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). exact (rec_ok_fits cbs ccs cenv benv renv denv M (Hrhp Wr) Wfl Cb). }
+    { destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). exact (rec_ok_fits cbs ccs cenv benv renv denv M (Hrhp Wr) (proj1 (Nat.eqb_eq _ _) Wn) Wfl Cb). }
     destruct I1 as (_ & _ & _ & _ & _ & _ & _ & Mv1 & H1 & _). destruct (H1 (Hrhp Wr)) as [Rm _].
     eapply K_call; eauto.
     + simpl. rewrite (A2 mv Mv1), Rm.
@@ -4700,7 +4899,7 @@ Proof.
                        (denote_m cs rec recm cenv benv renv denv M m)) as (fg & rho' & F & B & EV).
     { rewrite len_denote_cs. apply Nat.eqb_eq; auto. }
     { erewrite kinds_denote_es by eassumption. apply kinds_eqb_eq; auto. }
-    { destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). eapply rec_ok_fits; eauto. }
+    { destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). eapply rec_ok_fits; eauto; try (apply Nat.eqb_eq; eauto). }
     destruct I1 as (_ & _ & _ & _ & _ & _ & _ & Mv1 & H1 & _). destruct (H1 (Hrmhp Wr)) as [Rm _].
     assert (VC3 : avals rho3 Cs = Some (map ofn (denote_cs cs rec cenv benv renv denv M ccs))).
     { rewrite (avals_agree rho2 rho3 n2 Cs A3 (Forall_atom_mono Cs n1 n2 LCs Le2)), (avals_agree rho1 rho2 n1 Cs A2 LCs).
@@ -5290,7 +5489,7 @@ Proof.
   destruct I2 as (_ & _ & _ & _ & _ & _ & Cb & _ & H2 & _). destruct (H2 (Hrhp Wr)) as [Rm _].
   rewrite DEN. rewrite <- (firstn_skipn (length (map ofn (denote_cs cs rec cenv benv renv denv M ccs))) Xs).
   eapply loop_call_ok; [exact Wr | rewrite len_denote_cs; exact Lc | rewrite (@kinds_items args l cenv benv renv denv M rk IS); exact Ls
-                       | eapply rec_ok_fits; eauto | exact Rm | exact V1 | exact V2].
+                       | eapply rec_ok_fits; eauto; try (apply Nat.eqb_eq; eauto) | exact Rm | exact V1 | exact V2].
 Qed.
 
 Lemma mrg_m_ok : forall m kk cenvA benvA renvA envA cenv benv renv denv nxt rho M rk, wfm (sigsv cbs) r rm mok nx k rk m = true ->
@@ -5323,7 +5522,7 @@ Proof.
   rewrite DEN, (skel_denote mm ws cenv benv renv denv M SK).
   rewrite <- (firstn_skipn (length (map ofn (denote_cs cs rec cenv benv renv denv M ccs))) (firstn (mt_ncall T) Xs)).
   eapply loopm_call_ok; [exact Wr | rewrite len_denote_cs; exact Lc | rewrite (@kinds_items args l cenv benv renv denv M rk IS); exact Ls
-                        | eapply rec_ok_fits; eauto | exact Rm | exact V11 | exact V12].
+                        | eapply rec_ok_fits; eauto; try (apply Nat.eqb_eq; eauto) | exact Rm | exact V11 | exact V12].
 Qed.
 End Merge.
 
@@ -5363,7 +5562,7 @@ Proof.
     destruct (Hrec Wr (denote_cs cs rec cenv benv renv denv M ccs) (denote_es cs rec cenv benv renv denv M args) M) as (fg & rho' & F & B & EV).
     { rewrite len_denote_cs. apply Nat.eqb_eq; auto. }
     { erewrite kinds_denote_es by eassumption. apply kinds_eqb_eq; auto. }
-    { destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). eapply rec_ok_fits; eauto. }
+    { destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). eapply rec_ok_fits; eauto; try (apply Nat.eqb_eq; eauto). }
     rewrite Hf in F. injection F as <-.
     destruct I1 as (_ & _ & _ & _ & _ & _ & _ & Mv1 & H1 & _). destruct (H1 (Hrhp Wr)) as [Rm _].
     cbn [denote_e]. eapply K_loop; eauto.
@@ -5450,7 +5649,7 @@ Proof.
                        (denote_m cs rec recm cenv benv renv denv M m)) as (fg & rho' & F & B & EV).
     { rewrite len_denote_cs. apply Nat.eqb_eq; auto. }
     { erewrite kinds_denote_es by eassumption. apply kinds_eqb_eq; auto. }
-    { destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). eapply rec_ok_fits; eauto. }
+    { destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). eapply rec_ok_fits; eauto; try (apply Nat.eqb_eq; eauto). }
     rewrite Hf in F. injection F as <-.
     destruct I1 as (_ & _ & _ & _ & _ & _ & _ & Mv1 & H1 & _). destruct (H1 (Hrmhp Wr)) as [Rm _].
     assert (VC3 : avals rho3 Cs = Some (map ofn (denote_cs cs rec cenv benv renv denv M ccs))).
@@ -5594,7 +5793,7 @@ Proof.
                        (denote_m cs rec recm cenv benv renv denv M m)) as (fg & rho' & Fd & Bd & EVd).
     { rewrite len_denote_cs. apply Nat.eqb_eq; auto. }
     { erewrite kinds_denote_es by eassumption. apply kinds_eqb_eq; auto. }
-    { destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). eapply rec_ok_fits; eauto. }
+    { destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). eapply rec_ok_fits; eauto; try (apply Nat.eqb_eq; eauto). }
     destruct I1 as (_ & _ & _ & _ & _ & _ & _ & Mv1 & H1 & _). destruct (H1 (Hrphp Wr)) as [Rm _].
     assert (VC3 : avals rho3 Cs = Some (map ofn (denote_cs cs rec cenv benv renv denv M ccs))).
     { rewrite (avals_agree rho2 rho3 n2 Cs A3 (Forall_atom_mono Cs n1 n2 LCs Le2)), (avals_agree rho1 rho2 n1 Cs A2 LCs).
@@ -5765,7 +5964,7 @@ Proof.
     + apply Hrecp; [exact Wr | | |].
       * rewrite len_denote_cs. apply Nat.eqb_eq; auto.
       * erewrite kinds_denote_es by eassumption. apply kinds_eqb_eq; auto.
-      * destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). eapply rec_ok_fits; eauto.
+      * destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). eapply rec_ok_fits; eauto; try (apply Nat.eqb_eq; eauto).
     + rewrite (A3 mv) by lia. rewrite (A2 mv Mv1). exact Rm.
   - (* PvLet *) cbn [wfpv] in W. apply andb_true_iff in W as [We Wp].
     assert (We' : wf (sigsv cbs) r mok nx k rk e = true) by (rewrite Hr0, Hm1; exact We).
@@ -5913,7 +6112,7 @@ Proof.
                        (denote_m cs rec recm cenv benv renv denv M m)) as [Me RK].
     { rewrite len_denote_cs. apply Nat.eqb_eq; auto. }
     { erewrite kinds_denote_es by eassumption. apply kinds_eqb_eq; auto. }
-    { eapply rec_ok_fits; eauto. }
+    { eapply rec_ok_fits; eauto; try (apply Nat.eqb_eq; eauto). }
     exists Me. intros cenvA benvA renvA envA nxt rho Iv. cbn [ctailx denote_x].
     assert (Wc' : wfcs (sigsv cbs) r mok nx k rk ccs = true) by (rewrite Hr0, Hm1; exact Wc).
     assert (Ws' : wfs (sigsv cbs) r mok nx k rk args = true) by (rewrite Hr0, Hm1; exact Ws).
@@ -6030,7 +6229,7 @@ Proof.
     apply Hrecb; [exact Wr | | |].
     + rewrite len_denote_cs. apply Nat.eqb_eq; auto.
     + erewrite kinds_denote_es by eassumption. apply kinds_eqb_eq; auto.
-    + destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). eapply rec_ok_fits; eauto.
+    + destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). eapply rec_ok_fits; eauto; try (apply Nat.eqb_eq; eauto).
   - (* BbNotRec *) cbn [wfbb] in W. apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [W Wc].
     apply andb_true_iff in W as [W Wfl]. apply andb_true_iff in W as [W Wk]. apply andb_true_iff in W as [Wr Wn].
     apply ccnts_ok with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto. { eapply rec_ok_wb; eauto. }
@@ -6043,7 +6242,7 @@ Proof.
     destruct (Hrecb Wr (denote_cs cs rec cenv benv renv denv M ccs) (denote_es cs rec cenv benv renv denv M args) M) as (fg & rho' & Fd & Bd & EVd).
     { rewrite len_denote_cs. apply Nat.eqb_eq; auto. }
     { erewrite kinds_denote_es by eassumption. apply kinds_eqb_eq; auto. }
-    { destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). eapply rec_ok_fits; eauto. }
+    { destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). eapply rec_ok_fits; eauto; try (apply Nat.eqb_eq; eauto). }
     eapply K_call; [exact Fd | | exact Bd | exact EVd | ].
     + cbn [avals aval]. rewrite Rm, (avals_app rho2 Cs As _ _ (eq_trans (avals_agree rho1 rho2 n1 Cs A2 LCs) VCs) VAs). reflexivity.
     + eapply K_op; [cbn [aval]; apply PTree.gss | reflexivity | ]. rewrite b2i_lxor.
@@ -6130,7 +6329,7 @@ Proof.
     destruct (Hrecr Wr (denote_cs cs rec cenv benv renv denv M ccs) (denote_es cs rec cenv benv renv denv M args) M) as (fg & rho' & F & B & EV).
     { rewrite len_denote_cs. apply Nat.eqb_eq; auto. }
     { erewrite kinds_denote_es by eassumption. apply kinds_eqb_eq; auto. }
-    { destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). eapply rec_ok_fits; eauto. }
+    { destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). eapply rec_ok_fits; eauto; try (apply Nat.eqb_eq; eauto). }
     rewrite Hf in F. injection F as <-.
     destruct I1 as (_ & _ & _ & _ & _ & _ & _ & Mv1 & H1 & _). destruct (H1 (Hrbhp Wr)) as [Rm _].
     eapply K_loop; eauto.
@@ -6151,7 +6350,7 @@ Proof.
     { apply Hrecr; [exact Wr | | |].
       - rewrite len_denote_cs. apply Nat.eqb_eq; auto.
       - erewrite kinds_denote_es by eassumption. apply kinds_eqb_eq; auto.
-      - destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). eapply rec_ok_fits; eauto. }
+      - destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). eapply rec_ok_fits; eauto; try (apply Nat.eqb_eq; eauto). }
     set (Y := recr (denote_cs cs rec cenv benv renv denv M ccs) (denote_es cs rec cenv benv renv denv M args) M) in *.
     assert (LY : length (relim (RO ri) Y (fun l => l)) = rn (RO ri)) by apply rl_len.
     pose proof I2 as (_ & _ & _ & _ & _ & _ & _ & Mv2 & H2 & _). destruct (H2 (Hrbhp Wr)) as [Rm _].
@@ -6182,7 +6381,7 @@ Proof.
     { apply Hrecr; [exact Wr | | |].
       - rewrite len_denote_cs. apply Nat.eqb_eq; auto.
       - erewrite kinds_denote_es by eassumption. apply kinds_eqb_eq; auto.
-      - destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). eapply rec_ok_fits; eauto. }
+      - destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). eapply rec_ok_fits; eauto; try (apply Nat.eqb_eq; eauto). }
     set (Y := recr (denote_cs cs rec cenv benv renv denv M ccs) (denote_es cs rec cenv benv renv denv M args) M) in *.
     assert (LY : length (relim (RO ri) Y (fun l => l)) = rn (RO ri)) by apply rl_len.
     pose proof I2 as (_ & _ & _ & _ & _ & _ & _ & Mv2 & H2 & _). destruct (H2 (Hrbhp Wr)) as [Rm _].
@@ -6495,14 +6694,19 @@ Qed.
 Lemma cbj_le4 : forall bo j, bok bo = true -> ((match bo with Some b0 => b0 | None => cbz j end) <= 4611686018427387904)%Z.
 Proof. intros bo j H. destruct bo as [b0|]; [unfold bok in H; apply andb_true_iff in H as [_ H2]; apply Z.leb_le in H2; exact H2 | unfold cbz; lia]. Qed.
 
-(** the counters given (steps 37, 38): each below the bound, through a weighted sum where its weight is at least 1 *)
+(** the counters given (steps 37 to 39): each below the bound, through a polynomial where its own monomial has a coefficient
+    of at least 1 *)
 Lemma cfits_forall : forall gs B cvs, swok gs = true -> length cvs = sn gs -> cfits gs B cvs -> Forall (fun c => (Z.of_nat c < B)%Z) cvs.
 Proof.
   intros gs B cvs Sw L C. unfold swok, cfits in *. destruct (sv gs) as [|v vs]; [exact C|].
-  apply andb_true_iff in Sw as [_ Cv]. rewrite forallb_forall in Cv. rewrite Forall_forall in C.
+  rewrite forallb_forall in Sw. rewrite Forall_forall in C.
   apply Forall_forall. intros c Hc. apply (In_nth cvs c O) in Hc as (i & Hi & <-).
-  specialize (Cv i ltac:(apply in_seq; lia)). apply existsb_exists in Cv as (ws & Hw & W1). apply Nat.leb_le in W1.
-  specialize (C ws Hw). pose proof (dotw_ge_nth ws cvs i W1). lia.
+  specialize (Sw i ltac:(apply in_seq; lia)). apply existsb_exists in Sw as (P0 & HP & Hm).
+  apply existsb_exists in Hm as ([c0 l0] & Hm & Hm1). cbn [fst snd] in Hm1.
+  apply andb_true_iff in Hm1 as [H1 H2]. apply Nat.leb_le in H1.
+  destruct (list_eq_dec Nat.eq_dec l0 [i]) as [->|Ne]; [|cbn in H2; discriminate H2].
+  pose proof (pevalz_unit P0 c0 i (map Z.of_nat cvs) Hm H1 (nth_ofnat_nonneg cvs)) as U. rewrite nth_ofnat in U.
+  specialize (C P0 HP). lia.
 Qed.
 Lemma evc_rev_dotw : forall ws cvs, length ws = length cvs -> evc (map Z.of_nat (rev ws)) (rev cvs) = Z.of_nat (dotw ws cvs).
 Proof.
@@ -6513,14 +6717,11 @@ Qed.
 (** a recursive body of a function with weights: what the body's proof assumes of its counters *)
 Lemma hpv_rec : forall (hp : bool) gs B n' rest x', swok gs = true -> sn gs = S x' -> length rest = x' -> cfits gs B (S n' :: rest) ->
   hp = true -> sv gs <> [] ->
-  (exists prest, rev rest ++ [S n'] = prest ++ [S n']) /\
-  Forall (fun ws => length (rev rest ++ [S n']) = length ws /\ (evc (map Z.of_nat (rev ws)) (rev rest ++ [S n']) < B)%Z) (sv gs).
+  exists rest0, rev rest ++ [S n'] = rev rest0 ++ [S n'] /\ length rest0 = x' /\
+  Forall (fun P => (pevalz P (map Z.of_nat (S n' :: rest0)) < B)%Z) (sv gs).
 Proof.
-  intros hp gs B n' rest x' Sw Sn L C _ Ne. unfold swok, cfits in *. destruct (sv gs) as [|v vs]; [contradiction|].
-  apply andb_true_iff in Sw as [Lw _]. rewrite forallb_forall in Lw. rewrite Sn in Lw.
-  split; [exists (rev rest); reflexivity|]. rewrite Forall_forall in C |- *. intros ws Hw. specialize (Lw ws Hw). apply Nat.eqb_eq in Lw.
-  split; [rewrite length_app, length_rev; cbn [length] in *; lia|].
-  change (rev rest ++ [S n']) with (rev (S n' :: rest)). rewrite evc_rev_dotw by (cbn [length] in *; lia). exact (C ws Hw).
+  intros hp gs B n' rest x' Sw Sn L C _ Ne. unfold cfits in C. destruct (sv gs) as [|v vs]; [contradiction|].
+  exists rest. split; [reflexivity|]. split; [exact L | exact C].
 Qed.
 (** the predecessor of the first counter, below its linear bound *)
 Lemma pred_lin : forall n' rest x', length rest = x' -> (Z.of_nat n' <= leval (lshift (-1) (lunit x')) (rev rest ++ [S n']))%Z.
@@ -7230,7 +7431,7 @@ Proof.
       assert (Bn : (Z.of_nat (S n') < (match bo with Some b0 => b0 | None => cbz j end))%Z) by (pose proof (cfits_forall _ _ (S n' :: rest) Hsw ltac:(cbn [length sn] in *; lia) Bd) as BdF'; inversion BdF'; auto).
       assert (HR : true = true -> forall cvs vs' M', length cvs = x' -> map kind_of vs' = k ->
                      match vw with [] => Forall (fun c => (Z.of_nat c < (match bo with Some b0 => b0 | None => cbz j end))%Z) cvs
-                     | vs0 => Forall (fun ws => (Z.of_nat (dotw ws (n' :: cvs)) < (match bo with Some b0 => b0 | None => cbz j end))%Z) vs0 end ->
+                     | vs0 => Forall (fun P => (pevalz P (map Z.of_nat (n' :: cvs)) < (match bo with Some b0 => b0 | None => cbz j end))%Z) vs0 end ->
                      exists M2, runk P (gidf j) (ofn n' :: map ofn cvs ++ flat_map vflat vs') M'
                                      ((fun cvs args s' => appn k true false (appc x' _ (dfn n') cvs) args s') cvs vs' M') M2).
       { intros _ cvs vs' M' Lc' Lv' Bd'. assert (Bn' : (Z.of_nat n' < (match bo with Some b0 => b0 | None => cbz j end))%Z) by lia.
@@ -8985,10 +9186,10 @@ Fixpoint krw (n a b : nat) (x : i63) : i63 := match n with O => x | S p => krw p
 Fixpoint krl (n m : nat) (x : i63) : i63 := match n with O => x | S p => let q := S m in krl p q (PrimInt63.add x 1) end.
 Definition krg (n : nat) (a : i63) : i63 := krs n n a.
 Fixpoint krp (n m : nat) (x : i63) : i63 := match n with O => x | S p => krp p (S p) (PrimInt63.add x 1) end.
-Definition krs_g := mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [[1; 1]]%nat.
-Definition krt_g := mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [[2; 1]]%nat.
-Definition krw_g := mksig8 3 (nk 1) false false false None (Some 4611686018427387904%Z) [[1; 1; 1]]%nat.
-Definition krl_g := mksig8 2 (nk 1) false false false None (Some 2305843009213693952%Z) [[1; 1]]%nat.
+Definition krs_g := mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) (map lpoly [[1; 1]]%nat).
+Definition krt_g := mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) (map lpoly [[2; 1]]%nat).
+Definition krw_g := mksig8 3 (nk 1) false false false None (Some 4611686018427387904%Z) (map lpoly [[1; 1; 1]]%nat).
+Definition krl_g := mksig8 2 (nk 1) false false false None (Some 2305843009213693952%Z) (map lpoly [[1; 1]]%nat).
 Definition krg_g := mksig7 1 (nk 1) false false false None (Some 2305843009213693952%Z).
 Definition krp_g := mksig7 2 (nk 1) false false false None (Some 4611686018427387904%Z).
 Definition krs_b := FRec (SVar 0) (SRec (CCons (CS (CVar 1)) CNil) (SCons (SOp Badd (SVar 0) (SInt 1)) SNil)).
@@ -9016,16 +9217,17 @@ Time Lemma krp_ok : callee_ok k37_P (gid1 5) 4611686018427387904%Z krp_g krp.
 Proof. Time exact_no_check (compile_f_ok k37_P [] gid1 5 krp_g krp_b eq_refl eq_refl (no_callees k37_P gid1) eq_refl eq_refl). Time Qed.
 Print Assumptions krs_ok.
 (* refused: the growth without weights (each counter below the bound cannot hold S m), weights too small for m + 2, a zero weight,
-   weights of the wrong number, a counter grown by the predecessor (k p (m + p) grows quadratically: no weights bound it), a call
+   a counter grown by the predecessor (k p (m + p) grows quadratically: no weights of degree 1 bound it), a call
    whose weighted sum passes the callee's bound, the predecessor's second successor (above the first counter), and a tree that is
    not the text *)
 Check (eq_refl : wf_f [] (mksig7 2 (nk 1) false false false None (Some 4611686018427387904%Z)) krs_b = false).
-Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [[1; 1]]%nat) krt_b = false).
-Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [[0; 1]]%nat) krs_b = false).
-Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [[1; 1; 1]]%nat) krs_b = false).
-Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [[1; 1]]%nat)
+Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) (map lpoly [[1; 1]]%nat)) krt_b = false).
+Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) (map lpoly [[0; 1]]%nat)) krs_b = false).
+(* (step 39) a weight for a counter the function does not have multiplies 0 on both sides: taken *)
+Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) (map lpoly [[1; 1; 1]]%nat)) krs_b = true).
+Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) (map lpoly [[1; 1]]%nat))
                        (FRec (SVar 0) (SRec (CCons (CAdd (CVar 1) (CVar 0)) CNil) (SCons (SVar 0) SNil))) = false).
-Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) [[5; 1]]%nat)
+Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 4611686018427387904%Z) (map lpoly [[5; 1]]%nat))
                        (FRec (SVar 0) (SRec (CCons (CAdd (CVar 1) (CVar 0)) CNil) (SCons (SVar 0) SNil))) = false).
 Check (eq_refl : wf_f [krs_g] (mksig7 1 (nk 1) false false false None (Some 4611686018427387904%Z)) krg_b = false).
 Check (eq_refl : wf_f [] krp_g (FRec (SVar 0) (SRec (CCons (CS (CS (CVar 0))) CNil) (SCons (SVar 0) SNil))) = false).
@@ -9036,7 +9238,7 @@ Time Fail Definition krs_wrong : krs = denote_f [] krs_g
    caller at the smallest bound's value, each sum fits where one weighted sum of the three would not *)
 Fixpoint krd (n c d : nat) (x : i63) : i63 := match n with O => x | S p => krd p (S c) (S d) (PrimInt63.add x 1) end.
 Definition krdg (n : nat) (a : i63) : i63 := krd n n n a.
-Definition krd_g := mksig8 3 (nk 1) false false false None (Some 4611686018427387904%Z) [[1; 1; 0]; [1; 0; 1]]%nat.
+Definition krd_g := mksig8 3 (nk 1) false false false None (Some 4611686018427387904%Z) (map lpoly [[1; 1; 0]; [1; 0; 1]]%nat).
 Definition krdg_g := mksig7 1 (nk 1) false false false None (Some 2305843009213693952%Z).
 Definition krd_b := FRec (SVar 0) (SRec (CCons (CS (CVar 2)) (CCons (CS (CVar 1)) CNil)) (SCons (SOp Badd (SVar 0) (SInt 1)) SNil)).
 Definition krdg_b := FPlain (SCall 0 (CCons (CVar 0) (CCons (CVar 0) (CCons (CVar 0) CNil))) (SCons (SVar 0) SNil)).
@@ -9049,6 +9251,29 @@ Proof. Time exact_no_check (compile_f_ok k38_P k38_cs gid1 1 krdg_g krdg_b eq_re
 Print Assumptions krdg_ok.
 (* refused: one weighted sum of the three (its weights add to 4: n n n at the caller's bound passes the callee's), a counter no
    vector covers, a vector whose sum grows *)
-Check (eq_refl : wf_f [mksig8 3 (nk 1) false false false None (Some 4611686018427387904%Z) [[2; 1; 1]]%nat] krdg_g krdg_b = false).
-Check (eq_refl : wf_f [] (mksig8 3 (nk 1) false false false None (Some 4611686018427387904%Z) [[1; 1; 0]]%nat) krd_b = false).
-Check (eq_refl : wf_f [] (mksig8 3 (nk 1) false false false None (Some 4611686018427387904%Z) [[1; 1; 0]; [0; 0; 1]]%nat) krd_b = false).
+Check (eq_refl : wf_f [mksig8 3 (nk 1) false false false None (Some 4611686018427387904%Z) (map lpoly [[2; 1; 1]]%nat)] krdg_g krdg_b = false).
+Check (eq_refl : wf_f [] (mksig8 3 (nk 1) false false false None (Some 4611686018427387904%Z) (map lpoly [[1; 1; 0]]%nat)) krd_b = false).
+Check (eq_refl : wf_f [] (mksig8 3 (nk 1) false false false None (Some 4611686018427387904%Z) (map lpoly [[1; 1; 0]; [0; 0; 1]]%nat)) krd_b = false).
+
+(* ---- counters grown by other counters (step 39): polynomial weighted sums; k p (m + p) from a written budget, the polynomial
+   2m + n^2 + n (it never grows: over the predecessor the difference is 2) *)
+Fixpoint krq (n m : nat) (x : i63) : i63 := match n with O => x | S p => krq p (m + p) (PrimInt63.add x 1) end.
+Definition krqg (a : i63) : i63 := krq (KQ.KQRun.kq_nat 100) O a.
+Definition krq_pol : poly := [(2, [1]); (1, [0; 0]); (1, [0])]%nat.
+Definition krq_g := mksig8 2 (nk 1) false false false None (Some 2305843009213693952%Z) [krq_pol].
+Definition krqg_g := mksig7 0 (nk 1) false false false None (Some 2305843009213693952%Z).
+Definition krq_b := FRec (SVar 0) (SRec (CCons (CAdd (CVar 1) (CVar 0)) CNil) (SCons (SOp Badd (SVar 0) (SInt 1)) SNil)).
+Definition krqg_b := FPlain (SCall 0 (CCons (CNat (SInt 100)) (CCons CO CNil)) (SCons (SVar 0) SNil)).
+Definition k39_P := mkprog [(gid1 0, compile_f gid1 0 krq_g krq_b); (gid1 1, compile_f gid1 1 krqg_g krqg_b)] [].
+Time Lemma krq_ok : callee_ok k39_P (gid1 0) 2305843009213693952%Z krq_g krq.
+Proof. Time exact_no_check (compile_f_ok k39_P [] gid1 0 krq_g krq_b eq_refl eq_refl (no_callees k39_P gid1) eq_refl eq_refl). Time Qed.
+Definition k39_cs := [existT ftype krq_g krq].
+Time Lemma krqg_ok : callee_ok k39_P (gid1 1) 2305843009213693952%Z krqg_g krqg.
+Proof. Time exact_no_check (compile_f_ok k39_P k39_cs gid1 1 krqg_g krqg_b eq_refl eq_refl (all_ok_callees k39_P gid1 k39_cs (conj krq_ok Logic.I)) eq_refl eq_refl). Time Qed.
+Print Assumptions krqg_ok.
+(* refused: the same given n n from the data (the polynomial at the caller's bound passes the callee's: the counter outgrows a
+   machine number), a degree-1 polynomial (the growth by the predecessor is not linear), a counter with no monomial of its own *)
+Check (eq_refl : wf_f [krq_g] (mksig7 1 (nk 1) false false false None (Some 2305843009213693952%Z))
+                       (FPlain (SCall 0 (CCons (CVar 0) (CCons (CVar 0) CNil)) (SCons (SVar 0) SNil))) = false).
+Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 2305843009213693952%Z) [lpoly [1; 1]]%nat) krq_b = false).
+Check (eq_refl : wf_f [] (mksig8 2 (nk 1) false false false None (Some 2305843009213693952%Z) [[(1, [0; 0]); (1, [0])]]%nat) krq_b = false).

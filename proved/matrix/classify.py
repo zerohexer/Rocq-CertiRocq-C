@@ -12,7 +12,12 @@ import re, sys, collections
 # recursive function), two versions of the memory both used later.  Each needs a control: the nearest accepted cell that
 # differs only in the cause.  The cells once listed here (option, sum, a list cell, a function in a pair, a function returned,
 # a dead memory let) build and take apart their value in place, so they are gaps.
-DESIGN_CELLS = set()
+DESIGN_CELLS = {
+  # a counter grown by the recursion's predecessor, from the data (kq_nat, up to 2^60): it reaches about n^2/2, beyond a machine
+  # number -- an unbounded number (Rocq-C-solution.md §0.5, second reason); control: A_par_nat_rec_add_pred_lit, the same
+  # function from a written budget, translated and proved (step 39)
+  "A_par_nat_rec_add_pred",
+}
 # gaps whose refusal message is shared with another category: classified by name
 BY_NAME = {
   "A_par_option": "a value built and taken apart in place (option, sum, a list cell, a function in a pair)",

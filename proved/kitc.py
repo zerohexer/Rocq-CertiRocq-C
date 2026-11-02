@@ -394,8 +394,16 @@ def reflect(name, entry, prog, no_proof):
         + f"MetaRocq Run (monad_iter (fun p => tmMkDefinition (fst p) (snd p)) {name}_mts).\n")
     rc, out = coqc(f0)
     info = open(os.path.join(GEN, f"{name}_rinfo.out")).read() if rc == 0 and os.path.exists(os.path.join(GEN, f"{name}_rinfo.out")) else ""
-    fs = re.findall(r'\("([^"]+)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([IBa-h]*)"(?:%bs)?,\s*(true|false),\s*(true|false),\s*(true|false),'
-                    r'\s*"([a-hBP]?)"(?:%bs)?,\s*(?:None|Some\s*\(?(\d+)(?:%Z)?\)?),\s*(\[(?:[^\[\]]|\[[^\]]*\])*\])\)', info)
+    # each function: its name, counters, kinds, flags, result, bound and weights (polynomials, step 39: read to the tuple's end)
+    head = re.compile(r'\("([^"]+)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([IBa-h]*)"(?:%bs)?,\s*(true|false),\s*(true|false),\s*(true|false),'
+                      r'\s*"([a-hBP]?)"(?:%bs)?,\s*(?:None|Some\s*\(?(\d+)(?:%Z)?\)?),\s*')
+    fs = []
+    for mh in head.finditer(info):
+        i0 = j0 = mh.end(); d = 0
+        while j0 < len(info) and not (info[j0] in ')]' and d == 0):
+            d += 1 if info[j0] in '([' else -1 if info[j0] in ')]' else 0
+            j0 += 1
+        fs.append(mh.groups(default="") + (info[i0:j0].strip(),))
     if rc != 0:
         # the file did not compile: the program is not Rocq (Rocq's own error, the first of them), or the reifier failed
         m = re.search(r"Error:\s*(.*?)(?:\n\n|$)", out, re.S)
@@ -424,8 +432,8 @@ def reflect(name, entry, prog, no_proof):
     # or none
     rq = lambda f: ("None" if f[6] == "" else "(Some KQR.KBool)" if f[6] == "B" else "(Some KQR.KNum)" if f[6] == "P"
                     else f"(Some (KQR.KRec {ord(f[6]) - ord('a')}))")
-    # the weights of a function whose recursion grows counters (steps 37, 38): vectors, each weighted sum below its bound
-    ws = lambda f: "[" + "; ".join("[" + "; ".join(re.findall(r"\d+", v)) + "]" for v in re.findall(r"\[([^\[\]]*)\]", f[8][1:-1])) + "]%nat"
+    # the weights of a function whose recursion grows counters (steps 37 to 39): polynomials, each below its bound at the counters
+    ws = lambda f: "(" + " ".join(f[8].replace("%nat", "").split()) + ")%nat"
     bo = lambda f: "None" if not f[7] else f"(Some {f[7]}%Z)"
     sig = lambda f: (f"(KQR.mksig8 {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)} {ws(f)})" if re.search(r"\d", f[8])
                      else f"(KQR.mksig {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)})" if not f[7]
