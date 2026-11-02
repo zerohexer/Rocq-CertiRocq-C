@@ -3626,6 +3626,28 @@ passes 2^62.  The bound the call graph works out for it (step 34) is 101; nothin
 *Expected*: the two cells; the bounds of programs read before unchanged (the first reading succeeds); cells for a function in
 between that is a template, and for a let of a budget in a function with a small bound.
 
+**Step 41, parameters in any order — the design (2026-11-03).**  The second item of the record of 2026-11-02's order (§3.7):
+`A_par_conv_nat_second` (`k (x : int) (n : nat)`, the recursion on the second parameter) and `A_par_conv_mem_first` (the memory
+before a number).  The reader asks the counters first, the recursion on the first parameter and the memory last — conventions no
+theorem needs.  A function whose parameters stand in another order is read as the function in the order the syntax takes (the
+recursion's counter first, the other counters, the numbers, booleans and records in their order, the memory last) through a
+wrapper, as a template's copy is (step 10):
+- *The reifier*: such a function gets a wrapper `k__o := fun (parameters in the syntax's order) => k (in the user's order)`,
+  defined in the program as a copy's meaning is; its body read from the user's text with each parameter at its place in the
+  syntax's order and each recursive call's arguments put in that order; a call of `k` read as a call of the wrapper, its
+  arguments reordered.  The caller's text converts with its meaning: the wrapper applied is `k` applied (one beta step).
+- *`KQR.v`*: the wrapper's theorem from its two equations by conversion (`k`'s fix unfolds one step at `S n` whatever parameter it
+  recurses on), the copies' theorems (`compile_f_okr`, `okrm`, `okrx`) — and the same for every result kind they do not cover
+  yet: a boolean, a record, a number and a memory (`compile_f_okrb`, `okrr`, `okrp`, over the extensionality of each sort's
+  meaning in its recursive function: `denote_bb`, `denote_br`, `denote_pv`, as `denote_m_recm_ext` is for memories).  Those
+  theorems are also what a template giving back a record needs (a later item of the order).
+- *kitc.py*: a wrapper's theorem by its result kind; an entry whose parameters are in another order is called by the driver in
+  the syntax's order (the reifier gives the order).
+- *Cells*: a counter after a number, the recursion on the second of two counters, a boolean and a record before the counter, the
+  memory between two numbers, a function giving back a boolean, a record and a number and a memory with its parameters in another
+  order, an entry with its parameters in another order.
+*Expected*: the two cells and those.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
