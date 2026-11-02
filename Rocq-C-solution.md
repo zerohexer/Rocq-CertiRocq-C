@@ -3286,6 +3286,16 @@ expression and its recursive call inside one; a let in a later operand of `&&`; 
 apart later, given on; a memory function taking a number-and-memory pair apart, and the pair as a parameter; mutual blocks of any
 signature and giving back a memory; a template giving back a record; the counter not first, the memory not last).
 
+**Step 34, counter bounds worked out from the call graph — the design (2026-11-02).**  Step 33's general form: a function's own
+bound such that every caller's counters fit it, whatever the call graph (`A_par_nat_add_called_succ`: a function passing a sum, its
+caller giving it a successor, which the smallest own bound cannot take).  In the reifier only (`KQR.v` takes any bounds already):
+when a program is not read with the bounds of the index and the smallest own bound, it is read again without the well-formedness
+check, the calls of each function collected from its tree (`cl_*`, a traversal of every sort of `S`, the shared-block check's
+shape), and the bounds worked out from the entry down — the entry's the smallest (its counters come from `kq_nat`), each callee's
+above the largest counter any caller gives it (`cmax` over the caller's bound) — and the program read a third time with those
+bounds, every function checked by `wf_f`.  A bound above 2^62 is refused by `wf_f` (`bok`).  Programs read today are read as
+today (their statements unchanged).  *Expected*: the cell.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3465,7 +3475,9 @@ Pushed to the public repository up to `7252fa8` (2026-11-02); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | `proved/matrix/gen.py`: 22 cells for the places §12.V's steps left unread (802 cells) |
+| (this commit) | §12.V: step 34's design (counter bounds worked out from the call graph) |
+| `be10beb` | the construct table with the unread places as cells: 802 cells, 781 proved, 20 gaps |
+| `7252fa8` | `proved/matrix/gen.py`: 22 cells for the places §12.V's steps left unread (802 cells) |
 | `86e704b` | `CLAUDE.md` + READ THIS FIRST, §0.9, §13.7, §13.8: completeness is strict -- a construct is done only in its general form (owner) |
 | `dfa6958` | §12.V: step 33 done (a sum of counters, counter bounds per function: the construct table 779 of 780, no gap), the C, the gate |
 | `dfd4832` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 33: `CAdd`, `sig.sb` / `fbound`, `wf`'s call condition by `cmax`, `bok`; the reifier's `Nat.add` and own bound |
