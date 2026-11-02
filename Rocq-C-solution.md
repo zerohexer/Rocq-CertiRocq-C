@@ -3168,6 +3168,26 @@ unchanged):
   stands for it.  The gate on the follow-up, the walk switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the
   five kernels (10 / 10 / 10 / 13 / 12 s); **71 programs through the verified compiler, 0 refused**; the trusted base unchanged.
 
+**Step 32, records holding records — the design (2026-11-02).**  `P_pairp_rec`: `f` gives back `(int * int) * int` by recursion
+(`((a, b), 0)`; `let '(p, z) := f m a b s in let '(x, y) := p in ((y, x), z + 1)`), and `go` takes it apart the same way.  A record
+type of the table has numbers as fields (D15); a record holding records is held as one flat record of numbers — C's struct
+holding a struct, laid out in place — so every construct of records (built, chosen, taken apart, bound, passed, given back
+through the slot block) serves it, and `KQR.v` is unchanged (a record type is any type with its descriptor and laws, step 12):
+- *The order of the fields*: the outer record's numbers first, then each inner record's fields, recursively, in field order —
+  the order in which Rocq's nested patterns bind them (`let '((x, y), z) := v` is `match v with (p, z) => match p with (x, y)
+  => ..`: binders `p z x y`, of which `p` is no number).  So a record taken apart together with its inner records, at once and in
+  that order, is `SMatchR` with its numbers where the text binds them, the inner records' own variables unusable after it, and
+  the meaning's match is the user's, nest for nest.  Inner records taken apart in another order are not read (the descriptor is
+  one per type).
+- *A constructor* of such a type, each inner record built in place, is `RMk` on the flat numbers; an inner record given as a
+  variable or a call is not read (no eta for `prod`: `(p, z)` is not `((fst p, snd p), z)`).
+- *The reifier*: the record table's entries gain their fields' widths (a field whose type is a record of the table: its
+  width), `rec_shape` takes such fields; one helper (`rbr`) reads a record taken apart and its inner records in the seven
+  places a record match is read today; the constructor flattened as above.
+- *`kitc.py`*: the instance of such a type — its constructor on the flat list, its match nest for nest, a value of it — from
+  texts the reifier gives (`rec_text`); the laws' script also destructs the values a match in the goal takes apart.
+*Expected*: the cell.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3345,7 +3365,8 @@ Pushed to the public repository up to `c48dc6c` (2026-11-02); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 31 done (a local `fix` naming the caller's variables: the construct table 777 of 780), F57, F58, the C, the gate |
+| (this commit) | §12.V: step 32's design (records holding records) |
+| `29ca4e5` | §12.V: step 31 done (a local `fix` naming the caller's variables: the construct table 777 of 780), F57, F58, the C, the gate |
 | `c48dc6c` | `proved/KQRReify.v`: a helper's full scan for a local fixpoint only where the bounded scan finds one (F58) |
 | `446e1c2` | `proved/KQRReify.v` + `kitc.py` step 31: a local fixpoint read as a copy whose parameters are its captured variables (`kn_lfix`, `lfix_key`, `lfix_meaning`, `read_def`); `teq` compares fixpoints (F57) |
 | `92c32ab` | §12.V: step 31's design (a local `fix` naming the caller's variables) |
