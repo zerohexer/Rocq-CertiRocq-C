@@ -3446,6 +3446,27 @@ proved for counters whose **weighted sum** is below its bound, and the recursion
 *Expected*: `A_par_nat_rec_succ`, and cells for `k p (m + 2)`, a swap, a let-bound successor given to the recursion; the cell of a
 growth by the predecessor refused (its own step).
 
+**Step 38, counters grown apart: several weighted sums — the design (2026-11-03).**  `A_par_nat_rec_two_succ`:
+`k (n c d : nat) x := match n with O => x | S p => k p (S c) (S d) (x + 1) end`, given `n n n` by the entry.  One weighted sum
+needs `w₁ ≥ w₂ + w₃`, so its weights add to at least 4, and three counters at `kq_nat`'s 2^60 give a sum past a machine number's
+room (2^62), while each counter stays below 2^61: `n + c` and `n + d` never grow.  The single weighted sum is the narrow form;
+the general one is a set of them:
+- *Signature*: the weights become a list of weight vectors (`sv : list (list nat)`), each one weight per counter, at least 0,
+  each counter with a weight of at least 1 in one vector at least.  `cfits`: every vector's weighted sum below the bound — which
+  puts each counter below it, through a vector where its weight is at least 1.  Step 37's single vector is a list of one.
+- *The recursion*: `pot_ok` for each vector (a weight of 0 asks its counter's coefficient to be at most 0).
+- *A call*: each vector's `Σ wᵢ·cmaxv(cᵢ)` below the callee's bound.
+- *Proof*: step 37's, for each vector: the invariant's premise per vector (the weighted sum at the parameters below the bound),
+  `pot_sound` per vector, `cfits_forall` through the vector that covers each counter.
+- *The reifier*: no weights when the recursion's counters pass without them; else one vector from step 37's rounds when its
+  bound fits; else one vector per counter, each by the rounds from that counter's unit vector (each weight raised to what the
+  calls' linear bounds ask: `e_c` grows to `e_1 + e_c` for a counter grown by one), the vectors kept that `pot_ok` takes and
+  their union covering every counter; `kitc.py` prints them.
+*Expected*: `A_par_nat_rec_two_succ`, and cells for three counters grown apart (`k p (S c) (S d) (S e)`), one grown by two
+per round beside one grown by one (`k p (c + 2) (S d)`), two grown apart beside a swapped pair (`k p (S c) (S e) d` with `d`,
+`e` swapped each round), each given its counters by the entry.  *Not in this step*: growth by the predecessor
+from a written budget (`A_par_nat_rec_add_pred_lit`, quadratic: its bound is not linear in the counters).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
