@@ -395,7 +395,7 @@ def reflect(name, entry, prog, no_proof):
     rc, out = coqc(f0)
     info = open(os.path.join(GEN, f"{name}_rinfo.out")).read() if rc == 0 and os.path.exists(os.path.join(GEN, f"{name}_rinfo.out")) else ""
     fs = re.findall(r'\("([^"]+)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([IBa-h]*)"(?:%bs)?,\s*(true|false),\s*(true|false),\s*(true|false),'
-                    r'\s*"([a-hBP]?)"(?:%bs)?\)', info)
+                    r'\s*"([a-hBP]?)"(?:%bs)?,\s*(?:None|Some\s*\(?(\d+)(?:%Z)?\)?)\)', info)
     if rc != 0:
         # the file did not compile: the program is not Rocq (Rocq's own error, the first of them), or the reifier failed
         m = re.search(r"Error:\s*(.*?)(?:\n\n|$)", out, re.S)
@@ -424,7 +424,9 @@ def reflect(name, entry, prog, no_proof):
     # or none
     rq = lambda f: ("None" if f[6] == "" else "(Some KQR.KBool)" if f[6] == "B" else "(Some KQR.KNum)" if f[6] == "P"
                     else f"(Some (KQR.KRec {ord(f[6]) - ord('a')}))")
-    sig = lambda f: f"(KQR.mksig {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)})"
+    sig = lambda f: (f"(KQR.mksig {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)})" if not f[7]
+                     else f"(KQR.mksig7 {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} (Some {f[7]}%Z))")
+    bnd = lambda f, j: f"(KQR.cbz {j})" if not f[7] else f"{f[7]}%Z"
     t = HDR + "From KQC Require KQR KQRReify.\nImport ListNotations.\n" + f"From KQG Require Import {name}_r.\n"
     # the program's record types (step 12): each its type, its constructor and match, a value of it; the laws by a fixed script
     rp = os.path.join(GEN, f"{name}_rrec.out")
@@ -520,7 +522,7 @@ def reflect(name, entry, prog, no_proof):
         for j, f in enumerate(fs):
             cs = "[" + "; ".join(f"existT (@KQR.ftype {inst}) {sig(g)} {g[0]}" for g in fs[:j]) + "]"
             oks = "".join(f"(conj {name}_rok{i} " for i in range(j)) + "Logic.I" + ")" * j
-            t += f"Lemma {name}_rok{j} : @KQR.callee_ok {inst} {name}_prog (KQR.gid1 {j}) (KQR.cbz {j}) {sig(f)} {f[0]}.\n"
+            t += f"Lemma {name}_rok{j} : @KQR.callee_ok {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {sig(f)} {f[0]}.\n"
             if "__c" in f[0]:
                 # a copy: not a fix over its counter, so its statement comes from its two equations, each by conversion
                 # (a copy that writes the memory and gives back a number has a memory: no memory argument)

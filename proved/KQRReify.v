@@ -43,6 +43,7 @@ Definition kn_nat_eqb := kn_of <% Nat.eqb %>.
 Definition kn_nat_ltb := kn_of <% Nat.ltb %>.
 Definition kn_nat_leb := kn_of <% Nat.leb %>.
 Definition kn_nat_pred := kn_of <% Nat.pred %>.
+Definition kn_nat_add := kn_of <% Nat.add %>.   (* a sum of counters (step 33) *)
 Definition ncmp_v (kn : kername) : option cmpop :=
   if Kername.eqb kn kn_nat_eqb then Some Ceq else if Kername.eqb kn kn_nat_ltb then Some Clt
   else if Kername.eqb kn kn_nat_leb then Some Cle else None.
@@ -872,6 +873,8 @@ with reify_c (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sc
   | tApp (tConst kn _) args =>
       if Kername.eqb kn kn_kq_nat then match args with [e] => option_map CNat (reify fuel ctx e) | _ => None end
       else if Kername.eqb kn kn_nat_pred then match args with [c] => option_map KQR.CPred (reify_c fuel ctx c) | _ => None end
+      else if Kername.eqb kn kn_nat_add then
+        match args with [a; b] => match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (CAdd x y) | _, _ => None end | _ => None end
       else match hb kn with Some b => reify_c fuel ctx (wout b args) | None => None end
   | _ => None
   end
@@ -1820,10 +1823,17 @@ Definition arity_recs (ars : list (nat * option (list nat))) : RecTypes :=
      Rd := fun _ => tt |}.
 
 (** ... kept when it is well formed, the condition of [compile_f_ok]: a program read is a program compiled *)
+Definition own_bound : Z := (1152921504606846976 + 1048576 + 1)%Z.
 Definition reify_fun (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
   (callees : list (kername * sig)) (kn : kername) : option (sig * fbody) :=
   match read_fun Σ hb tc rt callees kn with
-  | Some (gs, b) => if @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt)) (map snd callees) gs b then Some (gs, b) else None
+  | Some (gs, b) =>
+      let wfok := fun gs => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt)) (map snd callees) gs b in
+      if wfok gs then Some (gs, b) else
+      (* well formed only with a bound of its own (step 33): the smallest, which suits a function no other calls -- the entry,
+         whose counters come from kq_nat; a caller's wf_f checks what it gives against it *)
+      let gs' := mksig7 (sn gs) (sk gs) (sm gs) (sr gs) (sw gs) (sq gs) (Some own_bound) in
+      if wfok gs' then Some (gs', b) else None
   | None => None
   end.
 
@@ -2465,7 +2475,7 @@ Definition known_const (fns : list kername) (kn : kername) : bool :=
   || Kername.eqb kn kn_kq_nat || existsb (Kername.eqb kn) fns || Kername.eqb kn kn_ksize || Kername.eqb kn kn_w64_op
   || existsb (fun e => Kername.eqb (fst (fst e)) kn) hw_table || existsb (fun e => Kername.eqb (fst (fst e)) kn) hwf_table
   || Kername.eqb kn kn_andb || Kername.eqb kn kn_orb || Kername.eqb kn kn_negb
-  || match ncmp_v kn with Some _ => true | None => false end || Kername.eqb kn kn_nat_pred
+  || match ncmp_v kn with Some _ => true | None => false end || Kername.eqb kn kn_nat_pred || Kername.eqb kn kn_nat_add
   || Kername.eqb kn kn_int || Kername.eqb kn kn_mem.     (* as type arguments *)
 
 Definition head_name (t : term) : string :=
@@ -2671,7 +2681,8 @@ Definition kletters (ks : list kind) : string :=
   fold_right (fun k a => (match k with KNum => "I" | KBool => "B" | KRec i => rletter i end) ^ a) ""%bs ks.
 Definition info_of (l : list (kername * sig * fbody)) :=
   map (fun x : kername * sig * fbody => let '(kn, g, _) := x in
-         (snd kn, sn g, kletters (sk g), sm g, sr g, sw g, match sq g with Some (KRec i) => rletter i | Some KBool => "B"%bs | Some KNum => "P"%bs | None => ""%bs end)) l.
+         (snd kn, sn g, kletters (sk g), sm g, sr g, sw g, match sq g with Some (KRec i) => rletter i | Some KBool => "B"%bs | Some KNum => "P"%bs | None => ""%bs end,
+          sb g)) l.
 
 (** compatibility: one recursive function *)
 Definition reify_top (p : program) : option (sig * fbody) :=
@@ -4041,3 +4052,21 @@ Proof.
 Time Qed.
 Print Assumptions pp_go_ok.
 End PP.
+
+(* ---- a sum of counters given to a callee (step 33): [w33go] gives [w33k] [n + n] -- A_par_nat_mul's shape.  Well formed only
+   with a bound of its own, [w33go] -- the entry -- gets the smallest ([own_bound]); [w33k] keeps its index's *)
+Fixpoint w33k (n : nat) (x : i63) : i63 := match n with O => x | S m => w33k m (PrimInt63.add x 1) end.
+Definition w33go (n : nat) (a b : i63) (s : mem) : i63 := w33k (n + n) a.
+Definition w33_src := ltac:(run_template_program (tmQuoteRec w33go)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : map snd w33_src = [npk_b; FPlain (SCall 0 (CCons (CAdd (CVar 0) (CVar 0)) CNil) (SCons (SVar 1) SNil))]).
+Check (eq_refl : map (fun x => sb (snd (fst x))) w33_src = [None; Some own_bound]).
+Definition w33_Pr := mkprog (funs_of 0 w33_src) [].
+Time Lemma w33k_ok : callee_ok w33_Pr (gid1 0) (cbz 0) (sig_at w33_src 0) w33k.
+Proof. Time exact_no_check (compile_f_ok w33_Pr [] gid1 0 (sig_at w33_src 0) (body_at w33_src 0) eq_refl eq_refl (no_callees w33_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma w33go_ok : callee_ok w33_Pr (gid1 1) own_bound (sig_at w33_src 1) w33go.
+Proof.
+  Time exact_no_check (compile_f_ok w33_Pr [existT ftype (sig_at w33_src 0) w33k] gid1 1 (sig_at w33_src 1) (body_at w33_src 1)
+    eq_refl eq_refl (all_ok_callees w33_Pr gid1 [existT ftype (sig_at w33_src 0) w33k] (conj w33k_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
+Print Assumptions w33go_ok.
