@@ -207,6 +207,19 @@ add("int_write_nontail", "int", ffix("int", "match n with O => rd 0 0 s | S m =>
 add("mem_grow", "mem", fdef("mem", "kq_grow 2 a s"))
 add("mem_dup", "mem", fdef("mem", "let t := upd 0 a b s in upd 0 b a s"))      # old memory used after being handed on
 add("mem_hof", "mem", fdef("mem", "twice_m (fun t => upd 0 a b t) s"), "Definition twice_m (f : mem -> mem) (s : mem) : mem := f (f s).\n")
+# a match on a counter in every result kind's place (step 35): on a sum (read as a let of it and a match on the variable), and on a
+# counter variable where the table had none (a record or a pair chosen by the counter)
+add("bool_match_add", "bool", fdef("bool", "match (n + n)%nat with O => true | S _ => a <? b end"))
+add("bool_rec_match_add", "bool", ffix("bool", "match n with O => a <? b | S m => match (m + m)%nat with O => true | S _ => f m (a + 1) b s end end"))
+add("mem_match_add", "mem", fdef("mem", "match (n + n)%nat with O => s | S _ => upd 0 a b s end"))
+add("int_write_match_add", "int", fdef("int", "let s2 := upd 0 a b s in match (n + n)%nat with O => rd 0 0 s2 | S _ => rd 0 1 s2 end"))
+add("pair_match_nat", "pair", fdef("pair", "match n with O => (a, b) | S _ => (b, a) end"))
+add("pair_match_add", "pair", fdef("pair", "match (n + n)%nat with O => (a, b) | S _ => (b, a) end"))
+add("rec3_match_nat", "rec3", fdef("rec3", "match n with O => mk3 a b 0 | S _ => mk3 b a 1 end"))
+add("rec3_rec_match_add", "rec3", ffix("rec3", "match n with O => mk3 a b 0 | S m => match (m + m)%nat with O => mk3 b a 1 | S _ => f m b (a + b) s end end"))
+add("pairp_match_nat", "pairp", fdef("pairp", "match n with O => ((a, b), 0) | S _ => ((b, a), 1) end"))
+add("intmem_match_nat", "intmem", fdef("intmem", "match n with O => (a, s) | S _ => (b, upd 0 a b s) end"))
+add("intmem_rec_match_add", "intmem", ffix("intmem", "match n with O => (a, s) | S m => match (m + m)%nat with O => (b, s) | S _ => f m (a + 1) b (upd 0 a b s) end end"))
 
 # ---------------------------------------------------------------- family A: parameters
 A = []

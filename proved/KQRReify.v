@@ -251,6 +251,12 @@ Definition known_branch (c : term) (b0 b1 : branch term) : option term :=
   | tApp (tConstruct _ 1 _) [c'] => Some (subst [c'] 0 (bbody b1))
   | _ => None
   end.
+(** a match on a counter that is not a variable (step 35): the same term up to zeta as a let of the counter and a match on the
+    variable the let binds; its bound is the let's *)
+Definition let_scrut (ci : case_info) (p : predicate term) (c : term) (b0 b1 : branch term) : term :=
+  tLetIn {| binder_name := nAnon; binder_relevance := Relevant |} c (tInd ind_nat [])
+    (tCase ci (map_predicate_k id (fun k => lift 1 k) 0 p) (tRel 0)
+       [{| bcontext := bcontext b0; bbody := lift 1 0 (bbody b0) |}; {| bcontext := bcontext b1; bbody := lift 1 1 (bbody b1) |}]).
 
 (** the lets a term starts with, and what is under them; and back *)
 Fixpoint peel (fuel : nat) (t : term) : list (aname * term * term) * term :=
@@ -820,7 +826,7 @@ Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option 
             | Some x, Some e0, Some e1 => Some (SMatch x e0 e1)
             | _, _, _ => None
             end
-        | _ => match known_branch c b0 b1 with Some t => reify fuel ctx t | None => None end
+        | _ => match known_branch c b0 b1 with Some t => reify fuel ctx t | None => reify fuel ctx (let_scrut ci p c b0 b1) end
         end
       else None
       end
@@ -1173,7 +1179,7 @@ Fixpoint reify_m (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
             | Some x, Some m0, Some m1 => Some (MMatch x m0 m1)
             | _, _, _ => None
             end
-        | _ => match known_branch c b0 b1 with Some t => reify_m fuel ctx t | None => None end
+        | _ => match known_branch c b0 b1 with Some t => reify_m fuel ctx t | None => reify_m fuel ctx (let_scrut ci p c b0 b1) end
         end
       else None
       end
@@ -1297,7 +1303,7 @@ Fixpoint reify_pv (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
             | Some x, Some t0, Some t1 => Some (PvMatch x t0 t1)
             | _, _, _ => None
             end
-        | _ => match known_branch c b0 b1 with Some t => reify_pv fuel ctx t | None => None end
+        | _ => match known_branch c b0 b1 with Some t => reify_pv fuel ctx t | None => reify_pv fuel ctx (let_scrut ci p c b0 b1) end
         end
       else None
       end
@@ -1416,7 +1422,7 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
             | Some x, Some t0, Some t1 => Some (XMatch x t0 t1)
             | _, _, _ => None
             end
-        | _ => match known_branch c b0 b1 with Some t => reify_x fuel ctx t | None => None end
+        | _ => match known_branch c b0 b1 with Some t => reify_x fuel ctx t | None => reify_x fuel ctx (let_scrut ci p c b0 b1) end
         end
       else None
       end
@@ -1550,7 +1556,7 @@ Fixpoint reify_br (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
             | Some x, Some e0, Some e1 => Some (BMatch x e0 e1)
             | _, _, _ => None
             end
-        | _ => match known_branch c b0 b1 with Some t => reify_br fuel ctx t | None => None end
+        | _ => match known_branch c b0 b1 with Some t => reify_br fuel ctx t | None => reify_br fuel ctx (let_scrut ci p c b0 b1) end
         end
       else None
       end
@@ -1672,7 +1678,7 @@ Fixpoint reify_bb (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
             | Some x, Some e0, Some e1 => Some (BbMatch x e0 e1)
             | _, _, _ => None
             end
-        | _ => match known_branch c b0 b1 with Some t => reify_bb fuel ctx t | None => None end
+        | _ => match known_branch c b0 b1 with Some t => reify_bb fuel ctx t | None => reify_bb fuel ctx (let_scrut ci p c b0 b1) end
         end
       else None
       end
@@ -2466,149 +2472,152 @@ Definition reify_prog2b (bt : kername -> option Z) (chk : bool) (p : program) : 
       option_map (fun et => (fst et, map (fun e => (snd (snd (fst e)), snd e)) (snd et))) st
   | _ => None
   end.
-(** the calls of a function's tree, each its callee and the counters it is given (step 34): the shape of KQR's shared-block
-    check, [sh_*] *)
-Fixpoint cl_e (e : sexp) {struct e} : list (nat * scnts) :=
+(** the calls of a function's tree, each its callee and the largest value of the counters it is given (step 34; step 35: each
+    counter variable below its own bound, a let's [lbnd], a match's predecessor the matched variable's, as [wf] tracks them,
+    [B] the function's bound): the shape of KQR's shared-block check, [sh_*] *)
+Fixpoint cmaxsv (B : Z) (bs : list (option Z)) (ccs : scnts) : Z :=
+  match ccs with CNil => 0%Z | CCons c r => Z.max (cmaxv B bs c) (cmaxsv B bs r) end.
+Definition lbndv (B : Z) (bs : list (option Z)) (c : scnt) : option Z := lbnd ([], (Some B, bs)) c.
+Fixpoint cl_e (B : Z) (bs : list (option Z)) (e : sexp) {struct e} : list (nat * Z) :=
   match e with
   | SVar _ | SInt _ | SFld _ _ => []
-  | SOp _ a b | SLet a b | SRd a b => cl_e a ++ cl_e b
-  | SRd32 a b | SRd8 a b => cl_e a ++ cl_e b
-  | SIf _ a b t f => cl_e a ++ cl_e b ++ cl_e t ++ cl_e f
-  | SRec ccs args => cl_cs ccs ++ cl_es args
-  | SCall f ccs args => (f, ccs) :: cl_cs ccs ++ cl_es args
-  | SMatch _ e0 e1 => cl_e e0 ++ cl_e e1
-  | SIfB b t f => cl_b b ++ cl_e t ++ cl_e f
-  | SLetB b e => cl_b b ++ cl_e e
-  | SLetC c e => cl_c c ++ cl_e e
-  | SLetR x e | SMatchR x e => cl_r x ++ cl_e e
-  | SHwf _ args => cl_es args
-  | SSize h => cl_e h
+  | SOp _ a b | SLet a b | SRd a b => cl_e B bs a ++ cl_e B bs b
+  | SRd32 a b | SRd8 a b => cl_e B bs a ++ cl_e B bs b
+  | SIf _ a b t f => cl_e B bs a ++ cl_e B bs b ++ cl_e B bs t ++ cl_e B bs f
+  | SRec ccs args => cl_cs B bs ccs ++ cl_es B bs args
+  | SCall f ccs args => (f, cmaxsv B bs ccs) :: cl_cs B bs ccs ++ cl_es B bs args
+  | SMatch c e0 e1 => cl_e B bs e0 ++ cl_e B (nth c bs None :: bs) e1
+  | SIfB b t f => cl_b B bs b ++ cl_e B bs t ++ cl_e B bs f
+  | SLetB b e => cl_b B bs b ++ cl_e B bs e
+  | SLetC c e => cl_c B bs c ++ cl_e B (lbndv B bs c :: bs) e
+  | SLetR x e | SMatchR x e => cl_r B bs x ++ cl_e B bs e
+  | SHwf _ args => cl_es B bs args
+  | SSize h => cl_e B bs h
   end
-with cl_es (es : sexps) {struct es} : list (nat * scnts) :=
+with cl_es (B : Z) (bs : list (option Z)) (es : sexps) {struct es} : list (nat * Z) :=
   match es with
   | SNil => []
-  | SCons e r => cl_e e ++ cl_es r
-  | SConsB b r => cl_b b ++ cl_es r
-  | SConsR x r => cl_r x ++ cl_es r
+  | SCons e r => cl_e B bs e ++ cl_es B bs r
+  | SConsB b r => cl_b B bs b ++ cl_es B bs r
+  | SConsR x r => cl_r B bs x ++ cl_es B bs r
   end
-with cl_c (c : scnt) {struct c} : list (nat * scnts) :=
-  match c with CVar _ | CO => [] | CS c | KQR.CPred c => cl_c c | CAdd a b => cl_c a ++ cl_c b | CNat e => cl_e e end
-with cl_cs (cs : scnts) {struct cs} : list (nat * scnts) :=
-  match cs with CNil => [] | CCons c r => cl_c c ++ cl_cs r end
-with cl_b (b : sbool) {struct b} : list (nat * scnts) :=
+with cl_c (B : Z) (bs : list (option Z)) (c : scnt) {struct c} : list (nat * Z) :=
+  match c with CVar _ | CO => [] | CS c | KQR.CPred c => cl_c B bs c | CAdd a b => cl_c B bs a ++ cl_c B bs b | CNat e => cl_e B bs e end
+with cl_cs (B : Z) (bs : list (option Z)) (cs : scnts) {struct cs} : list (nat * Z) :=
+  match cs with CNil => [] | CCons c r => cl_c B bs c ++ cl_cs B bs r end
+with cl_b (B : Z) (bs : list (option Z)) (b : sbool) {struct b} : list (nat * Z) :=
   match b with
-  | BCmp _ x y => cl_e x ++ cl_e y
+  | BCmp _ x y => cl_e B bs x ++ cl_e B bs y
   | BVar _ | BTrue | BFalse => []
-  | BAnd x y | BOr x y => cl_b x ++ cl_b y
-  | BNot x => cl_b x
-  | BIfCmp _ a b x y => cl_e a ++ cl_e b ++ cl_b x ++ cl_b y
-  | BMatchCnt _ x0 x1 => cl_b x0 ++ cl_b x1
-  | BCall f ccs args => (f, ccs) :: cl_cs ccs ++ cl_es args
-  | BCmpC _ x y => cl_c x ++ cl_c y
+  | BAnd x y | BOr x y => cl_b B bs x ++ cl_b B bs y
+  | BNot x => cl_b B bs x
+  | BIfCmp _ a b x y => cl_e B bs a ++ cl_e B bs b ++ cl_b B bs x ++ cl_b B bs y
+  | BMatchCnt c x0 x1 => cl_b B bs x0 ++ cl_b B (nth c bs None :: bs) x1
+  | BCall f ccs args => (f, cmaxsv B bs ccs) :: cl_cs B bs ccs ++ cl_es B bs args
+  | BCmpC _ x y => cl_c B bs x ++ cl_c B bs y
   end
-with cl_r (x : srec) {struct x} : list (nat * scnts) :=
+with cl_r (B : Z) (bs : list (option Z)) (x : srec) {struct x} : list (nat * Z) :=
   match x with
   | RVar _ => []
-  | RMk _ es => cl_es es
-  | RCall _ f ccs args => (f, ccs) :: cl_cs ccs ++ cl_es args
-  | RW64 _ _ a b => cl_r a ++ cl_r b
-  | RLet e x => cl_e e ++ cl_r x
-  | RLetR y x => cl_r y ++ cl_r x
-  | RIf _ _ a b x y => cl_e a ++ cl_e b ++ cl_r x ++ cl_r y
-  | RMatchR _ x y => cl_r x ++ cl_r y
+  | RMk _ es => cl_es B bs es
+  | RCall _ f ccs args => (f, cmaxsv B bs ccs) :: cl_cs B bs ccs ++ cl_es B bs args
+  | RW64 _ _ a b => cl_r B bs a ++ cl_r B bs b
+  | RLet e x => cl_e B bs e ++ cl_r B bs x
+  | RLetR y x => cl_r B bs y ++ cl_r B bs x
+  | RIf _ _ a b x y => cl_e B bs a ++ cl_e B bs b ++ cl_r B bs x ++ cl_r B bs y
+  | RMatchR _ x y => cl_r B bs x ++ cl_r B bs y
   end.
-Fixpoint cl_m (m : smem) {struct m} : list (nat * scnts) :=
+Fixpoint cl_m (B : Z) (bs : list (option Z)) (m : smem) {struct m} : list (nat * Z) :=
   match m with
   | MCur => []
-  | MUpd h i v m => cl_e h ++ cl_e i ++ cl_e v ++ cl_m m
-  | MUpd32 h i v m | MUpd8 h i v m => cl_e h ++ cl_e i ++ cl_e v ++ cl_m m
-  | MLet e m => cl_e e ++ cl_m m
-  | MLetM m1 m2 => cl_m m1 ++ cl_m m2
-  | MIf _ a b m1 m2 => cl_e a ++ cl_e b ++ cl_m m1 ++ cl_m m2
-  | MRec ccs args m => cl_cs ccs ++ cl_es args ++ cl_m m
-  | MCall f ccs args m => (f, ccs) :: cl_cs ccs ++ cl_es args ++ cl_m m
-  | MMatch _ m0 m1 => cl_m m0 ++ cl_m m1
-  | MIfB b m1 m2 => cl_b b ++ cl_m m1 ++ cl_m m2
-  | MLetB b m => cl_b b ++ cl_m m
-  | MLetC c m => cl_c c ++ cl_m m
-  | MHw _ args m => cl_es args ++ cl_m m
-  | MLetR x m | MMatchR x m => cl_r x ++ cl_m m
+  | MUpd h i v m => cl_e B bs h ++ cl_e B bs i ++ cl_e B bs v ++ cl_m B bs m
+  | MUpd32 h i v m | MUpd8 h i v m => cl_e B bs h ++ cl_e B bs i ++ cl_e B bs v ++ cl_m B bs m
+  | MLet e m => cl_e B bs e ++ cl_m B bs m
+  | MLetM m1 m2 => cl_m B bs m1 ++ cl_m B bs m2
+  | MIf _ a b m1 m2 => cl_e B bs a ++ cl_e B bs b ++ cl_m B bs m1 ++ cl_m B bs m2
+  | MRec ccs args m => cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m
+  | MCall f ccs args m => (f, cmaxsv B bs ccs) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m
+  | MMatch c m0 m1 => cl_m B bs m0 ++ cl_m B (nth c bs None :: bs) m1
+  | MIfB b m1 m2 => cl_b B bs b ++ cl_m B bs m1 ++ cl_m B bs m2
+  | MLetB b m => cl_b B bs b ++ cl_m B bs m
+  | MLetC c m => cl_c B bs c ++ cl_m B (lbndv B bs c :: bs) m
+  | MHw _ args m => cl_es B bs args ++ cl_m B bs m
+  | MLetR x m | MMatchR x m => cl_r B bs x ++ cl_m B bs m
   end.
-Fixpoint cl_pv (p : spv) {struct p} : list (nat * scnts) :=
+Fixpoint cl_pv (B : Z) (bs : list (option Z)) (p : spv) {struct p} : list (nat * Z) :=
   match p with
-  | PvMk e m => cl_e e ++ cl_m m
-  | PvCall f ccs args m => (f, ccs) :: cl_cs ccs ++ cl_es args ++ cl_m m
-  | PvRec ccs args m => cl_cs ccs ++ cl_es args ++ cl_m m
-  | PvLet e p => cl_e e ++ cl_pv p
-  | PvLetB c p => cl_b c ++ cl_pv p
-  | PvLetC c p => cl_c c ++ cl_pv p
-  | PvLetR x p | PvMatchR x p => cl_r x ++ cl_pv p
-  | PvLetM m p => cl_m m ++ cl_pv p
-  | PvIf _ x y t f => cl_e x ++ cl_e y ++ cl_pv t ++ cl_pv f
-  | PvIfB c t f => cl_b c ++ cl_pv t ++ cl_pv f
-  | PvMatch _ p0 p1 => cl_pv p0 ++ cl_pv p1
-  | PvMatchP p q => cl_pv p ++ cl_pv q
+  | PvMk e m => cl_e B bs e ++ cl_m B bs m
+  | PvCall f ccs args m => (f, cmaxsv B bs ccs) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m
+  | PvRec ccs args m => cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m
+  | PvLet e p => cl_e B bs e ++ cl_pv B bs p
+  | PvLetB c p => cl_b B bs c ++ cl_pv B bs p
+  | PvLetC c p => cl_c B bs c ++ cl_pv B (lbndv B bs c :: bs) p
+  | PvLetR x p | PvMatchR x p => cl_r B bs x ++ cl_pv B bs p
+  | PvLetM m p => cl_m B bs m ++ cl_pv B bs p
+  | PvIf _ x y t f => cl_e B bs x ++ cl_e B bs y ++ cl_pv B bs t ++ cl_pv B bs f
+  | PvIfB c t f => cl_b B bs c ++ cl_pv B bs t ++ cl_pv B bs f
+  | PvMatch c p0 p1 => cl_pv B bs p0 ++ cl_pv B (nth c bs None :: bs) p1
+  | PvMatchP p q => cl_pv B bs p ++ cl_pv B bs q
   end.
-Fixpoint cl_x (x : sx) {struct x} : list (nat * scnts) :=
+Fixpoint cl_x (B : Z) (bs : list (option Z)) (x : sx) {struct x} : list (nat * Z) :=
   match x with
-  | XRet e => cl_e e
-  | XLetM m x => cl_m m ++ cl_x x
-  | XLet e x => cl_e e ++ cl_x x
-  | XLetB b x => cl_b b ++ cl_x x
-  | XIf _ a b x1 x2 => cl_e a ++ cl_e b ++ cl_x x1 ++ cl_x x2
-  | XIfB b x1 x2 => cl_b b ++ cl_x x1 ++ cl_x x2
-  | XMatch _ x0 x1 => cl_x x0 ++ cl_x x1
-  | XLetC c x => cl_c c ++ cl_x x
-  | XRec ccs args m => cl_cs ccs ++ cl_es args ++ cl_m m
-  | XCall f ccs args m => (f, ccs) :: cl_cs ccs ++ cl_es args ++ cl_m m
-  | XLetR r x | XMatchR r x => cl_r r ++ cl_x x
-  | XMatchP p x | XLetP p x => cl_pv p ++ cl_x x
+  | XRet e => cl_e B bs e
+  | XLetM m x => cl_m B bs m ++ cl_x B bs x
+  | XLet e x => cl_e B bs e ++ cl_x B bs x
+  | XLetB b x => cl_b B bs b ++ cl_x B bs x
+  | XIf _ a b x1 x2 => cl_e B bs a ++ cl_e B bs b ++ cl_x B bs x1 ++ cl_x B bs x2
+  | XIfB b x1 x2 => cl_b B bs b ++ cl_x B bs x1 ++ cl_x B bs x2
+  | XMatch c x0 x1 => cl_x B bs x0 ++ cl_x B (nth c bs None :: bs) x1
+  | XLetC c x => cl_c B bs c ++ cl_x B (lbndv B bs c :: bs) x
+  | XRec ccs args m => cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m
+  | XCall f ccs args m => (f, cmaxsv B bs ccs) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m
+  | XLetR r x | XMatchR r x => cl_r B bs r ++ cl_x B bs x
+  | XMatchP p x | XLetP p x => cl_pv B bs p ++ cl_x B bs x
   end.
-Fixpoint cl_br (b : sbr) {struct b} : list (nat * scnts) :=
+Fixpoint cl_br (B : Z) (bs : list (option Z)) (b : sbr) {struct b} : list (nat * Z) :=
   match b with
-  | BRet x => cl_r x
-  | BRec ccs args => cl_cs ccs ++ cl_es args
-  | BMatchRec ccs args b | BLetRec ccs args b => cl_cs ccs ++ cl_es args ++ cl_br b
-  | BLet e b => cl_e e ++ cl_br b
-  | BLetB c b => cl_b c ++ cl_br b
-  | BLetC c b => cl_c c ++ cl_br b
-  | BLetR x b | BMatchR x b => cl_r x ++ cl_br b
-  | BIf _ x y t f => cl_e x ++ cl_e y ++ cl_br t ++ cl_br f
-  | BIfB c t f => cl_b c ++ cl_br t ++ cl_br f
-  | BMatch _ b0 b1 => cl_br b0 ++ cl_br b1
+  | BRet x => cl_r B bs x
+  | BRec ccs args => cl_cs B bs ccs ++ cl_es B bs args
+  | BMatchRec ccs args b | BLetRec ccs args b => cl_cs B bs ccs ++ cl_es B bs args ++ cl_br B bs b
+  | BLet e b => cl_e B bs e ++ cl_br B bs b
+  | BLetB c b => cl_b B bs c ++ cl_br B bs b
+  | BLetC c b => cl_c B bs c ++ cl_br B (lbndv B bs c :: bs) b
+  | BLetR x b | BMatchR x b => cl_r B bs x ++ cl_br B bs b
+  | BIf _ x y t f => cl_e B bs x ++ cl_e B bs y ++ cl_br B bs t ++ cl_br B bs f
+  | BIfB c t f => cl_b B bs c ++ cl_br B bs t ++ cl_br B bs f
+  | BMatch c b0 b1 => cl_br B bs b0 ++ cl_br B (nth c bs None :: bs) b1
   end.
-Fixpoint cl_bb (b : sbb) {struct b} : list (nat * scnts) :=
+Fixpoint cl_bb (B : Z) (bs : list (option Z)) (b : sbb) {struct b} : list (nat * Z) :=
   match b with
-  | BbRet x => cl_b x
-  | BbRec ccs args | BbNotRec ccs args => cl_cs ccs ++ cl_es args
-  | BbLet e b => cl_e e ++ cl_bb b
-  | BbLetB c b => cl_b c ++ cl_bb b
-  | BbLetC c b => cl_c c ++ cl_bb b
-  | BbLetR x b | BbMatchR x b => cl_r x ++ cl_bb b
-  | BbIf _ x y t f => cl_e x ++ cl_e y ++ cl_bb t ++ cl_bb f
-  | BbIfB c t f => cl_b c ++ cl_bb t ++ cl_bb f
-  | BbMatch _ b0 b1 => cl_bb b0 ++ cl_bb b1
+  | BbRet x => cl_b B bs x
+  | BbRec ccs args | BbNotRec ccs args => cl_cs B bs ccs ++ cl_es B bs args
+  | BbLet e b => cl_e B bs e ++ cl_bb B bs b
+  | BbLetB c b => cl_b B bs c ++ cl_bb B bs b
+  | BbLetC c b => cl_c B bs c ++ cl_bb B (lbndv B bs c :: bs) b
+  | BbLetR x b | BbMatchR x b => cl_r B bs x ++ cl_bb B bs b
+  | BbIf _ x y t f => cl_e B bs x ++ cl_e B bs y ++ cl_bb B bs t ++ cl_bb B bs f
+  | BbIfB c t f => cl_b B bs c ++ cl_bb B bs t ++ cl_bb B bs f
+  | BbMatch c b0 b1 => cl_bb B bs b0 ++ cl_bb B (nth c bs None :: bs) b1
   end.
-Definition cl_f (b : fbody) : list (nat * scnts) :=
+Definition cl_f (B : Z) (b : fbody) : list (nat * Z) :=
   match b with
-  | FRec e0 e1 => cl_e e0 ++ cl_e e1
-  | FPlain e => cl_e e
-  | FRecM m0 m1 => cl_m m0 ++ cl_m m1
-  | FPlainM m => cl_m m
-  | FPlainX x => cl_x x
-  | FRecX x0 x1 => cl_x x0 ++ cl_x x1
-  | FRecR b0 b1 => cl_br b0 ++ cl_br b1
-  | FPlainR b => cl_br b
-  | FRecB b0 b1 => cl_bb b0 ++ cl_bb b1
-  | FPlainB b => cl_bb b
-  | FRecP p0 p1 => cl_pv p0 ++ cl_pv p1
-  | FPlainP p => cl_pv p
+  | FRec e0 e1 => cl_e B [] e0 ++ cl_e B [] e1
+  | FPlain e => cl_e B [] e
+  | FRecM m0 m1 => cl_m B [] m0 ++ cl_m B [] m1
+  | FPlainM m => cl_m B [] m
+  | FPlainX x => cl_x B [] x
+  | FRecX x0 x1 => cl_x B [] x0 ++ cl_x B [] x1
+  | FRecR b0 b1 => cl_br B [] b0 ++ cl_br B [] b1
+  | FPlainR b => cl_br B [] b
+  | FRecB b0 b1 => cl_bb B [] b0 ++ cl_bb B [] b1
+  | FPlainB b => cl_bb B [] b
+  | FRecP p0 p1 => cl_pv B [] p0 ++ cl_pv B [] p1
+  | FPlainP p => cl_pv B [] p
   end.
 
 (** counter bounds worked out from the call graph (step 34): from the entry down -- the functions come callees first -- each
     function's bound above the largest counter any caller gives it, at least the smallest ([own_bound]); a bound above 2^62 is
     refused by [wf_f] *)
-Fixpoint cmaxs (B : Z) (ccs : scnts) : Z := match ccs with CNil => 0%Z | CCons c r => Z.max (cmax B c) (cmaxs B r) end.
 Fixpoint upd_max (l : list Z) (f : nat) (v : Z) : list Z :=
   match l, f with [], _ => [] | x :: r, O => Z.max x v :: r | x :: r, S f => x :: upd_max r f v end.
 Fixpoint find_kn (kn : kername) (l : list (kername * sig * fbody)) (i : nat) : option nat :=
@@ -2618,7 +2627,7 @@ Definition bounds_tab (es : list (kername * sig * fbody)) : kername -> option Z 
   let bs := fold_left (fun bs i =>
               let Bi := nth i bs own_bound in
               match nth_error es i with
-              | Some e => fold_left (fun bs' fc => upd_max bs' (fst fc) (cmaxs Bi (snd fc) + 1)%Z) (cl_f (snd e)) bs
+              | Some e => fold_left (fun bs' fc => upd_max bs' (fst fc) (snd fc + 1)%Z) (cl_f Bi (snd e)) bs
               | None => bs
               end) (rev (seq 0 n)) (repeat own_bound n) in
   fun kn => match find_kn kn es 0 with Some i => Some (nth i bs own_bound) | None => None end.
@@ -3121,10 +3130,14 @@ Proof.
   Time exact_no_check (compile_f_ok lcx_Pr [existT ftype (sig_at lcx_src 0) lc_fill] gid1 1 (sig_at lcx_src 1) (body_at lcx_src 1)
     eq_refl eq_refl (all_ok_callees lcx_Pr gid1 [existT ftype (sig_at lcx_src 0) lc_fill] (conj lc_fill_okx Logic.I)) eq_refl eq_refl).
 Time Qed.
+(* a let of [S n] over a variable: refused at step 9, read since step 35 (the let's counter carries its own bound) *)
 Definition lcbad (n : nat) (a : i63) : i63 := let w := S n in c_inner w a.
 Definition lcbad_src := ltac:(run_template_program (tmQuoteRec lcbad)
   (fun q => let r := eval vm_compute in (reify_prog q) in exact r)).
-Check (eq_refl : lcbad_src = None).
+Check (eq_refl : option_map (fun l => map (fun x => snd x) l) lcbad_src =
+  option_map (fun l => map (fun x => snd x) l) lcbad_src).
+Check (eq_refl : match lcbad_src with Some l => body_at l (Nat.pred (length l)) | None => FPlain (SInt 0) end =
+  FPlain (SLetC (CS (CVar 0)) (SCall 0 (CCons (CVar 0) CNil) (SCons (SVar 0) SNil)))).
 
 (* ---------------------------------------------------------------- a chain of tests whose every end is a call of the function itself *)
 (* one call, the arguments chosen by conditional moves along the tests and the cells written once with the values chosen
@@ -4267,3 +4280,54 @@ Proof.
     eq_refl eq_refl).
 Time Qed.
 Print Assumptions w34go_ok.
+
+(* ---- a bound for each counter variable (step 35): a sum bound by a let and given to a callee (its own bound from the call graph),
+   a let of a successor, a sum compared, a match on a sum read as a let of it and a match on the variable -- the cells
+   A_par_nat_let_add, _let_succ, _eqb_add, _match_add *)
+Fixpoint w35k (n : nat) (x : i63) : i63 := match n with O => x | S m => w35k m (PrimInt63.add x 1) end.
+Definition w35a (n : nat) (a b : i63) (s : mem) : i63 := let w := (n + n)%nat in w35k w a.
+Definition w35s (n : nat) (a b : i63) (s : mem) : i63 := let w := S n in w35k w a.
+Definition w35e (n : nat) (a b : i63) (s : mem) : i63 := if Nat.eqb (n + n) 4 then a else b.
+Definition w35m (n : nat) (a b : i63) (s : mem) : i63 := match (n + n)%nat with O => a | S p => w35k p a end.
+Definition w35go (n : nat) (a b : i63) (s : mem) : i63 :=
+  PrimInt63.add (PrimInt63.add (w35a n a b s) (w35s n a b s)) (PrimInt63.add (w35e n a b s) (w35m n a b s)).
+Definition w35_src := ltac:(run_template_program (tmQuoteRec w35go)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+(* the four are small helpers: written out in [w35go], which the reading gives the smallest bound of its own *)
+Check (eq_refl : map (fun x => sb (snd (fst x))) w35_src = [None; Some own_bound]).
+Check (eq_refl : body_at w35_src 1 =
+  FPlain (SOp Badd
+    (SOp Badd (SLetC (CAdd (CVar 0) (CVar 0)) (SCall 0 (CCons (CVar 0) CNil) (SCons (SVar 1) SNil)))
+              (SLetC (CS (CVar 0)) (SCall 0 (CCons (CVar 0) CNil) (SCons (SVar 1) SNil))))
+    (SOp Badd (SIfB (BCmpC Ceq (CAdd (CVar 0) (CVar 0)) (CS (CS (CS (CS CO))))) (SVar 1) (SVar 0))
+              (SLetC (CAdd (CVar 0) (CVar 0)) (SMatch 0 (SVar 1) (SCall 0 (CCons (CVar 0) CNil) (SCons (SVar 1) SNil))))))).
+Definition w35_Pr := mkprog (funs_of 0 w35_src) [].
+Time Lemma w35k_ok : callee_ok w35_Pr (gid1 0) (fbound (sig_at w35_src 0) 0) (sig_at w35_src 0) w35k.
+Proof. Time exact_no_check (compile_f_ok w35_Pr [] gid1 0 (sig_at w35_src 0) (body_at w35_src 0) eq_refl eq_refl (no_callees w35_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma w35go_ok : callee_ok w35_Pr (gid1 1) (fbound (sig_at w35_src 1) 1) (sig_at w35_src 1) w35go.
+Proof. Time exact_no_check (compile_f_ok w35_Pr [existT ftype (sig_at w35_src 0) w35k] gid1 1 (sig_at w35_src 1) (body_at w35_src 1) eq_refl eq_refl
+  (all_ok_callees w35_Pr gid1 [existT ftype (sig_at w35_src 0) w35k] (conj w35k_ok Logic.I)) eq_refl eq_refl). Time Qed.
+Print Assumptions w35go_ok.
+(* the bounds from the call graph see a let's bound: [w35r] binds [n + n] and gives it to [w35k], and is given [S n] by the entry --
+   its bound one more than the entry's, [w35k]'s twice that less one (the let's bound) *)
+Fixpoint w35r (r n : nat) (x : i63) : i63 := match r with O => let w := (n + n)%nat in w35k w x | S q => w35r q n (PrimInt63.add x 1) end.
+Definition w35go2 (n : nat) (a b : i63) (s : mem) : i63 := w35r n (S n) a.
+Definition w35b_src := ltac:(run_template_program (tmQuoteRec w35go2)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : map (fun x => sb (snd (fst x))) w35b_src = [Some (2 * own_bound + 1)%Z; Some (own_bound + 1)%Z; Some own_bound]).
+Definition w35b_Pr := mkprog (funs_of 0 w35b_src) [].
+Time Lemma w35bk_ok : callee_ok w35b_Pr (gid1 0) (fbound (sig_at w35b_src 0) 0) (sig_at w35b_src 0) w35k.
+Proof. Time exact_no_check (compile_f_ok w35b_Pr [] gid1 0 (sig_at w35b_src 0) (body_at w35b_src 0) eq_refl eq_refl (no_callees w35b_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma w35r_ok : callee_ok w35b_Pr (gid1 1) (fbound (sig_at w35b_src 1) 1) (sig_at w35b_src 1) w35r.
+Proof.
+  Time exact_no_check (compile_f_ok w35b_Pr [existT ftype (sig_at w35b_src 0) w35k] gid1 1 (sig_at w35b_src 1) (body_at w35b_src 1)
+    eq_refl eq_refl (all_ok_callees w35b_Pr gid1 [existT ftype (sig_at w35b_src 0) w35k] (conj w35bk_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
+Time Lemma w35go2_ok : callee_ok w35b_Pr (gid1 2) (fbound (sig_at w35b_src 2) 2) (sig_at w35b_src 2) w35go2.
+Proof.
+  Time exact_no_check (compile_f_ok w35b_Pr [existT ftype (sig_at w35b_src 0) w35k; existT ftype (sig_at w35b_src 1) w35r] gid1 2
+    (sig_at w35b_src 2) (body_at w35b_src 2) eq_refl eq_refl
+    (all_ok_callees w35b_Pr gid1 [existT ftype (sig_at w35b_src 0) w35k; existT ftype (sig_at w35b_src 1) w35r] (conj w35bk_ok (conj w35r_ok Logic.I)))
+    eq_refl eq_refl).
+Time Qed.
+Print Assumptions w35go2_ok.
