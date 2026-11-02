@@ -3326,6 +3326,30 @@ cannot hold both `n` and `n + n`.  So each counter variable carries its own boun
 (`A_par_nat_rec_succ`, `k p (S m)`): its value stays below the sum of the two counters' starting values, which no bound of one
 variable says — it needs a bound relating two counters (step 36).
 
+**Step 36, the boolean and record sorts given the constructs of the number sort — the design (2026-11-03).**  The number sort has, for
+each way a value can be made, a node: a test on a comparison or on a boolean, a let of each kind (number, boolean, counter, record), a
+match on a counter, a record taken apart.  The boolean sort (`sbool`) has the test on a comparison (`BIfCmp`) and the counter match
+(`BMatchCnt`) only; the record sort (`srec`) has the number let, the record let and the test on a comparison only.  So a boolean or a
+record made any other way is refused wherever it stands: a boolean chosen by a test on a boolean (`if (a <? b) && c then x else y`
+in a test), a let in a later operand of `&&` (`P_int_if_and_let`, step 8's place), a record taken apart inside a test (`let '(x, y) :=
+hp a b in x <? y`), a boolean-valued match on a sum (`P_bool_match_add`, step 35's place), a record or pair chosen by a counter match
+(`P_pair_match_nat`, `P_rec3_match_nat`, `P_pairp_match_nat`, `P_pair_match_add`, found with step 35's cells), a record chosen by a
+test on a boolean, a boolean let inside a record.  The constructs, each the counterpart of a number node already proved:
+- *`sbool`*: `BIfB b x y` (`SIfB`), `BLet e x` (`SLet`), `BLetB b x` (`SLetB`), `BLetC c x` (`SLetC`, its counter's bound pushed as
+  step 35's), `BLetR r x` (`SLetR`), `BMatchR r x` (`SMatchR`).  Each compiled in the three forms a boolean is compiled to (a jump, a
+  value, a choice of two atoms): the let's code, then the boolean's in the extended environment; a test on a boolean, the jumps of
+  `ccond`, then the branch's form.  Proof: one case of each of the three parts of `cexp_all`'s boolean statement per node, the shape of
+  the number node's case; `denote_nomem`, `denote_rec_ext` one case each.
+- *`srec`*: `RIfB ri b x y` (`SIfB`), `RLetB b x` (`SLetB`), `RLetC c x` (`SLetC`), `RMatchCnt ri c x y` (`SMatch`, the predecessor
+  pushed with the matched variable's bound).  Meanings that put the choice inside one record value, as `RIf` does (step 21: a test of
+  two record values does not convert to the user's text taken apart).
+- *The reifier*: these in `reify_b` / `reify_r`; a match on a counter expression read as a let and a match there too (step 35's
+  `let_scrut`); the reasons scan, `cl_b` / `cl_r` (the bounds tracked).
+- *Cells*: a boolean chosen by a test on a boolean, a number let and a record taken apart inside a later operand, a record or a pair
+  chosen by a test on a boolean, a boolean let inside a record — beside the six step 35 left.
+*Expected*: those cells and step 35's five gaps, `P_int_if_and_let`.  *Not in this step*: the relational bound (step 37,
+`A_par_nat_rec_succ`).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3505,7 +3529,8 @@ Pushed to the public repository up to `ca1ff4f` (2026-11-02); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 35's design (a bound for each counter variable); `gen.py`: a match on a sum, the recursive call given a successor |
+| (this commit) | §12.V: step 36's design (the boolean and record sorts given the constructs of the number sort) |
+| `adf1658` | §12.V: step 35's design (a bound for each counter variable); `gen.py`: a match on a sum, the recursive call given a successor |
 | `ef85399` | §12.V: step 34 done (counter bounds from the call graph: 782 of 802), the C, the gate, the kernels timed apart |
 | `ca1ff4f` | `proved/KQRReify.v` step 34: `bounds_tab`, `cl_*`, the reading again with the bounds |
 | `87bf37b` | §12.V: step 34's design (counter bounds worked out from the call graph) |
