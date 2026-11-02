@@ -3572,6 +3572,22 @@ outgrows a machine number, §0.5's second reason) and, with its control read, mo
 predecessor in a mutual block and in a template, a counter grown by a counter grown by the predecessor (degree 3) from a written
 budget, and a growth by the predecessor's successor.
 
+**Step 40, a function's bound from what its callers give it, however small — the design (2026-11-03).**
+`A_par_nat_rec_add_pred_mutual`, `A_par_nat_rec_add_pred_pass`: a function between the entry's written counters and one whose
+polynomial grows (a mutual block's member, a recursive function passing its counters on) gets a bound of at least 2^60 + 2^20,
+because every bound must hold a budget (`bok`'s lower end; `cbz_big` in the proofs): its callee's polynomial at its counters then
+passes 2^62.  The bound the call graph works out for it (step 34) is 101; nothing but that lower end refuses it.  So:
+- *`KQR.v`*: `bok` asks a written bound to be at least 1 and at most 2^62.  The seven places the proofs use the lower end become
+  checks of the counter's largest value against the bound, which for a written bound is the same number in `wf` (`ub`) and in
+  the theorem (`cbj`): a let of a counter takes the function's bound (`lbnd`'s none) only when its largest value is below it as
+  well as `letc_ok`; the recursion's flat counter (step 35's rule) likewise; a budget given to the recursion or bound by a let is
+  below a small bound only when its written value is (`cnat_max`).  A bound left to the index (`None`, `cbz`) keeps today's room.
+- *The reifier*: the call-graph bounds start a function that is not the entry at 1 and raise it to what its callers give it; the
+  entry keeps the smallest own bound (`kq_nat`'s counters).
+- *Proof*: `cbz_big` splits on the bound: written, the explicit checks; left to the index, as today.
+*Expected*: the two cells; the bounds of programs read before unchanged (the first reading succeeds); cells for a function in
+between that is a template, and for a let of a budget in a function with a small bound.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
