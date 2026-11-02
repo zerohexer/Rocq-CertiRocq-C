@@ -18,6 +18,12 @@ logic is proved** and **only the hardware is assumed** through generic primitive
 its interrupt handling and its drivers can be written in Rocq by the user, for any architecture, from the manual.
 **No over-rejection, no style rules to learn, no patching holes one by one, general optimizations only, fast proofs.**
 
+**COMPLETENESS IS STRICT (owner, 2026-11-02).**  A construct is done only in its general form — every place and type it can
+appear in.  A step built narrower than its design ("only at the entry", "only in this order", "not inside an expression") is
+**not done**: it is not recorded as done, and the next item does not start as if it were.  Every place a step leaves unread gets
+a construct-table cell in the same commit, so the table shows it as a gap; "0 gaps" is a claim about the table's cells, never
+about completeness while known unread places have no cell.  (`CLAUDE.md` in the repository says the same, for every session.)
+
 **What exists and works (all verified on the final tree, 2026-10-29/30):**
 
 ```
@@ -260,8 +266,10 @@ convenient.
    operation or is a standard C pass, proved once (§0.7).
 4. **Does it keep the C of existing programs?**  Byte-identical C for programs that do not use the change, or a measured reason
    why not, with the corpus timed.
-5. **Is it closed by a construction?**  A gap is closed when the cell is translated and proved; a boundary when it has a pinned
-   cell and a control (§3.6).  Writing the limit into a README closes nothing.
+5. **Is it closed by a construction, in its general form?**  A gap is closed when the cell is translated and proved; a boundary
+   when it has a pinned cell and a control (§3.6).  Writing the limit into a README closes nothing.  A construct accepted only in
+   some of its places is not closed: the places left get cells, and the step goes on until they are accepted (owner, 2026-11-02:
+   completeness is strict, no narrower substitute is done).
 6. **Is the proof time still small?**  General tactic changes only; no per-program proof scripts; the cold kernels stay under a
    minute and a rerun stays at the cache's floor.
 
@@ -3384,7 +3392,8 @@ needs its own memory or arguments.
 
 ### 13.7 Definition of done (for any item)
 
-- The construction exists (translator rule, proof, library, operation) — not a description of it.
+- The construction exists (translator rule, proof, library, operation) — not a description of it — **in its general form**:
+  every place and type the construct can appear in, each with its cell in the table.  A narrower version is not done.
 - Its cells of the table are `ok`, or pinned by design with a control; the full table is re-run when the translator changed.
 - The gate of §13.2 passed on the final tree, and its numbers are the ones reported.
 - This file is updated: §3.4/§3.5 numbers, the item in §12, any finding in §11, any decision in §10, the commit in §14.
@@ -3410,6 +3419,7 @@ needs its own memory or arguments.
 | lower a safety threshold (disk guard, timeout) quietly | the owner relies on it | say so, with the reason, in the report |
 | put host names, addresses, user names or local paths in the repository | it is public | keep them in local notes only |
 | call a refusal "by design" because of the value's type (`option`, a list, a function) | type is not the cause; size and lifetime are (§0.5, F35) | by design only with a pin that shows the cause and a control (§3.6) |
+| land a step narrower than its design ("only at the entry", "only in this order", "only one level") and record it as done, with the places it leaves in prose | completeness is strict (owner, 2026-11-02); a limit in prose closes nothing and the table, having no cell for it, then claims "0 gaps" falsely | build the general form; give every place left a table cell in the same commit; if the general form is blocked, stop and ask the owner |
 | build an easier substitute for what the owner asked, and record the substitute as the decision | the owner's request silently leaves the plan (F36) | build the substitute if it is a real step, say plainly that it is not what was asked, and keep the request open in §12 |
 | call the route "a verified compiler" before §12.V is done, or say the reifier is verified | until `compile` covers a program, that program's theorem comes from the walk; the reifier is never verified, its output is checked (`denote s = f`) | "proved end to end for every compiled program"; after §12.V: "`compile` is a verified compiler for `S`; a program is reified and checked by conversion" |
 | verify the translator against MetaRocq's semantics of Rocq | that semantics has no rule for primitive operations (F38) and adds trust | reflection over our own syntax (§1.12) |
@@ -3435,7 +3445,8 @@ Pushed to the public repository up to `dfd4832` (2026-11-02); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 33 done (a sum of counters, counter bounds per function: the construct table 779 of 780, no gap), the C, the gate |
+| (this commit) | `CLAUDE.md` + READ THIS FIRST, §0.9, §13.7, §13.8: completeness is strict -- a construct is done only in its general form (owner) |
+| `dfa6958` | §12.V: step 33 done (a sum of counters, counter bounds per function: the construct table 779 of 780, no gap), the C, the gate |
 | `dfd4832` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` step 33: `CAdd`, `sig.sb` / `fbound`, `wf`'s call condition by `cmax`, `bok`; the reifier's `Nat.add` and own bound |
 | `7879d05` | §12.V: step 33's design (a sum of counters given to a callee: counter bounds per function) |
 | `2956187` | §12.V: step 32 done (records holding records: the construct table 778 of 780), the C, the gate |
