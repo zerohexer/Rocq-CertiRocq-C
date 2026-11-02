@@ -278,6 +278,8 @@ addA("par_nat_add_succ", "", "k (S (n + n)) a", "Fixpoint k (n : nat) (x : int) 
 addA("par_nat_let_add", "", "let w := (n + n)%nat in k w a", "Fixpoint k (n : nat) (x : int) : int := match n with O => x | S m => k m (x + 1) end.\n")
 addA("par_nat_eqb_add", "", "if Nat.eqb (n + n) 4 then a else b", "")
 # a let of a successor of a counter variable (step 9)
+addA("par_nat_match_add", "", "match (n + n)%nat with O => a | S p => k p a end", "Fixpoint k (n : nat) (x : int) : int := match n with O => x | S m => k m (x + 1) end.\n")   # a match on a sum
+addA("par_nat_rec_succ", "", "k n n a", "Fixpoint k (n m : nat) (x : int) : int := match n with O => x | S p => k p (S m) (x + 1) end.\n")   # the recursive call given a successor: bounded by the sum of the two
 addA("par_nat_let_succ", "", "let w := S n in k w a", "Fixpoint k (n : nat) (x : int) : int := match n with O => x | S m => k m (x + 1) end.\n")
 # a record holding records (step 32): an inner record used as a value, taken apart later, given on
 addA("par_pairp_proj", "", "let r := k n a b in fst (fst r) + snd (fst r) + snd r", "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => k m y x end.\n")

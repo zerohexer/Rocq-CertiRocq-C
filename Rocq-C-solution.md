@@ -3310,6 +3310,22 @@ at step 33 — so measured apart, on one machine, cold, interleaved: the whole b
 files and 9.20 / 9.26 s with step 34's, `HWP_own` 9.80 / 9.75 s and 9.64 / 9.53 s: the same; the work machine's runs vary by a
 second or two); **71 programs through the verified compiler, 0 refused**; the trusted base unchanged.
 
+**Step 35, a bound for each counter variable — the design (2026-11-02).**  The counter gaps left: a sum bound by a let, a let of a
+successor of a variable, a sum compared, a match on a sum (`A_par_nat_let_add`, `_let_succ`, `_eqb_add`, `_match_add`, added with this
+design).  Each binds or tests a counter that can be above the function's bound: one bound for all of a function's counters (`cbj`)
+cannot hold both `n` and `n + n`.  So each counter variable carries its own bound:
+- *KQR*: the bounds of the counters in scope (`cbs`, nearest first) travel in `wf`'s first argument with the callees and the own
+  bound — a parameter's the function's bound, a let's `cmax cbs c + 1`, a match's predecessor the matched variable's — and `cmax`
+  reads them (a variable its own bound less one).  `wf` asks every bound pushed to be at most 2^62 (a machine number with room), a
+  callee's counters below its bound, the recursive call's below the function's bound, a comparison's below `wB`; `letc_ok`'s
+  depth rule and `shallow` in comparisons go (the bounds cover them).  The invariant's `cbound` becomes one bound per variable;
+  `cexp_all`'s counter part asks `cmax cbs c < wB` of the variables' own bounds; a let and a match push their bound.
+- *The reifier*: unchanged but for a match whose subject is a counter expression (read as a let of it and a match on the variable,
+  the same term up to zeta).
+*Expected*: the four cells.  *Not in this step, a cell of its own*: the recursive call giving a counter its successor
+(`A_par_nat_rec_succ`, `k p (S m)`): its value stays below the sum of the two counters' starting values, which no bound of one
+variable says — it needs a bound relating two counters (step 36).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3489,7 +3505,8 @@ Pushed to the public repository up to `ca1ff4f` (2026-11-02); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 34 done (counter bounds from the call graph: 782 of 802), the C, the gate, the kernels timed apart |
+| (this commit) | §12.V: step 35's design (a bound for each counter variable); `gen.py`: a match on a sum, the recursive call given a successor |
+| `ef85399` | §12.V: step 34 done (counter bounds from the call graph: 782 of 802), the C, the gate, the kernels timed apart |
 | `ca1ff4f` | `proved/KQRReify.v` step 34: `bounds_tab`, `cl_*`, the reading again with the bounds |
 | `87bf37b` | §12.V: step 34's design (counter bounds worked out from the call graph) |
 | `be10beb` | the construct table with the unread places as cells: 802 cells, 781 proved, 20 gaps |
