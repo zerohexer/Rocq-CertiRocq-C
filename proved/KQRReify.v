@@ -1884,7 +1884,12 @@ Definition helper_of (Σ : global_env) (mp : modpath) (fns : list kername) (kn :
      || existsb (Kername.eqb kn) fns then None
   else if eq_mp (fst kn) mp then
     (* its fixpoints local ones (step 31): each read as a copy where it is applied *)
-    match body_of Σ kn with Some (tFix _ _) => None | Some b => if lfix_body b || negb (has_fix 1000 b) then Some b else None | None => None end
+    match body_of Σ kn with
+    | Some (tFix _ _) => None
+    (* the full scan for a local fixpoint only where the bounded one finds a fixpoint: a helper is looked up at every call *)
+    | Some b => if negb (has_fix 1000 b) then Some b else if lfix_body b then Some b else None
+    | None => None
+    end
   else if eq_mp (fst kn) kit_mp || eq_mp (fst kn) uint63_mp then
     match body_of Σ kn with Some b => if has_fix 1000 b then None else Some b | None => None end
   else None.
