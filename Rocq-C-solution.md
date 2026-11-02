@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **823 of 843, 19 gaps** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **827 of 846, 18 gaps** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -3521,6 +3521,32 @@ per round beside one grown by one (`k p (c + 2) (S d)`), two grown apart beside 
 `e` swapped each round), each given its counters by the entry.  *Not in this step*: growth by the predecessor
 from a written budget (`A_par_nat_rec_add_pred_lit`, quadratic: its bound is not linear in the counters).
 
+**Step 38 done (2026-11-03): counters grown apart, several weighted sums.**  Built as designed:
+- *`KQR.v`*: the weights are a list of vectors (`sv : list (list nat)`); `swok` asks each vector one weight per counter and
+  every counter a weight of at least 1 in one vector; `cfits` asks every vector's weighted sum below the bound; the recursion
+  asks `pot_ok` of each vector (`rec_ok`), a call each vector's `Σ wᵢ·cmaxv(cᵢ)` below the callee's bound and each counter given
+  below 2^63 (`cfits_b`; the weights at least 1 that gave the latter in step 37 are now asked of the coverage only).  The
+  proof: the invariant's premise per vector (`Hpv`), `pot_sound` per vector (`rec_ok_fits`), `cfits_forall` through the vector
+  that covers each counter (`dotw_ge_nth`: a counter whose weight is at least 1 is at most the weighted sum).  No new
+  hypothesis; `Print Assumptions` the same base.  Step 37's tests take their single vector as a list of one.  Tests: `krd`
+  (`k p (S c) (S d)`, vectors `[1; 1; 0]`, `[1; 0; 1]`), `krdg` (a call giving `n n n` at 2^61: each sum fits where one of the
+  three would not); refused: one weighted sum of the three for that call, a counter no vector covers, a vector whose sum grows;
+  each theorem in milliseconds.
+- *The reifier*: one vector per counter, each the smallest above that counter's unit vector by step 37's rounds (each at most
+  the vector step 37 took from all ones), the same vectors once; the entry's bound and the call-graph bounds take the largest
+  vector sum (`wmax`); the weights are worked out only when the signature without them is refused (`wf_sig`; `vm_compute`
+  evaluates a `let` at once).  `kitc.py` reads and prints the vectors.  Tests: step 37's pinned weights as vectors (`grow`
+  `[1; 0]`, `[1; 1]`; `w37go`'s four), `w38go` (`k p (S c) (S d)` given `n n n`: `[1; 0; 0]`, `[1; 1; 0]`, `[1; 0; 1]`, its
+  bound twice the smallest bound's value); each theorem in milliseconds.
+- *Cells*: 3 more (846): three counters grown apart, one grown by two beside one by one, two grown beside a swap.  Run alone:
+  all three proved, and with them `A_par_nat_rec_two_succ`.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest; step 37's files /
+  step 38's): `HWP_kernel` 2.88 / 2.84 s, `HWP_own` 2.27 / 2.11, `HWP_irqnow` 1.85 / 1.76 — the same.
+- The C: 63 of 63 byte-identical.  The construct table (on `03f83e9`): **827 of 846 through the verified compiler** (was 823 of
+  843: the three new cells and `A_par_nat_rec_two_succ`), 18 gaps, 1 not Rocq.  The gate on `03f83e9`, the walk switched off:
+  `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (11 / 11 / 12 / 13 / 12 s); **71 programs through the
+  verified compiler, 0 refused**; the trusted base unchanged.
+
 **Step 39, counters grown by other counters: polynomial weighted sums — the design (2026-11-03).**  The last cells of the
 counter family (the record of 2026-11-02's first item): `A_par_nat_rec_add_pred_lit`, `k (n m : nat) x := match n with O => x |
 S p => k p (m + p) (x + 1) end` from a written budget (`k 100 0 a`): `m` grows by the predecessor, about `n²/2` in all.  No
@@ -3721,11 +3747,15 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `6f87d43` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `03f83e9` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 37 done (counters grown by the recursion, bound by a weighted sum: the construct table 823 of 843), the C, the gate |
+| (this commit) | §12.V: step 38 done (counters grown apart, several weighted sums: the construct table 827 of 846), the C, the gate |
+| `e731b81` | §12.V: step 39's design (counters grown by other counters: polynomial weighted sums) |
+| `03f83e9` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` step 38: weights a list of vectors, coverage, one vector per counter in the reifier; 3 cells |
+| `d6a0025` | §12.V: step 37 done (counters grown by the recursion, bound by a weighted sum: the construct table 823 of 843), the C, the gate |
+| `a98b0fd` | §12.V: step 38's design (counters grown apart: several weighted sums) |
 | `6f87d43` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` step 37: weights `sv`, linear bounds, `pot_ok`, `lin1`, `cnat_max`, the copies' theorems for any bound; `wts_of`, `wf_sig`; 18 cells |
 | `2c4dfc3` | §12.V: step 36 done (the boolean and record sorts given the number sort's constructs: the construct table 807 of 825), the C, the gate |
 | `c764f08` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 36: `BxIfB` .. `BxMatchR`, `RIfB` .. `RMatchCnt`; the boolean and record readers; 10 cells |
