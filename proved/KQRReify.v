@@ -773,7 +773,7 @@ Definition bcall_rec (u : term) : option term :=
       end
   | _ => None
   end.
-Definition bind_first (ctx : list cent) (t : term) : option term :=
+Definition bind_first (ot : option term) (ctx : list cent) (t : term) : option term :=
   let res (u : term) : term := match u with tApp (tConst kn _) args => let '(kn1, args1) := tcall ctx kn args in tApp (tConst kn1 []) args1 | _ => u end in
   let bq (u : term) : option bool :=
     match u with
@@ -862,9 +862,13 @@ Definition bind_first (ctx : list cent) (t : term) : option term :=
   match find 1000 t with
   | None => None
   | Some c =>
+      (* (step 48 continued) [ot]: the type of the let of the function's own call; the reader does not know its result here, and
+         the let's type is not part of the meaning *)
+      let own := match c with tApp (tRel _) _ => true | _ => false end in
+      if (match ot with Some _ => negb own | None => false end) then None else
       let '(sk, hs) := skel 1000 c t [] in
       let k := length hs in
-      let tyv := match bcall_rec (res c) with Some ty => ty | None => match bq c with Some true => tInd ind_bool [] | _ => tConst kn_int [] end end in
+      let tyv := match ot with Some ty => ty | None => match bcall_rec (res c) with Some ty => ty | None => match bq c with Some true => tInd ind_bool [] | _ => tConst kn_int [] end end end in
       let anon := {| binder_name := nAnon; binder_relevance := Relevant |} in
       Some (fold_right (fun ih b => tLetIn anon (lift0 (fst ih) (snd ih)) (tConst kn_int []) b)
                        (tLetIn anon (lift0 k c) tyv (repl 1000 k (lift0 (S k) sk))) (combine (seq 0 k) hs))
@@ -1657,7 +1661,7 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
                     match rev (skipn fnx rest) with
                     | m :: rnums =>
                         match reify_cs ctx (firstn fnx rest), reify_args ctx (rev rnums), reify_m fuel ctx m, after true with
-                        | Some cs, Some As, Some d, Some x => Some (XBindR cs As d x)
+                        | Some cs, Some As, Some d, Some x => Some (if bq then XBindRB cs As d x else XBindR cs As d x)
                         | _, _, _, _ => None
                         end
                     | [] => None
@@ -1733,6 +1737,35 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
                        | _ => None
                        end
                    | _, _ => None
+                   end
+               | tApp (tRel fi) args00 =>
+                   (* (step 48 continued) the function's own call, giving back a record: what follows reads no memory *)
+                   let aftR := match reify fuel (CRec :: kill_mem ctx) body with
+                               | Some e => Some (XRet e)
+                               | None => match reify_b fuel (CRec :: kill_mem ctx) body with
+                                         | Some b => Some (XRetB b)
+                                         | None => option_map (XRetR 0) (reify_r fuel (CRec :: kill_mem ctx) body)
+                                         end
+                               end in
+                   match self_perm ctx fi args00 with
+                   | tRel mi :: rest0 =>
+                       if is_ent CSelf ctx fi && is_ent CPred ctx mi then
+                         match option_map (with_caps ctx) (drop_fns ctx fd rest0) with
+                         | Some rest =>
+                             if Nat.leb fnx (length rest) then
+                               match rev (skipn fnx rest) with
+                               | m :: rnums =>
+                                   match reify_cs ctx (firstn fnx rest), reify_args ctx (rev rnums), reify_m fuel ctx m, aftR with
+                                   | Some cs, Some As, Some d, Some x => Some (XBindRR 0 cs As d x)
+                                   | _, _, _, _ => None
+                                   end
+                               | [] => None
+                               end
+                             else None
+                         | None => None
+                         end
+                       else None
+                   | _ => None
                    end
                | _ => None
                end
@@ -1822,7 +1855,12 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
               (* a number function that writes, called at the end: its numbers on the memory before the one it is given *)
               let rest := rev rnums in
               match reify_m fuel ctx m, reify_cs ctx (firstn (sn gs) rest), reify_args ctx (skipn (sn gs) rest) with
-              | Some mm, Some cs, Some As => Some (XCall f cs As mm)
+              | Some mm, Some cs, Some As =>
+                  Some (match sq gs with
+                        | Some KBool => XBind true f cs As mm (XRetB (BVar 0))
+                        | Some (KRec ri) => XBindRM ri f cs As mm (XRetR ri (RVar 0))
+                        | _ => XCall f cs As mm
+                        end)
               | _, _, _ => None
               end
             else fallback
@@ -1860,7 +1898,15 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
   end
   end) with
   | Some x => Some x
-  | None => match bind_first ctx t with Some t' => reify_x fuel ctx t' | None => None end
+  | None =>
+      let tryb (ot : option term) := match bind_first ot ctx t with Some t' => reify_x fuel ctx t' | None => None end in
+      match tryb None with
+      | Some x => Some x
+      | None => match tryb (Some (tInd ind_bool [])) with
+                | Some x => Some x
+                | None => tryb (Some (tVar "kq_rec"%bs))
+                end
+      end
   end
   end.
 (** a record given back: at the end a record (built, or given by a call), the function itself at the end, the function itself
@@ -2247,6 +2293,8 @@ Fixpoint xset_ri (ri : nat) (x : sx) : sx :=
   | XSplitR sj r x => XSplitR sj r (xset_ri ri x)
   | XBind bq f cs a m x => XBind bq f cs a m (xset_ri ri x)
   | XBindR cs a m x => XBindR cs a m (xset_ri ri x)
+  | XBindRB cs a m x => XBindRB cs a m (xset_ri ri x)
+  | XBindRR _ cs a m x => XBindRR ri cs a m (xset_ri ri x)
   | XBindP bq f cs a p x => XBindP bq f cs a p (xset_ri ri x)
   | XBindPR rj f cs a p x => XBindPR rj f cs a p (xset_ri ri x)
   | XBindRM rj f cs a m x => XBindRM rj f cs a m (xset_ri ri x)
@@ -2589,7 +2637,7 @@ Fixpoint cl_x (B : Z) (bs : list cbe) (x : sx) {struct x} : list site :=
   | XCall f ccs args m => (Some f, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m
   | XCallP f ccs args p => (Some f, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_pv B bs p
   | XBind _ f ccs args m x => (Some f, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m ++ cl_x B bs x
-  | XBindR ccs args m x => (None, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m ++ cl_x B bs x
+  | XBindR ccs args m x | XBindRB ccs args m x | XBindRR _ ccs args m x => (None, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m ++ cl_x B bs x
   | XBindP _ f ccs args p x | XBindPR _ f ccs args p x => (Some f, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_pv B bs p ++ cl_x B bs x
   | XLetR r x | XMatchR r x | XSplitR _ r x => cl_r B bs r ++ cl_x B bs x
   | XMatchP p x | XLetP p x => cl_pv B bs p ++ cl_x B bs x

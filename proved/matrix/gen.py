@@ -586,6 +586,25 @@ addA("par_rec_write_own_let", "", "f2 (kro n a s)",
      "Fixpoint kro (n : nat) (x : int) (t : mem) : r3 := match n with O => mk3 (rd 0 0 t) x 0 | S m => let w := kro m (x + 1) (upd 0 x x t) in mk3 (f1 w + 1) (f2 w) (f3 w) end.\n")
 addA("par_bool_write_own_neg", "", "if kbo n a s then a else b",
      "Fixpoint kbo (n : nat) (x : int) (t : mem) : bool := match n with O => rd 0 0 t <? x | S m => negb (kbo m (x + 1) (upd 0 x x t)) end.\n")
+# the function's own call not at the end, bound by a let in a boolean, inside an expression in a record (step 48 continued)
+addA("par_bool_write_own_let", "", "if kbl n a s then a else b",
+     "Fixpoint kbl (n : nat) (x : int) (t : mem) : bool := match n with O => rd 0 0 t <? x | S m => let c := kbl m (x + 1) (upd 0 x x t) in negb c end.\n")
+addA("par_rec_write_own_expr", "", "f2 (kre n a s)",
+     "Fixpoint kre (n : nat) (x : int) (t : mem) : r3 := match n with O => mk3 (rd 0 0 t) x 0 | S m => mk3 (f1 (kre m (x + 1) (upd 0 x x t)) + 1) x 0 end.\n")
+# and with a template (its copy), a mutual block of booleans and of records that write
+addA("par_tmpl_bool_write_own", "", "if tbo n a (fun z => z + 1) s then a else b",
+     "Fixpoint tbo (n : nat) (x : int) (g : int -> int) (t : mem) : bool := match n with O => rd 0 0 t <? g x | S m => negb (tbo m (g x) g (upd 0 x x t)) end.\n")
+addA("par_tmpl_rec_write_own", "", "f1 (tro n a (fun z => z + 1) s)",
+     "Fixpoint tro (n : nat) (x : int) (g : int -> int) (t : mem) : r3 := match n with O => mk3 (rd 0 0 t) (g x) 0 | S m => let w := tro m (g x) g (upd 0 x x t) in mk3 (f1 w + 1) (f2 w) (f3 w) end.\n")
+addA("par_mutual_bool_write", "", "if evw n a s then a else b",
+     "Fixpoint evw (n : nat) (x : int) (t : mem) : bool := match n with O => rd 0 0 t <? x | S m => odw m (x + 1) (upd 0 x x t) end\nwith odw (n : nat) (x : int) (t : mem) : bool := match n with O => x <? rd 0 0 t | S m => evw m (x + 1) (upd 0 x x t) end.\n")
+addA("par_mutual_rec_write", "", "f1 (evr n a s)",
+     "Fixpoint evr (n : nat) (x : int) (t : mem) : r3 := match n with O => mk3 (rd 0 0 t) x 0 | S m => odr m (x + 1) (upd 0 x x t) end\nwith odr (n : nat) (x : int) (t : mem) : r3 := match n with O => mk3 x (rd 0 0 t) 1 | S m => evr m (x + 1) (upd 0 x x t) end.\n")
+# a boolean and a record that writes, called at the end of a recursive function giving back one
+addA("par_bool_write_tail_call", "", "if ktc n a s then a else b",
+     "Fixpoint wb (n : nat) (x : int) (t : mem) : bool := match n with O => rd 0 0 t <? x | S m => wb m (x + 1) (upd 0 x x t) end.\nFixpoint ktc (n : nat) (x : int) (t : mem) : bool := match n with O => wb 3 x t | S m => ktc m (x + 1) t end.\n")
+addA("par_rec_write_tail_call", "", "f2 (ktr n a s)",
+     "Fixpoint wq (n : nat) (x : int) (t : mem) : r3 := match n with O => mk3 (rd 0 0 t) x 0 | S m => wq m (x + 1) (upd 0 x x t) end.\nFixpoint ktr (n : nat) (x : int) (t : mem) : r3 := match n with O => wq 3 x t | S m => ktr m (x + 1) t end.\n")
 addA("par_tmpl_rec_write", "", "f1 (trw n a (fun z => z + 1) s)",
      "Fixpoint trw (n : nat) (x : int) (g : int -> int) (t : mem) : r3 := match n with O => mk3 (rd 0 0 t) (g x) 0 | S m => trw m (g x) g (upd 0 x x t) end.\n")
 addA("par_tmpl_bool_write", "", "if tbw n a (fun z => z + 1) s then a else b",
