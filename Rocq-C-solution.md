@@ -1607,6 +1607,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F59 | A fix made by hand in a file that an edit script regenerates is lost at the next regeneration: step 37's rewrite of `pot_ok` (made in the file, its proofs written against it) vanished when the core was made again from its script, and a proof term fixed by hand the same way (2026-11-03) | every fix goes into the script; the work files are made again from the scripts alone and compared byte for byte before a build counts |
 | F60 | Three of the reifier's ways of reading a function — a template's copy, a local fixpoint's copy, a mutual block and its members — checked `wf_f` with the signature as read only: the call graph's bounds (step 34) and the smallest own bound (step 33) never reached them, and the copies' theorems took no bound at all (found by step 37's cells of a template and of a mutual block, 2026-11-03) | one function gives every way of reading its signature (`wf_sig`); the copies' theorems take any bound and weights |
 | F61 | A written budget's largest value was `kq_nat`'s bound, 2^60, whatever was written: a mutual block's selector (given as a written number) counted 2^60 in a weighted sum, and the block's bound passed 2^62 (2026-11-03) | `cnat_max`: a written number in `kq_nat`'s range is its own largest value, in `cmax`, `cmaxv` and `clinf` |
+| F62 | The reifier's step was timed in two trees whose directories differ in size: `coqc` scans every directory `-R` and `-Q` give it, and the working tree holds every cell's generated files and the cells themselves (234 MB against 101 MB), so a file that loads only MetaRocq takes 0.80 s there against 0.73 s.  The 0.04–0.08 s the records of steps 44 continued to 48 put on the libraries' loading (and on the reifier's tests) was this.  Timed in copies of both trees without those directories, step 44 continued's files against step 48's: `HWP_kernel` 2.50 / 2.52 s, `HWP_own` 1.93 / 1.95, `HWP_irqnow` 1.63 / 1.64 — the same.  The timing now makes those copies. |
 | F38 | MetaRocq's formal evaluation (`EWcbvEval.eval`, `PCUICWcbvEval`) has rules for primitive values only, none for primitive operations: `PrimInt63.add` has no body, `eval_delta` cannot fire, every program here is stuck in it | the verified compiler is built by reflection over our own syntax instead (D26, §1.12) (read in the image's MetaRocq sources, 2026-10-30) |
 | F37 | CakeML's architecture is ours: a proof-producing translator from the logic's functions on top, one verified compiler below; Pancake is verified through a proof-producing decompiler.  The difference is that CakeML builds each proof by construction while ours searches | D25, §1.11 (read in the CakeML repository, 2026-10-30) |
 
@@ -4141,6 +4142,12 @@ binds such a call in the body of a number that writes, its result a number or a 
   6 gaps, 1 not Rocq (was 926 of 935: the two new cells read and `A_par_pm_call_rec`).  The gate on `10a5276`, the walk switched
   off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (11 / 12 / 12 / 13 / 13 s); **71 programs through
   the verified compiler, 0 refused**; the trusted base unchanged.  The step goes on with the bodies of the other sorts (below).
+
+**Correction (2026-11-03): the reifier's timing of steps 44 continued to 48.**  Their timing lines put a difference of 0.04–0.08 s on the
+libraries' loading; it was the scan of the working tree's generated files and cells (F62).  Timed without them, step 44 continued's files
+against step 48's: `HWP_kernel` 2.50 / 2.52 s, `HWP_own` 1.93 / 1.95, `HWP_irqnow` 1.63 / 1.64 — the same.  The pair pass of step 44
+continued, run since its first timing only over a body with a pair parameter or a flagged callee, stays so (it reads nothing else);
+the reifier's tests in a file of their own, proposed in steps 46 and 48, cost nothing measurable and are not made.
 
 **Step 48 continued, functions giving back a boolean or a record that write the memory, and a call given the pair a let holds —
 the design (2026-11-03).**  The four places of `1fab4bb`.
