@@ -4002,6 +4002,23 @@ each other in any pattern:
   five kernels (12 / 11 / 12 / 14 / 12 s); **71 programs through the verified compiler, 0 refused**; the trusted base unchanged.
   Next: templates giving back records (the record of 2026-11-02's order).
 
+**Step 46, templates of any signature — the design (2026-11-03).**  The seventh item of the record of 2026-11-02's order:
+`A_par_fun_rec_pair` (`foldp (n : nat) (p : int * int) (g : int -> int) : int * int`, a template taking a record and giving one
+back).  A template's copy for the functions it is given (step 10), and a local fixpoint's (step 31), is read by `read_def`: its
+result a number, a memory or a number that writes the memory; every parameter that is not a counter, a memory or a boolean read
+as a number; the copy checked without the program's record types.  The general form, a copy read as any function is:
+- *The reifier*: a copy giving back a boolean, a record, or a number and a memory, read by the readers of those sorts (as
+  `read_fun_c` reads a function); a record among its parameters a record (`tkinds`); its last parameter a number-and-memory pair
+  read on its components, its signature flagged (as step 44 continued reads a function); the copy checked with the program's
+  record types and, flagged, on its components; a record given back by a function given to it read with that function's body
+  written out, as the other sorts read it.  `KQR.v` unchanged: the copies' theorems for every result sort are there (step 41).
+- *kitc.py*: a flagged copy's theorem the one of a recursive function of the pair (its components' copy theorem, then
+  `callee_ok_unpair`).
+- *Cells*: a template giving back a boolean (and with a capture), a record (and with a capture), a number and a memory; a record
+  and a boolean among its parameters; a local fixpoint giving back a record; functions given that give back a record, take a
+  record, write the memory, take a boolean; the pair as a parameter.
+*Expected*: `A_par_fun_rec_pair` and those.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4181,7 +4198,8 @@ Pushed to the public repository up to `dcb282b` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 45 (mutual blocks of any signature: the construct table 901 of 909, 1 by design), the C, the gate |
+| (this commit) | §12.V: step 46's design (templates of any signature) |
+| `df2e4aa` | §12.V: step 45 (mutual blocks of any signature: the construct table 901 of 909, 1 by design), the C, the gate |
 | `dcb282b` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` step 45: `blkT`; a block read per part of its call graph, written as a function over shared slots; 13 cells |
 | `56c3242` | §12.V: step 45's design (mutual blocks of any signature) |
 | `df72495` | §12.V: step 44 continued (a number-and-memory pair as a parameter: the construct table 887 of 896, 1 by design), the C, the gate |
