@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **835 of 853, 16 gaps, 1 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **846 of 864, 16 gaps, 1 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -3670,6 +3670,42 @@ wrapper, as a template's copy is (step 10):
   order, an entry with its parameters in another order.
 *Expected*: the two cells and those.
 
+**Step 41 done (2026-11-03): parameters in any order.**  Built as designed:
+- *`KQR.v`*: the copies' theorems for every result kind: `compile_f_okrb` (a boolean), `okrr` (a record), `okrp` (a number and a
+  memory), each from the two equations by conversion, over the extensionality of its sort's meaning in its recursive function
+  (`denote_bb_recb_ext`, `denote_br_recr_ext`, `denote_pv_recp_ext`, as `denote_m_recm_ext` is for memories) and one lemma that
+  moves a function's theorem to any function giving the same at every counters and arguments (`callee_ok_ext`); the bodies'
+  parts for them (`fbb0` .. `fpv1`).  No new hypothesis; `Print Assumptions` the same base.  These are also what a template giving
+  back a record needs (a later item).
+- *The reifier*: a function whose parameters stand in another order (`fun_perm`: the recursion on a counter that is not the
+  first, a counter after a number, the memory not last) is read by `read_fun_p`, generated from `read_fun`'s text: the body's
+  context in the user's binder order, each parameter counter with its place among the counters in the syntax's order (`CCntP`),
+  the fix binder with the order (`CSelfP`), a recursive call's arguments put in that order at every self-call reader
+  (`self_perm`); the indices of numbers, booleans and records are counted within their kind, so the user's order already gives
+  the syntax's.  The function enters the program as its wrapper `k__o` (`k__on` when it does not recurse), whose meaning is
+  `fun (parameters in the syntax's order) => k (in the user's)`; a call of `k` is a call of the wrapper, its arguments reordered
+  (`tc_of`), and the caller's text converts with its meaning by one beta step.  The reasons no longer name the order; with the
+  parameters in the syntax's order the one refusal left there is two memories.  Tests: `w41go` (`w41a`, the counter after a
+  number; `w41b`, the memory before a number; `w41c`, the recursion on the second of two counters; their wrappers' theorems by
+  `compile_f_okr`, the entry's by `compile_f_ok`), `w41dgo` (a boolean given back: `compile_f_okrb`); each theorem in milliseconds.
+- *kitc.py*: a wrapper takes its copies' theorem by result kind (`okrm`, `okrx`, `okrb`, `okrr` with the record's index, `okrp`,
+  `okr`); wrappers are unfolded first as copies are; an entry whose parameters stand in another order gets `main`'s arguments
+  in the syntax's order (the reifier gives the order, `entry_perm`): `A_par_conv_entry` built and run gives 105 for 100 and 5.
+- *Cells*: 11 more (864): a boolean and a record before the counter, the recursion on the second counter, the memory between two
+  numbers, a boolean, a pair, a memory, a number and a memory, and a writing function giving back a number with their parameters
+  in another order, an entry with its parameters in another order (`gen.py`: a cell may carry its own `main`); and the two places
+  this commit leaves unread, found while building it: a local fixpoint recursing on its second parameter (`A_par_conv_lfix`) and
+  a template whose function parameter comes first (`A_par_conv_tmpl`) -- a copy's reading still asks the recursion on the first
+  parameter and the counters first.  Run alone: the first 9 proved, and with them `A_par_conv_nat_second` and
+  `A_par_conv_mem_first`; the two copies' places refused.  The step goes on with them (below).
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest; step 40's files /
+  step 41's; the machine loaded): `HWP_kernel` 2.94 / 2.95 s, `HWP_own` 2.24 / 2.35, `HWP_irqnow` 1.93 / 1.95 — the same.
+- The C: 63 of 63 byte-identical.  The construct table (on `3270bf7`): **846 of 864 through the verified compiler**, 1 by design,
+  16 gaps, 1 not Rocq (was 835 of 853: the nine new cells, `A_par_conv_nat_second` and `_mem_first`; the two copies' cells new
+  gaps).  The gate on `3270bf7`, the walk switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels
+  (12 / 12 / 12 / 14 / 15 s; the work machine's runs vary by a second or two, the reifier's step measured apart above); **71
+  programs through the verified compiler, 0 refused**; the trusted base unchanged.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3845,11 +3881,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `3dcc757` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `3270bf7` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 40 done (a function's bound from what its callers give it: the construct table 835 of 853, 1 by design), the C, the gate |
+| (this commit) | §12.V: step 41 (parameters in any order: the construct table 846 of 864, 1 by design; the copies' order goes on), the C, the gate |
+| `3270bf7` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` step 41: wrappers in the syntax's order, `CCntP` / `CSelfP`, the copies' theorems for every result kind; 11 cells |
+| `f04dc03` | §12.V: step 40 done (a function's bound from what its callers give it: the construct table 835 of 853, 1 by design), the C, the gate |
 | `0d03935` | §12.V: step 41's design (parameters in any order) |
 | `3dcc757` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 40: written bounds from 1, the let and flat rules checked against them; the call-graph bounds from 1; 2 cells |
 | `7626def` | §12.V: step 39 done (counters grown by other counters, polynomial weighted sums: the construct table 831 of 851, 1 by design), the C, the gate |
