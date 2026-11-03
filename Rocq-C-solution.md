@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **943 of 954, 8 gaps, 2 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **953 of 962, 6 gaps, 2 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4365,6 +4365,33 @@ gives a value of that kind, and the meaning of a number's body has no own call o
 - *Cells*: the two pinned; the boolean bound by a let; the record's inside an expression.
 *Expected*: those four.
 
+**Step 48 continued (2026-11-04): the function's own call not at the end of a boolean or a record that writes; a call at the end of
+one, mutual blocks of them.**  Built as designed, and one place found on the way:
+- *`KQR.v`*: `XBindRB`, `XBindRR`, the function's own call on a memory, its boolean or its record the nearest of its kind in what
+  follows, which reads no memory (`xfree`); C: the call into a variable under the function's own name, the record's fields through
+  `ccallr` (`ccallrw_ok`).  Their meanings are in `denote_xb` and `denote_xr`.  A number's body has neither (`xnum`, in its `wf_f`, a
+  premise of `ctailx_ok`).  The boolean's body has its own theorem `ctailxb_ok` (`after_free_b`), made like the record's from the
+  number's text, one script now making all three (`xresb_calln` and its fellows); the route through the number's meaning
+  (`denote_x_xb`, `xres_xresb`, `xrec_xrecb`) is removed.  No new hypothesis; `Print Assumptions` the same base.
+- *The reifier*: such a call bound by a let (`bindc`, the let of a record); `bind_first` binds an own call not bound by a let, its
+  let's type a number, then a boolean, then a record, until what follows is read (the type is not part of the meaning).  Found on
+  the way: a boolean or a record that writes, called at the end of a function giving back one, was read as `XCall`, not a leaf of
+  those bodies, which also refused every mutual block of them (a member is one call of its block): it is now read as the call bound
+  and its result the leaf (`XBind` with `XRetB`, `XBindRM` with `XRetR`; for a boolean the same code).
+- *Cells*: 8 more (962): the boolean's own call bound by a let, the record's inside an expression; both with a template; a mutual
+  block of booleans and of records that write; a boolean and a record that writes called at the end.  Run alone: all proved, and
+  with them `A_par_bool_write_own_neg`, `A_par_rec_write_own_let`.  Run as a check beside them, 511 cells (booleans, pairs, writes,
+  records, templates, functions given, mutual blocks, memories, and every eleventh cell of the table): 503 proved, the other 8 the
+  known gaps and the two cells refused by design.
+- *Not built yet, the step's continuation*: the pair a let holds given to a call (`A_par_pm_call_in_pv`, `A_par_pm_call_in_mem`).
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the
+  trees without their generated files, F62; the templates' files / these): `HWP_kernel` 2.44 / 2.42 s, `HWP_own` 1.82 / 1.85,
+  `HWP_irqnow` 1.53 / 1.53 — the same.
+- The C: 63 of 63 byte-identical.  The construct table (on `9d5ee76`): **953 of 962 through the verified compiler**, 2 by design,
+  6 gaps, 1 not Rocq (was 943 of 954: the eight new cells read and the two own calls pinned).  The gate on `9d5ee76`, the walk
+  switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (11 / 11 / 11 / 14 / 13 s); **71 programs
+  through the verified compiler, 0 refused**; the trusted base unchanged.  The step goes on with the pair a let holds.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4540,11 +4567,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `4804dc5` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `9d5ee76` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 48 continued, the own call not at the end of a boolean or a record that writes, the design (`XBindRB`, `XBindRR`, `xnum`, `ctailxb_ok`) |
+| (this commit) | §12.V: step 48 continued (the own call not at the end of a boolean or a record that writes, mutual blocks of them: the construct table 953 of 962, 2 by design; the pair a let holds goes on), the C, the gate |
+| `9d5ee76` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 48 continued: `XBindRB`, `XBindRR`, `xnum`, `ctailxb_ok`; the reifier binds an own call of a boolean or a record, a boolean or a record that writes called at the end read as a bound call; 8 cells |
+| `ba62ec6` | §12.V: step 48 continued, the own call not at the end of a boolean or a record that writes, the design (`XBindRB`, `XBindRR`, `xnum`, `ctailxb_ok`) |
 | `c4a2005` | §12.V: step 48 continued (templates giving back a boolean or a record that writes: the construct table 943 of 954, 2 by design; the own call not at the end and the pair a let holds go on), the C, the gate |
 | `4804dc5` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` step 48 continued: `compile_f_okrxb`, `compile_f_okrxr`, the meanings' independence of the own call; the reader of copies, the binding of a template's call; 2 cells |
 | `ac84ef0` | §12.V: step 48 continued, templates giving back a boolean or a record that writes, the design (the copies' theorems for X bodies of booleans and records) |
