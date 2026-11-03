@@ -3873,6 +3873,31 @@ form that takes the whole pair (its proof through `surjective_pairing`).
   off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (12 / 12 / 12 / 14 / 13 s); **71 programs through
   the verified compiler, 0 refused**; the trusted base unchanged.  The step goes on with the pair as a parameter (below).
 
+**Step 44 continued, a number-and-memory pair as a parameter — the design (2026-11-03).**  `A_par_intmem_param`
+(`k (n : nat) (p : int * mem)`, called `k n (a, s)`, its recursive call `k m (fst p + rd 0 0 (snd p), snd p)`).  A signature
+holds numbers, booleans, records and a memory, each its own parameter; a pair parameter is refused.  Taking it as a number and a
+memory through a wrapper (`k__p n x s := k n (x, s)`, as step 41 does for order) reads the function, and a call given a pair built
+in place; but a call given any other pair expression `P` (a call's result) is `k n P`, which is not `k n (fst P, snd P)` up to
+conversion (no eta for pairs), so the wrapper alone leaves those calls unread:
+- *`KQR.v`*: a signature gets a flag `sp`: its last number and its memory are one parameter, a pair (`mksig8` the signature
+  without).  The function's type takes the pair there (`ntypeTP`); its KQL takes the number and the memory as before; a call on
+  numbers and a memory is the function on the pair of the last number and the memory (`callf`, `appnTP`).  A signature with the
+  pair takes a memory and ends with a number (`pairok`, in `swok`).  A function's own body is read and proved on the two
+  components; its theorem with the pair from the components' theorem (`callee_ok_unpair`, through `appnTP_unpair`): kitc proves
+  `fun .. x s => k .. (x, s)` by the theorems of before and gives `k`'s from it.  A call given a whole pair expression, where a
+  call giving back a memory, a pair, or a number after memories at its end stands: `MCallP`, `PvCallP`, `XCallP`, its meaning
+  the function applied to the pair (`callfp`), its C the arguments, the pair's code, then the call on the pair's number and
+  memory; the proof from the callee's theorem at the pair's two parts and `surjective_pairing`.
+- *The reifier*: a function whose last parameter is a number-and-memory pair is read on the components: its body with the pair
+  replaced by the pair of two new variables (`pm_split`), the flag set in its signature; a call given a pair built in place is a
+  call on its number and memory; a call given another pair expression the new call forms.
+- *kitc.py*: the flag in a signature; the function's theorem from the components' one.
+- *Cells*: a pair parameter after other parameters; the function giving back a memory, a pair, a boolean; a call given a pair a
+  function gives (giving back a number, a memory, a pair); the pair taken apart in the body; the recursion given the pair as it
+  is.  A call of such a function inside an expression given a pair that is not built in place is a writing function inside an
+  expression (a later item of the order): a cell, a gap.
+*Expected*: `A_par_intmem_param` and those.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4048,11 +4073,12 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `4d99efa` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `1e9da9c` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 44 (a memory function taking a number-and-memory pair apart: the construct table 877 of 885, 1 by design; the pair as a parameter goes on), the C, the gate |
+| (this commit) | §12.V: step 44 continued's design (a number-and-memory pair as a parameter) |
+| `1e9da9c` | §12.V: step 44 (a memory function taking a number-and-memory pair apart: the construct table 877 of 885, 1 by design; the pair as a parameter goes on), the C, the gate |
 | `4d99efa` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 44: the memory and pair sorts mutual, `MMatchP` / `MLetP`, `cmem_cpv_ok`; 6 cells |
 | `80e2d78` | §12.V: step 44's design (a memory function taking a number-and-memory pair apart) |
 | `f2d3996` | §12.V: step 43 done (records holding records as values: the construct table 870 of 879, 1 by design), the C, the gate |
