@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **939 of 952, 10 gaps, 2 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **943 of 954, 8 gaps, 2 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4325,6 +4325,29 @@ those results.  So:
 convertible with `k n (fst p, snd p)`: `prod` has no eta, and `k`'s recursion on a symbolic counter does not reduce), so it is a
 design of its own; the function's own call not at the end comes after this one.
 
+**Step 48 continued (2026-11-04): templates giving back a boolean or a record that writes.**  Built as designed:
+- *`KQR.v`*: the copies' theorems for an X body of booleans and of records (`compile_f_okrxb`, `compile_f_okrxr`), from
+  `compile_f_ok` and the meanings' independence of the own call beyond its values (`denote_xb_recb_ext`, `denote_xr_recr_ext`,
+  made from `denote_x_recx_ext`'s text; `xresb_ext`, `xrecb_ext`, `xresR_ext`, `xrecR_ext`).  No new hypothesis;
+  `Print Assumptions` the same base.
+- *The reifier*: a copy giving back a boolean or a record that the readers of booleans and records refuse read as an X body, its
+  signature writing (the records' type set, `xset_ri`); the binding of a call (`bind_first`) asks a template's call for its
+  copy's signature (`tcall`), as the readers do — a boolean's call in a test was bound only when it was not a template's.
+- *`kitc.py`*: a copy whose signature writes and gives back a boolean or a record gets those theorems.
+- *Cells*: 2 more (954): a template giving back a boolean and a record that writes through a call.  Run alone, with every
+  template cell (19): all proved, the two pinned by the record half among them.  Run as a check beside them, 507 cells (booleans,
+  pairs, writes, records, templates, functions given, mutual blocks, memories, and every eleventh cell of the table): 497
+  proved, the other 10 the known gaps and the two cells refused by design.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the
+  trees without their generated files, F62; the record half's files / these): `HWP_kernel` 2.59 / 2.57 s, `HWP_own` 1.99 / 1.98,
+  `HWP_irqnow` 1.68 / 1.68 — the same (a first run, on a machine loaded by other work, spread 0.15 s between rounds; the second
+  is the one given).
+- The C: 63 of 63 byte-identical.  The construct table (on `4804dc5`): **943 of 954 through the verified compiler**, 2 by design,
+  8 gaps, 1 not Rocq (was 939 of 952: the two new cells read and the two the record half pinned).  The gate on `4804dc5`, the walk
+  switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (11 / 11 / 11 / 14 / 13 s); **71 programs
+  through the verified compiler, 0 refused**; the trusted base unchanged.  The step goes on with the function's own call not at
+  the end and the pair a let holds.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4500,11 +4523,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `2d66918` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `4804dc5` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 48 continued, templates giving back a boolean or a record that writes, the design (the copies' theorems for X bodies of booleans and records) |
+| (this commit) | §12.V: step 48 continued (templates giving back a boolean or a record that writes: the construct table 943 of 954, 2 by design; the own call not at the end and the pair a let holds go on), the C, the gate |
+| `4804dc5` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` step 48 continued: `compile_f_okrxb`, `compile_f_okrxr`, the meanings' independence of the own call; the reader of copies, the binding of a template's call; 2 cells |
+| `ac84ef0` | §12.V: step 48 continued, templates giving back a boolean or a record that writes, the design (the copies' theorems for X bodies of booleans and records) |
 | `454364a` | §12.V: step 48 continued (functions giving back a record whose body writes: the construct table 939 of 952, 2 by design; the own call not at the end, templates and the pair a let holds go on), the C, the gate |
 | `2d66918` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 48 continued: `callmw`, `XRetR`, `XBindRM`, `denote_xr`, `ctailxr_ok`, a record whose body writes; the reifier reads it as an X body and looks into a let's bound term for a call to bind; 9 cells |
 | `ffd7eed` | §12.V: step 48 continued's record half, the design (the contract keeps the slot block of a record that writes; `XRetR`, `denote_xr`, `ctailxr_ok`; `XBindRM`) |
