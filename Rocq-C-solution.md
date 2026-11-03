@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **901 of 909, 6 gaps, 1 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **915 of 922, 5 gaps, 1 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4019,6 +4019,31 @@ as a number; the copy checked without the program's record types.  The general f
   record, write the memory, take a boolean; the pair as a parameter.
 *Expected*: `A_par_fun_rec_pair` and those.
 
+**Step 46 done (2026-11-03): templates of any signature.**  Built as designed, in the reifier and `kitc.py` (`KQR.v`
+unchanged):
+- *The reifier*: `read_def` reads a copy giving back a number and a memory (`FRecP`), a boolean (`FRecB`) or a record
+  (`FRecR`) as `read_fun_c` reads a function; `tkinds` reads a record among a template's parameters as a record; a copy whose
+  last parameter is a number-and-memory pair is read on its components (`pm_body`), its signature flagged and checked on them;
+  a copy is checked with the program's record types (`arity_recs`, as a function is — without them every template holding a
+  record was refused); the record reader writes out the body of a function given to the template (`CFn`), as the other
+  readers do.  Test `w46go` (`w46foldp`'s copy for `fun z => z + 1`, taking and giving back a pair of numbers, its theorem by
+  `compile_f_okrr`, `w46go`'s by `compile_f_ok`), each theorem in milliseconds.
+- *kitc.py*: a flagged copy's theorem from its components' copy theorem (`callee_ok_unpair`), as a recursive function's.
+- *Cells*: 13 more (922): a template giving back a boolean (and with a capture), a record (and with a capture), a number and a
+  memory; a record and a boolean among its parameters; a local fixpoint giving back a record; functions given that give back a
+  record, take a record, write the memory, take a boolean; the pair as a parameter.  Run alone: all 13 proved, and with them
+  `A_par_fun_rec_pair`.  Run as a check beside them, 194 cells (templates, local fixpoints, records, the pair, and every
+  ninth cell of the table): 191 proved, the other 3 the known gaps (the writing functions inside expressions).
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest; step 45's
+  files / step 46's): `HWP_kernel` 2.58 / 2.63 s, `HWP_own` 2.00 / 2.04, `HWP_irqnow` 1.68 / 1.73 — the loading of the
+  libraries again (`KQR` and the reifier alone: 0.88 / 0.94 s; this step's change to the reader is small, its test with a
+  record instance is not): every program loads the reifier's tests; they go to a file of their own next (below).
+- The C: 63 of 63 byte-identical.  The construct table (on `4283f5d`): **915 of 922 through the verified compiler**, 1 by design,
+  5 gaps, 1 not Rocq (was 901 of 909: the thirteen new cells read and `A_par_fun_rec_pair`).  The gate on `4283f5d`, the walk
+  switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (11 / 12 / 12 / 14 / 13 s); **71 programs
+  through the verified compiler, 0 refused**; the trusted base unchanged.  Next: calls inside expressions that write the memory or
+  are given a pair (the record of 2026-11-02's order).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4194,11 +4219,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `dcb282b` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `4283f5d` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 46's design (templates of any signature) |
+| (this commit) | §12.V: step 46 (templates of any signature: the construct table 915 of 922, 1 by design), the C, the gate |
+| `4283f5d` | `proved/KQRReify.v` + `kitc.py` + `matrix/gen.py` step 46: a copy read for every result sort, a record parameter a record, the pair as a parameter, checked with the program's record types; 13 cells |
+| `4102c0a` | §12.V: step 46's design (templates of any signature) |
 | `df2e4aa` | §12.V: step 45 (mutual blocks of any signature: the construct table 901 of 909, 1 by design), the C, the gate |
 | `dcb282b` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` step 45: `blkT`; a block read per part of its call graph, written as a function over shared slots; 13 cells |
 | `56c3242` | §12.V: step 45's design (mutual blocks of any signature) |
