@@ -839,6 +839,19 @@ Definition bind_first (ctx : list cent) (t : term) : option term :=
         | _ => u
         end
     end in
+  let fix inl (fu : nat) (u : term) {struct fu} : term :=
+    match fu with
+    | O => u
+    | S fu =>
+        match u with
+        | tApp (tConst kn _ as f) args => match hb kn with Some b => inl fu (wout b args) | None => tApp f (map (inl fu) args) end
+        | tApp f args => tApp f (map (inl fu) args)
+        | tCase ci p c brs => tCase ci p (inl fu c) brs
+        | _ => u
+        end
+    end in
+  (* the helpers written out only when the text as written holds no such call *)
+  let t := match find 1000 t with Some _ => t | None => inl 100 t end in
   match find 1000 t with
   | None => None
   | Some c =>
@@ -1587,7 +1600,7 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
   match fuel with
   | O => None
   | S fuel =>
-  let fallback := option_map XRet (reify fuel ctx t) in
+  let fallback := match reify fuel ctx t with Some e => Some (XRet e) | None => option_map XRetB (reify_b fuel ctx t) end in
   let reify_args (c : list cent) (l : list term) : option sexps :=
     to_args (map (fun a => match reify fuel c a with Some e => Some (inl e) | None =>
                             match reify_b fuel c a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel c a) end end) l) in
@@ -1596,7 +1609,12 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
      itself: what follows on the memory the call was given, or (after a call that writes) reading no memory *)
   let bindc (bq : bool) (b body : term) : option sx :=
     let cv := if bq then CBool else CNum in
-    let after (w : bool) := if w then option_map XRet (reify fuel (cv :: kill_mem ctx) body) else reify_x fuel (cv :: ctx) body in
+    let after (w : bool) :=
+      if w then match reify fuel (cv :: kill_mem ctx) body with
+                | Some e => Some (XRet e)
+                | None => option_map XRetB (reify_b fuel (cv :: kill_mem ctx) body)   (* (step 48 continued) a boolean *)
+                end
+      else reify_x fuel (cv :: ctx) body in
     match b with
     | tApp (tConst kn _) args =>
         let '(kn1, args1) := tcall ctx kn args in
@@ -2181,6 +2199,8 @@ Definition pm_body (callees : list (kername * sig)) (tys : list term) (fx : bool
   if last_pm tys then flatp 100000 (isp_of callees (if fx then Some (S (length tys)) else None)) 0 (pm_split (last tys (tRel 0)) body)
   else if existsb (fun e => sp (snd e)) callees then flatp 100000 (isp_of callees None) 0 body else body.
 
+(** a signature whose body writes (step 48 continued: a boolean read as an X body) *)
+Definition wsig (g : sig) : sig := mksig9 (sn g) (sk g) (sm g) (sr g) true (sq g) (sb g) (sv g) (sp g).
 Definition read_fun_c (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
   (callees : list (kername * sig)) (kn : kername) : option (sig * fbody) :=
   match lookup_env Σ kn with
@@ -2205,7 +2225,14 @@ Definition read_fun_c (Σ : global_env) (hb : kername -> option term) (tc : kern
                   else if isbq gs then
                     match reify_bb callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_bb callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
                     | Some r0, Some r1 => Some (gs, FRecB r0 r1)
-                    | _, _ => None
+                    | _, _ =>
+                        (* (step 48 continued) a boolean whose body writes: an X body of booleans *)
+                        if sm gs then
+                          match reify_x callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_x callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
+                          | Some x0, Some x1 => Some (wsig gs, FRecX x0 x1)
+                          | _, _ => None
+                          end
+                        else None
                     end
                   else if isq gs then
                     match reify_br callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_br callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
@@ -2242,7 +2269,11 @@ Definition read_fun_c (Σ : global_env) (hb : kername -> option term) (tc : kern
           | Some gs =>
               let nx := Nat.pred (sn gs) in
               if ispq gs then option_map (fun r => (gs, FPlainP r)) (reify_pv callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body)
-              else if isbq gs then option_map (fun r => (gs, FPlainB r)) (reify_bb callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body)
+              else if isbq gs then
+                match reify_bb callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body with
+                | Some r => Some (gs, FPlainB r)
+                | None => if sm gs then option_map (fun x => (wsig gs, FPlainX x)) (reify_x callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body) else None
+                end
               else if isq gs then option_map (fun r => (gs, FPlainR r)) (reify_br callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body)
               else if sr gs then option_map (fun m => (gs, FPlainM m)) (reify_m callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body)
               else match reify callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body with
@@ -2284,7 +2315,14 @@ Definition read_fun_p (Σ : global_env) (hb : kername -> option term) (tc : kern
                   else if isbq gs then
                     match reify_bb callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_bb callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
                     | Some r0, Some r1 => Some (gs, FRecB r0 r1)
-                    | _, _ => None
+                    | _, _ =>
+                        (* (step 48 continued) a boolean whose body writes: an X body of booleans *)
+                        if sm gs then
+                          match reify_x callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_x callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
+                          | Some x0, Some x1 => Some (wsig gs, FRecX x0 x1)
+                          | _, _ => None
+                          end
+                        else None
                     end
                   else if isq gs then
                     match reify_br callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_br callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
@@ -2320,7 +2358,11 @@ Definition read_fun_p (Σ : global_env) (hb : kername -> option term) (tc : kern
           | Some gs =>
               let nx := Nat.pred (sn gs) in
               if ispq gs then option_map (fun r => (gs, FPlainP r)) (reify_pv callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body)
-              else if isbq gs then option_map (fun r => (gs, FPlainB r)) (reify_bb callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body)
+              else if isbq gs then
+                match reify_bb callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body with
+                | Some r => Some (gs, FPlainB r)
+                | None => if sm gs then option_map (fun x => (wsig gs, FPlainX x)) (reify_x callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body) else None
+                end
               else if isq gs then option_map (fun r => (gs, FPlainR r)) (reify_br callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body)
               else if sr gs then option_map (fun m => (gs, FPlainM m)) (reify_m callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body)
               else match reify callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body with
@@ -2460,6 +2502,7 @@ with cl_pv (B : Z) (bs : list cbe) (p : spv) {struct p} : list site :=
 Fixpoint cl_x (B : Z) (bs : list cbe) (x : sx) {struct x} : list site :=
   match x with
   | XRet e => cl_e B bs e
+  | XRetB b => cl_b B bs b
   | XLetM m x => cl_m B bs m ++ cl_x B bs x
   | XLet e x => cl_e B bs e ++ cl_x B bs x
   | XLetB b x => cl_b B bs b ++ cl_x B bs x
