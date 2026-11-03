@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **933 of 943, 7 gaps, 2 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **939 of 952, 10 gaps, 2 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4267,6 +4267,46 @@ memory (`callee_ok`, `sw`), which loses the slot block, so a caller could not re
   record that writes (bound by a let, negated) — the boolean's cell missed by the boolean half (its slip, recorded).
 *Expected*: `A_par_pm_call_in_rec` and the new cells but the own call not at the end.
 
+**Step 48 continued (2026-11-04): functions giving back a record whose body writes the memory; the pair a let holds goes on.**
+Built, the design's record half:
+- *`KQR.v`*: the contract of a function that writes keeps a record's slot block: the memory after it is some memory whose slot
+  block holds the fields after the first (`callmw`, `callmwp`; for the other results the end memory itself, `callmw_norec`).  A
+  record as a leaf of the sort of a number that writes (`XRetR`: its fields after the first put in the slot block, the first
+  returned) and a call giving back a record on a memory, bound (`XBindRM`); `XBindPR` takes a function that writes too (after it,
+  what follows reads no memory).  A function giving back a record whose signature writes has an X body whose leaves are records of
+  its type or its own call (`xrecbody`), its meaning `denote_xr`; its theorem `ctailxr_ok` (the code returns the first field and
+  leaves the slot block holding the others over some memory), the same induction as `ctailx_ok` (its text made from that
+  lemma's by a script, the leaves and the binding calls apart); after a call that writes, a record that reads no memory
+  (`after_free_r`; `after_free`'s end memory `xfend`, the slot block written over the call's end memory); a call of a function
+  that writes giving back a record (`ccallrw_ok`: the saved cells written back over its end memory).  `compile_f_ok_rec` gains
+  the case.  No new hypothesis; `Print Assumptions` the same base.
+- *The reifier*: a record as the last resort of an X body's leaf and of what follows a call that writes (`XRetR`, its type the
+  function's, `xset_ri`); a function giving back a record that its readers of records refuse read as an X body of records, its
+  signature writing; a call of a function giving back a record that writes bound (`XBindRM` on a memory, `XBindPR` given a
+  pair).  And a general change to the binding of a call (`bind_first`): it looks into a let's bound term, unless that term is
+  itself the call — a helper given a computed argument is written out as a let (`wout`), so a call that writes in such a helper's
+  body was not found (`A_par_pm_call_in_rec`, whose helper builds the record); the exception keeps a bound call from being bound
+  again (its first version did that until the fuel ran out, on the own call of `A_par_rec_write_own_let`).
+- *Cells*: 9 more (952): a record that writes through a call inside an expression and in a test, its recursion given a memory it
+  writes; a call that writes inside a record built in place, projected and bound by a let; and the places this step leaves: the
+  function's own call not at the end in a record and in a boolean that writes (`A_par_rec_write_own_let`,
+  `A_par_bool_write_own_neg` — the boolean's place missed by step 48 continued's first half, a slip recorded here), a template
+  giving back a record and a boolean that writes (`A_par_tmpl_rec_write`, `A_par_tmpl_bool_write`: their copies' theorems).  Run
+  alone: the five read cells proved, and with them `A_par_pm_call_in_rec`; the four places refused.  Run as a check beside them,
+  506 cells (booleans, pairs, writes, records, templates, mutual blocks, memories, and every eleventh cell of the table): 494
+  proved, the other 12 the known gaps and the two cells refused by design.
+- *Not built yet, the step's continuation*: those four places, and the pair a let holds given to a call (`A_par_pm_call_in_pv`,
+  `A_par_pm_call_in_mem`).
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the
+  trees without their generated files, F62; the boolean half's files / this half's): `HWP_kernel` 2.55 / 2.55 s, `HWP_own` 1.97 /
+  1.97, `HWP_irqnow` 1.66 / 1.67 — the same.
+- The C: 63 of 63 byte-identical.  The construct table (on `2d66918`): **939 of 952 through the verified compiler**, 2 by design,
+  10 gaps, 1 not Rocq (was 933 of 943: the five new cells read and `A_par_pm_call_in_rec`; the four places of the new cells left
+  unread added as gaps).  The gate on `2d66918`, the walk switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the
+  five kernels (12 / 11 / 12 / 15 / 13 s); **71 programs through the verified compiler, 0 refused**; the trusted base unchanged.
+  The step goes on with the own call not at the end, templates giving back a record or a boolean that writes, and the pair a let
+  holds.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4442,11 +4482,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `5057f75` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `2d66918` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 48 continued's record half, the design (the contract keeps the slot block of a record that writes; `XRetR`, `denote_xr`, `ctailxr_ok`; `XBindRM`) |
+| (this commit) | §12.V: step 48 continued (functions giving back a record whose body writes: the construct table 939 of 952, 2 by design; the own call not at the end, templates and the pair a let holds go on), the C, the gate |
+| `2d66918` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 48 continued: `callmw`, `XRetR`, `XBindRM`, `denote_xr`, `ctailxr_ok`, a record whose body writes; the reifier reads it as an X body and looks into a let's bound term for a call to bind; 9 cells |
+| `ffd7eed` | §12.V: step 48 continued's record half, the design (the contract keeps the slot block of a record that writes; `XRetR`, `denote_xr`, `ctailxr_ok`; `XBindRM`) |
 | `6fd239e` | §12.V: step 49 (two versions of the memory both used: the boundary pinned; the construct table 933 of 943, 2 by design), the gate |
 | `5057f75` | `proved/matrix/gen.py` + `classify.py` step 49: the pin `A_par_write_two_data` by design, its control `A_par_write_two_seq`, the fixed side's gaps `A_par_write_in_mem`, `P_mem_both`; 4 cells |
 | `3d57a2e` | §0.5, §11 F63, §12.V: step 49's design (two versions of the memory both used: the third refusal by the size of the difference; a pin from the data with its control, the fixed side as gaps) |
