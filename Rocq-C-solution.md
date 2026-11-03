@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **846 of 864, 16 gaps, 1 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **848 of 864, 14 gaps, 1 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -3706,6 +3706,24 @@ wrapper, as a template's copy is (step 10):
   (12 / 12 / 12 / 14 / 15 s; the work machine's runs vary by a second or two, the reifier's step measured apart above); **71
   programs through the verified compiler, 0 refused**; the trusted base unchanged.
 
+**Step 41 continued (2026-11-03): the copies with their parameters in any order.**  The two places the first commit left unread,
+in the reifier only (`KQR.v`, `kitc.py` unchanged): a template's copy and a local fixpoint's copy take the template's non-function
+parameters in the syntax's order (`nonfn_perm`) — the copy's signature and binders in that order, the template called in its
+meaning with them back in the user's order (`copy_meaning_h` takes the order), its body read with the parameter counters' places
+(`CCntP`) and its recursive call reordered over all the template's parameters, functions included, before those are dropped
+(`CSelfP`, `tdrop` over the reordered types); a call of the template or of the local fixpoint gives its arguments in the copy's
+order (`tc_of`); a local fixpoint no longer has to recurse on its first parameter (`sites`).  A copy whose template has its
+parameters in the syntax's order is made as before.  Tests: `w41fgo` (a template whose function comes first, a local fixpoint
+recursing on its second parameter written out in the entry; the copies' theorems from their two equations, the entry's); each
+theorem in milliseconds.  Cells: `A_par_conv_lfix` and `A_par_conv_tmpl` proved; run as a check beside them, 220 of the 224
+cells that involve templates, captures and local functions proved, the other 4 the known gaps (three captures, a template giving
+back a pair).  The reifier's step on the kernels' programs (one core, interleaved, three rounds, the fastest; the machine loaded;
+step 41's first files / these): `HWP_kernel` 4.07 / 4.05 s, `HWP_own` 3.08 / 3.15, `HWP_irqnow` 2.60 / 2.64 — the same.
+The C: 63 of 63 byte-identical.  The construct table (on `c825e9a`): **848 of 864 through the verified compiler**, 1 by design,
+14 gaps, 1 not Rocq (was 846: the two copies' cells).  The gate on `c825e9a`, the walk switched off: `make.sh` `core-ok`;
+examples 27 / 27; corpus 36 / 36; the five kernels (14 / 13 / 14 / 20 / 15 s); **71 programs through the verified compiler, 0
+refused**; the trusted base unchanged.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3881,11 +3899,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `3270bf7` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `c825e9a` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 41 (parameters in any order: the construct table 846 of 864, 1 by design; the copies' order goes on), the C, the gate |
+| (this commit) | §12.V: step 41 continued (the copies with their parameters in any order: the construct table 848 of 864, 1 by design), the C, the gate |
+| `c825e9a` | `proved/KQRReify.v` step 41 continued: a template's copy and a local fixpoint's copy in the syntax's order (`nonfn_perm`), the recursive call reordered before the functions are dropped |
+| `f9c3e5f` | §12.V: step 41 (parameters in any order: the construct table 846 of 864, 1 by design; the copies' order goes on), the C, the gate |
 | `3270bf7` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` step 41: wrappers in the syntax's order, `CCntP` / `CSelfP`, the copies' theorems for every result kind; 11 cells |
 | `f04dc03` | §12.V: step 40 done (a function's bound from what its callers give it: the construct table 835 of 853, 1 by design), the C, the gate |
 | `0d03935` | §12.V: step 41's design (parameters in any order) |
