@@ -765,7 +765,7 @@ Definition bcall_rec (u : term) : option term :=
       | Some (_, gs) =>
           match sq gs with
           | Some (KRec ri) =>
-              if negb (sr gs) && negb (sw gs) && sp gs && match rev args with a :: _ => negb (pair_lit a) | [] => false end
+              if negb (sr gs) && ((sp gs && match rev args with a :: _ => negb (pair_lit a) | [] => false end) || (sw gs && sm gs && negb (sp gs)))
               then option_map (fun e => let '(_, ty, _, _, _, _, _) := e in ty) (nth_error rt ri) else None
           | _ => None
           end
@@ -789,6 +789,8 @@ Definition bind_first (ctx : list cent) (t : term) : option term :=
             match u with
             | tApp _ args => fold_left (fun a x => match a with Some _ => a | None => find fu x end) args None
             | tCase _ _ c _ => find fu c
+            (* a let's bound term, unless it is itself the call: a call already bound is not bound again *)
+            | tLetIn _ b _ _ => match bq b with Some _ => None | None => find fu b end
             | _ => None
             end
         end
@@ -799,7 +801,8 @@ Definition bind_first (ctx : list cent) (t : term) : option term :=
     | S fu => teq 1000 u c || match u with
                              | tApp f args => occ fu c f || existsb (occ fu c) args
                              | tCase _ _ c0 brs => occ fu c c0 || existsb (fun br => occ fu c (bbody br)) brs
-                             | tLambda _ _ b | tLetIn _ _ _ b => occ fu c b
+                             | tLambda _ _ b => occ fu c b
+                             | tLetIn _ b0 _ b => occ fu c b0 || occ fu c b
                              | _ => false
                              end
     end in
@@ -823,6 +826,7 @@ Definition bind_first (ctx : list cent) (t : term) : option term :=
                                    if occ 1000 c a then let '(a', h') := skel fu c a h in (l ++ [a'], h') else (l ++ [a], h)) args ([], hs) in
             (tApp f args', hs')
         | tCase ci p c0 brs => let '(c0', hs') := skel fu c c0 hs in (tCase ci p c0' brs, hs')
+        | tLetIn na b0 ty b => let '(b0', hs') := skel fu c b0 hs in (tLetIn na b0' ty b, hs')
         | _ => (u, hs)
         end
     end in
@@ -836,6 +840,7 @@ Definition bind_first (ctx : list cent) (t : term) : option term :=
                          | Some i => tRel (k - i) | None => u end
         | tApp f args => tApp (repl fu k f) (map (repl fu k) args)
         | tCase ci p c0 brs => tCase ci p (repl fu k c0) brs
+        | tLetIn na b0 ty b => tLetIn na (repl fu k b0) ty b
         | _ => u
         end
     end in
@@ -847,6 +852,7 @@ Definition bind_first (ctx : list cent) (t : term) : option term :=
         | tApp (tConst kn _ as f) args => match hb kn with Some b => inl fu (wout b args) | None => tApp f (map (inl fu) args) end
         | tApp f args => tApp f (map (inl fu) args)
         | tCase ci p c brs => tCase ci p (inl fu c) brs
+        | tLetIn na b0 ty b => tLetIn na (inl fu b0) ty b
         | _ => u
         end
     end in
@@ -1600,7 +1606,8 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
   match fuel with
   | O => None
   | S fuel =>
-  let fallback := match reify fuel ctx t with Some e => Some (XRet e) | None => option_map XRetB (reify_b fuel ctx t) end in
+  let fallback := match reify fuel ctx t with Some e => Some (XRet e) | None =>
+                  match reify_b fuel ctx t with Some b => Some (XRetB b) | None => option_map (XRetR 0) (reify_r fuel ctx t) end end in
   let reify_args (c : list cent) (l : list term) : option sexps :=
     to_args (map (fun a => match reify fuel c a with Some e => Some (inl e) | None =>
                             match reify_b fuel c a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel c a) end end) l) in
@@ -1612,7 +1619,10 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
     let after (w : bool) :=
       if w then match reify fuel (cv :: kill_mem ctx) body with
                 | Some e => Some (XRet e)
-                | None => option_map XRetB (reify_b fuel (cv :: kill_mem ctx) body)   (* (step 48 continued) a boolean *)
+                | None => match reify_b fuel (cv :: kill_mem ctx) body with   (* (step 48 continued) a boolean, a record *)
+                          | Some b => Some (XRetB b)
+                          | None => option_map (XRetR 0) (reify_r fuel (cv :: kill_mem ctx) body)
+                          end
                 end
       else reify_x fuel (cv :: ctx) body in
     match b with
@@ -1693,14 +1703,31 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
                    match find_callee kn1 callees 0, rev args1 with
                    | Some (f, gs), m :: rnums =>
                        let rest := rev rnums in
+                       (* (step 48 continued) after a call that writes, what follows reads no memory: a number, a boolean, a record *)
+                       let afterR (w : bool) :=
+                         if w then match reify fuel (CRec :: kill_mem ctx) body with
+                                   | Some e => Some (XRet e)
+                                   | None => match reify_b fuel (CRec :: kill_mem ctx) body with
+                                             | Some b => Some (XRetB b)
+                                             | None => option_map (XRetR 0) (reify_r fuel (CRec :: kill_mem ctx) body)
+                                             end
+                                   end
+                         else reify_x fuel (CRec :: ctx) body in
                        match sq gs with
                        | Some (KRec ri) =>
-                           if sp gs && negb (pair_lit m) && Nat.leb (sn gs) (length rest) then
-                             match reify_pv fuel ctx m, reify_cs ctx (firstn (sn gs) rest), reify_args ctx (skipn (sn gs) rest),
-                                   reify_x fuel (CRec :: ctx) body with
-                             | Some p, Some cs, Some As, Some x => Some (XBindPR ri f cs As p x)
-                             | _, _, _, _ => None
-                             end
+                           if negb (sr gs) && Nat.leb (sn gs) (length rest) then
+                             if sp gs && negb (pair_lit m) then
+                               match reify_pv fuel ctx m, reify_cs ctx (firstn (sn gs) rest), reify_args ctx (skipn (sn gs) rest), afterR (sw gs) with
+                               | Some p, Some cs, Some As, Some x => Some (XBindPR ri f cs As p x)
+                               | _, _, _, _ => None
+                               end
+                             else if sw gs && sm gs && negb (sp gs) then
+                               (* (step 48 continued) a call of a function giving back a record that writes, on a memory *)
+                               match reify_m fuel ctx m, reify_cs ctx (firstn (sn gs) rest), reify_args ctx (skipn (sn gs) rest), afterR true with
+                               | Some mm, Some cs, Some As, Some x => Some (XBindRM ri f cs As mm x)
+                               | _, _, _, _ => None
+                               end
+                             else None
                            else None
                        | _ => None
                        end
@@ -2201,6 +2228,29 @@ Definition pm_body (callees : list (kername * sig)) (tys : list term) (fx : bool
 
 (** a signature whose body writes (step 48 continued: a boolean read as an X body) *)
 Definition wsig (g : sig) : sig := mksig9 (sn g) (sk g) (sm g) (sr g) true (sq g) (sb g) (sv g) (sp g).
+(** an X body's records given the function's record type (step 48 continued: the reader leaves it 0) *)
+Fixpoint xset_ri (ri : nat) (x : sx) : sx :=
+  match x with
+  | XRetR _ r => XRetR ri r
+  | XLetM m x => XLetM m (xset_ri ri x)
+  | XLet e x => XLet e (xset_ri ri x)
+  | XLetB b x => XLetB b (xset_ri ri x)
+  | XIf c a b x1 x2 => XIf c a b (xset_ri ri x1) (xset_ri ri x2)
+  | XIfB b x1 x2 => XIfB b (xset_ri ri x1) (xset_ri ri x2)
+  | XMatch c x0 x1 => XMatch c (xset_ri ri x0) (xset_ri ri x1)
+  | XLetC c x => XLetC c (xset_ri ri x)
+  | XLetR r x => XLetR r (xset_ri ri x)
+  | XMatchR r x => XMatchR r (xset_ri ri x)
+  | XMatchP p x => XMatchP p (xset_ri ri x)
+  | XLetP p x => XLetP p (xset_ri ri x)
+  | XSplitR sj r x => XSplitR sj r (xset_ri ri x)
+  | XBind bq f cs a m x => XBind bq f cs a m (xset_ri ri x)
+  | XBindR cs a m x => XBindR cs a m (xset_ri ri x)
+  | XBindP bq f cs a p x => XBindP bq f cs a p (xset_ri ri x)
+  | XBindPR rj f cs a p x => XBindPR rj f cs a p (xset_ri ri x)
+  | XBindRM rj f cs a m x => XBindRM rj f cs a m (xset_ri ri x)
+  | _ => x
+  end.
 Definition read_fun_c (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
   (callees : list (kername * sig)) (kn : kername) : option (sig * fbody) :=
   match lookup_env Σ kn with
@@ -2237,7 +2287,14 @@ Definition read_fun_c (Σ : global_env) (hb : kername -> option term) (tc : kern
                   else if isq gs then
                     match reify_br callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_br callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
                     | Some r0, Some r1 => Some (gs, FRecR r0 r1)
-                    | _, _ => None
+                    | _, _ =>
+                        (* (step 48 continued) a record whose body writes: an X body of records *)
+                        if sm gs then
+                          match reify_x callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_x callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
+                          | Some x0, Some x1 => Some (wsig gs, FRecX (xset_ri (sqi gs) x0) (xset_ri (sqi gs) x1))
+                          | _, _ => None
+                          end
+                        else None
                     end
                   else if sr gs then
                     match reify_m callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_m callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
@@ -2274,7 +2331,11 @@ Definition read_fun_c (Σ : global_env) (hb : kername -> option term) (tc : kern
                 | Some r => Some (gs, FPlainB r)
                 | None => if sm gs then option_map (fun x => (wsig gs, FPlainX x)) (reify_x callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body) else None
                 end
-              else if isq gs then option_map (fun r => (gs, FPlainR r)) (reify_br callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body)
+              else if isq gs then
+                match reify_br callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body with
+                | Some r => Some (gs, FPlainR r)
+                | None => if sm gs then option_map (fun x => (wsig gs, FPlainX (xset_ri (sqi gs) x))) (reify_x callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body) else None
+                end
               else if sr gs then option_map (fun m => (gs, FPlainM m)) (reify_m callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body)
               else match reify callees (sm gs) nx hb tc [] rt 100000 (fun_ctx gs) body with
                    | Some e => Some (gs, FPlain e)
@@ -2327,7 +2388,14 @@ Definition read_fun_p (Σ : global_env) (hb : kername -> option term) (tc : kern
                   else if isq gs then
                     match reify_br callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_br callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
                     | Some r0, Some r1 => Some (gs, FRecR r0 r1)
-                    | _, _ => None
+                    | _, _ =>
+                        (* (step 48 continued) a record whose body writes: an X body of records *)
+                        if sm gs then
+                          match reify_x callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_x callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
+                          | Some x0, Some x1 => Some (wsig gs, FRecX (xset_ri (sqi gs) x0) (xset_ri (sqi gs) x1))
+                          | _, _ => None
+                          end
+                        else None
                     end
                   else if sr gs then
                     match reify_m callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_m callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
@@ -2363,7 +2431,11 @@ Definition read_fun_p (Σ : global_env) (hb : kername -> option term) (tc : kern
                 | Some r => Some (gs, FPlainB r)
                 | None => if sm gs then option_map (fun x => (wsig gs, FPlainX x)) (reify_x callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body) else None
                 end
-              else if isq gs then option_map (fun r => (gs, FPlainR r)) (reify_br callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body)
+              else if isq gs then
+                match reify_br callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body with
+                | Some r => Some (gs, FPlainR r)
+                | None => if sm gs then option_map (fun x => (wsig gs, FPlainX (xset_ri (sqi gs) x))) (reify_x callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body) else None
+                end
               else if sr gs then option_map (fun m => (gs, FPlainM m)) (reify_m callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body)
               else match reify callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body with
                    | Some e => Some (gs, FPlain e)
@@ -2503,6 +2575,8 @@ Fixpoint cl_x (B : Z) (bs : list cbe) (x : sx) {struct x} : list site :=
   match x with
   | XRet e => cl_e B bs e
   | XRetB b => cl_b B bs b
+  | XRetR _ r => cl_r B bs r
+  | XBindRM _ f ccs args m x => (Some f, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m ++ cl_x B bs x
   | XLetM m x => cl_m B bs m ++ cl_x B bs x
   | XLet e x => cl_e B bs e ++ cl_x B bs x
   | XLetB b x => cl_b B bs b ++ cl_x B bs x

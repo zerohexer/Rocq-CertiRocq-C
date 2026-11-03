@@ -567,6 +567,29 @@ addA("par_bool_write_call", "", "if kbr n a s then a else b",
      "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\nFixpoint kbr (n : nat) (x : int) (t : mem) : bool := match n with O => wr 3 t <? x | S m => kbr m (x + 1) t end.\n")
 addA("par_bool_write_rec", "", "if kbw n a s then a else b",
      "Fixpoint kbw (n : nat) (x : int) (t : mem) : bool := match n with O => rd 0 0 t <? x | S m => kbw m (x + 1) (upd 0 x x t) end.\n")
+# a function giving back a record whose body writes the memory (step 48 continued): through a call that writes, called inside
+# an expression and in a test; its recursion given a memory it writes, bound by a let; and the places this step leaves: the
+# function's own call not at the end in a record or a boolean that writes, a template giving back a record or a boolean that writes
+addA("par_rec_write_call", "", "f1 (kqw n a s) + 1",
+     "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\nDefinition kqw (n : nat) (x : int) (t : mem) : r3 := mk3 (wr n t) x 0.\n")
+addA("par_rec_write_test", "", "if f2 (kqw n a s) <? 7 then a else b",
+     "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\nDefinition kqw (n : nat) (x : int) (t : mem) : r3 := mk3 (wr n t) x 0.\n")
+addA("par_rec_write_rec", "", "let w := krw n a s in f1 w * f2 w",
+     "Fixpoint krw (n : nat) (x : int) (t : mem) : r3 := match n with O => mk3 (rd 0 0 t) x 0 | S m => krw m (x + 1) (upd 0 x x t) end.\n")
+# a call that writes inside a record built in place: projected, bound by a let (the form a helper given a computed argument
+# is written out in)
+addA("par_write_in_rec_proj", "", "f1 (mk3 (wr n s) a 0) + 1",
+     "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\n")
+addA("par_write_in_rec_let", "", "let w := mk3 (wr n s) a 0 in f1 w + 1",
+     "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\n")
+addA("par_rec_write_own_let", "", "f2 (kro n a s)",
+     "Fixpoint kro (n : nat) (x : int) (t : mem) : r3 := match n with O => mk3 (rd 0 0 t) x 0 | S m => let w := kro m (x + 1) (upd 0 x x t) in mk3 (f1 w + 1) (f2 w) (f3 w) end.\n")
+addA("par_bool_write_own_neg", "", "if kbo n a s then a else b",
+     "Fixpoint kbo (n : nat) (x : int) (t : mem) : bool := match n with O => rd 0 0 t <? x | S m => negb (kbo m (x + 1) (upd 0 x x t)) end.\n")
+addA("par_tmpl_rec_write", "", "f1 (trw n a (fun z => z + 1) s)",
+     "Fixpoint trw (n : nat) (x : int) (g : int -> int) (t : mem) : r3 := match n with O => mk3 (rd 0 0 t) (g x) 0 | S m => trw m (g x) g (upd 0 x x t) end.\n")
+addA("par_tmpl_bool_write", "", "if tbw n a (fun z => z + 1) s then a else b",
+     "Fixpoint tbw (n : nat) (x : int) (g : int -> int) (t : mem) : bool := match n with O => rd 0 0 t <? g x | S m => tbw m (g x) g (upd 0 x x t) end.\n")
 # the translator's own conventions (§3.7): the counter not first, the memory not last
 addA("par_conv_nat_second", "", "k a n", "Fixpoint k (x : int) (n : nat) : int := match n with O => x | S m => k (x + 1) m end.\n")
 addA("par_conv_mem_first", "", "k n s a", "Fixpoint k (n : nat) (t : mem) (x : int) : int := match n with O => x + rd 0 0 t | S m => k m t (x + 1) end.\n")
