@@ -3936,6 +3936,41 @@ conversion (no eta for pairs), so the wrapper alone leaves those calls unread:
   programs through the verified compiler, 0 refused**; the trusted base unchanged.  Next: mutual blocks of any signature (the
   record of 2026-11-02's order).
 
+**Step 45, mutual blocks of any signature — the design (2026-11-03).**  The sixth item of the record of 2026-11-02's order:
+`A_par_mutual_sig` (`ev (n : nat) (x : int)` and `od (n : nat) (x y : int)`, one `Fixpoint .. with ..`) and `A_par_mutual_mem`
+(`wa` and `wb`, each giving back a memory).  Step 17 reads a block whose members are number functions of one signature, numbers
+and booleans as parameters, recursive on the first: the block one function with a selector, its meaning `blk` of the members,
+read by a reader of its own.  The general form: members of any signatures and parameter orders, giving back any sort, calling
+each other in any pattern:
+- *`KQR.v`*: `blkT`, the block's meaning over the members' *views*: each member seen as a function of the block's counters (the
+  selector apart) and parameters, giving the member its own in its own order; the result of any type `T`; `sel_appT` the
+  choice (the first member apart, so no default value is needed).  A block giving back a number, a number that writes the
+  memory, a memory, a boolean, a record or a pair is then proved by the theorem of a function given by its equations for that
+  sort (`compile_f_okr`, `_okrx`, `_okrm`, `_okrb`, `_okrr`, `_okrp`), by conversion as in step 17.  Definitions only.
+- *The block's signature*: the members' parameters in shared slots — the recursion's counter, one slot for the `i`-th other
+  counter of any member, the selector, one slot of a kind for the `i`-th parameter of that kind of any member, the memory (a
+  number-and-memory pair a number slot and the memory).  A call of one member by another passes its arguments in the callee's
+  slots and every other slot its current value, so a tail call between members stays one loop with nothing more to move; a
+  member is one call of the block, the slots not its own given zeros.
+- *The members' call graph*: a block is read per strongly connected part of it, the parts a part calls first.  A call into
+  another part is a call of that member (the user's constant, a member the program does not name included).  So members giving
+  back different sorts are read whenever the members of one part agree (and those of one part agree on the memory: a member
+  without one cannot call one with it).  A member gets a function of its own only where it is called: by the program, or from
+  another part.
+- *The reifier*: the part's function is written as a term — a fixpoint over the slots, the members' bodies moved into them
+  (`relocate`), under a match on the selector (`nest_t`), a call of a member of the part its own recursive call with the slots
+  filled (`sibr`) — and each member as a term, one call of it; both are then read by the readers of every function, so every
+  sort, every parameter order and every construct a body may hold are read as in a function of its own.  The reader of step 17
+  goes.
+- *kitc.py*: a block's meaning is made in the proof file, where the program's record types are (`blkT` takes them); a member
+  with the pair as a parameter is not a fix over its counter (its theorem the one of a function of the pair, not of a copy).
+- *Cells*: a boolean and a record among one member's parameters, a second counter, the recursion's counter not first; giving
+  back a boolean (`even` / `odd`), a record, a number and a memory, a number that writes the memory; a number that reads the
+  memory and one that writes it in one part; three members; two parts of different sorts; a member taking the pair.  A part
+  whose members give back different types (a number and a memory calling each other) is a cell, a gap (a later step), refused
+  with that reason.
+*Expected*: `A_par_mutual_sig`, `A_par_mutual_mem` and those; `mutual`'s C byte-identical.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4115,7 +4150,8 @@ Pushed to the public repository up to `be57d75` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 44 continued (a number-and-memory pair as a parameter: the construct table 887 of 896, 1 by design), the C, the gate |
+| (this commit) | §12.V: step 45's design (mutual blocks of any signature) |
+| `df72495` | §12.V: step 44 continued (a number-and-memory pair as a parameter: the construct table 887 of 896, 1 by design), the C, the gate |
 | `be57d75` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` step 44 continued: the signature's pair flag, `callee_ok_unpair`, `MCallP` / `PvCallP` / `XCallP`; the reifier reads the pair on its components; 11 cells |
 | `d8f1337` | §12.V: step 44 continued's design (a number-and-memory pair as a parameter) |
 | `1e9da9c` | §12.V: step 44 (a memory function taking a number-and-memory pair apart: the construct table 877 of 885, 1 by design; the pair as a parameter goes on), the C, the gate |
