@@ -384,6 +384,14 @@ addA("par_capture_nat", "", "fold n 0 a (fun i acc => match n with O => acc | S 
 addA("par_capture_rec", "", "let w := mk3 a b 1 in fold n 0 a (fun i acc => acc + f1 w)", "")
 addA("par_capture_match", "", "kr n (mk3 a b 1) a",
      "Fixpoint kr (n : nat) (w : r3) (x : int) : int := match n with O => x | S m => match w with mk3 p q r => kr m w (fold m 0 x (fun i acc => acc + p)) end end.\n")
+# captures of every kind (step 42): a counter and a record together, a counter captured inside a recursion, a counter captured by
+# a local fixpoint, a template in another order given a function that captures
+addA("par_capture_cnt_rec", "", "let w := mk3 a b 1 in fold n 0 a (fun i acc => match n with O => acc + f1 w | S _ => acc + i end)", "")
+addA("par_capture_in_rec", "", "kc n n a",
+     "Fixpoint kc (r n : nat) (x : int) : int := match r with O => x | S q => kc q n (fold n 0 x (fun i acc => match n with O => acc | S _ => acc + i end)) end.\n")
+addA("par_capture_lfix", "", "let fix g (m : nat) (x : int) : int := match m with O => x | S p => g p (match n with O => x | S _ => x + 1 end) end in g n a", "")
+addA("par_capture_tmpl_perm", "", "foldf (fun i acc => acc + b) n 0 a",
+     "Fixpoint foldf (f : int -> int -> int) (n : nat) (i acc : int) : int := match n with O => acc | S m => foldf f m (i + 1) (f i acc) end.\n")
 # a template giving back a record (step 12)
 addA("par_fun_rec_pair", "", "let '(x, y) := foldp n (a, b) (fun z => z + 1) in x + y",
      "Fixpoint foldp (n : nat) (p : int * int) (g : int -> int) : int * int := match n with O => p | S m => foldp m (g (fst p), snd p + 1) g end.\n")

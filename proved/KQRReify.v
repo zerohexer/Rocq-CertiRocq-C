@@ -106,7 +106,7 @@ Definition cmp_v (s : ident) : option cmpop :=
     the predecessor of the first counter that the match a recursive function starts with binds (a counter too, and the one
     its recursive call is given first), the function itself, a boolean *)
 Inductive cent := CNum | CMem | CDead | CCnt | CPred | CSelf | CBool | CFn (p : nat) (t : term) | CRec | CSib (j : nat)
-  | CCntP (j : nat) | CSelfP (perm : list nat).
+  | CCntP (j : nat) | CSelfP (perm : list nat) | CRecT (t : term).
 (* CFn p t: the function parameter number p of a template's copy, bound to the function t given (its captured variables
    numbered 0 .. in the order they first appear: the context's entries after the copy's own, CSelf, step 13).  CSib j: member
    j of a mutual block (step 17) *)
@@ -304,12 +304,14 @@ Definition abs_caps (fv : list nat) (f : term) : term :=
   | _ => subst (map (fun r => match idx_of r fv 0 with Some k => tRel k | None => tRel 0 end) (seq 0 (S (fold_left Nat.max fv 0)))) 0 f
   end.
 Definition is_memc (c : cent) : bool := match c with CMem | CDead => true | _ => false end.
-Definition cap_ok (c : cent) : bool := match c with CNum | CBool | CMem => true | _ => false end.
+Definition cap_ok (c : cent) : bool := match c with CNum | CBool | CMem | CCnt | CRecT _ => true | _ => false end.
+(* a captured counter (step 42): one of the copy's counters, after the template's *)
+Definition is_capc (c : cent) : bool := match c with CCnt => true | _ => false end.
 Definition capk_eqb (a b : list cent) : bool :=
   Nat.eqb (length a) (length b)
   && forallb (fun q => match q with (CNum, CNum) | (CBool, CBool) | (CMem, CMem) => true | _ => false end) (combine a b).
 (** a copy's captured variables: the entries of its context after CSelf, the first captured the deepest *)
-Fixpoint after_self (ctx : list cent) : list cent := match ctx with [] => [] | CSelf :: r => r | _ :: r => after_self r end.
+Fixpoint after_self (ctx : list cent) : list cent := match ctx with [] => [] | CSelf :: r | CSelfP _ :: r => r | _ :: r => after_self r end.
 (** a function given, written out in a copy's context: its captured variables are the copy's entries for them *)
 Definition capsub (ctx : list cent) (t : term) : term :=
   match after_self ctx with
@@ -602,8 +604,11 @@ Definition with_caps (ctx : list cent) (rest : list term) : list term :=
   | cs0 =>
       let L := length ctx in
       let cs := combine (rev cs0) (map (fun k => tRel (L - 1 - k)) (seq 0 (length cs0))) in
-      firstn fnx rest ++ map snd (filter (fun p => negb (is_memc (fst p))) cs) ++ skipn fnx rest
-      ++ map snd (filter (fun p => is_memc (fst p)) cs)
+      (* the captured counters after the template's counters, the other captured variables before its numbers (step 42) *)
+      let isc (c : cent) := match c with CCntP _ | CCnt => true | _ => false end in
+      let nt := Nat.sub fnx (length (filter (fun p => isc (fst p)) cs)) in
+      firstn nt rest ++ map snd (filter (fun p => isc (fst p)) cs) ++ map snd (filter (fun p => negb (is_memc (fst p)) && negb (isc (fst p))) cs)
+      ++ skipn nt rest ++ map snd (filter (fun p => is_memc (fst p)) cs)
   end.
 
 Definition tcall (ctx : list cent) (kn : kername) (args : list term) : kername * list term :=
@@ -2509,7 +2514,7 @@ Definition tc_of_t (Σ : global_env) (mp : modpath) (tbl : copytab) (kn : kernam
               let nc := fst (lead_nats ltys) in
               let rest := map (fun i => nth i rest (tRel 0)) (nonfn_perm ltys (rarg d)) in
               let cs := combine capk (map tRel fv) in
-              Some (ckn, firstn nc rest ++ map snd (filter (fun p => negb (is_memc (fst p))) cs) ++ skipn nc rest
+              Some (ckn, firstn nc rest ++ map snd (filter (fun p => is_capc (fst p)) cs) ++ map snd (filter (fun p => negb (is_memc (fst p)) && negb (is_capc (fst p))) cs) ++ skipn nc rest
                          ++ map snd (filter (fun p => is_memc (fst p)) cs))
           | None => None
           end
@@ -2526,7 +2531,7 @@ Definition tc_of_t (Σ : global_env) (mp : modpath) (tbl : copytab) (kn : kernam
                         let nonfn := map (fun i => nth i (nonfn_args tys args) (tRel 0)) (nonfn_perm tys (tmpl_rarg Σ kn)) in
                         let nc := fst (lead_nats (filter (fun t => negb (is_prod t)) tys)) in
                         let cs := combine capk (map tRel fv) in
-                        Some (ckn, firstn nc nonfn ++ map snd (filter (fun p => negb (is_memc (fst p))) cs) ++ skipn nc nonfn
+                        Some (ckn, firstn nc nonfn ++ map snd (filter (fun p => is_capc (fst p)) cs) ++ map snd (filter (fun p => negb (is_memc (fst p)) && negb (is_capc (fst p))) cs) ++ skipn nc nonfn
                                    ++ map snd (filter (fun p => is_memc (fst p)) cs))
                     | None => None
                     end
@@ -2546,17 +2551,21 @@ Definition tc_of (Σ : global_env) (mp : modpath) (tbl : copytab) (kn : kername)
 (** the meaning of a copy: [fun x1 .. xn => T .. f .. xi ..], the functions given in their places; with captured variables
     (step 13) [fun c1 .. b1 .. x1 .. s => T .. f ..]: the template's counters, the captured numbers and booleans, the
     template's other parameters, the captured memory *)
-Definition cap_ty (c : cent) : term := match c with CBool => tInd ind_bool [] | CMem | CDead => tConst kn_mem [] | _ => tConst kn_int [] end.
+Definition cap_ty (c : cent) : term :=
+  match c with CBool => tInd ind_bool [] | CMem | CDead => tConst kn_mem [] | CCnt => tInd ind_nat [] | CRecT t => t | _ => tConst kn_int [] end.
 Definition copy_meaning_h (hd : list term -> term) (tys fargs : list term) (capk : list cent) (pn : list nat) : term :=
   let nonfn0 := filter (fun t => negb (is_prod t)) tys in
   let nonfn := map (fun i => nth i nonfn0 (tRel 0)) pn in
   let nc := fst (lead_nats nonfn) in
-  let cn := filter (fun c => negb (is_memc c)) capk in
+  let cn := filter is_capc capk ++ filter (fun c => negb (is_memc c) && negb (is_capc c)) capk in
+  let ncc := length (filter is_capc capk) in
   let mc := length cn in
   let cm := if existsb is_memc capk then 1 else 0 in
   let n := length nonfn + mc + cm in
   let pos i := if Nat.ltb i nc then i else i + mc in
-  let capidx k := if is_memc (nth k capk CNum) then 0 else n - 1 - (nc + length (filter (fun c => negb (is_memc c)) (firstn k capk))) in
+  let capidx k := if is_memc (nth k capk CNum) then 0
+                   else if is_capc (nth k capk CNum) then n - 1 - (nc + length (filter is_capc (firstn k capk)))
+                   else n - 1 - (nc + ncc + length (filter (fun c => negb (is_memc c) && negb (is_capc c)) (firstn k capk))) in
   let sb := map (fun k => tRel (capidx k)) (seq 0 (length capk)) in
   let fix args (l fa : list term) (i : nat) : list term :=
     match l with
@@ -2603,7 +2612,24 @@ Definition tmpl_helpers (Σ : global_env) (hb : kername -> option term) (tms kns
     given with their captured variables numbered in the order they first appear, and those variables' kinds (step 13: a
     number, a boolean, the memory -- read off the binders' types, [kctx], the nearest first) *)
 Definition ty_cent (ty : term) : option cent :=
-  if is_ty kn_int ty then Some CNum else if is_bool ty then Some CBool else if is_ty kn_mem ty then Some CMem else None.
+  if is_ty kn_int ty then Some CNum else if is_bool ty then Some CBool else if is_ty kn_mem ty then Some CMem
+  else if is_nat ty then Some CCnt
+  else match ty with tInd _ _ => Some (CRecT ty) | _ => None end.   (* step 42: a counter, a record of the program *)
+(** the kinds of the variables a branch of a [match] binds, nearest first (step 42): a counter's predecessor a counter, a
+    constructor's fields their types' *)
+Definition br_kinds (Σ : global_env) (ind : inductive) (j n : nat) : list (option cent) :=
+  if Kername.eqb (inductive_mind ind) (inductive_mind ind_nat) then repeat (Some CCnt) n
+  else match lookup_env Σ (inductive_mind ind) with
+       | Some (InductiveDecl mib) =>
+           match nth_error (ind_bodies mib) (inductive_ind ind) with
+           | Some oib => match nth_error (ind_ctors oib) j with
+                         | Some c => if Nat.eqb (length (cstr_args c)) n then map (fun d => ty_cent (decl_type d)) (cstr_args c) else repeat None n
+                         | None => repeat None n
+                         end
+           | None => repeat None n
+           end
+       | _ => repeat None n
+       end.
 Fixpoint sites (fuel : nat) (Σ : global_env) (tms : list kername) (hb : kername -> option term) (th : list kername)
   (kctx : list (option cent)) (t : term) (acc : list (kername * list term * list cent)) : list (kername * list term * list cent) :=
   match fuel with
@@ -2652,8 +2678,8 @@ Fixpoint sites (fuel : nat) (Σ : global_env) (tms : list kername) (hb : kername
       | tLetIn _ b ty body =>
           if fun_or_type ty then sites fuel Σ tms hb th kctx (subst [b] 0 body) acc
           else sites fuel Σ tms hb th (ty_cent ty :: kctx) body (sites fuel Σ tms hb th kctx b acc)
-      | tCase _ _ c brs => fold_left (fun a br => sites fuel Σ tms hb th (repeat None (length (bcontext br)) ++ kctx) (bbody br) a) brs
-                                     (sites fuel Σ tms hb th kctx c acc)
+      | tCase ci _ c brs => snd (fold_left (fun ja br => (S (fst ja), sites fuel Σ tms hb th (br_kinds Σ (ci_ind ci) (fst ja) (length (bcontext br)) ++ kctx)
+                                                                     (bbody br) (snd ja))) brs (O, sites fuel Σ tms hb th kctx c acc))
       | tFix mfix _ => fold_left (fun a d => sites fuel Σ tms hb th (repeat None (length mfix) ++ kctx) (dbody d) a) mfix acc
       | _ => acc
       end
@@ -2679,7 +2705,10 @@ Definition read_def (hb : kername -> option term) (tc : kername -> list term -> 
           match read_sig rt (filter (fun t => negb (is_prod t)) tysc) (ret_ty (dtype d)), body with
           | Some gs0, tCase ci _ (tRel cnt) [b0; b1] =>
               (* the captured numbers and booleans before the template's other parameters, the captured memory last *)
-              let gs := mksig (sn gs0) (map (fun c => match c with CBool => KBool | _ => KNum end) (filter (fun c => negb (is_memc c)) capk) ++ sk gs0)
+              let ncc := length (filter is_capc capk) in
+              let gs := mksig (sn gs0 + ncc)
+                              (map (fun c => match c with CBool => KBool | CRecT t => match rindex t rt 0 with Some ri => KRec ri | None => KNum end | _ => KNum end)
+                                   (filter (fun c => negb (is_memc c) && negb (is_capc c)) capk) ++ sk gs0)
                               (sm gs0 || existsb is_memc capk) (sr gs0) (sw gs0) (sq gs0) in
               let nx := Nat.pred (sn gs) in
               let fd := tdrop (tl tysc) 0 in
@@ -2688,9 +2717,15 @@ Definition read_def (hb : kername -> option term) (tc : kername -> list term -> 
                  && Nat.eqb cnt (Nat.sub (Nat.pred (length tys)) (rarg d)) && is_nat (nth (rarg d) tys (tRel 0)) then
                 let k := length (filter is_nat tys) in
                 let tk := tkinds tys fargs 0 in
-                let ctx := if list_eq_dec Nat.eq_dec pa (seq 0 (length pa)) then rev tk ++ [CSelf] ++ rev capk
+                let kt := k in
+                let k := Nat.add kt ncc in
+                (* the captured variables (step 42): a counter at its place after the template's, a record as a record *)
+                let capc := map (fun i => match nth i capk CNum with
+                                          | CCnt => CCntP (Nat.sub (Nat.sub k 1) (Nat.add kt (length (filter is_capc (firstn i capk)))))
+                                          | CRecT _ => CRec | c => c end) (seq 0 (length capk)) in
+                let ctx := if (if list_eq_dec Nat.eq_dec pa (seq 0 (length pa)) then Nat.eqb ncc 0 else false) then rev tk ++ [CSelf] ++ rev capc
                            else rev (map (fun u => if is_nat (nth u tys (tRel 0)) then CCntP (Nat.sub (Nat.sub k 1) (pos_in u pa)) else nth u tk CNum)
-                                         (seq 0 (length tys))) ++ [CSelfP pa] ++ rev capk in
+                                         (seq 0 (length tys))) ++ [if list_eq_dec Nat.eq_dec pa (seq 0 (length pa)) then CSelf else CSelfP pa] ++ rev capc in
                 if sr gs then
                   match reify_m callees (sm gs) nx hb tc fd rt 100000 ctx (bbody b0),
                         reify_m callees (sm gs) nx hb tc fd rt 100000 (CPred :: ctx) (bbody b1) with
@@ -4966,3 +5001,27 @@ Proof.
   Time exact_no_check (compile_f_ok w41f_Pr w41f_cs2 gid1 2 (sig_at w41f_src 2) (body_at w41f_src 2) eq_refl eq_refl
     (all_ok_callees w41f_Pr gid1 w41f_cs2 (conj w41f_ok (conj w41l_ok Logic.I))) eq_refl eq_refl).
 Time Qed.
+
+(* ---------------------------------------------------------------- captures of every kind (step 42) *)
+(* a function given to a template naming a counter of the caller: the copy's counters the template's and the captured one *)
+Fixpoint w42fold (n : nat) (i acc : i63) (f : i63 -> i63 -> i63) : i63 := match n with O => acc | S m => w42fold m (PrimInt63.add i 1) (f i acc) f end.
+Definition w42go (n : nat) (a b : i63) (s : mem) : i63 := w42fold n 0 a (fun i acc => match n with O => acc | S _ => PrimInt63.add acc i end).
+Definition w42_res := ltac:(run_template_program (tmQuoteRec w42go)
+  (fun q => let r := eval vm_compute in (reify_prog2 q) in match r with Some ?x => exact x end)).
+Definition w42_src := fst w42_res.
+Check (eq_refl : map (fun x => (snd (fst (fst x)), sn (snd (fst x)), snd x)) w42_src =
+  [("w42fold__c0"%bs, 2, FRec (SVar 0) (SRec (CCons (CVar 1) CNil) (SCons (SOp Badd (SVar 1) (SInt 1)) (SCons (SMatch 1 (SVar 0) (SOp Badd (SVar 0) (SVar 1))) SNil))));
+   ("w42go"%bs, 1, FPlain (SCall 0 (CCons (CVar 0) (CCons (CVar 0) CNil)) (SCons (SInt 0) (SCons (SVar 1) SNil))))]).
+MetaRocq Run (tmMkDefinition "w42_c0"%bs (meaning_of (snd w42_res) "w42fold__c0"%bs)).
+Definition w42_Pr := mkprog (funs_of 0 w42_src) [].
+Time Lemma w42c_ok : callee_ok w42_Pr (gid1 0) (cbz 0) (sig_at w42_src 0) w42_c0.
+Proof.
+  Time exact_no_check (compile_f_okr w42_Pr [] gid1 0 1 (nk 2) false (fr0 (body_at w42_src 0)) (fr1 (body_at w42_src 0)) None [] w42_c0
+    eq_refl eq_refl (no_callees w42_Pr gid1) eq_refl eq_refl eq_refl (fun n => eq_refl)).
+Time Qed.
+Time Lemma w42go_ok : callee_ok w42_Pr (gid1 1) (cbz 1) (sig_at w42_src 1) w42go.
+Proof.
+  Time exact_no_check (compile_f_ok w42_Pr [existT ftype (sig_at w42_src 0) w42_c0] gid1 1 (sig_at w42_src 1) (body_at w42_src 1) eq_refl eq_refl
+    (all_ok_callees w42_Pr gid1 [existT ftype (sig_at w42_src 0) w42_c0] (conj w42c_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
+Print Assumptions w42go_ok.
