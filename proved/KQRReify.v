@@ -774,10 +774,11 @@ Definition bcall_rec (u : term) : option term :=
   | _ => None
   end.
 Definition bind_first (ctx : list cent) (t : term) : option term :=
+  let res (u : term) : term := match u with tApp (tConst kn _) args => let '(kn1, args1) := tcall ctx kn args in tApp (tConst kn1 []) args1 | _ => u end in
   let bq (u : term) : option bool :=
     match u with
     | tApp (tRel fi) _ => if is_ent CSelf ctx fi then Some false else None
-    | _ => match bcall_rec u with Some _ => Some false | None => bcall_q u end
+    | _ => match bcall_rec (res u) with Some _ => Some false | None => bcall_q (res u) end
     end in
   let fix find (fu : nat) (u : term) {struct fu} : option term :=
     match fu with
@@ -863,7 +864,7 @@ Definition bind_first (ctx : list cent) (t : term) : option term :=
   | Some c =>
       let '(sk, hs) := skel 1000 c t [] in
       let k := length hs in
-      let tyv := match bcall_rec c with Some ty => ty | None => match bq c with Some true => tInd ind_bool [] | _ => tConst kn_int [] end end in
+      let tyv := match bcall_rec (res c) with Some ty => ty | None => match bq c with Some true => tInd ind_bool [] | _ => tConst kn_int [] end end in
       let anon := {| binder_name := nAnon; binder_relevance := Relevant |} in
       Some (fold_right (fun ih b => tLetIn anon (lift0 (fst ih) (snd ih)) (tConst kn_int []) b)
                        (tLetIn anon (lift0 k c) tyv (repl 1000 k (lift0 (S k) sk))) (combine (seq 0 k) hs))
@@ -3147,13 +3148,29 @@ Definition read_def (hb : kername -> option term) (tc : kername -> list term -> 
                   match reify_bb callees (sm gs) nx hb tc fd rt 100000 ctx (bbody b0),
                         reify_bb callees (sm gs) nx hb tc fd rt 100000 (CPred :: ctx) (bbody b1) with
                   | Some r0, Some r1 => Some (gs, FRecB r0 r1)
-                  | _, _ => None
+                  | _, _ =>
+                      (* (step 48 continued) a copy giving back a boolean whose body writes: an X body of booleans *)
+                      if sm gs then
+                        match reify_x callees (sm gs) nx hb tc fd rt 100000 ctx (bbody b0),
+                              reify_x callees (sm gs) nx hb tc fd rt 100000 (CPred :: ctx) (bbody b1) with
+                        | Some x0, Some x1 => Some (wsig gs, FRecX x0 x1)
+                        | _, _ => None
+                        end
+                      else None
                   end
                 else if isq gs then
                   match reify_br callees (sm gs) nx hb tc fd rt 100000 ctx (bbody b0),
                         reify_br callees (sm gs) nx hb tc fd rt 100000 (CPred :: ctx) (bbody b1) with
                   | Some r0, Some r1 => Some (gs, FRecR r0 r1)
-                  | _, _ => None
+                  | _, _ =>
+                      (* (step 48 continued) a copy giving back a record whose body writes: an X body of records *)
+                      if sm gs then
+                        match reify_x callees (sm gs) nx hb tc fd rt 100000 ctx (bbody b0),
+                              reify_x callees (sm gs) nx hb tc fd rt 100000 (CPred :: ctx) (bbody b1) with
+                        | Some x0, Some x1 => Some (wsig gs, FRecX (xset_ri (sqi gs) x0) (xset_ri (sqi gs) x1))
+                        | _, _ => None
+                        end
+                      else None
                   end
                 else
                   match reify callees (sm gs) nx hb tc fd rt 100000 ctx (bbody b0),

@@ -590,6 +590,11 @@ addA("par_tmpl_rec_write", "", "f1 (trw n a (fun z => z + 1) s)",
      "Fixpoint trw (n : nat) (x : int) (g : int -> int) (t : mem) : r3 := match n with O => mk3 (rd 0 0 t) (g x) 0 | S m => trw m (g x) g (upd 0 x x t) end.\n")
 addA("par_tmpl_bool_write", "", "if tbw n a (fun z => z + 1) s then a else b",
      "Fixpoint tbw (n : nat) (x : int) (g : int -> int) (t : mem) : bool := match n with O => rd 0 0 t <? g x | S m => tbw m (g x) g (upd 0 x x t) end.\n")
+# templates giving back a boolean or a record whose body writes through a call (step 48 continued)
+addA("par_tmpl_bool_write_call", "", "if tbc n a (fun z => z + 1) s then a else b",
+     "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\nFixpoint tbc (n : nat) (x : int) (g : int -> int) (t : mem) : bool := match n with O => wr 2 t <? g x | S m => tbc m (g x) g t end.\n")
+addA("par_tmpl_rec_write_call", "", "f1 (trc n a (fun z => z + 1) s)",
+     "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\nFixpoint trc (n : nat) (x : int) (g : int -> int) (t : mem) : r3 := match n with O => mk3 (wr 2 t) (g x) 0 | S m => trc m (g x) g t end.\n")
 # the translator's own conventions (§3.7): the counter not first, the memory not last
 addA("par_conv_nat_second", "", "k a n", "Fixpoint k (x : int) (n : nat) : int := match n with O => x | S m => k (x + 1) m end.\n")
 addA("par_conv_mem_first", "", "k n s a", "Fixpoint k (n : nat) (t : mem) (x : int) : int := match n with O => x + rd 0 0 t | S m => k m t (x + 1) end.\n")

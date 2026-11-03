@@ -594,7 +594,10 @@ def reflect(name, entry, prog, no_proof):
                 # (a copy that writes the memory and gives back a number has a memory: no memory argument)
                 # (step 41) a boolean, a number and a memory, a record given back: their own copies' theorems
                 ri = f" {ord(f[6]) - ord('a')}" if f[6] not in ("", "B", "P") else ""
-                thm, p0, p1, mm = (("compile_f_okrb", "KQR.fbb0", "KQR.fbb1", f" {f[3]}") if f[6] == "B" else
+                # (step 48 continued) a copy giving back a boolean or a record whose body writes: an X body of those
+                thm, p0, p1, mm = (("compile_f_okrxb", "KQR.fx0", "KQR.fx1", "") if f[6] == "B" and f[5] == "true" else
+                                   ("compile_f_okrxr", "KQR.fx0", "KQR.fx1", "") if ri and f[5] == "true" else
+                                   ("compile_f_okrb", "KQR.fbb0", "KQR.fbb1", f" {f[3]}") if f[6] == "B" else
                                    ("compile_f_okrp", "KQR.fpv0", "KQR.fpv1", f" {f[3]}") if f[6] == "P" else
                                    ("compile_f_okrr", "KQR.fbr0", "KQR.fbr1", f" {f[3]}") if ri else
                                    ("compile_f_okrm", "KQR.fm0", "KQR.fm1", f" {f[3]}") if f[4] == "true" else
