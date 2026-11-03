@@ -3724,6 +3724,25 @@ The C: 63 of 63 byte-identical.  The construct table (on `c825e9a`): **848 of 86
 examples 27 / 27; corpus 36 / 36; the five kernels (14 / 13 / 14 / 20 / 15 s); **71 programs through the verified compiler, 0
 refused**; the trusted base unchanged.
 
+**Step 42, captures of every kind — the design (2026-11-03).**  The third item of the record of 2026-11-02's order:
+`A_par_capture_nat` (a function given to a template naming a counter of the caller), `A_par_capture_rec` (naming a record),
+`A_par_capture_match` (naming a field bound by taking a record apart, inside a recursion).  A captured variable becomes a
+parameter of the copy (step 13), but `sites` reads each one's kind off its binder's type and knows numbers, booleans and the
+memory only (`ty_cent`, `cap_ok`), and gives the variables a `match` binds no kind at all (`repeat None`), so the call site is
+dropped before a copy is made:
+- *Kinds*: a `nat` binder is a counter; a binder of a record type of the program is that record (its index in the record table);
+  the variables a `match` binds take their constructor's field types (a counter's predecessor a counter, a record's fields their
+  kinds).
+- *The copy*: its counters are the template's, then the captured counters; its other parameters the captured numbers, booleans
+  and records, then the template's, then a memory (the syntax's order, step 41).  The copy's body sees every parameter counter at
+  its place (`CCntP`); its meaning binds the captured counters as `nat` and the captured records at their types; a call gives the
+  captured variables in the same order.
+- *Proof*: none new — a copy's theorem is about its signature, whatever its parameters stood for in the caller.
+  The copy's recursive call passes the captured counters on after the template's counters (`with_caps`), and a copy in the
+  syntax's order (step 41) finds its captured variables after its fix binder too (`after_self` reads `CSelfP`).
+*Expected*: the three cells, and cells for a captured counter and record together, a counter captured inside a recursion, a
+counter captured by a local fixpoint, a template in another order given a function that captures.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3899,11 +3918,12 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `c825e9a` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `9d4beb8` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 41 continued (the copies with their parameters in any order: the construct table 848 of 864, 1 by design), the C, the gate |
+| (this commit) | §12.V: step 42's design (captures of every kind) |
+| `9d4beb8` | §12.V: step 41 continued (the copies with their parameters in any order: the construct table 848 of 864, 1 by design), the C, the gate |
 | `c825e9a` | `proved/KQRReify.v` step 41 continued: a template's copy and a local fixpoint's copy in the syntax's order (`nonfn_perm`), the recursive call reordered before the functions are dropped |
 | `f9c3e5f` | §12.V: step 41 (parameters in any order: the construct table 846 of 864, 1 by design; the copies' order goes on), the C, the gate |
 | `3270bf7` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` step 41: wrappers in the syntax's order, `CCntP` / `CSelfP`, the copies' theorems for every result kind; 11 cells |
