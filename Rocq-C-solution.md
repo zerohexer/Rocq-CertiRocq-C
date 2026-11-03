@@ -4142,6 +4142,23 @@ binds such a call in the body of a number that writes, its result a number or a 
   off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (11 / 12 / 12 / 13 / 13 s); **71 programs through
   the verified compiler, 0 refused**; the trusted base unchanged.  The step goes on with the bodies of the other sorts (below).
 
+**Step 48 continued, functions giving back a boolean or a record that write the memory, and a call given the pair a let holds —
+the design (2026-11-03).**  The four places of `1fab4bb`.
+- *A boolean or a record that writes.*  `kb n x t := k n (g n x t) <? 5`: `g` writes the memory, so `kb` does, and its theorem
+  must say the memory after it is *some* memory, as a number that writes says (step 11, `sw`).  `callee_ok` already states that
+  for any result (`if sw gs then exists M', ..`); what is missing is the body: the sort of a number that writes gets results of
+  the other two kinds — `XRetB b` and `XRetR r` (a boolean, a record, from the newest memory) — and its meaning a result of the
+  signature's type (`rtq`), so a function giving back a boolean or a record whose body writes is read in that sort, its theorem
+  `compile_f_ok`'s case for it, the caller's `XBind` / `XBindP` / `XBindPR` taking its result as for a number (the record from the
+  slot block).
+- *A call given the pair a let holds.*  `let p := g n x t in upd 0 (k n p) 0 (snd p)`: `k n p` is not `k n (fst p, snd p)` up to
+  conversion, so the call takes the pair itself: in the memory's and the pair's sorts, a number made by a call given the pair
+  the nearest pair variable holds — the form of `MCallP` / `PvCallP` for a number, its meaning `callfp` on that pair, its C the
+  call on the pair's number and the newest memory (which is the pair's, a let of a pair making its memory the newest, step 26).
+- *Cells*: the four of `1fab4bb`; a boolean and a record that write, called at the end and inside an expression; the pair a let
+  holds given to a call inside a test and twice.
+*Expected*: the four cells and those.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4321,7 +4338,8 @@ Pushed to the public repository up to `10a5276` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 48 (a call given a pair, bound, giving back a record: the construct table 929 of 937, 1 by design; the bodies of the other sorts go on), the C, the gate |
+| (this commit) | §12.V: step 48 continued's design (functions giving back a boolean or a record that write the memory; a call given the pair a let holds) |
+| `eee39e5` | §12.V: step 48 (a call given a pair, bound, giving back a record: the construct table 929 of 937, 1 by design; the bodies of the other sorts go on), the C, the gate |
 | `10a5276` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 48: `XBindPR`, its fields from the slot block, `ctailx_ok`'s case; the reifier binds such a call with its record type; 2 cells |
 | `45ecac0` | §12.V: step 48's design (calls given a pair inside expressions of every sort) |
 | `f52b924` | §12.V: step 47 (calls inside expressions that write the memory or are given a pair: the construct table 926 of 931, 1 by design), the C, the gate |
