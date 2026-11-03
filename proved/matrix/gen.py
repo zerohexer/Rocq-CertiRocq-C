@@ -534,6 +534,16 @@ addA("par_pm_call_rec", "", "f1 (kr n (g n a s))",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint kr (n : nat) (p : int * mem) : r3 := match n with O => mk3 (fst p) (rd 0 0 (snd p)) 0 | S m => kr m (fst p + 1, snd p) end.\n")
 addA("par_write_two", "", "wr n s + wr2 n s",
      "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\nFixpoint wr2 (n : nat) (t : mem) : int := match n with O => rd 1 0 t | S m => wr2 m (upd 1 0 (rd 1 0 t + 2) t) end.\n")
+# a call given a pair not built in place inside an expression of a function giving back a boolean, a record, a number and a
+# memory, a memory (the places step 47 leaves: it reads them in a number's body only)
+addA("par_pm_call_in_bool", "", "if kb n a s then 1 else 0",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\nDefinition kb (n : nat) (x : int) (t : mem) : bool := k n (g n x t) <? 5.\n")
+addA("par_pm_call_in_rec", "", "f1 (kq n a s)",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\nDefinition kq (n : nat) (x : int) (t : mem) : r3 := mk3 (k n (g n x t)) 0 1.\n")
+addA("par_pm_call_in_pv", "", "let '(x, t) := kp n a s in x + rd 0 0 t",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\nDefinition kp (n : nat) (x : int) (t : mem) : int * mem := let p := g n x t in (k n p + 1, snd p).\n")
+addA("par_pm_call_in_mem", "", "rd 0 0 (km n a s)",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\nDefinition km (n : nat) (x : int) (t : mem) : mem := let p := g n x t in upd 0 (k n p) 0 (snd p).\n")
 # the translator's own conventions (§3.7): the counter not first, the memory not last
 addA("par_conv_nat_second", "", "k a n", "Fixpoint k (x : int) (n : nat) : int := match n with O => x | S m => k (x + 1) m end.\n")
 addA("par_conv_mem_first", "", "k n s a", "Fixpoint k (n : nat) (t : mem) (x : int) : int := match n with O => x + rd 0 0 t | S m => k m t (x + 1) end.\n")
