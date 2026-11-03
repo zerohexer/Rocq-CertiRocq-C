@@ -9,7 +9,7 @@ import re, sys, collections
 
 # cells whose refusal is by design.  A cell belongs here only if its program shows the cause: a value whose size comes from
 # the data (a list built by recursion), a value that must outlive the call where it cannot be put in (a closure returned by a
-# recursive function), two versions of the memory both used later.  Each needs a control: the nearest accepted cell that
+# recursive function), two versions of the memory both used, differing in cells whose number comes from the data.  Each needs a control: the nearest accepted cell that
 # differs only in the cause.  The cells once listed here (option, sum, a list cell, a function in a pair, a function returned,
 # a dead memory let) build and take apart their value in place, so they are gaps.
 DESIGN_CELLS = {
@@ -17,9 +17,16 @@ DESIGN_CELLS = {
   # number -- an unbounded number (Rocq-C-solution.md §0.5, second reason); control: A_par_nat_rec_add_pred_lit, the same
   # function from a written budget, translated and proved (step 39)
   "A_par_nat_rec_add_pred",
+  # two versions of the memory both used, differing in cells whose number comes from the data: each call a prefix sum in place
+  # over n cells, both given the memory before both -- keeping the old one takes a copy or a log as long as the data
+  # (Rocq-C-solution.md §0.5, third reason); control: A_par_write_two_seq, the same two calls with the memory handed on (step 49)
+  "A_par_write_two_data",
 }
 # gaps whose refusal message is shared with another category: classified by name
 BY_NAME = {
+  "A_par_write_two": "two versions of the memory both used, differing in cells fixed by the text (their old values saved and put back)",
+  "A_par_write_in_mem": "two versions of the memory both used, differing in cells fixed by the text (their old values saved and put back)",
+  "P_mem_both": "two versions of the memory both used, differing in cells fixed by the text (their old values saved and put back)",
   "A_par_option": "a value built and taken apart in place (option, sum, a list cell, a function in a pair)",
   "A_par_sum": "a value built and taken apart in place (option, sum, a list cell, a function in a pair)",
   "A_par_list": "a value built and taken apart in place (option, sum, a list cell, a function in a pair)",

@@ -206,6 +206,8 @@ add("int_if_and_let", "int", fdef("int", "if (a <? b) && (let c := a + 1 in c <?
 add("int_write_nontail", "int", ffix("int", "match n with O => rd 0 0 s | S m => f m a b (upd 0 a b s) + 1 end"))   # step 11
 add("mem_grow", "mem", fdef("mem", "kq_grow 2 a s"))
 add("mem_dup", "mem", fdef("mem", "let t := upd 0 a b s in upd 0 b a s"))      # old memory used after being handed on
+# both versions used, differing in one cell written in the text (step 49): its old value can be kept and put back
+add("mem_both", "mem", fdef("mem", "let t := upd 0 a b s in upd 0 b (rd 0 0 t) s"))
 add("mem_hof", "mem", fdef("mem", "twice_m (fun t => upd 0 a b t) s"), "Definition twice_m (f : mem -> mem) (s : mem) : mem := f (f s).\n")
 # a match on a counter in every result kind's place (step 35): on a sum (read as a let of it and a match on the variable), and on a
 # counter variable where the table had none (a record or a pair chosen by the counter)
@@ -534,6 +536,16 @@ addA("par_pm_call_rec", "", "f1 (kr n (g n a s))",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint kr (n : nat) (p : int * mem) : r3 := match n with O => mk3 (fst p) (rd 0 0 (snd p)) 0 | S m => kr m (fst p + 1, snd p) end.\n")
 addA("par_write_two", "", "wr n s + wr2 n s",
      "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\nFixpoint wr2 (n : nat) (t : mem) : int := match n with O => rd 1 0 t | S m => wr2 m (upd 1 0 (rd 1 0 t + 2) t) end.\n")
+# two versions of the memory both used (step 49).  `A_par_write_two` and these two differ from the old memory in cells fixed
+# by the text (a save of those cells, no copy: gaps); the pin differs in cells whose number comes from the data -- each call a
+# prefix sum in place over n cells from its own index, each round reading the cell the round before wrote, both given the
+# memory before both -- so keeping the old memory needs a copy or a log of n cells (by design); its control hands the memory on
+addA("par_write_in_mem", "", "rd 0 1 (kw n a s)",
+     "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\nDefinition kw (n : nat) (x : int) (t : mem) : mem := upd 0 1 (wr n t + x) t.\n")
+addA("par_write_two_data", "", "wp n a s + wp n b s",
+     "Fixpoint wp (n : nat) (x : int) (t : mem) : int := match n with O => rd 0 x t | S m => wp m (x + 1) (upd 0 (x + 1) (rd 0 (x + 1) t + rd 0 x t) t) end.\n")
+addA("par_write_two_seq", "", "let '(v, t) := wpp n a s in v + wp n b t",
+     "Fixpoint wpp (n : nat) (x : int) (t : mem) : int * mem := match n with O => (rd 0 x t, t) | S m => wpp m (x + 1) (upd 0 (x + 1) (rd 0 (x + 1) t + rd 0 x t) t) end.\nFixpoint wp (n : nat) (x : int) (t : mem) : int := match n with O => rd 0 x t | S m => wp m (x + 1) (upd 0 (x + 1) (rd 0 (x + 1) t + rd 0 x t) t) end.\n")
 # a call given a pair giving back a record, bound by a let, inside a test (step 48)
 addA("par_pm_call_rec_let", "", "let w := kr n (g n a s) in f1 w + f2 w * f3 w",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint kr (n : nat) (p : int * mem) : r3 := match n with O => mk3 (fst p) (rd 0 0 (snd p)) 0 | S m => kr m (fst p + 1, snd p) end.\n")
