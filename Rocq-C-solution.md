@@ -4103,6 +4103,22 @@ that changes it.  A call of a function given a pair, whatever it gives back, is 
   steps since left unread (a call given a pair giving back a record, two calls that write in one expression, a mutual part of two
   types).
 
+**Step 48, calls given a pair inside expressions of every sort — the design (2026-11-03).**  The places step 47 left:
+`A_par_pm_call_rec` (`f1 (kr n (g n a s))`, the call giving back a record) and the four cells of `1fab4bb` (a call given a pair
+not built in place inside an expression of a function giving back a boolean, a record, a number and a memory, a memory).  Step 47
+binds such a call in the body of a number that writes, its result a number or a boolean:
+- *`KQR.v`*: the bound call's result may be a record too (its fields from the slot block, as `RCall` reads them: `ccallr`, the
+  slot block given back as it was); and the bodies of the other sorts get the same binding — a boolean's (`sbb`), a record's
+  (`sbr`), a memory's and a number-and-memory pair's (`smem`, `spv`, one mutual type since step 44): a call given a pair, its
+  result the nearest value of its kind in what follows, on the pair's memory.  The proofs: a case in each lemma over those
+  sorts, from the callee's theorem at the pair's two parts (`pcall_pre`) and the induction hypothesis.
+- *The reifier*: `bind_first` and the let of such a call read in the readers of those sorts as in `reify_x`.
+- *Cells*: a call given a pair inside an expression of each sort, giving back a number, a boolean, a record; bound by a let;
+  inside a test.  A call that writes inside an expression of a memory's or a pair's body is given a memory the body uses again
+  after it (the body's own result is a memory made from the one before): with two calls that write in one expression it is
+  the place of a copy of the memory — cells beside `A_par_write_two`, decided together.
+*Expected*: the five cells and those.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4282,7 +4298,8 @@ Pushed to the public repository up to `1fab4bb` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 47 (calls inside expressions that write the memory or are given a pair: the construct table 926 of 931, 1 by design), the C, the gate |
+| (this commit) | §12.V: step 48's design (calls given a pair inside expressions of every sort) |
+| `f52b924` | §12.V: step 47 (calls inside expressions that write the memory or are given a pair: the construct table 926 of 931, 1 by design), the C, the gate |
 | `1fab4bb` | `proved/matrix/gen.py`: 4 cells for the places step 47 leaves unread (a call given a pair inside an expression of a function of another sort) |
 | `706834b` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 47: `XBind`, `XBindR`, `XBindP`, `ctailx_ok`'s cases; the reifier binds such a call first; 9 cells |
 | `653b839` | §12.V: step 47's design (calls inside expressions that write the memory or are given a pair) |
