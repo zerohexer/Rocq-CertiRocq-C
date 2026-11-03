@@ -2426,78 +2426,14 @@ Definition reify_fun (Σ : global_env) (hb : kername -> option term) (tc : kerna
   | None => None
   end.
 
-(* ---------------------------------------------------------------- mutual blocks (step 17) *)
-(** a mutual block's members (number functions of one signature, numbers and booleans as parameters) are one function with
-    one counter more, the selector, last among its counters: its body a match on the selector over the members' bodies (each
-    body lifted to make room for the selector, and under one binder more per match on the selector it stands in), a call of
-    member [j] on the predecessor the recursive call given the selector [j] *)
-Fixpoint nest_sel (c : nat) (es : list sexp) : sexp :=
-  match es with [] => SInt 0%uint63 | [e] => e | e :: es' => SMatch c e (nest_sel 0 es') end.
-Definition read_block (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
-  (callees : list (kername * sig)) (mfix : mfixpoint term) : option (sig * sig * fbody) :=
-  match mfix with
-  | [] | [_] => None
-  | d0 :: _ =>
-      let L := length mfix in
-      let '(tys, _) := lams (dbody d0) in
-      match read_sig rt tys (ret_ty (dtype d0)) with
-      | Some gs =>
-          if forallb (fun d => Nat.eqb (rarg d) 0 && teq 1000 (dtype d) (dtype d0)) mfix
-             && negb (Nat.eqb (sn gs) 0) && negb (sr gs) && negb (isq gs)
-             && forallb (fun k => match k with KRec _ => false | _ => true end) (sk gs) then
-            let nx := Nat.pred (sn gs) in
-            let nv := (if sm gs then 1 else 0) + length (sk gs) in
-            let gs' := mksig (S (sn gs)) (sk gs) (sm gs) false false None in
-            let ctx := fun_ctx gs' ++ map CSib (rev (seq 0 L)) in
-            let brs := map (fun d => match lift 1 nv (snd (lams (dbody d))) with
-                                     | tCase ci _ (tRel cnt) [b0; b1] =>
-                                         if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_nat) && Nat.eqb cnt (nv + nx + 1)
-                                         then Some (bbody b0, bbody b1) else None
-                                     | _ => None
-                                     end) mfix in
-            match opt_all brs with
-            | Some bs =>
-                let rd (pre : list cent) (j : nat) (t : term) :=
-                  reify callees (sm gs) (sn gs) hb tc [] rt 100000 (repeat CCnt j ++ pre) (lift0 j t) in
-                let jbs := combine (seq 0 L) bs in
-                match opt_all (map (fun jb => rd ctx (fst jb) (fst (snd jb))) jbs),
-                      opt_all (map (fun jb => rd (CPred :: ctx) (fst jb) (snd (snd jb))) jbs) with
-                | Some e0s, Some e1s => Some (gs, gs', FRec (nest_sel 0 e0s) (nest_sel 1 e1s))
-                | _, _ => None
-                end
-            | None => None
-            end
-          else None
-      | None => None
-      end
-  end.
-(** the block function's meaning: [blk] of the fixpoint's own bodies (a member the program does not name included), with
-    the first member's type as the list's (the type [blk] asks, by conversion) *)
 Definition ind_kind := ind_of <% KQR.kind %>.
 Definition ind_list := ind_of <% list %>.
-Definition kn_blk := kn_of <% @KQR.blk %>.
 Definition kn_no_recs := kn_of <% @KQR.no_recs %>.
 Fixpoint qnat (n : nat) : term := match n with O => tConstruct ind_nat 0 [] | S n => tApp (tConstruct ind_nat 1 []) [qnat n] end.
 Definition qkind (k : kind) : term :=
   match k with KNum => tConstruct ind_kind 0 [] | KBool => tConstruct ind_kind 1 [] | KRec ri => tApp (tConstruct ind_kind 2 []) [qnat ri] end.
 Definition qlist (A : term) (l : list term) : term :=
   fold_right (fun x acc => tApp (tConstruct ind_list 1 []) [A; x; acc]) (tApp (tConstruct ind_list 0 []) [A]) l.
-Definition blk_meaning (gs : sig) (mfix : mfixpoint term) : term :=
-  tApp (tConst kn_blk []) [tConst kn_no_recs []; qnat (Nat.pred (sn gs)); qlist (tInd ind_kind []) (map qkind (sk gs));
-                           tConstruct ind_bool (if sm gs then 0 else 1) [];
-                           qlist (match mfix with d :: _ => dtype d | [] => tVar "none"%bs end) (map (fun j => tFix mfix j) (seq 0 (length mfix)))].
-(** a member: one call of the block function, its counters, the selector, its parameters *)
-Fixpoint fwd_args (ks : list kind) : sexps :=
-  match ks with
-  | [] => SNil
-  | KNum :: ks => SCons (SVar (length (filter (kind_eqb KNum) ks))) (fwd_args ks)
-  | KBool :: ks => SConsB (BVar (length (filter (kind_eqb KBool) ks))) (fwd_args ks)
-  | KRec ri :: ks => SConsR (RVar (length (filter (fun k => match k with KRec _ => true | _ => false end) ks))) (fwd_args ks)
-  end.
-Definition member_body (bi : nat) (gs : sig) (j : nat) : fbody :=
-  FPlain (SCall bi (to_scnts (map CVar (rev (seq 0 (sn gs))) ++ [CNat (SInt (Uint63.of_Z (Z.of_nat j)))])) (fwd_args (sk gs))).
-Definition blk_name (mp : modpath) (mfix : mfixpoint term) : kername :=
-  (mp, match mfix with d :: _ => match binder_name (dname d) with nNamed s => s | nAnon => "blk"%bs end | [] => "blk"%bs end ^ "__cblk").
 (** the constants a term names *)
 Fixpoint consts (fuel : nat) (t : term) (acc : list kername) : list kername :=
   match fuel with
@@ -3085,6 +3021,282 @@ Definition rec_info (p : program) : list (string * string * nat * string) :=
   | _ => []
   end.
 
+(* ---------------------------------------------------------------- mutual blocks of any signature (step 45) *)
+(** a mutual block is read per strongly connected part of its members' call graph, the parts a part calls first.  The part is
+    one function: its members' parameters in shared slots (the recursion's counter, one slot for the [i]-th other counter of
+    any member, the selector, one slot of a kind for the [i]-th parameter of that kind of any member, the memory), its body the
+    members' bodies moved into the slots under a match on the selector, a call of a member of the part its own recursive call
+    (the callee's arguments in its slots, every other slot its current value), a call of another part's member a call of that
+    member.  Each member is one call of it, the slots not its own given zeros.  Both are written as terms and read by the
+    readers of every function; the part's meaning is [blkT] of the members' views, each the fixpoint's member given its own
+    parameters from the slots *)
+Definition kn_blkT := kn_of <% @KQR.blkT %>.
+Definition unread_t : term := tVar "kq_unread"%bs.
+Definition anon_b : aname := {| binder_name := nAnon; binder_relevance := Relevant |}.
+Definition pair_t (a b : term) : term := tApp (tConstruct ind_prod 0 []) [tConst kn_int []; tConst kn_mem []; a; b].
+Definition pfst_t (p : term) : term := tApp (tConst kn_pfst []) [tConst kn_int []; tConst kn_mem []; p].
+Definition psnd_t (p : term) : term := tApp (tConst kn_psnd []) [tConst kn_int []; tConst kn_mem []; p].
+Definition lams_of (tys : list term) (b : term) : term := fold_right (fun ty b => tLambda anon_b ty b) b tys.
+Definition pis_of (tys : list term) (b : term) : term := fold_right (fun ty b => tProd anon_b ty b) b tys.
+Definition dflt_def : def term := {| dname := anon_b; dtype := unread_t; dbody := unread_t; rarg := 0 |}.
+Fixpoint find_idx (x : nat) (l : list nat) : option nat :=
+  match l with [] => None | y :: r => if Nat.eqb x y then Some O else option_map S (find_idx x r) end.
+(** the members a member's body names *)
+Definition mcalls (L : nat) (d : def term) : list nat :=
+  map (fun q => Nat.sub (Nat.sub L 1) q) (filter (fun q => Nat.ltb q L) (fvs 1000 0 (dbody d) [])).
+Fixpoint mreach (fuel : nat) (g : list (list nat)) (seen todo : list nat) : list nat :=
+  match fuel with
+  | O => seen
+  | S fuel => match todo with
+              | [] => seen
+              | j :: r => if existsb (Nat.eqb j) seen then mreach fuel g seen r else mreach fuel g (j :: seen) (nth j g [] ++ r)
+              end
+  end.
+Definition reaches (g : list (list nat)) (i j : nat) : bool := existsb (Nat.eqb j) (mreach 1000 g [] (nth i g [])).
+Definition part_of (g : list (list nat)) (L j : nat) : list nat :=
+  filter (fun i => Nat.eqb i j || (reaches g j i && reaches g i j)) (seq 0 L).
+Definition mem_kn (mp : modpath) (mfix : mfixpoint term) (i : nat) : kername :=
+  (mp, match nth_error mfix i with
+       | Some d => match binder_name (dname d) with nNamed s => s | nAnon => "kq_member"%bs end
+       | None => "kq_member"%bs end).
+Definition part_name (mp : modpath) (mfix : mfixpoint term) (P : list nat) : kername :=
+  let k := mem_kn mp mfix (hd O P) in (fst k, snd k ^ "__cblk").
+Definition known (kn : kername) (es : list (kername * sig * fbody)) (tbl : copytab) : bool :=
+  existsb (fun e => Kername.eqb (fst (fst e)) kn) es || existsb (fun e => Kername.eqb (fst (fst (fst e))) kn) tbl.
+(** a member's parameter: the recursion's counter, its [q]-th other counter, its [o]-th parameter of a kind, the memory, a
+    number-and-memory pair (its number its [o]-th number) *)
+Inductive pcl := PRec | POc (q : nat) | PVal (k : kind) (o : nat) | PMemC | PPair (o : nat).
+Definition classify_params (rt : list rentry) (tys : list term) (r : nat) : option (list pcl) :=
+  opt_all (map (fun u =>
+    let ty := nth u tys (tRel 0) in
+    let pre := combine (seq 0 u) (firstn u tys) in
+    let nkind (k : kind) := length (filter (fun p => match kind_ty rt (snd p) with
+                                                     | Some k' => kind_eqb k k'
+                                                     | None => is_pm (snd p) && kind_eqb k KNum end) pre) in
+    if Nat.eqb u r then (if is_nat ty then Some PRec else None)
+    else if is_nat ty then Some (POc (length (filter (fun p => is_nat (snd p) && negb (Nat.eqb (fst p) r)) pre)))
+    else if is_ty kn_mem ty then Some PMemC
+    else if is_pm ty then Some (PPair (nkind KNum))
+    else option_map (fun k => PVal k (nkind k)) (kind_ty rt ty)) (seq 0 (length tys))).
+(** the slots of a kind: a member's [o]-th parameter of kind [k] the [o]-th slot of that kind *)
+Fixpoint kslot (K : list (kind * term)) (k : kind) (o : nat) : nat :=
+  match K with
+  | [] => O
+  | (k', _) :: K' => if kind_eqb k k' then match o with O => O | S o' => S (kslot K' k o') end else S (kslot K' k o)
+  end.
+Definition add_slots (K : list (kind * term)) (cls : list pcl) (tys : list term) : list (kind * term) :=
+  let nof k K := length (filter (fun e => kind_eqb (fst e) k) K) in
+  fold_left (fun K ct => match ct with
+                         | (PVal k o, ty) => if Nat.eqb (nof k K) o then K ++ [(k, ty)] else K
+                         | (PPair o, _) => if Nat.eqb (nof KNum K) o then K ++ [(KNum, tConst kn_int [])] else K
+                         | _ => K
+                         end) (combine cls tys) K.
+(** a member's body in the block: each parameter the block's binder of its slot (a pair the pair of its two) *)
+Definition rel_arg (NB : nat) (ps : list nat) : term :=
+  match ps with [p] => tRel (NB - 1 - p) | [p1; p2] => pair_t (tRel (NB - 1 - p1)) (tRel (NB - 1 - p2)) | _ => unread_t end.
+Definition relocate (NB : nat) (pss : list (list nat)) (body : term) : term :=
+  let N := length pss in subst (map (fun k => rel_arg NB (nth (N - 1 - k) pss [])) (seq 0 N)) 0 (lift NB N body).
+Definition sel_lit (j : nat) : term := tApp (tConst kn_kq_nat []) [tInt (Uint63.of_Z (Z.of_nat j))].
+(** which parameter of a member stands in slot [p]: the parameter, and 0 (its slot), 1 (a pair's number), 2 (a pair's memory) *)
+Fixpoint find_pos (p : nat) (pss : list (list nat)) (u : nat) : option (nat * nat) :=
+  match pss with
+  | [] => None
+  | ps :: r => match ps with
+               | [a] => if Nat.eqb a p then Some (u, 0) else find_pos p r (S u)
+               | [a; b] => if Nat.eqb a p then Some (u, 1) else if Nat.eqb b p then Some (u, 2) else find_pos p r (S u)
+               | _ => find_pos p r (S u)
+               end
+  end.
+Definition slot_arg (pss : list (list nat)) (p : nat) (args : list term) (dflt : term) : term :=
+  match find_pos p pss 0 with
+  | Some (u, 0) => nth u args unread_t
+  | Some (u, 1) => pfst_t (nth u args unread_t)
+  | Some (u, _) => psnd_t (nth u args unread_t)
+  | None => dflt
+  end.
+(** the calls of the members: of the part, its own recursive call; of another part, a call of that member *)
+Fixpoint sibr (fuel : nat) (L NB X : nat) (pin : nat -> option (nat * list (list nat))) (nargs : nat -> nat) (outk : nat -> kername)
+  (d : nat) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => unread_t
+  | S fuel =>
+      let go := sibr fuel L NB X pin nargs outk in
+      match t with
+      | tRel i => if Nat.leb (d + NB) i then (if Nat.ltb i (d + NB + L) then unread_t else tRel (i - L + 1)) else t
+      | tApp (tRel i) args =>
+          let args' := map (go d) args in
+          if Nat.leb (d + NB) i && Nat.ltb i (d + NB + L) then
+            let jj := Nat.sub (Nat.sub L 1) (i - d - NB) in
+            if Nat.eqb (length args') (nargs jj) then
+              match pin jj with
+              | Some (sel, pss) =>
+                  tApp (tRel (d + NB)) (map (fun p => if Nat.eqb p (S X) then sel_lit sel else slot_arg pss p args' (tRel (d + NB - 1 - p)))
+                                            (seq 0 NB))
+              | None => tApp (tConst (outk jj) []) args'
+              end
+            else unread_t
+          else tApp (go d (tRel i)) args'
+      | tApp f args => tApp (go d f) (map (go d) args)
+      | tLambda na ty b => tLambda na (go d ty) (go (S d) b)
+      | tProd na ty b => tProd na (go d ty) (go (S d) b)
+      | tLetIn na b ty body => tLetIn na (go d b) (go d ty) (go (S d) body)
+      | tCase ci p c brs =>
+          tCase ci {| puinst := puinst p; pparams := map (go d) (pparams p); pcontext := pcontext p;
+                      preturn := go (d + length (pcontext p)) (preturn p) |}
+                (go d c) (map (fun br => {| bcontext := bcontext br; bbody := go (d + length (bcontext br)) (bbody br) |}) brs)
+      | tFix mfix k => tFix (map (fun df => {| dname := dname df; dtype := go d (dtype df); dbody := go (d + length mfix) (dbody df);
+                                               rarg := rarg df |}) mfix) k
+      | tProj pr c => tProj pr (go d c)
+      | tCast c k ty => tCast (go d c) k (go d ty)
+      | _ => t
+      end
+  end.
+(** a value for a slot that is not the member's: a counter or a number 0, [false], a record of zeros *)
+Fixpoint zero_of (rt : list rentry) (fuel : nat) (ty : term) : term :=
+  match fuel with
+  | O => unread_t
+  | S fuel =>
+      if is_ty kn_int ty then tInt (Uint63.of_Z 0) else if is_bool ty then tConstruct ind_bool 1 [] else if is_nat ty then tConstruct ind_nat 0 []
+      else match option_map (fun i => nth_error rt i) (rindex ty rt 0) with
+           | Some (Some (fts, _, ind, _, pars, _, _)) =>
+               match fts with [] => unread_t | _ => tApp (tConstruct ind 0 []) (pars ++ map (zero_of rt fuel) fts) end
+           | _ => unread_t
+           end
+  end.
+(** the members' bodies under a match on the selector: member [j] under [j] binders more ([k] those above) *)
+Fixpoint nest_t (ci : case_info) (pr : predicate term) (bc1 : list aname) (sv : term) (k : nat) (es : list term) : term :=
+  match es with
+  | [] => unread_t
+  | [e] => lift0 k e
+  | e :: es' => tCase ci pr sv [{| bcontext := []; bbody := lift0 k e |}; {| bcontext := bc1; bbody := nest_t ci pr bc1 (tRel 0) (S k) es' |}]
+  end.
+Definition add_decl (Σ : global_env) (kn : kername) (ty b : term) : global_env :=
+  {| universes := universes Σ;
+     declarations := (kn, ConstantDecl {| cst_type := ty; cst_body := Some b; cst_universes := Monomorphic_ctx; cst_relevance := Relevant |})
+                     :: declarations Σ;
+     retroknowledge := retroknowledge Σ |}.
+(** a part's slots: the other counters, the slots of the kinds, the memory, the number of binders, each member's parameters'
+    binders, the binders' types *)
+Definition part_layout (rt : list rentry) (mfix : mfixpoint term) (P : list nat)
+  : option (nat * list (kind * term) * bool * nat * list (list (list nat)) * list term) :=
+  let ds := map (fun i => nth i mfix dflt_def) P in
+  let tyss := map (fun d => fst (lams (dbody d))) ds in
+  match opt_all (map (fun dt => classify_params rt (fst dt) (rarg (snd dt))) (combine tyss ds)) with
+  | None => None
+  | Some clss =>
+      let X := fold_left Nat.max (map (fun cls => length (filter (fun c => match c with POc _ => true | _ => false end) cls)) clss) O in
+      let K := fold_left (fun K ct => add_slots K (fst ct) (snd ct)) (combine clss tyss) [] in
+      let M := existsb (fun cls => existsb (fun c => match c with PMemC | PPair _ => true | _ => false end) cls) clss in
+      let posc (c : pcl) : list nat :=
+        match c with
+        | PRec => [O] | POc q => [S q] | PVal k o => [S (S X) + kslot K k o] | PMemC => [S (S X) + length K]
+        | PPair o => [S (S X) + kslot K KNum o; S (S X) + length K]
+        end in
+      Some (X, K, M, S (S X) + length K + (if M then 1 else 0), map (map posc) clss,
+            [tInd ind_nat []] ++ repeat (tInd ind_nat []) X ++ [tInd ind_nat []] ++ map snd K ++ (if M then [tConst kn_mem []] else []))
+  end.
+(** a part's block function: the members' bodies in the slots under a match on the selector *)
+Definition read_part (Σ : global_env) (mp : modpath) (hb : kername -> option term) (rt : list rentry) (bt : kername -> option Z) (chk : bool)
+  (mfix : mfixpoint term) (P : list nat) (st : list (kername * sig * fbody) * copytab) : option (list (kername * sig * fbody) * copytab) :=
+  let '(es, tbl) := st in
+  let L := length mfix in
+  let bn := part_name mp mfix P in
+  let ds := map (fun i => nth i mfix dflt_def) P in
+  let T := ret_ty (dtype (hd dflt_def ds)) in
+  match part_layout rt mfix P with
+  | None => None
+  | Some (X, K, M, NB, psss, btys) =>
+  if negb (forallb (fun d => teq 1000 (ret_ty (dtype d)) T) ds) then None else
+  let pin := fun jj => option_map (fun s => (s, nth s psss [])) (find_idx jj P) in
+  let nargs := fun jj => match nth_error mfix jj with Some d => length (fst (lams (dbody d))) | None => O end in
+  let rd (dps : def term * list (list nat)) :=
+    let body := sibr 100000 L NB X pin nargs (mem_kn mp mfix) 0 (relocate NB (snd dps) (snd (lams (dbody (fst dps))))) in
+    let body := if M then flatp 100000 (fun _ _ => false) 0 body else body in
+    match body with
+    | tCase ci pr (tRel c) [b0; b1] => if Nat.eqb c (NB - 1) then Some (ci, pr, b0, b1) else None
+    | _ => None
+    end in
+  match opt_all (map rd (combine ds psss)) with
+  | Some (((ci, pr, b0, b1) :: _) as cs) =>
+      let bc1 := bcontext b1 in
+      let sv d := tRel (d + NB - 1 - S X) in
+      let body := tCase ci pr (tRel (NB - 1))
+                    [{| bcontext := []; bbody := nest_t ci pr bc1 (sv 0) 0 (map (fun c => bbody (snd (fst c))) cs) |};
+                     {| bcontext := bc1; bbody := nest_t ci pr bc1 (sv 1) 0 (map (fun c => bbody (snd c)) cs) |}] in
+      let bty := pis_of btys T in
+      let bfix := tFix [{| dname := {| binder_name := nNamed (snd bn); binder_relevance := Relevant |}; dtype := bty;
+                           dbody := lams_of btys body; rarg := 0 |}] 0 in
+      let Σ1 := add_decl Σ bn bty bfix in
+      match reify_fun Σ1 hb (tc_of Σ1 mp tbl) rt (callees_of es) bn bt chk with
+      | Some (gs, b) =>
+          (* the views: the block's binders but the selector, the member given its own *)
+          let vtys := firstn (S X) btys ++ skipn (S (S X)) btys in
+          let NV := length vtys in
+          let vpos p := if Nat.leb p X then p else Nat.pred p in
+          let varg (ps : list nat) := match ps with
+                                      | [p] => tRel (NV - 1 - vpos p)
+                                      | [p1; p2] => pair_t (tRel (NV - 1 - vpos p1)) (tRel (NV - 1 - vpos p2))
+                                      | _ => unread_t end in
+          let views := map (fun ip => lams_of vtys (tApp (tFix mfix (fst ip)) (map varg (snd ip)))) (combine P psss) in
+          let mn := tApp (tConst kn_blkT []) [tConst kn_no_recs []; qnat X; qlist (tInd ind_kind []) (map (fun e => qkind (fst e)) K);
+                                              tConstruct ind_bool (if M then 0 else 1) []; T; hd unread_t views; qlist (pis_of vtys T) (tl views)] in
+          Some (es ++ [(bn, gs, b)], tbl ++ [(bn, ([], []), bn, mn)])
+      | None => None
+      end
+  | _ => None
+  end
+  end.
+(** a member: one call of its part's block function, the slots not its own given zeros *)
+Definition add_member (Σ : global_env) (mp : modpath) (hb : kername -> option term) (rt : list rentry) (bt : kername -> option Z) (chk : bool)
+  (mfix : mfixpoint term) (P : list nat) (i : nat) (st : option (list (kername * sig * fbody) * copytab))
+  : option (list (kername * sig * fbody) * copytab) :=
+  match st, part_layout rt mfix P, find_idx i P with
+  | Some (es, tbl), Some (X, K, M, NB, psss, btys), Some sel =>
+      let kn := mem_kn mp mfix i in
+      if known kn es tbl then st else
+      let pss := nth sel psss [] in
+      let d := nth i mfix dflt_def in
+      let tys := fst (lams (dbody d)) in
+      let N := length tys in
+      let marg p := if Nat.eqb p (S X) then sel_lit sel
+                    else match find_pos p pss 0 with
+                         | Some (u, 0) => tRel (N - 1 - u)
+                         | Some (u, 1) => pfst_t (tRel (N - 1 - u))
+                         | Some (u, _) => psnd_t (tRel (N - 1 - u))
+                         | None => zero_of rt 100 (nth p btys unread_t)
+                         end in
+      let Σ2 := add_decl Σ kn (dtype d) (lams_of tys (tApp (tConst (part_name mp mfix P) []) (map marg (seq 0 NB)))) in
+      match reify_fun Σ2 hb (tc_of Σ2 mp tbl) rt (callees_of es) kn bt chk with
+      | Some (gs, b) => Some (add_fun Σ2 kn gs b es tbl)
+      | None => None
+      end
+  | _, _, _ => None
+  end.
+(** a part whose members give back different types (not read yet) *)
+Definition mixed_part (mfix : mfixpoint term) (k : nat) : bool :=
+  let T := ret_ty (dtype (nth k mfix dflt_def)) in
+  existsb (fun i => negb (teq 1000 (ret_ty (dtype (nth i mfix dflt_def))) T)) (part_of (map (mcalls (length mfix)) mfix) (length mfix) k).
+(** a member's part, after the parts it calls (and the members of theirs it calls) *)
+Fixpoint ensure_part (fuel : nat) (Σ : global_env) (mp : modpath) (hb : kername -> option term) (rt : list rentry) (bt : kername -> option Z)
+  (chk : bool) (mfix : mfixpoint term) (g : list (list nat)) (j : nat) (st : option (list (kername * sig * fbody) * copytab)) {struct fuel}
+  : option (list (kername * sig * fbody) * copytab) :=
+  match fuel with
+  | O => None
+  | S fuel =>
+      match st with
+      | None => None
+      | Some (es, tbl) =>
+          let P := part_of g (length mfix) j in
+          if known (part_name mp mfix P) es tbl then st else
+          let deps := filter (fun i => negb (existsb (Nat.eqb i) P)) (flat_map (fun i => nth i g []) P) in
+          match fold_left (fun st i => add_member Σ mp hb rt bt chk mfix (part_of g (length mfix) i) i (ensure_part fuel Σ mp hb rt bt chk mfix g i st))
+                          deps st with
+          | Some st' => read_part Σ mp hb rt bt chk mfix P st'
+          | None => None
+          end
+      end
+  end.
+
 Definition reify_prog2b (bt : kername -> option Z) (chk : bool) (p : program) : option (list (kername * sig * fbody) * list (string * term)) :=
   match p with
   | (Σ, tConst root _) =>
@@ -3112,28 +3324,9 @@ Definition reify_prog2b (bt : kername -> option Z) (chk : bool) (p : program) : 
                           match body_of Σ kn with
                           | Some (tFix mfix k) =>
                               if Nat.ltb 1 (length mfix) then
-                                (* a member of a mutual block: the block function first (once), then the member as one call of it *)
-                                let bn := blk_name mp mfix in
-                                let wfok := fun cs gs b => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt) (rjs rt)) (map snd cs) gs b in
-                                let st1 := if existsb (fun e => Kername.eqb (fst (fst e)) bn) es then Some (es, tbl) else
-                                           match read_block hb (tc_of Σ mp tbl) rt (callees_of es) mfix with
-                                           | Some (gs, gs', b) => match (if chk then wf_sig (fun g => wfok (callees_of es) g b) gs' b (bt bn) else Some gs') with
-                                                                  | Some g => Some (es ++ [(bn, g, b)], tbl ++ [(bn, ([], []), bn, blk_meaning gs mfix)])
-                                                                  | None => None
-                                                                  end
-                                           | None => None
-                                           end in
-                                match st1 with
-                                | Some (es1, tbl1) =>
-                                    match find_callee bn (callees_of es1) 0, read_block hb (tc_of Σ mp tbl1) rt (callees_of es) mfix with
-                                    | Some (bi, _), Some (gs, _, _) =>
-                                        let b := member_body bi gs k in
-                                        match (if chk then wf_sig (fun g => wfok (callees_of es1) g b) gs b (bt kn) else Some gs) with
-                                        | Some g => Some (es1 ++ [(kn, g, b)], tbl1) | None => None end
-                                    | _, _ => None
-                                    end
-                                | None => None
-                                end
+                                (* a member of a mutual block (step 45): its part, after the parts it calls, each read once *)
+                                let g := map (mcalls (length mfix)) mfix in
+                                add_member Σ mp hb rt bt chk mfix (part_of g (length mfix) k) k (ensure_part 100 Σ mp hb rt bt chk mfix g k (Some (es, tbl)))
                               else match reify_fun Σ hb (tc_of Σ mp tbl) rt (callees_of es) kn bt chk with
                                    | Some (gs, b) => Some (add_fun Σ kn gs b es tbl)
                                    | None => None
@@ -3183,6 +3376,12 @@ Definition reify_prog2 (p : program) : option (list (kername * sig * fbody) * li
             end
   end.
 Definition reify_prog (p : program) : option (list (kername * sig * fbody)) := option_map fst (reify_prog2 p).
+(** the block functions' meanings (step 45) are made where the program's record types are known: [blkT] at their instance;
+    the other meanings where the program is *)
+Definition is_blk_m (t : term) : bool := match t with tApp (tConst kn _) _ => Kername.eqb kn kn_blkT | _ => false end.
+Definition plain_mts (l : list (string * term)) : list (string * term) := filter (fun p => negb (is_blk_m (snd p))) l.
+Definition blk_mts (inst : term) (l : list (string * term)) : list (string * term) :=
+  map (fun p => (fst p, match snd p with tApp f (_ :: rest) => tApp f (inst :: rest) | t => t end)) (filter (fun p => is_blk_m (snd p)) l).
 Definition meaning_of (l : list (string * term)) (nm : string) : term :=
   match List.find (fun q => fst q == nm) l with Some q => snd q | None => tVar "none"%bs end.
 
@@ -3333,7 +3532,8 @@ Definition why_fun (Σ : global_env) (hb : kername -> option term) (tc : kername
           let '(rec, body, ty) :=
             match b with
             | tFix [d] _ => (""%bs, dbody d, dtype d)
-            | tFix _ _ => ("mutual recursion", b, cst_type cb)
+            | tFix mfix k => (if mixed_part mfix k then "a mutual block whose members that call each other give back different types"
+                              else "mutual recursion", b, cst_type cb)
             | _ => (""%bs, b, cst_type cb)
             end in
           let '(tys, inner) := lams body in
@@ -5327,3 +5527,43 @@ Proof.
     eq_refl eq_refl).
 Time Qed.
 Print Assumptions w44bgo_ok.
+(* ---- a mutual block of any signature (step 45): [w45a] and [w45b] give back a memory, [w45b] has a parameter more and its
+   counter second.  The block is one function, their parameters in shared slots, a call between them its own recursive call;
+   its meaning [blkT] of their views, its theorem from its two equations ([compile_f_okrm]); [w45a] one call of it ([w45b],
+   which the program does not name, nothing) *)
+Fixpoint w45a (n : nat) (x : i63) (t : KQ.KQRun.mem) : KQ.KQRun.mem :=
+  match n with O => t | S m => w45b (PrimInt63.add x 1) m x (KQ.KQRun.upd 0 x x t) end
+with w45b (x : i63) (n : nat) (y : i63) (t : KQ.KQRun.mem) : KQ.KQRun.mem :=
+  match n with O => KQ.KQRun.upd 1 y x t | S m => w45a m (PrimInt63.add x y) t end.
+Definition w45go (n : nat) (a : i63) (s : KQ.KQRun.mem) : i63 := KQ.KQRun.rd 0 0 (w45a n a s).
+Definition w45_res := ltac:(run_template_program (tmQuoteRec w45go)
+  (fun q => let r := eval vm_compute in (reify_prog2 q) in match r with Some ?x => exact x end)).
+Definition w45_src := fst w45_res.
+Check (eq_refl : map (fun x => snd x) w45_src =
+  [FRecM (MMatch 0 MCur (MUpd (SInt 1) (SVar 0) (SVar 1) MCur))
+     (MMatch 1 (MRec (CCons (CNat (SInt 1)) CNil) (SCons (SOp Badd (SVar 1) (SInt 1)) (SCons (SVar 1) SNil)) (MUpd (SInt 0) (SVar 1) (SVar 1) MCur))
+        (MRec (CCons (CNat (SInt 0)) CNil) (SCons (SOp Badd (SVar 1) (SVar 0)) (SCons (SVar 0) SNil)) MCur));
+   FPlainM (MCall 0 (CCons (CVar 0) (CCons (CNat (SInt 0)) CNil)) (SCons (SVar 0) (SCons (SInt 0) SNil)) MCur);
+   FPlainX (XLetM (MCall 1 (CCons (CVar 0) CNil) (SCons (SVar 0) SNil) MCur) (XRet (SRd (SInt 0) (SInt 0))))]).
+Check (eq_refl : map (fun x => snd (fst x)) w45_src =
+  [mksig8 2 [KNum; KNum] true true false None None []; mksig8 1 [KNum] true true false None None [];
+   mksig8 1 [KNum] true false true None None []]).
+MetaRocq Run (tmMkDefinition "w45blk"%bs (meaning_of (snd w45_res) "w45a__cblk"%bs)).
+Definition w45_Pr := mkprog (funs_of 0 w45_src) [].
+Time Lemma w45blk_ok : callee_ok w45_Pr (gid1 0) (cbz 0) (sig_at w45_src 0) w45blk.
+Proof.
+  Time exact_no_check (compile_f_okrm w45_Pr [] gid1 0 1 [KNum; KNum] true (fm0 (body_at w45_src 0)) (fm1 (body_at w45_src 0)) None [] w45blk
+    eq_refl eq_refl (no_callees w45_Pr gid1) eq_refl eq_refl eq_refl (fun n => eq_refl)).
+Time Qed.
+Time Lemma w45a_ok : callee_ok w45_Pr (gid1 1) (cbz 1) (sig_at w45_src 1) w45a.
+Proof.
+  Time exact_no_check (compile_f_ok w45_Pr [existT ftype (sig_at w45_src 0) w45blk] gid1 1 (sig_at w45_src 1) (body_at w45_src 1)
+    eq_refl eq_refl (all_ok_callees w45_Pr gid1 [existT ftype (sig_at w45_src 0) w45blk] (conj w45blk_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
+Time Lemma w45go_ok : callee_ok w45_Pr (gid1 2) (cbz 2) (sig_at w45_src 2) w45go.
+Proof.
+  Time exact_no_check (compile_f_ok w45_Pr [existT ftype (sig_at w45_src 0) w45blk; existT ftype (sig_at w45_src 1) w45a] gid1 2
+    (sig_at w45_src 2) (body_at w45_src 2) eq_refl eq_refl
+    (all_ok_callees w45_Pr gid1 [existT ftype (sig_at w45_src 0) w45blk; existT ftype (sig_at w45_src 1) w45a] (conj w45blk_ok (conj w45a_ok Logic.I)))
+    eq_refl eq_refl).
+Time Qed.

@@ -392,7 +392,7 @@ def reflect(name, entry, prog, no_proof):
         + (f'Redirect "{name}_rsh" Eval vm_compute in (match {name}_src with Some l => map (fun f => (snd (fst (fst f)), '
            f'KQR.sh_ok kq_shared (snd f))) l | None => [] end).\n' if shared else "")
         # a copy of a recursive function for the functions it is given: its meaning, the function applied to them (step 10)
-        + f"MetaRocq Run (monad_iter (fun p => tmMkDefinition (fst p) (snd p)) {name}_mts).\n")
+        + f"MetaRocq Run (monad_iter (fun p => tmMkDefinition (fst p) (snd p)) (KQRReify.plain_mts {name}_mts)).\n")
     rc, out = coqc(f0)
     info = open(os.path.join(GEN, f"{name}_rinfo.out")).read() if rc == 0 and os.path.exists(os.path.join(GEN, f"{name}_rinfo.out")) else ""
     # each function: its name, counters, kinds, flags, result, bound and weights (polynomials, step 39: read to the tuple's end)
@@ -569,6 +569,8 @@ def reflect(name, entry, prog, no_proof):
               f"- intros i l rs G Hk Hl. destruct i as {dpat}; cbn in G, Hk; try discriminate G; KQR.kq_rb_case.\nQed.\n")
     else:
         inst, laws = "KQR.no_recs", "KQR.no_recs_laws"
+    # a mutual block's meaning (step 45): blkT at the program's record types
+    t += f"MetaRocq Run (monad_iter (fun p => tmMkDefinition (fst p) (snd p)) (KQRReify.blk_mts <% @{inst} %> {name}_mts)).\n"
     t += f"Definition {name}_funs := match {name}_src with Some l => l | None => [] end.\n"
     t += f"Definition {name}_prog := KQL.mkprog (@KQRReify.funs_of {inst} 0 {name}_funs) [].\n"
     # the program's functions are unfolded last when the kernel compares a function with the meaning of its syntax tree: a
@@ -583,7 +585,9 @@ def reflect(name, entry, prog, no_proof):
             cs = "[" + "; ".join(f"existT (@KQR.ftype {inst}) {sig(g)} {g[0]}" for g in fs[:j]) + "]"
             oks = "".join(f"(conj {name}_rok{i} " for i in range(j)) + "Logic.I" + ")" * j
             t += f"Lemma {name}_rok{j} : @KQR.callee_ok {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {sig(f)} {f[0]}.\n"
-            prec = isp(f) and re.search(r"Fixpoint\s+" + re.escape(f[0]) + r"\b", prog) is not None
+            # (step 45) a member of a mutual block (a `with NAME (..)` in its Fixpoint) is one call of its block: not a fix over its counter
+            mfx = re.search(r"Fixpoint\s+" + re.escape(f[0]) + r"\b(.*?)\.\s*$", prog, re.S | re.M)
+            prec = isp(f) and mfx is not None and not re.search(r"\bwith\s+[A-Za-z_][\w']*\s*[({]", mfx.group(1))
             if "__c" in f[0] or f[0].endswith("__o") or prec:
                 # a copy: not a fix over its counter, so its statement comes from its two equations, each by conversion
                 # (a copy that writes the memory and gives back a number has a memory: no memory argument)

@@ -455,6 +455,19 @@ Fixpoint vals_rev (ks : list kind) (env : list i63) (benv : list bool) (renv : l
 Definition blk (x : nat) (k : list kind) (m : bool) (hs : list (nat -> ctype x (ntype k m false))) : nat -> ctype (S x) (ntype k m false) :=
   fun n => absc (S x) _ (fun cenv => absn k m false (fun env benv renv s =>
     sel_app x k m hs (hd O cenv) n (rev (tl cenv)) (rev (vals_rev (rev k) env benv renv)) s)).
+(** a mutual block of any signatures (step 45): each member seen through its view, a function of the block's counters (the
+    selector apart) and parameters that gives the member its own in its own order; the result of any type; the first member
+    apart, so the choice needs no default *)
+Fixpoint sel_appT (x : nat) (k : list kind) (m : bool) (T : Type) (h0 : nat -> ctype x (ntypeT k m T))
+  (hs : list (nat -> ctype x (ntypeT k m T))) (i n : nat) (cvs : list nat) (vs : list val) (s : mem) {struct hs} : T :=
+  match hs with
+  | [] => appnT k m T (appc x _ (h0 n) cvs) vs s
+  | h1 :: hs' => match i with O => appnT k m T (appc x _ (h0 n) cvs) vs s | S i' => sel_appT x k m T h1 hs' i' n cvs vs s end
+  end.
+Definition blkT (x : nat) (k : list kind) (m : bool) (T : Type) (h0 : nat -> ctype x (ntypeT k m T))
+  (hs : list (nat -> ctype x (ntypeT k m T))) : nat -> ctype (S x) (ntypeT k m T) :=
+  fun n => absc (S x) _ (fun cenv => absnT k m T (fun env benv renv s =>
+    sel_appT x k m T h0 hs (hd O cenv) n (rev (tl cenv)) (rev (vals_rev (rev k) env benv renv)) s)).
 
 (** the slot block's cells [j ..] written with these numbers, the last one first *)
 Fixpoint wslot (j : nat) (vs : list i63) (s : mem) : mem :=

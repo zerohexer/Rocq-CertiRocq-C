@@ -435,6 +435,36 @@ addA("par_mutual_sig", "", "ev n a",
 addA("par_mutual_mem", "", "rd 0 0 (wa n s)",
      "Fixpoint wa (n : nat) (t : mem) : mem := match n with O => t | S m => wb m (upd 0 1 1 t) end\n"
      "with wb (n : nat) (t : mem) : mem := match n with O => t | S m => wa m (upd 0 2 2 t) end.\n")
+# a mutual block of any signature (step 45): booleans and records among the members' parameters, a second counter, the
+# recursion's counter not first; giving back a boolean, a record, a number and a memory, a number that writes; a number that
+# reads and one that writes in one part; three members; members of different sorts in different parts; a member taking a pair;
+# a part whose members give back different types (a later step)
+addA("par_mutual_bool", "", "if ev n then a else b",
+     "Fixpoint ev (n : nat) : bool := match n with O => true | S m => od m end\nwith od (n : nat) : bool := match n with O => false | S m => ev m end.\n")
+addA("par_mutual_bool_param", "", "ev n a (a <? b)",
+     "Fixpoint ev (n : nat) (x : int) (c : bool) : int := match n with O => if c then x else 0 | S m => od m (x + 1) end\nwith od (n : nat) (x : int) : int := match n with O => x | S m => ev m (x * 2) (x <? 100) end.\n")
+addA("par_mutual_rec_param", "", "ev n (mk3 a b 1)",
+     "Fixpoint ev (n : nat) (w : r3) : int := match n with O => f1 w + f3 w | S m => od m (f2 w) w end\nwith od (n : nat) (x : int) (w : r3) : int := match n with O => x | S m => ev m (mk3 x (f1 w) (f3 w + 1)) end.\n")
+addA("par_mutual_counter2", "", "ev n 3 a",
+     "Fixpoint ev (n k : nat) (x : int) : int := match n with O => x | S m => od m (x + 1) end\nwith od (n : nat) (x : int) : int := match n with O => x * 2 | S m => ev m 2 x end.\n")
+addA("par_mutual_order", "", "ev a n",
+     "Fixpoint ev (x : int) (n : nat) : int := match n with O => x | S m => od m (x + 1) end\nwith od (n : nat) (x : int) : int := match n with O => x * 2 | S m => ev (x + 3) m end.\n")
+addA("par_mutual_rec_res", "", "f1 (ev n a) + f3 (ev n b)",
+     "Fixpoint ev (n : nat) (x : int) : r3 := match n with O => mk3 x 0 1 | S m => od m (x + 1) end\nwith od (n : nat) (x : int) : r3 := match n with O => mk3 0 x 2 | S m => ev m (x * 2) end.\n")
+addA("par_mutual_pv_res", "", "let '(x, t) := ev n a s in x + rd 0 0 t",
+     "Fixpoint ev (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => od m (x + 1) (upd 0 x x t) end\nwith od (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x + 1, t) | S m => ev m x (upd 1 x x t) end.\n")
+addA("par_mutual_write", "", "ev n a s",
+     "Fixpoint ev (n : nat) (x : int) (t : mem) : int := match n with O => rd 0 0 t + x | S m => od m (x + 1) (upd 0 0 x t) end\nwith od (n : nat) (x : int) (t : mem) : int := match n with O => rd 1 0 t | S m => ev m x (upd 1 0 x t) end.\n")
+addA("par_mutual_read_write", "", "ev n a s",
+     "Fixpoint ev (n : nat) (x : int) (t : mem) : int := match n with O => rd 0 0 t + x | S m => od m x t end\nwith od (n : nat) (x : int) (t : mem) : int := match n with O => x | S m => ev m (x + 1) (upd 0 0 x t) end.\n")
+addA("par_mutual_three", "", "ma n a",
+     "Fixpoint ma (n : nat) (x : int) : int := match n with O => x | S m => mb m (x + 1) end\nwith mb (n : nat) (x : int) : int := match n with O => x * 2 | S m => mc m (x * 3) end\nwith mc (n : nat) (x : int) : int := match n with O => x + 7 | S m => ma m (x - 1) end.\n")
+addA("par_mutual_parts", "", "rd 0 0 (cg n s)",
+     "Fixpoint cf (n : nat) (x : int) : int := match n with O => x | S m => cf m (x + 1) end\nwith cg (n : nat) (t : mem) : mem := match n with O => t | S m => upd 0 (cf m 1) 0 (cg m t) end.\n")
+addA("par_mutual_pm", "", "ev n (a, s)",
+     "Fixpoint ev (n : nat) (p : int * mem) : int := match n with O => fst p + rd 0 0 (snd p) | S m => od m (fst p + 1) (snd p) end\nwith od (n : nat) (x : int) (t : mem) : int := match n with O => x | S m => ev m (x * 2, t) end.\n")
+addA("par_mutual_mixed", "", "ev n a s",
+     "Fixpoint ev (n : nat) (x : int) (t : mem) : int := match n with O => x | S m => rd 0 0 (od m t) + x end\nwith od (n : nat) (t : mem) : mem := match n with O => t | S m => upd 0 (ev m 1 t) 0 t end.\n")
 # a capture (step 13): of a counter, of a record, of a variable bound by a match on a record
 addA("par_capture_nat", "", "fold n 0 a (fun i acc => match n with O => acc | S _ => acc + i end)", "")
 addA("par_capture_rec", "", "let w := mk3 a b 1 in fold n 0 a (fun i acc => acc + f1 w)", "")
