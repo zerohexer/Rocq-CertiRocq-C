@@ -4348,6 +4348,23 @@ design of its own; the function's own call not at the end comes after this one.
   through the verified compiler, 0 refused**; the trusted base unchanged.  The step goes on with the function's own call not at
   the end and the pair a let holds.
 
+**Step 48 continued, the function's own call not at the end of a boolean or a record that writes — the design (2026-11-04).**
+`A_par_bool_write_own_neg` (`negb (kbo m (x + 1) (upd 0 x x t))`), `A_par_rec_write_own_let` (`let w := kro m .. in mk3 (f1 w + 1)
+(f2 w) (f3 w)`).  A number's own call is bound by `XBindR` (step 47), its value a number.  A boolean's or a record's own call
+gives a value of that kind, and the meaning of a number's body has no own call of those kinds.  So:
+- *`KQR.v`*: `XBindRB cs args m x` and `XBindRR ri cs args m x`: the function's own call on the memory `m`, its boolean the nearest
+  boolean or its record the nearest record in `x`, `x` run after it and reading no memory (`xfree`).  Their meanings are in
+  `denote_xb` and `denote_xr`, through the own call there.  A number's body has neither (`xnum`, asked by its `wf_f`, a premise of
+  `ctailx_ok`).  The boolean's body gets its own theorem `ctailxb_ok` as the record's has (the code returns the boolean as 1 or 0),
+  made from `ctailx_ok`'s text in the same way; the route through the number's meaning (`denote_x_xb`) is removed, since that
+  meaning has no own call of a boolean.  C: the call into a variable under the function's own name; the record's fields through
+  `ccallr`.
+- *The reifier*: such a call bound by a let (`bindc`, and the let of a record).  A call not bound by a let is bound first
+  (`bind_first`), the let's type a number and, when what follows is not read, a boolean, then a record: the reader does not know
+  the function's result there, and the let's type is not part of the meaning (the check goes through zeta).
+- *Cells*: the two pinned; the boolean bound by a let; the record's inside an expression.
+*Expected*: those four.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4527,7 +4544,8 @@ Pushed to the public repository up to `4804dc5` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 48 continued (templates giving back a boolean or a record that writes: the construct table 943 of 954, 2 by design; the own call not at the end and the pair a let holds go on), the C, the gate |
+| (this commit) | §12.V: step 48 continued, the own call not at the end of a boolean or a record that writes, the design (`XBindRB`, `XBindRR`, `xnum`, `ctailxb_ok`) |
+| `c4a2005` | §12.V: step 48 continued (templates giving back a boolean or a record that writes: the construct table 943 of 954, 2 by design; the own call not at the end and the pair a let holds go on), the C, the gate |
 | `4804dc5` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` step 48 continued: `compile_f_okrxb`, `compile_f_okrxr`, the meanings' independence of the own call; the reader of copies, the binding of a template's call; 2 cells |
 | `ac84ef0` | §12.V: step 48 continued, templates giving back a boolean or a record that writes, the design (the copies' theorems for X bodies of booleans and records) |
 | `454364a` | §12.V: step 48 continued (functions giving back a record whose body writes: the construct table 939 of 952, 2 by design; the own call not at the end, templates and the pair a let holds go on), the C, the gate |
