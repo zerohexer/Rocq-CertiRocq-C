@@ -3767,6 +3767,35 @@ counter captured by a local fixpoint, a template in another order given a functi
   `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (12 / 12 / 12 / 14 / 14 s); **71 programs through the
   verified compiler, 0 refused**; the trusted base unchanged.
 
+**Step 43, records holding records as values — the design (2026-11-03).**  The fourth item of the record of 2026-11-02's
+order: `A_par_pairp_proj` (`fst (fst r)` and `snd r` of a record holding records), `A_par_pairp_late` (an inner record taken
+apart after other text), `A_par_pairp_pass` (an inner record given to a function), `P_pairp_match_nat` (a record holding
+records chosen by a match on a counter, in a helper written out).  The readers hold a record as its numbers, and a record
+holding records as the numbers of all its records (step 32); the meaning of taking one apart is the record type's own match
+(`relim`), which binds those numbers only.  So an inner record is read only when the text takes it apart at once, and a
+projection or a match that binds the inner record as a value has no reading.  Rocq has no eta rule for pairs
+(`match p with (x, y) => (x, y) end` is not `p`), so the meaning has to bind the inner record as itself.  And a record holding
+records that only a body uses is not in the program's record table (step 32: built and taken apart in place it needs none),
+so one chosen by a test or a match has no type:
+- *`KQR.v`*: each record type gets a one-level match and constructor, given by the program as `relim` and `rmk` are (`RS`,
+  `RB`, and the types of its record fields, `RJ`): the match gives the number fields and the record fields, each in their
+  order.  The laws: the number fields and then the record fields' numbers are the record's numbers (`relim`'s, the order the
+  C holds them in), the record fields are of the types `RJ`, and the constructor on such fields has them as its numbers.  A
+  record type without record fields gets them from `relim` and `rmk` (`mkrecs`, and `laws_of` for the laws).  Each sort gets a
+  one-level take-apart that binds the number fields as numbers and the record fields as record variables (`SSplitR`,
+  `BxSplitR`, `RSplitR`, `MSplitR`, `PvSplitR`, `XSplitR`, `BSplitR`, `BbSplitR`); the record sort gets a constructor on
+  numbers and records (`RMkR`).  The C: a record's words are split among the fields, nothing is copied.
+- *The reifier*: the record table keeps each record's field types, and holds the records holding records the bodies use
+  (after every other, each after the records it holds: a program's indices are those of before).  A match on a record holding
+  records that the text does not take apart at once is read as the one-level take-apart; a projection (`fst r`) is such a
+  match, its branch the field; the function's own result is bound by a let and then taken apart.  A constructor of a record
+  holding records given a record value is `RMkR`.  A record holding records built of plain values is put in where it is
+  bound (zeta), as one built in a body was.
+- *kitc.py*: for each record type with record fields, the one-level match and constructor, and the laws by a fixed script.
+*Expected*: the four cells, and cells for an inner record rebuilt into a new outer record (in a recursion, by a let), one bound
+by a let, one given back by a function, three levels of records, and an inner record taken apart one level in a test and in
+functions giving back a boolean, a memory, a number after memories, a number and a memory, and a record.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3942,11 +3971,12 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `8ab60a6` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `d45b0f0` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 42 done (captures of every kind: the construct table 855 of 868, 1 by design), the C, the gate |
+| (this commit) | §12.V: step 43's design (records holding records as values) |
+| `d45b0f0` | §12.V: step 42 done (captures of every kind: the construct table 855 of 868, 1 by design), the C, the gate |
 | `8ab60a6` | `proved/KQRReify.v` + `matrix/gen.py` step 42: captured counters and records, a match's variables their fields' kinds; 4 cells |
 | `60915d3` | §12.V: step 42's design (captures of every kind) |
 | `9d4beb8` | §12.V: step 41 continued (the copies with their parameters in any order: the construct table 848 of 864, 1 by design), the C, the gate |
