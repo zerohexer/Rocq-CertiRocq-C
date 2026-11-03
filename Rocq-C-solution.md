@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **915 of 922, 5 gaps, 1 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **926 of 935, 7 gaps, 1 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4069,6 +4069,40 @@ that changes it.  A call of a function given a pair, whatever it gives back, is 
   a copy of the memory; whether that is by design is §0.5's question, answered with a pin and a control when it is built).
 *Expected*: the four cells and those.
 
+**Step 47 done (2026-11-03): calls inside expressions that write the memory or are given a pair.**  Built as designed:
+- *`KQR.v`*: `XBind`, `XBindR`, `XBindP` in the sort of a number that writes, their meaning (`xres`: the call's result, a number
+  or a boolean, given to what follows), C (the call into a variable, the function's own name for `XBindR`, then what follows)
+  and check (`resq`; after a call that writes, `xfree`: a number checked as reading no memory and as a number of the body);
+  the proofs: `ctailx_ok`'s three cases (the callee's theorem, or `Hrecx`, then the induction hypothesis; after a call that
+  writes, what follows moved from the callee's end memory to the memory given, through `denote_rec_ext_r` — `denote_rec_ext`
+  with its hypothesis asked only where the recursive call is allowed — and `denote_nomem`), `denote_x_recx_ext`'s
+  (`xres_ext`), `inv_call_res`.  No new hypothesis; `Print Assumptions` the same base.
+- *The reifier*: a number holding such a call in a place evaluated before the rest (`bind_first`: an operand, a call's
+  argument, a test) is read with the call bound by a let, the operands of the numbers' operations that read the memory bound
+  before it; a let of such a call read as `XBind`, `XBindR` or `XBindP` (`bindc`), what follows after a call that writes read
+  with the memory dead.  Test `w47go` (a read of the memory plus a call that writes it), each theorem in milliseconds.
+  `kitc.py` unchanged.
+- *Cells*: 9 more (931): a call that writes after a read of the memory, before one, in a test, bound by a let, its result used
+  twice, as a call's argument; the function's own inside an expression; and the two places this step leaves unread: a call
+  given a pair giving back a record (`A_par_pm_call_rec`) and two calls that write in one expression (`A_par_write_two`, each
+  given the memory before both: a copy of the memory, a question for later).  Run alone: 7 proved, and with them the four
+  cells of the item (`A_par_write_fn_expr`, `P_int_write_nontail`, `A_par_pm_call_expr`, `A_par_pm_call_bool_fn`).
+  Run as a check beside them, 549 cells (memories, pairs, calls, writes, mutual blocks, and every tenth cell of the table):
+  546 proved, the other 3 the known gaps (a mutual part of two types, and this step's two).  The step reads such a call in the
+  body of a number only; the places in the bodies of the other sorts (a call given a pair not built in place inside an
+  expression of a function giving back a boolean, a record, a number and a memory, a memory) got their 4 cells a commit late
+  (`1fab4bb`, all refused): the rule asks for the same commit, and that was missed.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest; step 46's
+  files / step 47's): `HWP_kernel` 2.52 / 2.62 s, `HWP_own` 1.95 / 2.01, `HWP_irqnow` 1.66 / 1.71 — most of it the loading of
+  the libraries (`KQR` and the reifier alone: 0.88 / 0.94 s; both files grew by the step's definitions, proofs and test).
+- The C: 63 of 63 byte-identical.  The construct table (on `706834b`): **926 of 931 through the verified compiler**, 1 by design,
+  3 gaps, 1 not Rocq (was 915 of 922: the seven new cells read and the four of the item).  The gate on `706834b`, the walk
+  switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (12 / 12 / 12 / 14 / 13 s); **71 programs
+  through the verified compiler, 0 refused**; the trusted base unchanged.  With the 4 cells of `1fab4bb`: **926 of 935**, 7 gaps.
+  The record of 2026-11-02's order is done (its last item, a let in a later operand, was read since step 36); next: the places the
+  steps since left unread (a call given a pair giving back a record, two calls that write in one expression, a mutual part of two
+  types).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4244,11 +4278,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `4283f5d` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `1fab4bb` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 47's design (calls inside expressions that write the memory or are given a pair) |
+| (this commit) | §12.V: step 47 (calls inside expressions that write the memory or are given a pair: the construct table 926 of 931, 1 by design), the C, the gate |
+| `1fab4bb` | `proved/matrix/gen.py`: 4 cells for the places step 47 leaves unread (a call given a pair inside an expression of a function of another sort) |
+| `706834b` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 47: `XBind`, `XBindR`, `XBindP`, `ctailx_ok`'s cases; the reifier binds such a call first; 9 cells |
+| `653b839` | §12.V: step 47's design (calls inside expressions that write the memory or are given a pair) |
 | `f9131bd` | §12.V: step 46 (templates of any signature: the construct table 915 of 922, 1 by design), the C, the gate |
 | `4283f5d` | `proved/KQRReify.v` + `kitc.py` + `matrix/gen.py` step 46: a copy read for every result sort, a record parameter a record, the pair as a parameter, checked with the program's record types; 13 cells |
 | `4102c0a` | §12.V: step 46's design (templates of any signature) |
