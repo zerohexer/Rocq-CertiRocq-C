@@ -366,6 +366,28 @@ addA("par_pairp_proj", "", "let r := k n a b in fst (fst r) + snd (fst r) + snd 
 addA("par_pairp_late", "", "let '(p, z) := k n a b in let w := z + 1 in let '(x, y) := p in x + y + w", "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => k m y x end.\n")
 addA("par_pairp_pass", "", "let '(p, z) := k n a b in pf n p + z",
      "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => k m y x end.\nFixpoint pf (n : nat) (p : int * int) : int := match n with O => fst p | S m => pf m (snd p, fst p) end.\n")
+# records holding records as values (step 43): an inner record rebuilt into a new outer record, in a recursion and by a let; bound
+# by a let; given back by a function; three levels; taken apart one level in a test, in functions giving back a boolean, a memory, a
+# number after memories, a number and a memory, a record
+addA("par_pairp_rebuild", "", "let '((x, y), z) := k n a b in x + y + z",
+     "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => let '(p, z) := k m y x in (p, z + 1) end.\n")
+addA("par_pairp_build_let", "", "let '(p, z) := k n a b in let r := (p, z + 1) in let '((x, y), w) := r in x + y + w", "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => k m y x end.\n")
+addA("par_pairp_let", "", "let '(p, z) := k n a b in let q := p in fst q + snd q + z", "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => k m y x end.\n")
+addA("par_pairp_ret", "", "let q := kin n (k n a b) in fst q + snd q",
+     "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => k m y x end.\nFixpoint kin (n : nat) (r : (int * int) * int) : int * int := match n with O => fst r | S m => kin m r end.\n")
+addA("par_pairp_deep", "", "let '(p, w) := k3 n a b in let '(q, z) := p in fst q + snd q + z + w",
+     "Fixpoint k3 (n : nat) (x y : int) : ((int * int) * int) * int := match n with O => (((x, y), 0), 1) | S m => k3 m y x end.\n")
+addA("par_pairp_test", "", "if (let '(p, z) := k n a b in fst p <? z) then 1 else 0", "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => k m y x end.\n")
+addA("par_pairp_bool", "", "if kb n a b then 1 else 0",
+     "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => k m y x end.\nFixpoint kb (n : nat) (x y : int) : bool := match n with O => let '(p, z) := k n x y in let w := z + 1 in fst p <? w | S m => kb m y x end.\n")
+addA("par_pairp_mem", "", "rd 0 0 (km n a s)",
+     "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => k m y x end.\nFixpoint km (n : nat) (x : int) (t : mem) : mem := match n with O => let '(p, z) := k n x x in let w := z + 1 in upd 0 (fst p) w t | S m => km m (x + 1) t end.\n")
+addA("par_pairp_tail", "", "kx n a s",
+     "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => k m y x end.\nFixpoint kx (n : nat) (x : int) (t : mem) : int := match n with O => let '(p, z) := k n x x in let t2 := upd 0 (fst p) z t in rd 0 0 t2 | S m => kx m (x + 1) t end.\n")
+addA("par_pairp_pv", "", "let '(y, t2) := kp n a s in y + rd 0 0 t2",
+     "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => k m y x end.\nFixpoint kp (n : nat) (x : int) (t : mem) : int * mem := match n with O => let '(p, z) := k n x x in let w := z + 1 in (fst p + w, upd 0 (snd p) z t) | S m => kp m (x + 1) t end.\n")
+addA("par_pairp_rec", "", "let '(u, v) := kr n a b in u + v",
+     "Fixpoint k (n : nat) (x y : int) : (int * int) * int := match n with O => ((x, y), 0) | S m => k m y x end.\nFixpoint kr (n : nat) (x y : int) : int * int := match n with O => let '(p, z) := k n x y in let w := z + 1 in (fst p + w, snd p) | S m => kr m y x end.\n")
 # a number and a memory (step 26): taken apart by a function giving back a memory; as a parameter
 addA("par_intmem_mem_fn", "", "rd 0 0 (wm n a s)",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\n"

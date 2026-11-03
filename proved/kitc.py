@@ -486,7 +486,7 @@ def reflect(name, entry, prog, no_proof):
             def rd(nd): return f"({nd[0]} " + " ".join("0%uint63" if f == "i" else rd(f) for f in nd[1]) + ")"
             return rd(shape(sh))
         def ro(cn, n, wd):
-            if wd.startswith("N:"): return nested_ro(wd[2:], int(n))
+            if wd.startswith("N:"): return nested_ro(wd[2:].split("@")[0], int(n))
             n = int(n); xs = [f"x{q}" for q in range(n)]
             if not wd.strip():
                 mk = f"(fun l => {cn} " + " ".join(f"(nth {q}%nat l 0%uint63)" for q in range(n)) + ")" if n else f"(fun _ => {cn})"
@@ -506,7 +506,7 @@ def reflect(name, entry, prog, no_proof):
             return (f"KQR.mkrops {n}%nat (Some {wl}) (fun l => {mk}) (fun P v k => match v with "
                     + " | ".join(arm(c) for c in range(len(cns))) + " end)")
         def rd0(cn, n, wd):
-            if wd.startswith("N:"): return nested_rd(wd[2:])
+            if wd.startswith("N:"): return nested_rd(wd[2:].split("@")[0])
             if not wd.strip(): return f"{cn}" + "".join(" 0%uint63" for _ in range(int(n)))
             return f"{cn.split()[0]}" + "".join(" 0%uint63" for _ in range(int(wd.split()[0])))
         t_ro = " | ".join(f"{pat(j)} => {ro(cn, n, wd)}" for j, (ty, cn, n, wd) in enumerate(recs))
@@ -514,13 +514,54 @@ def reflect(name, entry, prog, no_proof):
               f"  | _ => KQR.mkrops 0%nat None (fun _ => tt) (fun P _ k => k nil) end.\n")
         t_rd = " | ".join(f"{pat(j)} => {rd0(cn, n, wd)}" for j, (ty, cn, n, wd) in enumerate(recs))
         t += f"Definition {name}_rd (i : nat) : {name}_rt i := match i as i0 return {name}_rt i0 with {t_rd} | _ => tt end.\n"
-        t += f"#[local] Instance {inst} : KQR.RecTypes | 0 := {{| KQR.RT := {name}_rt; KQR.RO := {name}_ro; KQR.Rd := {name}_rd |}}.\n"
+        # the one-level match and constructor (step 43): a record holding records gives its number fields and its record fields
+        # (each with its type), and is built from them; another record type: its match and its constructor
+        def nest(wd):
+            sh, _, js = wd[2:].partition("@")
+            return shape(sh), [int(x) for x in js.split(",") if x]
+        def rs_of(j, wd):
+            if wd.startswith("N:"):
+                (cn0, fs), jl = nest(wd)
+                vs = [f"v{q}" for q in range(len(fs))]
+                recs = [v for v, f in zip(vs, fs) if f != "i"]
+                rl = "".join(f"(cons (existT {name}_rt {jj}%nat {v}) " for v, jj in zip(recs, jl)) + "nil" + ")" * len(recs)
+                return f"fun P v k => match v with {cn0} {' '.join(vs)} => k {lst([v for v, f in zip(vs, fs) if f == 'i'])} {rl} end"
+            return f"fun P v k => KQR.relim ({name}_ro ({pat(j)})) v (fun l => k l nil)"
+        def rb_of(j, wd):
+            if wd.startswith("N:"):
+                (cn0, fs), jl = nest(wd)
+                parts, q, r = [], 0, 0
+                for f in fs:
+                    if f == "i": parts.append(f"(nth {q}%nat l 0%uint63)"); q += 1
+                    else:
+                        jj = jl[r]; r += 1
+                        parts.append(f"(KQR.tk {name}_rd {jj}%nat (nth {r - 1}%nat rs (existT {name}_rt {jj}%nat ({name}_rd {jj}%nat))))")
+                return f"fun l rs => ({cn0} {' '.join(parts)})"
+            return f"fun l _ => KQR.rmk ({name}_ro ({pat(j)})) l"
+        def rj_of(wd):
+            return ("(" + "".join(f"cons {jj}%nat (" for jj in nest(wd)[1]) + "nil" + ")" * (len(nest(wd)[1]) + 1)) if wd.startswith("N:") else "nil"
+        t_rs = " | ".join(f"{pat(j)} => {rs_of(j, wd)}" for j, (ty, cn, n, wd) in enumerate(recs))
+        t_rb = " | ".join(f"{pat(j)} => {rb_of(j, wd)}" for j, (ty, cn, n, wd) in enumerate(recs))
+        t_rj = " | ".join(f"{pat(j)} => {rj_of(wd)}" for j, (ty, cn, n, wd) in enumerate(recs))
+        t += (f"Definition {name}_rs (i : nat) : forall P : Type, {name}_rt i -> (list PrimInt63.int -> list (sigT {name}_rt) -> P) -> P :=\n"
+              f"  match i as i0 return forall P : Type, {name}_rt i0 -> (list PrimInt63.int -> list (sigT {name}_rt) -> P) -> P with {t_rs}\n"
+              f"  | _ => fun P _ k => k nil nil end.\n")
+        t += (f"Definition {name}_rb (i : nat) : list PrimInt63.int -> list (sigT {name}_rt) -> {name}_rt i :=\n"
+              f"  match i as i0 return list PrimInt63.int -> list (sigT {name}_rt) -> {name}_rt i0 with {t_rb}\n"
+              f"  | _ => fun _ _ => tt end.\n")
+        t += f"Definition {name}_rj (i : nat) : list nat := match i with {t_rj} | _ => nil end.\n"
+        t += (f"#[local] Instance {inst} : KQR.RecTypes | 0 := {{| KQR.RT := {name}_rt; KQR.RO := {name}_ro; KQR.Rd := {name}_rd;\n"
+              f"  KQR.RS := {name}_rs; KQR.RB := {name}_rb; KQR.RJ := {name}_rj |}}.\n")
         dpat = "".join("[|" for _ in range(len(recs))) + "i" + "]" * len(recs)
         t += (f"#[local] Instance {laws} : @KQR.RecLaws {inst}.\nProof. split.\n"
               f"- intros i x P k. destruct i as {dpat}; destruct x; first [reflexivity | cbn; repeat match goal with |- context [match ?v with _ => _ end] => destruct v end; reflexivity].\n"
               f"- intros i x. destruct i as {dpat}; destruct x; first [reflexivity | cbn; repeat match goal with |- context [match ?v with _ => _ end] => destruct v end; reflexivity].\n"
               f"- intros i l E L. destruct i as {dpat}; cbn in E, L; try discriminate E; repeat (destruct l as [|? l]; try discriminate L); reflexivity.\n"
-              f"- intros i ws c rest E Lc Lr Hz. destruct i as {dpat}; cbn in E; try discriminate E; injection E as <-; KQR.kq_tag_case.\nQed.\n")
+              f"- intros i ws c rest E Lc Lr Hz. destruct i as {dpat}; cbn in E; try discriminate E; injection E as <-; KQR.kq_tag_case.\n"
+              f"- intros i x P k. destruct i as {dpat}; destruct x; first [reflexivity | cbn; repeat match goal with |- context [match ?v with _ => _ end] => destruct v end; reflexivity].\n"
+              f"- intros i x. destruct i as {dpat}; destruct x; first [reflexivity | cbn; repeat match goal with |- context [match ?v with _ => _ end] => destruct v end; reflexivity].\n"
+              f"- intros i x. destruct i as {dpat}; destruct x; first [reflexivity | cbn; repeat match goal with |- context [match ?v with _ => _ end] => destruct v end; reflexivity].\n"
+              f"- intros i l rs G Hk Hl. destruct i as {dpat}; cbn in G, Hk; try discriminate G; KQR.kq_rb_case.\nQed.\n")
     else:
         inst, laws = "KQR.no_recs", "KQR.no_recs_laws"
     t += f"Definition {name}_funs := match {name}_src with Some l => l | None => [] end.\n"
