@@ -4243,6 +4243,30 @@ other version still reads.  So (F63):
   kernels (11 / 12 / 12 / 13 / 13 s); **71 programs through the verified compiler, 0 refused**; the trusted base unchanged.  Step
   48 continued goes on with a record whose body writes and the pair a let holds.
 
+**Step 48 continued, functions giving back a record whose body writes the memory — the design (2026-11-03).**  The record half of
+the design of `dad6b6d` (`A_par_pm_call_in_rec`: `kq n x t := mk3 (k n (g n x t)) 0 1`, `g` writes, so `kq` does).  A record is given
+back as its first field, the others in the slot block (step 12); a function that writes says the memory after it is *some*
+memory (`callee_ok`, `sw`), which loses the slot block, so a caller could not read the fields.  So:
+- *The contract*: for a function that writes, the memory after it is some memory whose slot block holds the record's fields
+  after the first (`callmw`: `wslot O (tl fields) M'` for a record, `M'` for the other results); `callmw_norec` (a result that is
+  not a record: `M'`) at every place the contract was used before.
+- *The body*: the sort of a number that writes gets a record leaf `XRetR ri r` (the record from the newest memory: its fields after
+  the first put in the slot block, the first returned, as `BRet`'s code does).  A function giving back a record whose signature
+  writes has an X body whose leaves are records of its type or its own call (`xrecr ri`), its meaning `denote_xr` (the record;
+  the own call `recxr`); its theorem `ctailxr_ok`: the code gives the first field and leaves the slot block with the others over
+  some memory — by induction as `ctailx_ok`, the leaves `XRetR` (`crec_ok`, `cput_ok`), the own call (the induction hypothesis in
+  the new form), and after a call that writes a record that reads no memory (`after_free`'s record case).  `compile_f_ok_rec`
+  gains the case.
+- *The callers*: a call of a function giving back a record on a memory, bound (`XBindRM ri f cs args m x`, the record the nearest in
+  `x`: meaning `xrec`, code `ccallr`), and `XBindPR` given a function that writes: after a call that writes, `x` reads no memory
+  (`xfree`), the fields read from the slot block the contract keeps (`ccallrw_ok`).
+- *The reifier*: a function giving back a record that its readers of records refuse, read as an X body of records with `XRetR`
+  leaves, its signature writing; a binding call of a function giving back a record read as `XBindRM` / `XBindPR`.
+- *Cells*: `A_par_pm_call_in_rec`; a record that writes called at the end, inside an expression, its recursion given a memory it
+  writes; and the places this step leaves unread: the function's own call not at the end in a function giving back a boolean or a
+  record that writes (bound by a let, negated) — the boolean's cell missed by the boolean half (its slip, recorded).
+*Expected*: `A_par_pm_call_in_rec` and the new cells but the own call not at the end.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4422,7 +4446,8 @@ Pushed to the public repository up to `5057f75` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 49 (two versions of the memory both used: the boundary pinned; the construct table 933 of 943, 2 by design), the gate |
+| (this commit) | §12.V: step 48 continued's record half, the design (the contract keeps the slot block of a record that writes; `XRetR`, `denote_xr`, `ctailxr_ok`; `XBindRM`) |
+| `6fd239e` | §12.V: step 49 (two versions of the memory both used: the boundary pinned; the construct table 933 of 943, 2 by design), the gate |
 | `5057f75` | `proved/matrix/gen.py` + `classify.py` step 49: the pin `A_par_write_two_data` by design, its control `A_par_write_two_seq`, the fixed side's gaps `A_par_write_in_mem`, `P_mem_both`; 4 cells |
 | `3d57a2e` | §0.5, §11 F63, §12.V: step 49's design (two versions of the memory both used: the third refusal by the size of the difference; a pin from the data with its control, the fixed side as gaps) |
 | `4d17a62` | §12.V: step 48 continued (functions giving back a boolean whose body writes: the construct table 932 of 939, 1 by design; records and the pair a let holds go on), the C, the gate |
