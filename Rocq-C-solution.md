@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **877 of 885, 6 gaps, 1 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **887 of 896, 7 gaps, 1 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -3898,6 +3898,44 @@ conversion (no eta for pairs), so the wrapper alone leaves those calls unread:
   expression (a later item of the order): a cell, a gap.
 *Expected*: `A_par_intmem_param` and those.
 
+**Step 44 continued (2026-11-03): a number-and-memory pair as a parameter.**  Built as designed:
+- *`KQR.v`*: `sig` has the flag `sp` (`mksig9`; `mksig8` the signature without it, a notation, declared again after the section);
+  `ftype`, `callf` and `denote_f` take the pair where the signature takes a memory and has the flag (`ntypeTP`, `appnTP`; the
+  function on the components `unpairT`, made a function of the pair `pairT`, `cmapT` over the counters); `swok` refuses the flag
+  on a function's own signature, so its body is read and proved on the components and `compile_f_ok`'s flagged case is void;
+  `callee_ok_unpair` gives the flagged function's theorem from the components' one (`appnTP_unpair`).  `MCallP`, `PvCallP`,
+  `XCallP`: meaning `callfp` (the function applied to the pair, `appnTPP`), C the arguments, the pair's code, the call on its
+  number and memory, check as `MCall`, `PvCall`, `XCall` with the callee flagged, taking a memory, ending with a number (`last_num`);
+  their runs from the callee's theorem at the pair's number and memory (`pcall_pre`, `mcallp_run`, `pvcallp_run`,
+  `xcallp_run`, through `callf_snoc`, `appnTP_snoc`); a case in each lemma over the sorts.  No new hypothesis; `Print
+  Assumptions` the same base.
+- *The reifier*: a last parameter of type `int * mem` read as a number and the memory, the signature flagged (`read_sig`,
+  `with_sp`); the body with the pair replaced by the pair of two new variables (`pm_split`), and every call of a flagged function
+  (its own recursive call too) given a pair built in place read with the pair's number and memory, `fst` and `snd` of such a
+  pair its parts (`flatp`, `pm_body`); a function's own check on the components; a call given another pair expression read as
+  the new forms.  Test `w44bgo` (`w44bk` with the pair last, its theorem by `callee_ok_unpair` from its components' two
+  equations; `w44bgo` giving it the pair `w44bg` gives, `XCallP`); each theorem in milliseconds.
+- *kitc.py*: the flag (`p` after the kinds) in a signature, `KQR.mksig9 .. true`; a flagged function's theorem
+  `callee_ok_unpair` over the components' (`compile_f_ok`, or for a recursive one the copies' theorems over
+  `cmapT (unpairT ..) k`, its step equation by `reflexivity`: the bare `eq_refl` term meets an anomaly of Rocq's elaborator).
+- *Cells*: 11 more (896): the pair after other parameters; the function giving back a memory, a pair, a boolean; a call given
+  the pair a function gives, giving back a number, a memory, a pair; the pair taken apart in the body; the recursion given the
+  pair as it is; and the two places this step leaves unread: a call inside an expression given a pair a function gives
+  (`A_par_pm_call_expr`, `A_par_pm_call_bool_fn`, the writing functions inside expressions of a later item).  Run alone: 9
+  proved, and with them `A_par_intmem_param`; the two places refused.  Run as a check beside them (on the first build), the
+  469 cells that involve memories, pairs, calls or tail positions: 465 proved, the other 4 the known gaps (a template given a
+  function and giving back records, a mutual block giving back memories, a writing function inside an expression and its
+  recursive call inside one).
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest; step 44's files /
+  the continuation's): `HWP_kernel` 2.70 / 2.74 s, `HWP_own` 2.07 / 2.11, `HWP_irqnow` 1.73 / 1.80 -- within 4%.  The first
+  build ran the pair pass over every body (2.81 / 2.14 / 1.87 s against 2.63 / 2.03 / 1.72); it now runs only over a body with
+  a pair parameter or a flagged callee.
+- The C: 63 of 63 byte-identical.  The construct table (on `be57d75`): **887 of 896 through the verified compiler**, 1 by design,
+  7 gaps, 1 not Rocq (was 877 of 885: the nine new cells read and `A_par_intmem_param`).  The gate on `be57d75`, the walk
+  switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (13 / 16 / 14 / 21 / 14 s); **71
+  programs through the verified compiler, 0 refused**; the trusted base unchanged.  Next: mutual blocks of any signature (the
+  record of 2026-11-02's order).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4073,11 +4111,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `1e9da9c` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `be57d75` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 44 continued's design (a number-and-memory pair as a parameter) |
+| (this commit) | §12.V: step 44 continued (a number-and-memory pair as a parameter: the construct table 887 of 896, 1 by design), the C, the gate |
+| `be57d75` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` step 44 continued: the signature's pair flag, `callee_ok_unpair`, `MCallP` / `PvCallP` / `XCallP`; the reifier reads the pair on its components; 11 cells |
+| `d8f1337` | §12.V: step 44 continued's design (a number-and-memory pair as a parameter) |
 | `1e9da9c` | §12.V: step 44 (a memory function taking a number-and-memory pair apart: the construct table 877 of 885, 1 by design; the pair as a parameter goes on), the C, the gate |
 | `4d99efa` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 44: the memory and pair sorts mutual, `MMatchP` / `MLetP`, `cmem_cpv_ok`; 6 cells |
 | `80e2d78` | §12.V: step 44's design (a memory function taking a number-and-memory pair apart) |
