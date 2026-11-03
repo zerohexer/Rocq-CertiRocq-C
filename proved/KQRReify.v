@@ -1184,6 +1184,9 @@ with reify_b (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sb
 
 (** a memory: the newest one, a write, lets, a test, a match on a counter, the recursive call or a call giving back a
     memory, on the memory written as its last argument *)
+Definition is_rel (t : term) : bool := match t with tRel _ => true | _ => false end.
+
+(* the memory and the pair readers are one mutual fixpoint (step 44): a memory takes a pair apart *)
 Fixpoint reify_m (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option smem :=
   match fuel with
   | O => None
@@ -1304,11 +1307,24 @@ Fixpoint reify_m (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
         match reify_b fuel ctx b, reify_m fuel (CBool :: ctx) body with Some x, Some y => Some (MLetB x y) | _, _ => None end
       else if is_nat ty then
         match reify_c fuel ctx b, reify_m fuel (CCnt :: ctx) body with Some x, Some y => Some (MLetC x y) | _, _ => None end
+      else if is_pm ty then
+        (* a number and a memory bound by a let, read through fst and snd (step 44, as XLetP) *)
+        match reify_pv fuel ctx b, reify_m fuel (CMem :: CNum :: kill_mem ctx) (pm_split ty body) with
+        | Some p, Some m => Some (MLetP p m)
+        | _, _ => None
+        end
       else match reify_r fuel ctx b, reify_m fuel (CRec :: ctx) body with Some x, Some y => Some (MLetR x y) | _, _ => None end
   | tCase ci p c0 [br] =>
-      (* a record taken apart *)
+      (* a record taken apart; a number and a memory taken apart (step 44): the number below the memory, every older memory dead *)
       let c := match c0 with tApp (tConst kn _) args => match hb kn with Some hbd => wout hbd args | None => c0 end | _ => c0 end in
       match lets_first ci p c [br] with Some t' => reify_m fuel ctx t' | None =>
+      if is_pm_case ci p br then
+        match iota_pair ci p c br with Some t' => reify_m fuel ctx t' | None =>
+        match reify_pv fuel ctx c, reify_m fuel (CMem :: CNum :: kill_mem ctx) (bbody br) with
+        | Some x, Some y => Some (MMatchP x y)
+        | _, _ => None
+        end end
+      else
       match reify_r fuel ctx c, (match rbr ci p br with Some (es0, bd0) => reify_m fuel (es0 ++ ctx) bd0 | None => None end) with
       | Some x, Some m => Some (MMatchR x m)
       | _, _ => match rbs ci p br, reify_r fuel ctx c with
@@ -1320,16 +1336,10 @@ Fixpoint reify_m (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
   end
   end
   end
-  end.
-
-Definition is_rel (t : term) : bool := match t with tRel _ => true | _ => false end.
-
-(** a number made after memories: lets of memories, numbers and booleans, tests, and at the end a number from the newest
-    memory.  A read or a call whose memory is made in place ([rd h i (f .. s)]) is read as [let s2 := f .. s in rd h i s2] --
-    the same term up to [let]; its numbers are read with the older memories dead, so they may not name one *)
-(** a number and a memory (step 26): built, given back by a function of the program or by the function itself, chosen by a
+  end
+(* a number and a memory (step 26): built, given back by a function of the program or by the function itself, chosen by a
     test or a counter's match, after lets, or made from another one taken apart *)
-Fixpoint reify_pv (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option spv :=
+with reify_pv (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option spv :=
   match fuel with
   | O => None
   | S fuel =>
@@ -1456,6 +1466,9 @@ Fixpoint reify_pv (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
   end
   end.
 
+(** a number made after memories: lets of memories, numbers and booleans, tests, and at the end a number from the newest
+    memory.  A read or a call whose memory is made in place ([rd h i (f .. s)]) is read as [let s2 := f .. s in rd h i s2] --
+    the same term up to [let]; its numbers are read with the older memories dead, so they may not name one *)
 Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sx :=
   match fuel with
   | O => None
@@ -2165,8 +2178,9 @@ Fixpoint cl_m (B : Z) (bs : list cbe) (m : smem) {struct m} : list site :=
   | MLetC c m => cl_c B bs c ++ cl_m B (clet B bs c) m
   | MHw _ args m => cl_es B bs args ++ cl_m B bs m
   | MLetR x m | MMatchR x m | MSplitR _ x m => cl_r B bs x ++ cl_m B bs m
-  end.
-Fixpoint cl_pv (B : Z) (bs : list cbe) (p : spv) {struct p} : list site :=
+  | MMatchP p m | MLetP p m => cl_pv B bs p ++ cl_m B bs m
+  end
+with cl_pv (B : Z) (bs : list cbe) (p : spv) {struct p} : list site :=
   match p with
   | PvMk e m => cl_e B bs e ++ cl_m B bs m
   | PvCall f ccs args m => (Some f, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m
@@ -5163,3 +5177,38 @@ Proof.
 Time Qed.
 Print Assumptions w43go_ok.
 End W43.
+
+(* ---- a memory taking a number-and-memory pair apart (step 44): [w44wm] takes apart the pair [w44g] gives it, the number below
+   the memory; the helper [w44lm], written out in [w44go], binds the pair by a let and reads it through fst and snd *)
+Fixpoint w44g (n : nat) (x : i63) (t : KQ.KQRun.mem) : i63 * KQ.KQRun.mem :=
+  match n with O => (x, t) | S m => w44g m (PrimInt63.add x 1) (KQ.KQRun.upd 0 x x t) end.
+Fixpoint w44wm (n : nat) (x : i63) (t : KQ.KQRun.mem) : KQ.KQRun.mem :=
+  match n with O => t | S m => let '(y, t2) := w44g n x t in w44wm m y (KQ.KQRun.upd 1 y y t2) end.
+Definition w44lm (n : nat) (x : i63) (t : KQ.KQRun.mem) : KQ.KQRun.mem := let w := w44g n x t in KQ.KQRun.upd 2 (fst w) 0 (snd w).
+Definition w44go (n : nat) (a b : i63) (s : KQ.KQRun.mem) : i63 := KQ.KQRun.rd 0 0 (w44lm n b (w44wm n a s)).
+Definition w44_src := ltac:(run_template_program (tmQuoteRec w44go)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : map (fun x => snd x) w44_src =
+  [FRecP (PvMk (SVar 0) MCur) (PvRec CNil (SCons (SOp Badd (SVar 0) (SInt 1)) SNil) (MUpd (SInt 0) (SVar 0) (SVar 0) MCur));
+   FRecM MCur (MMatchP (PvCall 0 (CCons (CVar 1) CNil) (SCons (SVar 0) SNil) MCur)
+                       (MRec CNil (SCons (SVar 0) SNil) (MUpd (SInt 1) (SVar 0) (SVar 0) MCur)));
+   FPlainX (XLetM (MLetM (MCall 1 (CCons (CVar 0) CNil) (SCons (SVar 1) SNil) MCur)
+                         (MLetP (PvCall 0 (CCons (CVar 0) CNil) (SCons (SVar 0) SNil) MCur)
+                                (MUpd (SInt 2) (SLet (SVar 0) (SVar 0)) (SInt 0) (MLetM MCur MCur))))
+                  (XRet (SRd (SInt 0) (SInt 0))))]).
+Definition w44_Pr := mkprog (funs_of 0 w44_src) [].
+Time Lemma w44g_ok : callee_ok w44_Pr (gid1 0) (cbz 0) (sig_at w44_src 0) w44g.
+Proof. Time exact_no_check (compile_f_ok w44_Pr [] gid1 0 (sig_at w44_src 0) (body_at w44_src 0) eq_refl eq_refl (no_callees w44_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma w44wm_ok : callee_ok w44_Pr (gid1 1) (cbz 1) (sig_at w44_src 1) w44wm.
+Proof.
+  Time exact_no_check (compile_f_ok w44_Pr [existT ftype (sig_at w44_src 0) w44g] gid1 1 (sig_at w44_src 1) (body_at w44_src 1)
+    eq_refl eq_refl (all_ok_callees w44_Pr gid1 [existT ftype (sig_at w44_src 0) w44g] (conj w44g_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
+Time Lemma w44go_ok : callee_ok w44_Pr (gid1 2) (cbz 2) (sig_at w44_src 2) w44go.
+Proof.
+  Time exact_no_check (compile_f_ok w44_Pr [existT ftype (sig_at w44_src 0) w44g; existT ftype (sig_at w44_src 1) w44wm] gid1 2
+    (sig_at w44_src 2) (body_at w44_src 2) eq_refl eq_refl
+    (all_ok_callees w44_Pr gid1 [existT ftype (sig_at w44_src 0) w44g; existT ftype (sig_at w44_src 1) w44wm] (conj w44g_ok (conj w44wm_ok Logic.I)))
+    eq_refl eq_refl).
+Time Qed.
+Print Assumptions w44go_ok.

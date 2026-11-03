@@ -392,6 +392,22 @@ addA("par_pairp_rec", "", "let '(u, v) := kr n a b in u + v",
 addA("par_intmem_mem_fn", "", "rd 0 0 (wm n a s)",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\n"
      "Fixpoint wm (n : nat) (x : int) (t : mem) : mem := match n with O => t | S m => let '(y, t2) := g n x t in wm m y (upd 1 y y t2) end.\n")
+# a memory taking a number-and-memory pair apart (step 44): one built in place after other text, one chosen by a test; at the end of
+# a memory function; bound by a let and read through fst and snd; inside a memory given to a call; one a function gives that takes
+# one apart itself
+addA("par_intmem_mem_built", "", "rd 0 0 (wb n a s)",
+     "Fixpoint wb (n : nat) (x : int) (t : mem) : mem := match n with O => t | S m => let z := x + 1 in let '(y, t2) := (z, upd 0 x z t) in wb m y t2 end.\n")
+addA("par_intmem_mem_test", "", "rd 0 0 (wt n a s)",
+     "Fixpoint wt (n : nat) (x : int) (t : mem) : mem := match n with O => t | S m => let '(y, t2) := (if x <? 5 then (x, upd 0 x x t) else (x + 1, t)) in wt m y t2 end.\n")
+addA("par_intmem_mem_tail", "", "rd 1 0 (wl n a s)",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint wl (n : nat) (x : int) (t : mem) : mem := match n with O => let '(y, t2) := g n x t in upd 1 y y t2 | S m => wl m (x + 1) t end.\n")
+addA("par_intmem_mem_let", "", "rd 1 0 (wv n a s)",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint wv (n : nat) (x : int) (t : mem) : mem := match n with O => t | S m => let w := g n x t in wv m (fst w) (upd 1 (fst w) 0 (snd w)) end.\n")
+addA("par_intmem_mem_arg", "", "rd 1 0 (wc n a s)",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint wc (n : nat) (x : int) (t : mem) : mem := match n with O => t | S m => wc m x (hm x x (let '(y, t2) := g n x t in upd 1 y y t2)) end.\n")
+addA("par_intmem_mem_nested", "", "rd 2 0 (wn n a s)",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint g2 (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => let '(y, t2) := g n x t in g2 m (y + 1) (upd 2 y y t2) end.\n"
+     "Fixpoint wn (n : nat) (x : int) (t : mem) : mem := match n with O => t | S m => let '(y, t2) := g2 n x t in wn m y t2 end.\n")
 addA("par_intmem_param", "", "k n (a, s)",
      "Fixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\n")
 # a mutual block (step 17): members of different signatures; members giving back a memory
