@@ -3826,6 +3826,30 @@ functions giving back a boolean, a memory, a number after memories, a number and
   walk switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (12 / 12 / 12 / 14 / 13 s); **71
   programs through the verified compiler, 0 refused**; the trusted base unchanged.
 
+**Step 44, a memory function taking a number-and-memory pair apart — the design (2026-11-03).**  The fifth item of the record
+of 2026-11-02's order: `A_par_intmem_mem_fn` (a function giving back a memory takes apart the pair a call gives it:
+`let '(y, t2) := g n x t in wm m y (upd 1 y y t2)`); the pair as a parameter (`A_par_intmem_param`) is the step's continuation.
+A number made after memories and a pair take a pair apart (`XMatchP`, `PvMatchP`, step 26) or bind one by a let (`XLetP`); a
+memory does neither, because the pair's own memories are of the memory sort: the two sorts are defined one after the other, the
+memory first.
+- *`KQR.v`*: the memory sort and the pair sort one mutual type; their meanings, their C, their checks and the call-graph
+  functions mutual.  The memory sort gets `MMatchP p m` (the pair's number the nearest number in `m`, its memory the newest) and
+  `MLetP p m` (bound by a let, read through `fst` and `snd`): the meaning the user's match or let on the pair (its own recursive
+  call none, as in `XMatchP`), the C the pair's code and then `m`'s.  The pair's check takes the flags it is given: a number made
+  after memories and a pair function give it theirs as before, a memory function its own, so the pair's memories may hold that
+  function's recursive call.  The lemmas over the two sorts by mutual induction (`cmem_cpv_ok`, `denote_mpv_recm_ext`); their
+  earlier statements corollaries.
+- *The reifier*: a match on a number-and-memory pair in a memory function's body is read as `MMatchP`, a let of one as `MLetP`
+  (the number below the memory, every older memory dead, as in the other sorts); the memory and pair readers mutual, and the
+  call-graph sites.
+- *Cells*: a memory function taking apart a pair built in place after other text, one chosen by a test; at the end of a memory
+  function; bound by a let and read through `fst` and `snd`; inside a memory given to a call; one a function gives that takes
+  one apart itself.
+*Expected*: `A_par_intmem_mem_fn` and those.  The continuation, the pair as a parameter, is designed when it starts: a function
+whose last parameter is a number-and-memory pair has that pair in its signature, its theorem from the function on the two
+components (a call built of a number and a memory is a call on the components), and a call given any pair expression a call
+form that takes the whole pair (its proof through `surjective_pairing`).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4001,11 +4025,12 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `4840d28` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `f2d3996` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 43 done (records holding records as values: the construct table 870 of 879, 1 by design), the C, the gate |
+| (this commit) | §12.V: step 44's design (a memory function taking a number-and-memory pair apart) |
+| `f2d3996` | §12.V: step 43 done (records holding records as values: the construct table 870 of 879, 1 by design), the C, the gate |
 | `4840d28` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` step 43: one-level match and constructor (`RS`, `RB`, `RJ`), `*SplitR` in every sort, `RMkR`; the reifier's fallback and the bodies' records in its table; 11 cells |
 | `bf502ea` | §12.V: step 43's design (records holding records as values) |
 | `d45b0f0` | §12.V: step 42 done (captures of every kind: the construct table 855 of 868, 1 by design), the C, the gate |
