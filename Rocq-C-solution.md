@@ -202,8 +202,12 @@ inlining, join points, lambda lifting, specialization, tail calls as jumps — i
    recursive function, built anew at each round of a recursion).  In C such data is laid out by the programmer; here it is
    laid out in blocks with an allocator (`lib/Slab.v`), the same way.
 2. **An unbounded number** used as a value (`Z`, `nat` arithmetic beyond counting down).  C has none; a bignum is a runtime.
-3. **Two versions of the memory both used** (`let t := upd .. s in .. t .. s ..`): the memory is linear, which is what lets a
-   pure function be compiled to in-place updates; keeping both would be a copy made behind the programmer's back.
+3. **Two versions of the memory both used, differing in cells whose number comes from the data** (`wp n a s + wp n b s`, `wp`
+   writing a cell at each round of a recursion, at a moving index): the memory is linear, which is what lets a pure function be
+   compiled to in-place updates; keeping both would be a copy of the memory, or a log of the writes as long as the data, made
+   behind the programmer's back.  Two versions differing in cells fixed by the text (`let t := upd 0 a b s in .. t .. s ..`, a call
+   that writes one cell named in its text) need neither: the old values of those cells are kept in variables and put back, as a
+   C programmer writes it (F63).
 
 **Whether a value needs a runtime is decided by its size and its lifetime, never by its type.**  A value of a non-recursive
 inductive type of numbers (`option int`, `int + int`, an enumeration whose constructors carry numbers) has a fixed size: it is
@@ -1608,6 +1612,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F60 | Three of the reifier's ways of reading a function — a template's copy, a local fixpoint's copy, a mutual block and its members — checked `wf_f` with the signature as read only: the call graph's bounds (step 34) and the smallest own bound (step 33) never reached them, and the copies' theorems took no bound at all (found by step 37's cells of a template and of a mutual block, 2026-11-03) | one function gives every way of reading its signature (`wf_sig`); the copies' theorems take any bound and weights |
 | F61 | A written budget's largest value was `kq_nat`'s bound, 2^60, whatever was written: a mutual block's selector (given as a written number) counted 2^60 in a weighted sum, and the block's bound passed 2^62 (2026-11-03) | `cnat_max`: a written number in `kq_nat`'s range is its own largest value, in `cmax`, `cmaxv` and `clinf` |
 | F62 | The reifier's step was timed in two trees whose directories differ in size: `coqc` scans every directory `-R` and `-Q` give it, and the working tree holds every cell's generated files and the cells themselves (234 MB against 101 MB), so a file that loads only MetaRocq takes 0.80 s there against 0.73 s.  The 0.04–0.08 s the records of steps 44 continued to 48 put on the libraries' loading (and on the reifier's tests) was this.  Timed in copies of both trees without those directories, step 44 continued's files against step 48's: `HWP_kernel` 2.50 / 2.52 s, `HWP_own` 1.93 / 1.95, `HWP_irqnow` 1.63 / 1.64 — the same.  The timing now makes those copies. |
+| F63 | §0.5's third refusal took its example from a fixed difference: `let t := upd .. s in .. t .. s ..` differs from `s` in one cell, whose old value a variable keeps and puts back, as a C programmer does; `A_par_write_two` (step 47, one cell named in the callee's text) is the same.  Only two versions differing in cells whose number comes from the data need a copy (found by step 49's design, 2026-11-03) | §0.5's third refusal worded by the size of the difference, as values are (F35); the fixed side gets cells (gaps), a pin and a control show the side from the data (step 49) |
 | F38 | MetaRocq's formal evaluation (`EWcbvEval.eval`, `PCUICWcbvEval`) has rules for primitive values only, none for primitive operations: `PrimInt63.add` has no body, `eval_delta` cannot fire, every program here is stuck in it | the verified compiler is built by reflection over our own syntax instead (D26, §1.12) (read in the image's MetaRocq sources, 2026-10-30) |
 | F37 | CakeML's architecture is ours: a proof-producing translator from the logic's functions on top, one verified compiler below; Pancake is verified through a proof-producing decompiler.  The difference is that CakeML builds each proof by construction while ours searches | D25, §1.11 (read in the CakeML repository, 2026-10-30) |
 
@@ -4195,6 +4200,30 @@ go on.**  Built, the first of the design's two parts for booleans:
   through the verified compiler, 0 refused**; the trusted base unchanged.  The step goes on with a record whose body writes and
   the pair a let holds.
 
+**Step 49, two versions of the memory both used — the boundary pinned: the design (2026-11-03).**  `A_par_write_two` (`wr n s +
+wr2 n s`, step 47): each call is given the memory before both and each writes it, so the memory before the first must still be
+there for the second — §0.5's third refusal as it was worded.  Read by its size (a runtime is decided by size and lifetime, never
+by type: §0.5, F35), the two versions differ in the cells the first call writes, and `wr` writes one cell, named in its text
+(`upd 0 0 ..`): its old value kept in a variable and put back after the call is what a C programmer writes (here not even that:
+`wr2` reads and writes another cell), and nothing runs behind anyone's back.  A copy is forced only when the two versions differ
+in cells whose number comes from the data — a recursion writing a cell at each round at a moving index, whose old values the
+other version still reads.  So (F63):
+- *§0.5's third refusal* is that: two versions of the memory both used, differing in cells whose number comes from the data.  Two
+  versions differing in cells fixed by the text are runtime-free: a gap until read.
+- *The pin*, `A_par_write_two_data`: `wp n a s + wp n b s`, each call a prefix sum in place over the `n` cells from its own index
+  (each round reads the cell the round before wrote, so no call's reads can be split from its writes), both given the memory
+  before both, their ranges overlapping as the data falls: keeping the old memory for the second call takes the old values of up
+  to `n` cells, a copy or a log as large as the data.  By design (`DESIGN_CELLS`).
+- *Its control*, `A_par_write_two_seq`: the same two calls with the memory handed on (`let '(v, t) := wpp n a s in v + wp n b t`,
+  the first giving back its memory) — one version at a time; read and proved today.
+- *The runtime-free side, a cell in each place*: `A_par_write_two` (two calls in an expression of a number), `A_par_write_in_mem`
+  (a memory's body giving the result of a call that writes to a write on the memory it was given: `upd 0 1 (wr n t + x) t`),
+  `P_mem_both` (§0.5's old example, a let: `let t := upd 0 a b s in upd 0 b (rd 0 0 t) s`).  Gaps of one category (classified by
+  name); reading them — the cells the first version writes saved before it and put back after, or the old version's reads moved
+  before — is a construct of `S` for a later step.
+- No change to `KQR.v`, the reifier or `kitc.py`: the C and the gate are `f70ad99`'s; the construct table is run.
+*Expected*: 943 cells (the four new); 933 proved (`A_par_write_two_seq`), 2 by design, 7 gaps, 1 not Rocq.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4374,7 +4403,8 @@ Pushed to the public repository up to `f70ad99` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 48 continued (functions giving back a boolean whose body writes: the construct table 932 of 939, 1 by design; records and the pair a let holds go on), the C, the gate |
+| (this commit) | §0.5, §11 F63, §12.V: step 49's design (two versions of the memory both used: the third refusal by the size of the difference; a pin from the data with its control, the fixed side as gaps) |
+| `4d17a62` | §12.V: step 48 continued (functions giving back a boolean whose body writes: the construct table 932 of 939, 1 by design; records and the pair a let holds go on), the C, the gate |
 | `f70ad99` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 48 continued: `XRetB`, `denote_xb`, a boolean whose body writes, `after_free`; the reifier reads it as an X body; 2 cells |
 | `7556d7b` | §11 F62, §12.V: the reifier's timing of steps 44 continued to 48 corrected (the working tree's scanned directories) |
 | `dad6b6d` | §12.V: step 48 continued's design (functions giving back a boolean or a record that write the memory; a call given the pair a let holds) |
