@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **887 of 896, 7 gaps, 1 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **901 of 909, 6 gaps, 1 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -3971,6 +3971,37 @@ each other in any pattern:
   with that reason.
 *Expected*: `A_par_mutual_sig`, `A_par_mutual_mem` and those; `mutual`'s C byte-identical.
 
+**Step 45 done (2026-11-03): mutual blocks of any signature.**  Built as designed:
+- *`KQR.v`*: `blkT` and `sel_appT` (the block's meaning over the members' views, the result of any type) — definitions only: no
+  new theorem, no change to the syntax, the meanings or the proofs; `Print Assumptions` the same base.
+- *The reifier*: a member of a mutual block is read through its part of the members' call graph (`mcalls`, `part_of`), the
+  parts it calls first (`ensure_part`); the part's slots (`part_layout`: `classify_params`, `add_slots`, `kslot`); its function
+  written as a fixpoint over the slots (`relocate`, `sibr`, `nest_t`) and each member called as one call of it (`add_member`,
+  `zero_of`), both put in the environment (`add_decl`) and read by the readers of every function; the meaning `blkT` of the
+  views; a member gets a function only where the program or another part calls it.  The reader of step 17 (`read_block`,
+  `member_body`, `blk_meaning`) is gone.  A part whose members give back different types is refused with that reason
+  (`mixed_part`).  Test `w45go` (`w45a` and `w45b` giving back a memory, `w45b` with a parameter more and its counter
+  second, the block's theorem by `compile_f_okrm`, `w45a`'s and `w45go`'s by `compile_f_ok`; `w45b`, which the program does not
+  name, nothing), each theorem in milliseconds; the step-17 test unchanged.
+- *kitc.py*: a block's meaning made in the proof file at the program's record types (`KQRReify.blk_mts`, the other meanings
+  where they were, `plain_mts`); a member of a mutual block taking the pair has the theorem of a function of the pair.
+- *Cells*: 13 more (909): a boolean and a record among one member's parameters, a second counter, the recursion's counter not
+  first; giving back a boolean, a record, a number and a memory, a number that writes the memory; a number that reads the memory
+  and one that writes it in one part; three members; two parts of different sorts; a member taking the pair; and the place this
+  step leaves unread, a part whose members give back different types (`A_par_mutual_mixed`, a gap).  Run alone: 12 proved, and
+  with them `A_par_mutual_sig` and `A_par_mutual_mem` (step 17's `P_int_mutual` still); `A_par_mutual_mixed` refused.  Run as a
+  check beside them, 170 cells (the mutual blocks, the pair, records, templates, a parameter of another order, and every eighth
+  cell of the table): 166 proved, the other 4 the known gaps.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest; step 44
+  continued's files / step 45's): `HWP_kernel` 2.58 / 2.63 s, `HWP_own` 1.99 / 2.04, `HWP_irqnow` 1.68 / 1.76.  The difference
+  is the loading of the libraries (`KQR` and the reifier alone: 0.90 / 0.96 s; the reifier's file holds the step's definitions
+  and its test); the reading itself is the same (no mutual block in them).
+- The C: 63 of 63 byte-identical (`mutual` too).  The construct table (on `dcb282b`): **901 of 909 through the verified
+  compiler**, 1 by design, 6 gaps, 1 not Rocq (was 887 of 896: the twelve new cells read and `A_par_mutual_sig`,
+  `A_par_mutual_mem`).  The gate on `dcb282b`, the walk switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the
+  five kernels (12 / 11 / 12 / 14 / 12 s); **71 programs through the verified compiler, 0 refused**; the trusted base unchanged.
+  Next: templates giving back records (the record of 2026-11-02's order).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4146,11 +4177,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `be57d75` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `dcb282b` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 45's design (mutual blocks of any signature) |
+| (this commit) | §12.V: step 45 (mutual blocks of any signature: the construct table 901 of 909, 1 by design), the C, the gate |
+| `dcb282b` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` step 45: `blkT`; a block read per part of its call graph, written as a function over shared slots; 13 cells |
+| `56c3242` | §12.V: step 45's design (mutual blocks of any signature) |
 | `df72495` | §12.V: step 44 continued (a number-and-memory pair as a parameter: the construct table 887 of 896, 1 by design), the C, the gate |
 | `be57d75` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` step 44 continued: the signature's pair flag, `callee_ok_unpair`, `MCallP` / `PvCallP` / `XCallP`; the reifier reads the pair on its components; 11 cells |
 | `d8f1337` | §12.V: step 44 continued's design (a number-and-memory pair as a parameter) |
