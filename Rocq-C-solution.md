@@ -4392,6 +4392,24 @@ one, mutual blocks of them.**  Built as designed, and one place found on the way
   switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (11 / 11 / 11 / 14 / 13 s); **71 programs
   through the verified compiler, 0 refused**; the trusted base unchanged.  The step goes on with the pair a let holds.
 
+**Step 48 continued, a call given the pair a let holds — the design (2026-11-04).**  `A_par_pm_call_in_pv` (`let p := g n x t in (k n p + 1,
+snd p)`), `A_par_pm_call_in_mem`.  The design of `dad6b6d` gave the call the pair's parts, the nearest number and the newest memory;
+that is not the user's term: `k n p` is not convertible with `k n (fst p, snd p)` (`prod` has no eta, and `k`'s recursion on a symbolic
+counter does not reduce), so the meaning needs the pair as a value, and a pair environment in every meaning and invariant would be
+the price.  There is no need for one: `let p := e in BODY` is, up to zeta and beta, a function of the pair given `e`.  So:
+- *The reader*: a let of a pair whose body uses the pair bare (not only through `fst` and `snd`) is lifted, before the function holding it
+  is read: a function of the program's own, its parameters the free variables of the body in the reader's order, the pair the last
+  parameter, its body the let's; the let becomes a call of it given `e`.  The call given a pair expression and the function with a
+  pair parameter are constructs of `S` since step 44, proved; on the pair parameter `k n p` is `k n (x, s)`, read as such.  The
+  meaning of the function holding the let then reduces to the user's text by beta and zeta: nothing is added to the trust and
+  `KQR.v` does not change.  The C has one function more, called once, as a local function written by hand.
+- *`kitc.py`*: the lifted function's definition made from its term, as a copy's and a block's are.
+- *Places*: a let whose body holds the function's own call (it cannot be lifted out of the fixpoint), a memory other than the pair's
+  in the body (two versions): cells of their own.
+- *Cells*: the two pinned; the pair given to two calls; a number's and a boolean's body; the pair given inside a test; the own call in
+  the body; the old memory in the body.
+*Expected*: those, but the last two.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4571,7 +4589,8 @@ Pushed to the public repository up to `9d5ee76` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 48 continued (the own call not at the end of a boolean or a record that writes, mutual blocks of them: the construct table 953 of 962, 2 by design; the pair a let holds goes on), the C, the gate |
+| (this commit) | §12.V: step 48 continued, a call given the pair a let holds, the design (the let lifted to a function of the pair, no new construct of `S`) |
+| `dd55ebd` | §12.V: step 48 continued (the own call not at the end of a boolean or a record that writes, mutual blocks of them: the construct table 953 of 962, 2 by design; the pair a let holds goes on), the C, the gate |
 | `9d5ee76` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 48 continued: `XBindRB`, `XBindRR`, `xnum`, `ctailxb_ok`; the reifier binds an own call of a boolean or a record, a boolean or a record that writes called at the end read as a bound call; 8 cells |
 | `ba62ec6` | §12.V: step 48 continued, the own call not at the end of a boolean or a record that writes, the design (`XBindRB`, `XBindRR`, `xnum`, `ctailxb_ok`) |
 | `c4a2005` | §12.V: step 48 continued (templates giving back a boolean or a record that writes: the construct table 943 of 954, 2 by design; the own call not at the end and the pair a let holds go on), the C, the gate |
