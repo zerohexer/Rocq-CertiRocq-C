@@ -396,7 +396,7 @@ def reflect(name, entry, prog, no_proof):
     rc, out = coqc(f0)
     info = open(os.path.join(GEN, f"{name}_rinfo.out")).read() if rc == 0 and os.path.exists(os.path.join(GEN, f"{name}_rinfo.out")) else ""
     # each function: its name, counters, kinds, flags, result, bound and weights (polynomials, step 39: read to the tuple's end)
-    head = re.compile(r'\("([^"]+)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([IBa-h]*)"(?:%bs)?,\s*(true|false),\s*(true|false),\s*(true|false),'
+    head = re.compile(r'\("([^"]+)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([IBa-hp]*)"(?:%bs)?,\s*(true|false),\s*(true|false),\s*(true|false),'
                       r'\s*"([a-hBP]?)"(?:%bs)?,\s*(?:None|Some\s*\(?(\d+)(?:%Z)?\)?),\s*')
     fs = []
     for mh in head.finditer(info):
@@ -428,7 +428,9 @@ def reflect(name, entry, prog, no_proof):
             return None
     # the kinds of the parameters after the counters: I a number, B a boolean, a .. h a record of the program's type 0 .. 7
     kc = lambda c: "KQR.KNum" if c == "I" else "KQR.KBool" if c == "B" else f"(KQR.KRec {ord(c) - ord('a')})"
-    kl = lambda f: "[" + "; ".join(kc(c) for c in f[2]) + "]"
+    kl = lambda f: "[" + "; ".join(kc(c) for c in f[2] if c != "p") + "]"
+    # the last number and the memory one parameter, a pair (step 44): "p" after the kinds
+    isp = lambda f: f[2].endswith("p")
     # the result: a record of the program's type 0 .. 7 (a .. h), a boolean (B, step 24), a number and a memory (P, step 26),
     # or none
     rq = lambda f: ("None" if f[6] == "" else "(Some KQR.KBool)" if f[6] == "B" else "(Some KQR.KNum)" if f[6] == "P"
@@ -436,7 +438,10 @@ def reflect(name, entry, prog, no_proof):
     # the weights of a function whose recursion grows counters (steps 37 to 39): polynomials, each below its bound at the counters
     ws = lambda f: "(" + " ".join(f[8].replace("%nat", "").split()) + ")%nat"
     bo = lambda f: "None" if not f[7] else f"(Some {f[7]}%Z)"
-    sig = lambda f: (f"(KQR.mksig8 {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)} {ws(f)})" if re.search(r"\d", f[8])
+    wsl = lambda f: ws(f) if re.search(r"\d", f[8]) else "nil"
+    sigc = lambda f: f"(KQR.mksig9 {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)} {wsl(f)} false)"
+    sig = lambda f: (f"(KQR.mksig9 {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)} {wsl(f)} true)" if isp(f)
+                     else f"(KQR.mksig8 {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)} {ws(f)})" if re.search(r"\d", f[8])
                      else f"(KQR.mksig {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)})" if not f[7]
                      else f"(KQR.mksig7 {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} (Some {f[7]}%Z))")
     bnd = lambda f, j: f"(KQR.cbz {j})" if not f[7] else f"{f[7]}%Z"
@@ -578,7 +583,8 @@ def reflect(name, entry, prog, no_proof):
             cs = "[" + "; ".join(f"existT (@KQR.ftype {inst}) {sig(g)} {g[0]}" for g in fs[:j]) + "]"
             oks = "".join(f"(conj {name}_rok{i} " for i in range(j)) + "Logic.I" + ")" * j
             t += f"Lemma {name}_rok{j} : @KQR.callee_ok {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {sig(f)} {f[0]}.\n"
-            if "__c" in f[0] or f[0].endswith("__o"):
+            prec = isp(f) and re.search(r"Fixpoint\s+" + re.escape(f[0]) + r"\b", prog) is not None
+            if "__c" in f[0] or f[0].endswith("__o") or prec:
                 # a copy: not a fix over its counter, so its statement comes from its two equations, each by conversion
                 # (a copy that writes the memory and gives back a number has a memory: no memory argument)
                 # (step 41) a boolean, a number and a memory, a record given back: their own copies' theorems
@@ -590,9 +596,21 @@ def reflect(name, entry, prog, no_proof):
                                    ("compile_f_okrx", "KQR.fx0", "KQR.fx1", "") if f[5] == "true" else
                                    ("compile_f_okr", "KQR.fr0", "KQR.fr1", f" {f[3]}"))
                 b = f"(KQRReify.body_at {name}_funs {j})"
-                t += (f"Proof. exact_no_check (@KQR.{thm} {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {int(f[1]) - 1} {kl(f)}{mm} ({p0} {b}) ({p1} {b})"
-                      f" {bo(f)} {ws(f)}{ri} {f[0]} eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl eq_refl"
-                      f" (fun n => eq_refl)). Qed.\n")
+                hh = (f"(KQR.cmapT {f[1]} (KQR.ntypeTP {kl(f)} (KQR.rtq {f[4]} {rq(f)})) (KQR.ntypeT {kl(f)} true (KQR.rtq {f[4]} {rq(f)}))"
+                      f" (KQR.unpairT {kl(f)} (KQR.rtq {f[4]} {rq(f)})) {f[0]})") if prec else f[0]
+                core = (f"(@KQR.{thm} {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {int(f[1]) - 1} {kl(f)}{mm} ({p0} {b}) ({p1} {b})"
+                        f" {bo(f)} {ws(f)}{ri} {hh} eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl eq_refl"
+                        f" (fun n => {'ltac:(reflexivity)' if prec else 'eq_refl'}))")
+                if prec:
+                    core = (f"(@KQR.callee_ok_unpair {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {f[1]} {kl(f)} {f[4]} {f[5]}"
+                            f" {rq(f)} {bo(f)} {wsl(f)} {f[0]} {core})")
+                t += f"Proof. exact_no_check {core}. Qed.\n" 
+            elif isp(f):
+                # the pair (step 44): the theorem of the function on the two components, then the function's own
+                t += (f"Proof. exact_no_check (@KQR.callee_ok_unpair {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {f[1]} {kl(f)} {f[4]} {f[5]}"
+                      f" {rq(f)} {bo(f)} {wsl(f)} {f[0]} (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sigc(f)}"
+                      f" (KQRReify.body_at {name}_funs {j}) eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks})"
+                      f" eq_refl eq_refl)). Qed.\n")
             else:
                 t += (f"Proof. exact_no_check (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j})"
                       f" eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl). Qed.\n")

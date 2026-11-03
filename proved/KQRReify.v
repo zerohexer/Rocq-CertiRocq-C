@@ -1237,6 +1237,9 @@ Fixpoint reify_m (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
               | m :: rnums =>
                   match reify_cs (firstn (sn gs) args), reify_args (rev rnums), reify_m fuel ctx m with
                   | Some cs, Some As, Some d => Some (MCall f cs As d)
+                  | Some cs, Some As, None =>
+                      (* a whole pair given for the last number and the memory (step 44) *)
+                      if sp gs then option_map (MCallP f cs As) (reify_pv fuel ctx m) else None
                   | _, _, _ => None
                   end
               | [] => None
@@ -1368,6 +1371,7 @@ with reify_pv (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option s
             let rest := rev rnums in
             match reify_m fuel ctx m, reify_cs ctx (firstn (sn gs) rest), reify_args ctx (skipn (sn gs) rest) with
             | Some mm, Some cs, Some As => Some (PvCall f cs As mm)
+            | None, Some cs, Some As => if sp gs then option_map (PvCallP f cs As) (reify_pv fuel ctx m) else None
             | _, _, _ => None
             end
           else None
@@ -1572,6 +1576,12 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
         let '(kn1, args1) := tcall ctx kn args in
         match find_callee kn1 callees 0, rev args1 with
         | Some (f, gs), m :: rnums =>
+            match (if sp gs && negb (sr gs) && negb (isq gs) && Nat.leb (sn gs) (length (rev rnums)) then
+                     match reify_pv fuel ctx m, reify_cs ctx (firstn (sn gs) (rev rnums)), reify_args ctx (skipn (sn gs) (rev rnums)) with
+                     | Some p, Some cs, Some As => Some (XCallP f cs As p)    (* a whole pair given (step 44) *)
+                     | _, _, _ => None
+                     end
+                   else None) with Some x => Some x | None =>
             if negb (sr gs) && negb (sw gs) && sm gs && negb (is_rel m) && Nat.leb (sn gs) (length (rev rnums)) then
               let rest := rev rnums in
               match reify_m fuel ctx m, reify_cs (kill_mem ctx) (firstn (sn gs) rest), reify_args (kill_mem ctx) (skipn (sn gs) rest) with
@@ -1586,6 +1596,7 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
               | _, _, _ => None
               end
             else fallback
+            end
         | None, _ => match hb kn with Some b => reify_x fuel ctx (wout b args) | None => fallback end
         | _, _ => fallback
         end
@@ -1873,12 +1884,16 @@ Fixpoint lead_nats (tys : list term) : nat * list term :=
     number, a boolean or a record of the program's types as the result *)
 Definition kind_ty (rt : list rentry) (t : term) : option kind :=
   if is_ty kn_int t then Some KNum else if is_bool t then Some KBool else option_map KRec (rindex t rt 0).
+(** the last parameter a number-and-memory pair (step 44): read as the last number and the memory, the signature flagged *)
+Definition last_pm (tys : list term) : bool := match rev tys with t :: _ => is_pm t | [] => false end.
+Definition with_sp (p : bool) (g : sig) : sig := mksig9 (sn g) (sk g) (sm g) (sr g) (sw g) (sq g) (sb g) (sv g) p.
 Definition read_sig (rt : list rentry) (tys : list term) (ret : term) : option sig :=
   let '(c, rest) := lead_nats tys in
-  let m := match rev rest with t :: _ => is_ty kn_mem t | [] => false end in
+  let pm := last_pm rest in
+  let m := pm || match rev rest with t :: _ => is_ty kn_mem t | [] => false end in
   let nums := if m then removelast rest else rest in
   let r := is_ty kn_mem ret in
-  match opt_all (map (kind_ty rt) nums) with
+  match option_map (fun ks => if pm then ks ++ [KNum] else ks) (opt_all (map (kind_ty rt) nums)) with
   | Some ks => if r || is_ty kn_int ret then Some (mksig c ks m r false None)
                else if is_bool ret then Some (mksig c ks m false false (Some KBool))
                else if is_pm ret then Some (mksig c ks m false false (Some KNum))
@@ -1925,6 +1940,60 @@ Definition fun_perm (Σ : global_env) (kn : kername) : option (list nat) :=
   end.
 (** one function of the program, given the ones before it, as its text reads: a recursive function starts with a match
     on its first counter *)
+(** a call of a function whose last parameter is a number-and-memory pair (the function's own recursive call too), given a
+    pair built in place: read with the pair's number and memory as its last two arguments, the components (step 44) *)
+Definition pair_parts (t : term) : option (term * term) :=
+  match t with
+  | tApp (tConstruct i 0 _) [a; b; e; m] =>
+      if Kername.eqb (inductive_mind i) (inductive_mind ind_prod) && is_ty kn_int a && is_ty kn_mem b then Some (e, m) else None
+  | _ => None
+  end.
+Definition kn_pfst := kn_of <% @fst %>.
+Definition kn_psnd := kn_of <% @snd %>.
+Fixpoint flatp (fuel : nat) (isp : nat -> term -> bool) (d : nat) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := flatp fuel isp in
+      match t with
+      | tApp f args =>
+          (* [fst] and [snd] of the pair built in place: its number and its memory (iota) *)
+          match (match f, args with
+                 | tConst kn _, [_; _; c] =>
+                     if Kername.eqb kn kn_pfst || Kername.eqb kn kn_psnd
+                     then option_map (fun em => if Kername.eqb kn kn_pfst then fst em else snd em) (pair_parts c) else None
+                 | _, _ => None
+                 end) with
+          | Some t' => go d t'
+          | None =>
+          let args' := map (go d) args in
+          let f' := go d f in
+          if isp d f then
+            match rev args' with
+            | a :: r => match pair_parts a with Some (e, m) => tApp f' (rev r ++ [e; m]) | None => tApp f' args' end
+            | [] => tApp f' args'
+            end
+          else tApp f' args'
+          end
+      | tLambda na ty b => tLambda na ty (go (S d) b)
+      | tLetIn na b ty body => tLetIn na (go d b) ty (go (S d) body)
+      | tCase ci p c brs => tCase ci p (go d c) (map (fun br => {| bcontext := bcontext br; bbody := go (d + length (bcontext br)) (bbody br) |}) brs)
+      | tProj pr c => tProj pr (go d c)
+      | _ => t
+      end
+  end.
+Definition isp_of (callees : list (kername * sig)) (self : option nat) (d : nat) (f : term) : bool :=
+  match f with
+  | tRel i => match self with Some k => Nat.eqb i (k + d) | None => false end
+  | tConst kn _ => existsb (fun e => Kername.eqb (fst e) kn && sp (snd e)) callees
+  | _ => false
+  end.
+(* a body: its pair parameter replaced by the pair of two new variables (the number, the memory), its calls given pairs built
+   in place spread; a body with neither a pair parameter nor a flagged callee as it is *)
+Definition pm_body (callees : list (kername * sig)) (tys : list term) (fx : bool) (body : term) : term :=
+  if last_pm tys then flatp 100000 (isp_of callees (if fx then Some (S (length tys)) else None)) 0 (pm_split (last tys (tRel 0)) body)
+  else if existsb (fun e => sp (snd e)) callees then flatp 100000 (isp_of callees None) 0 body else body.
+
 Definition read_fun_c (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
   (callees : list (kername * sig)) (kn : kername) : option (sig * fbody) :=
   match lookup_env Σ kn with
@@ -1932,7 +2001,9 @@ Definition read_fun_c (Σ : global_env) (hb : kername -> option term) (tc : kern
       match cst_body cb with
       | Some (tFix [d] 0) =>
           if Nat.eqb (rarg d) 0 then
-            let '(tys, body) := lams (dbody d) in
+            let '(tys, body0) := lams (dbody d) in
+            let body := pm_body callees tys true body0 in
+            option_map (fun gb => (with_sp (last_pm tys) (fst gb), snd gb))
             match read_sig rt tys (ret_ty (dtype d)), body with
             | Some gs, tCase ci _ (tRel cnt) [b0; b1] =>
                 let nx := Nat.pred (sn gs) in
@@ -1977,7 +2048,9 @@ Definition read_fun_c (Σ : global_env) (hb : kername -> option term) (tc : kern
             end
           else None
       | Some b =>
-          let '(tys, body) := lams b in
+          let '(tys, body0) := lams b in
+          let body := pm_body callees tys false body0 in
+          option_map (fun gb => (with_sp (last_pm tys) (fst gb), snd gb))
           match read_sig rt tys (ret_ty (cst_type cb)) with
           | Some gs =>
               let nx := Nat.pred (sn gs) in
@@ -2179,11 +2252,13 @@ Fixpoint cl_m (B : Z) (bs : list cbe) (m : smem) {struct m} : list site :=
   | MHw _ args m => cl_es B bs args ++ cl_m B bs m
   | MLetR x m | MMatchR x m | MSplitR _ x m => cl_r B bs x ++ cl_m B bs m
   | MMatchP p m | MLetP p m => cl_pv B bs p ++ cl_m B bs m
+  | MCallP f ccs args p => (Some f, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_pv B bs p
   end
 with cl_pv (B : Z) (bs : list cbe) (p : spv) {struct p} : list site :=
   match p with
   | PvMk e m => cl_e B bs e ++ cl_m B bs m
   | PvCall f ccs args m => (Some f, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m
+  | PvCallP f ccs args p => (Some f, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_pv B bs p
   | PvRec ccs args m => (None, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m
   | PvLet e p => cl_e B bs e ++ cl_pv B bs p
   | PvLetB c p => cl_b B bs c ++ cl_pv B bs p
@@ -2207,6 +2282,7 @@ Fixpoint cl_x (B : Z) (bs : list cbe) (x : sx) {struct x} : list site :=
   | XLetC c x => cl_c B bs c ++ cl_x B (clet B bs c) x
   | XRec ccs args m => (None, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m
   | XCall f ccs args m => (Some f, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m
+  | XCallP f ccs args p => (Some f, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_pv B bs p
   | XLetR r x | XMatchR r x | XSplitR _ r x => cl_r B bs r ++ cl_x B bs x
   | XMatchP p x | XLetP p x => cl_pv B bs p ++ cl_x B bs x
   end.
@@ -2343,10 +2419,10 @@ Definition reify_fun (Σ : global_env) (hb : kername -> option term) (tc : kerna
   (callees : list (kername * sig)) (kn : kername) (bt : kername -> option Z) (chk : bool) : option (sig * fbody) :=
   match read_fun Σ hb tc rt callees kn with
   | Some (gs, b) =>
-      let wfok := fun gs => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt) (rjs rt)) (map snd callees) gs b in
+      let wfok := fun gs => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt) (rjs rt)) (map snd callees) (with_sp false gs) b in
       if negb chk then Some (gs, b) else
-      (* the signature [wf_f] takes (steps 33, 34, 37) *)
-      option_map (fun g => (g, b)) (wf_sig wfok gs b (bt kn))
+      (* the signature [wf_f] takes (steps 33, 34, 37); a function with the pair checked on the components (step 44) *)
+      option_map (fun g => (with_sp (sp gs) g, b)) (wf_sig wfok gs b (bt kn))
   | None => None
   end.
 
@@ -3329,7 +3405,7 @@ Definition kletters (ks : list kind) : string :=
   fold_right (fun k a => (match k with KNum => "I" | KBool => "B" | KRec i => rletter i end) ^ a) ""%bs ks.
 Definition info_of (l : list (kername * sig * fbody)) :=
   map (fun x : kername * sig * fbody => let '(kn, g, _) := x in
-         (snd kn, sn g, kletters (sk g), sm g, sr g, sw g, match sq g with Some (KRec i) => rletter i | Some KBool => "B"%bs | Some KNum => "P"%bs | None => ""%bs end,
+         (snd kn, sn g, kletters (sk g) ^ (if sp g then "p" else ""), sm g, sr g, sw g, match sq g with Some (KRec i) => rletter i | Some KBool => "B"%bs | Some KNum => "P"%bs | None => ""%bs end,
           sb g, sv g)) l.
 
 (** compatibility: one recursive function *)
@@ -5212,3 +5288,42 @@ Proof.
     eq_refl eq_refl).
 Time Qed.
 Print Assumptions w44go_ok.
+
+(* ---- a number-and-memory pair as a parameter (step 44 continued): [w44bk] takes the pair last -- read on its components, its
+   signature flagged; [w44bgo] calls it given the pair [w44bg] gives (XCallP).  [w44bk]'s theorem from the theorem of
+   its components' function ([callee_ok_unpair]), that one from its two equations *)
+Fixpoint w44bk (n : nat) (p : i63 * KQ.KQRun.mem) : i63 :=
+  match n with O => fst p | S m => w44bk m (PrimInt63.add (fst p) (KQ.KQRun.rd 0 0 (snd p)), snd p) end.
+Fixpoint w44bg (n : nat) (x : i63) (t : KQ.KQRun.mem) : i63 * KQ.KQRun.mem :=
+  match n with O => (x, t) | S m => w44bg m (PrimInt63.add x 1) (KQ.KQRun.upd 0 x x t) end.
+Definition w44bgo (n : nat) (a b : i63) (s : KQ.KQRun.mem) : i63 := w44bk n (w44bg n a s).
+Definition w44b_src := ltac:(run_template_program (tmQuoteRec w44bgo)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : map (fun x => snd x) w44b_src =
+  [FRec (SVar 0) (SRec CNil (SCons (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 0))) SNil));
+   FRecP (PvMk (SVar 0) MCur) (PvRec CNil (SCons (SOp Badd (SVar 0) (SInt 1)) SNil) (MUpd (SInt 0) (SVar 0) (SVar 0) MCur));
+   FPlainX (XCallP 0 (CCons (CVar 0) CNil) SNil (PvCall 1 (CCons (CVar 0) CNil) (SCons (SVar 1) SNil) MCur))]).
+Check (eq_refl : map (fun x => snd (fst x)) w44b_src =
+  [mksig9 1 [KNum] true false false None None [] true; mksig8 1 [KNum] true false false (Some KNum) None [];
+   mksig8 1 [KNum; KNum] true false true None None []]).
+Definition w44b_Pr := mkprog (funs_of 0 w44b_src) [].
+Time Lemma w44bk_ok : callee_ok w44b_Pr (gid1 0) (cbz 0) (sig_at w44b_src 0) w44bk.
+Proof.
+  Time exact_no_check (callee_ok_unpair w44b_Pr (gid1 0) (cbz 0) 1 [KNum] false false None None nil w44bk
+    (compile_f_okr w44b_Pr [] gid1 0 0 [KNum] true (fr0 (body_at w44b_src 0)) (fr1 (body_at w44b_src 0)) None []%nat
+       (cmapT 1 (ntypeTP [KNum] (rtq false None)) (ntypeT [KNum] true (rtq false None)) (unpairT [KNum] (rtq false None)) w44bk)
+       eq_refl eq_refl (no_callees w44b_Pr gid1) eq_refl eq_refl eq_refl (fun n => ltac:(reflexivity)))).
+Time Qed.
+Time Lemma w44bg_ok : callee_ok w44b_Pr (gid1 1) (cbz 1) (sig_at w44b_src 1) w44bg.
+Proof.
+  Time exact_no_check (compile_f_ok w44b_Pr [existT ftype (sig_at w44b_src 0) w44bk] gid1 1 (sig_at w44b_src 1) (body_at w44b_src 1)
+    eq_refl eq_refl (all_ok_callees w44b_Pr gid1 [existT ftype (sig_at w44b_src 0) w44bk] (conj w44bk_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
+Time Lemma w44bgo_ok : callee_ok w44b_Pr (gid1 2) (cbz 2) (sig_at w44b_src 2) w44bgo.
+Proof.
+  Time exact_no_check (compile_f_ok w44b_Pr [existT ftype (sig_at w44b_src 0) w44bk; existT ftype (sig_at w44b_src 1) w44bg] gid1 2
+    (sig_at w44b_src 2) (body_at w44b_src 2) eq_refl eq_refl
+    (all_ok_callees w44b_Pr gid1 [existT ftype (sig_at w44b_src 0) w44bk; existT ftype (sig_at w44b_src 1) w44bg] (conj w44bk_ok (conj w44bg_ok Logic.I)))
+    eq_refl eq_refl).
+Time Qed.
+Print Assumptions w44bgo_ok.

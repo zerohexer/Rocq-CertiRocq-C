@@ -254,6 +254,7 @@ Inductive smem : Type :=
 | MSplitR (ri : nat) (x : srec) (m : smem)    (* x, of type ri, taken apart one level (step 43) *)
 | MMatchP (p : spv) (m : smem)       (* let '(x, s2) := p in m: x the nearest number, s2 the newest memory (step 44) *)
 | MLetP (p : spv) (m : smem)         (* let w := p in m, read through fst w (the nearest number) and snd w (the newest memory) *)
+| MCallP (f : nat) (cs : scnts) (args : sexps) (p : spv)   (* function f, giving back a memory, given the pair p (step 44) *)
 (* a number and a memory (step 26): built (the number worked out on the memory before the memory's writes), given back by a
     function of the program or by the function itself, chosen by a test or a counter's match, after lets, or made from another
     one taken apart; one mutual type with the memory (step 44) *)
@@ -271,7 +272,8 @@ with spv : Type :=
 | PvIfB (c : sbool) (t f : spv)
 | PvMatch (c : nat) (p0 p1 : spv)
 | PvMatchP (p q : spv)                                      (* let '(x, s2) := p in q: x the nearest number, s2 the newest memory *)
-| PvSplitR (ri : nat) (x : srec) (p : spv).                 (* x, of type ri, taken apart one level (step 43) *)
+| PvSplitR (ri : nat) (x : srec) (p : spv)                  (* x, of type ri, taken apart one level (step 43) *)
+| PvCallP (f : nat) (cs : scnts) (args : sexps) (p : spv).  (* function f, giving back a number and a memory, given the pair p *)
 
 Scheme smem_mut := Induction for smem Sort Prop
 with spv_mut := Induction for spv Sort Prop.
@@ -285,7 +287,12 @@ Combined Scheme smem_comb from smem_mut, spv_mut.
 (** a polynomial in a function's counters (step 39): monomials, each a coefficient and the counters it multiplies (their
     positions, the first counter 0) *)
 Definition poly : Type := list (nat * list nat).
-Record sig := mksig8 { sn : nat; sk : list kind; sm : bool; sr : bool; sw : bool; sq : option kind; sb : option Z; sv : list poly }.
+Record sig := mksig9 { sn : nat; sk : list kind; sm : bool; sr : bool; sw : bool; sq : option kind; sb : option Z; sv : list poly;
+                       sp : bool }.
+(* sp (step 44): the last number and the memory one parameter, a pair (for a signature that takes a memory); a signature without it *)
+Notation mksig8 x k m r w q b v := (mksig9 x k m r w q b v false).
+(* a signature with the pair: it takes a memory and its last parameter is a number *)
+Definition last_num (ks : list kind) : bool := match rev ks with KNum :: _ => true | _ => false end.
 (* sv (steps 37 to 39): none, each counter below the function's bound; else polynomials in the counters, every counter a
    monomial of its own with a coefficient of at least 1 in one of them, and each polynomial at the counters below the bound --
    for a function whose recursion grows counters *)
@@ -315,7 +322,17 @@ Notation ntype ks m r := (ntypeT ks m (rty r)).
 
 Fixpoint ctype (x : nat) (T : Type) : Type := match x with O => T | S x => nat -> ctype x T end.
 
-Definition ftype (g : sig) : Type := ctype (sn g) (ntypeT (sk g) (sm g) (rtq (sr g) (sq g))).
+(** a function whose last number and memory are one parameter, a pair (step 44): its type *)
+Fixpoint ntypeTP (ks : list kind) (T : Type) : Type :=
+  match ks with
+  | [] => T
+  | KNum :: ks' => match ks' with [] => (i63 * mem)%type -> T | _ :: _ => i63 -> ntypeTP ks' T end
+  | KBool :: ks' => bool -> ntypeTP ks' T
+  | KRec ri :: ks' => RT ri -> ntypeTP ks' T
+  end.
+
+Definition ftype (g : sig) : Type :=
+  ctype (sn g) (if (if sp g then sm g else false) then ntypeTP (sk g) (rtq (sr g) (sq g)) else ntypeT (sk g) (sm g) (rtq (sr g) (sq g))).
 
 (** a memory for the meaning of a function that takes none: never read (a well formed body reads no memory then) *)
 Definition dummy_mem : mem := KQ.KQRun.kq_input 0%uint63.
@@ -344,6 +361,57 @@ Fixpoint appnT (ks : list kind) (m : bool) (T : Type) {struct ks} : ntypeT ks m 
   end.
 Notation appn ks m r := (appnT ks m (rty r)).
 
+(** a function with the pair (step 44) applied to numbers and a memory: the last number and the memory the pair; on the two
+    components: its pair built of them; a function of the components as one of the pair *)
+Fixpoint appnTP (ks : list kind) (T : Type) {struct ks} : ntypeTP ks T -> list val -> mem -> T :=
+  match ks as k0 return ntypeTP k0 T -> list val -> mem -> T with
+  | [] => fun g _ _ => g
+  | KNum :: ks' => fun g l s =>
+      (match ks' as k1 return (ntypeTP (KNum :: k1) T -> (ntypeTP k1 T -> list val -> mem -> T) -> T) with
+       | [] => fun g _ => g (match l with VNum x :: _ => x | _ => 0%uint63 end, s)
+       | _ :: _ => fun g rec => match l with VNum x :: l => rec (g x) l s | _ :: l => rec (g 0%uint63) l s | [] => rec (g 0%uint63) [] s end
+       end) g (appnTP ks' T)
+  | KBool :: ks' => fun g l s => match l with VBool x :: l => appnTP ks' T (g x) l s | _ :: l => appnTP ks' T (g false) l s
+                                             | [] => appnTP ks' T (g false) [] s end
+  | KRec ri :: ks' => fun g l s => match l with v :: l => appnTP ks' T (g (to_rt ri v)) l s | [] => appnTP ks' T (g (Rd ri)) [] s end
+  end.
+Fixpoint unpairT (ks : list kind) (T : Type) {struct ks} : ntypeTP ks T -> ntypeT ks true T :=
+  match ks as k0 return ntypeTP k0 T -> ntypeT k0 true T with
+  | [] => fun g _ => g
+  | KNum :: ks' => fun g =>
+      (match ks' as k1 return (ntypeTP (KNum :: k1) T -> (ntypeTP k1 T -> ntypeT k1 true T) -> ntypeT (KNum :: k1) true T) with
+       | [] => fun g _ x s => g (x, s)
+       | _ :: _ => fun g rec x => rec (g x)
+       end) g (unpairT ks' T)
+  | KBool :: ks' => fun g x => unpairT ks' T (g x)
+  | KRec ri :: ks' => fun g x => unpairT ks' T (g x)
+  end.
+Fixpoint pairT (ks : list kind) (m : bool) (T : Type) {struct ks} : ntypeT ks m T -> ntypeTP ks T :=
+  match ks as k0 return ntypeT k0 m T -> ntypeTP k0 T with
+  | [] => if m as m0 return ntypeT [] m0 T -> ntypeTP [] T then fun g => g dummy_mem else fun g => g
+  | KNum :: ks' => fun g =>
+      (match ks' as k1 return (ntypeT (KNum :: k1) m T -> (ntypeT k1 m T -> ntypeTP k1 T) -> ntypeTP (KNum :: k1) T) with
+       | [] => fun g _ pr => (if m as m0 return (i63 -> ntypeT [] m0 T) -> T then fun g => g (fst pr) (snd pr) else fun g => g (fst pr)) g
+       | _ :: _ => fun g rec x => rec (g x)
+       end) g (pairT ks' m T)
+  | KBool :: ks' => fun g x => pairT ks' m T (g x)
+  | KRec ri :: ks' => fun g x => pairT ks' m T (g x)
+  end.
+Fixpoint appnTPP (ks : list kind) (T : Type) {struct ks} : ntypeTP ks T -> list val -> (i63 * mem) -> T :=
+  match ks as k0 return ntypeTP k0 T -> list val -> (i63 * mem) -> T with
+  | [] => fun g _ _ => g
+  | KNum :: ks' => fun g l pr =>
+      (match ks' as k1 return (ntypeTP (KNum :: k1) T -> (ntypeTP k1 T -> list val -> (i63 * mem) -> T) -> T) with
+       | [] => fun g _ => g pr
+       | _ :: _ => fun g rec => match l with VNum x :: l => rec (g x) l pr | _ :: l => rec (g 0%uint63) l pr | [] => rec (g 0%uint63) [] pr end
+       end) g (appnTPP ks' T)
+  | KBool :: ks' => fun g l pr => match l with VBool x :: l => appnTPP ks' T (g x) l pr | _ :: l => appnTPP ks' T (g false) l pr
+                                              | [] => appnTPP ks' T (g false) [] pr end
+  | KRec ri :: ks' => fun g l pr => match l with v :: l => appnTPP ks' T (g (to_rt ri v)) l pr | [] => appnTPP ks' T (g (Rd ri)) [] pr end
+  end.
+Fixpoint cmapT (x : nat) (A B : Type) (f : A -> B) {struct x} : ctype x A -> ctype x B :=
+  match x as x0 return ctype x0 A -> ctype x0 B with O => f | S x => fun h c => cmapT x A B f (h c) end.
+
 (** the same for counters: [absc x T F] is [fun c1 .. cx => F [cx; ..; c1]], [appc x T h [c1; ..; cx]] is [h c1 .. cx] *)
 Fixpoint absc (x : nat) (T : Type) {struct x} : (list nat -> T) -> ctype x T :=
   match x as x0 return (list nat -> T) -> ctype x0 T with
@@ -360,7 +428,10 @@ Fixpoint appc (x : nat) (T : Type) {struct x} : ctype x T -> list nat -> T :=
 (** a call of a function of signature [g] on its counters, its numbers, the memory *)
 Definition callf (g : sig) : ftype g -> list nat -> list val -> mem -> rtq (sr g) (sq g) :=
   match g as g0 return ftype g0 -> list nat -> list val -> mem -> rtq (sr g0) (sq g0) with
-  | mksig8 x k m r _ q _ _ => fun h cvs vs s => appnT k m (rtq r q) (appc x (ntypeT k m (rtq r q)) h cvs) vs s
+  | mksig9 x k m r w q b v p =>
+      if (if p then m else false) as p0 return ctype x (if p0 then ntypeTP k (rtq r q) else ntypeT k m (rtq r q)) -> list nat -> list val -> mem -> rtq r q then
+        fun h cvs vs s => appnTP k (rtq r q) (appc x (ntypeTP k (rtq r q)) h cvs) vs s
+      else fun h cvs vs s => appnT k m (rtq r q) (appc x (ntypeT k m (rtq r q)) h cvs) vs s
   end.
 
 (** a mutual block (step 17): the members, number functions of one signature, are one function with one counter more, the
@@ -416,6 +487,30 @@ Definition cmpn (c : cmpop) (a b : nat) : bool := match c with Ceq => Nat.eqb a 
 (** the value a call gives back, when it is a boolean (step 24) *)
 Definition boolf (g : sig) : rtq (sr g) (sq g) -> bool :=
   match sq g as q return rtq (sr g) q -> bool with Some KBool => fun x => x | _ => fun _ => false end.
+
+(** a call given a whole number-and-memory pair for the last number and the memory (step 44): the function applied to the pair;
+    its number and its memory after it *)
+Definition callfp (g : sig) : ftype g -> list nat -> list val -> (i63 * mem) -> rtq (sr g) (sq g) :=
+  match g as g0 return ftype g0 -> list nat -> list val -> (i63 * mem) -> rtq (sr g0) (sq g0) with
+  | mksig9 x k m r w q b v p =>
+      if (if p then m else false) as p0 return ctype x (if p0 then ntypeTP k (rtq r q) else ntypeT k m (rtq r q)) -> list nat -> list val -> (i63 * mem) -> rtq r q then
+        fun h cvs vs pr => appnTPP k (rtq r q) (appc x (ntypeTP k (rtq r q)) h cvs) vs pr
+      else fun h cvs vs pr => appnT k m (rtq r q) (appc x (ntypeT k m (rtq r q)) h cvs) (vs ++ [VNum (fst pr)]) (snd pr)
+  end.
+Definition callnp (g : sig) (h : ftype g) (cvs : list nat) (vs : list val) (pr : i63 * mem) : i63 :=
+  (match sq g as q return rtq (sr g) q -> i63 with
+   | Some (KRec ri) => fun x => hd 0%uint63 (relim (RO ri) x (fun l => l))
+   | Some KBool => b2i
+   | Some KNum => fun x => fst x
+   | None => if sr g as r return rty r -> i63 then fun _ => 0%uint63 else fun x => x
+   end) (callfp g h cvs vs pr).
+Definition callmp (g : sig) (h : ftype g) (cvs : list nat) (vs : list val) (pr : i63 * mem) : mem :=
+  (match sq g as q return rtq (sr g) q -> mem with
+   | Some (KRec ri) => fun x => wslot O (tl (relim (RO ri) x (fun l => l))) (snd pr)
+   | Some KBool => fun _ => snd pr
+   | Some KNum => fun x => snd x
+   | None => if sr g as r return rty r -> mem then fun x => x else fun _ => snd pr
+   end) (callfp g h cvs vs pr).
 
 (** the number and the memory a call gives back, when it gives back both (step 26) *)
 Definition pvf (g : sig) : rtq (sr g) (sq g) -> (i63 * mem)%type :=
@@ -580,6 +675,12 @@ Fixpoint denote_m (cs : list callee) (rec : list nat -> list val -> mem -> i63) 
   | MSplitR sj x m => rsplit (denote_r cs rec cenv benv renv env s x) (fun l rs => denote_m cs rec recm cenv benv (rev rs ++ renv) (rev l ++ env) s m)
   | MMatchP p m => let '(v, s2) := denote_pv cs rec recm dpair cenv benv renv env s p in denote_m cs rec recm cenv benv renv (v :: env) s2 m
   | MLetP p m => let w := denote_pv cs rec recm dpair cenv benv renv env s p in denote_m cs rec recm cenv benv renv (fst w :: env) (snd w) m
+  | MCallP f ccs args p =>
+      match nth_error cs f with
+      | Some (existT _ g h) => callmp g h (denote_cs cs rec cenv benv renv env s ccs) (denote_es cs rec cenv benv renv env s args)
+                                      (denote_pv cs rec recm dpair cenv benv renv env s p)
+      | None => s
+      end
   end
 (* a pair's meaning: the pair itself, [recp] the recursive call's *)
 with denote_pv (cs : list callee) (rec : list nat -> list val -> mem -> i63) (recm : list nat -> list val -> mem -> mem)
@@ -601,6 +702,12 @@ with denote_pv (cs : list callee) (rec : list nat -> list val -> mem -> i63) (re
   | PvLetR x p => let w := denote_r cs rec cenv benv renv env s x in denote_pv cs rec recm recp cenv benv (w :: renv) env s p
   | PvMatchR x p => rmatch (denote_r cs rec cenv benv renv env s x) (fun l => denote_pv cs rec recm recp cenv benv renv (rev l ++ env) s p)
   | PvSplitR sj x p => rsplit (denote_r cs rec cenv benv renv env s x) (fun l rs => denote_pv cs rec recm recp cenv benv (rev rs ++ renv) (rev l ++ env) s p)
+  | PvCallP f ccs args p =>
+      match nth_error cs f with
+      | Some (existT _ g h) => pvf g (callfp g h (denote_cs cs rec cenv benv renv env s ccs) (denote_es cs rec cenv benv renv env s args)
+                                             (denote_pv cs rec recm recp cenv benv renv env s p))
+      | None => (0%uint63, s)
+      end
   | PvLetM m p => let s2 := denote_m cs rec recm cenv benv renv env s m in denote_pv cs rec recm recp cenv benv renv env s2 p
   | PvIf c x y t f => if cmp_sem c (denote_e cs rec cenv benv renv env s x) (denote_e cs rec cenv benv renv env s y)
                       then denote_pv cs rec recm recp cenv benv renv env s t else denote_pv cs rec recm recp cenv benv renv env s f
@@ -633,7 +740,8 @@ Inductive sx : Type :=
 | XMatchR (r : srec) (x : sx)        (* let '(a, b, ..) := r in x *)
 | XMatchP (p : spv) (x : sx)         (* let '(v, s2) := p in x: v the nearest number, s2 the newest memory (step 26) *)
 | XLetP (p : spv) (x : sx)           (* let w := p in x, read through fst w (the nearest number) and snd w (the newest memory) *)
-| XSplitR (ri : nat) (r : srec) (x : sx).   (* r, of type ri, taken apart one level (step 43) *)
+| XSplitR (ri : nat) (r : srec) (x : sx)    (* r, of type ri, taken apart one level (step 43) *)
+| XCallP (f : nat) (cs : scnts) (args : sexps) (p : spv).   (* function f, a number function, given the pair p (step 44) *)
 
 Fixpoint denote_x (cs : list callee) (rec : list nat -> list val -> mem -> i63) (recm : list nat -> list val -> mem -> mem)
   (recx : list nat -> list val -> mem -> i63) (cenv : list nat) (benv : list bool) (renv : list val) (env : list i63) (s : mem) (x : sx) {struct x} : i63 :=
@@ -660,6 +768,12 @@ Fixpoint denote_x (cs : list callee) (rec : list nat -> list val -> mem -> i63) 
   | XLetR r x => let w := denote_r cs rec cenv benv renv env s r in denote_x cs rec recm recx cenv benv (w :: renv) env s x
   | XMatchR r x => rmatch (denote_r cs rec cenv benv renv env s r) (fun l => denote_x cs rec recm recx cenv benv renv (rev l ++ env) s x)
   | XSplitR sj r x => rsplit (denote_r cs rec cenv benv renv env s r) (fun l rs => denote_x cs rec recm recx cenv benv (rev rs ++ renv) (rev l ++ env) s x)
+  | XCallP f ccs args p =>
+      match nth_error cs f with
+      | Some (existT _ g h) => callnp g h (denote_cs cs rec cenv benv renv env s ccs) (denote_es cs rec cenv benv renv env s args)
+                                      (denote_pv cs rec recm dpair cenv benv renv env s p)
+      | None => 0%uint63
+      end
   | XMatchP p x => let '(v, s2) := denote_pv cs rec recm dpair cenv benv renv env s p in denote_x cs rec recm recx cenv benv renv (v :: env) s2 x
   | XLetP p x => let w := denote_pv cs rec recm dpair cenv benv renv env s p in denote_x cs rec recm recx cenv benv renv (fst w :: env) (snd w) x
   end.
@@ -768,9 +882,11 @@ Definition dmem : list nat -> list val -> mem -> mem := fun _ _ s => s.
 Definition drec (ri : nat) : list nat -> list val -> mem -> RT ri := fun _ _ _ => Rd ri.
 Definition dbool : list nat -> list val -> mem -> bool := fun _ _ _ => false.
 
-Definition denote_f (cs : list callee) (g : sig) (b : fbody) : ftype g :=
-  match g as g0 return ftype g0 with
-  | mksig8 x k m r w q b0 sv0 =>
+(* the signature on the two components *)
+Definition fcomp (g : sig) : sig := mksig8 (sn g) (sk g) (sm g) (sr g) (sw g) (sq g) (sb g) (sv g).
+Definition denote_f0 (cs : list callee) (g : sig) (b : fbody) : ftype (fcomp g) :=
+  match g as g0 return ftype (fcomp g0) with
+  | mksig9 x k m r w q b0 sv0 _ =>
       match q as q0 return ftype (mksig8 x k m r w q0 b0 sv0) with
       | Some KBool =>
         match x as x0 return ftype (mksig8 x0 k m r w (Some KBool) b0 sv0) with
@@ -887,6 +1003,14 @@ Definition denote_f (cs : list callee) (g : sig) (b : fbody) : ftype g :=
             end
         end
       end
+  end.
+(** a function's meaning: its body's, on the two components; with the pair (step 44), the function of the pair made of it *)
+Definition denote_f (cs : list callee) (g : sig) (b : fbody) : ftype g :=
+  match g as g0 return ftype g0 with
+  | mksig9 x k m r w q b0 sv0 p =>
+      if (if p then m else false) as p0 return ctype x (if p0 then ntypeTP k (rtq r q) else ntypeT k m (rtq r q)) then
+        cmapT x _ _ (pairT k m (rtq r q)) (denote_f0 cs (mksig8 x k m r w q b0 sv0) b)
+      else denote_f0 cs (mksig8 x k m r w q b0 sv0) b
   end.
 
 (* ================================================================ compile *)
@@ -1343,6 +1467,7 @@ Fixpoint cmem (m : smem) (cenv benv : list atom) (renv : list (list atom)) (env 
   | MMatchR x m => crec x cenv benv renv env nxt (fun As n1 => cmem m cenv benv renv (rev As ++ env) n1 K)
   | MSplitR sj x m => crec x cenv benv renv env nxt (fun As n1 => cmem m cenv benv (rev (rsl sj As) ++ renv) (rev (firstn (rnn sj) As) ++ env) n1 K)
   | MMatchP p m | MLetP p m => cpv p cenv benv renv env nxt (fun A n1 => cmem m cenv benv renv (A :: env) n1 K)
+  | MCallP f ccs args p => ccnts ccs cenv benv renv env nxt (fun Cs n1 => cexps args cenv benv renv env n1 (fun As n2 => cpv p cenv benv renv env n2 (fun A n3 => Ecall n3 (gidf f) (Cs ++ As ++ [A]) (K (Pos.succ n3)))))
   end
 (* a number and a memory where it is taken apart (step 26): the continuation gets the number's atom, the KQL memory is the
     pair's memory *)
@@ -1359,6 +1484,7 @@ with cpv (p : spv) (cenv benv : list atom) (renv : list (list atom)) (env : list
   | PvLetR x p => crec x cenv benv renv env nxt (fun As n1 => cpv p cenv benv (As :: renv) env n1 K)
   | PvMatchR x p => crec x cenv benv renv env nxt (fun As n1 => cpv p cenv benv renv (rev As ++ env) n1 K)
   | PvSplitR sj x p => crec x cenv benv renv env nxt (fun As n1 => cpv p cenv benv (rev (rsl sj As) ++ renv) (rev (firstn (rnn sj) As) ++ env) n1 K)
+  | PvCallP f ccs args p => ccnts ccs cenv benv renv env nxt (fun Cs n1 => cexps args cenv benv renv env n1 (fun As n2 => cpv p cenv benv renv env n2 (fun A n3 => Ecall n3 (gidf f) (Cs ++ As ++ [A]) (K (Avar n3) (Pos.succ n3)))))
   | PvLetM m p => cmem m cenv benv renv env nxt (fun n1 => cpv p cenv benv renv env n1 K)
   | PvIf c x y t f => cexp x cenv benv renv env nxt (fun A n1 => cexp y cenv benv renv env n1 (fun B n2 =>
                         let tc := cpv t cenv benv renv env n2 K in Eif c A B tc (cpv f cenv benv renv env (after n2 tc) K)))
@@ -1409,6 +1535,7 @@ Fixpoint ctailp (p : spv) (cenv benv : list atom) (renv : list (list atom)) (env
   | PvLetR x p => crec x cenv benv renv env nxt (fun As n1 => ctailp p cenv benv (As :: renv) env n1)
   | PvMatchR x p => crec x cenv benv renv env nxt (fun As n1 => ctailp p cenv benv renv (rev As ++ env) n1)
   | PvSplitR sj x p => crec x cenv benv renv env nxt (fun As n1 => ctailp p cenv benv (rev (rsl sj As) ++ renv) (rev (firstn (rnn sj) As) ++ env) n1)
+  | PvCallP f ccs args p => ccnts ccs cenv benv renv env nxt (fun Cs n1 => cexps args cenv benv renv env n1 (fun As n2 => cpv p cenv benv renv env n2 (fun A n3 => Ecall n3 (gidf f) (Cs ++ As ++ [A]) (Eret (Avar n3)))))
   | PvLetM m p => cmem m cenv benv renv env nxt (fun n1 => ctailp p cenv benv renv env n1)
   | PvIf c x y t f => cexp x cenv benv renv env nxt (fun A n1 => cexp y cenv benv renv env n1 (fun B n2 =>
                         let tc := ctailp t cenv benv renv env n2 in Eif c A B tc (ctailp f cenv benv renv env (after n2 tc))))
@@ -1441,6 +1568,7 @@ Fixpoint ctailx (x : sx) (cenv benv : list atom) (renv : list (list atom)) (env 
   | XLetR r x => crec r cenv benv renv env nxt (fun As n1 => ctailx x cenv benv (As :: renv) env n1)
   | XMatchR r x => crec r cenv benv renv env nxt (fun As n1 => ctailx x cenv benv renv (rev As ++ env) n1)
   | XSplitR sj r x => crec r cenv benv renv env nxt (fun As n1 => ctailx x cenv benv (rev (rsl sj As) ++ renv) (rev (firstn (rnn sj) As) ++ env) n1)
+  | XCallP f ccs args p => ccnts ccs cenv benv renv env nxt (fun Cs n1 => cexps args cenv benv renv env n1 (fun As n2 => cpv p cenv benv renv env n2 (fun A n3 => Ecall n3 (gidf f) (Cs ++ As ++ [A]) (Eret (Avar n3)))))
   | XMatchP p x | XLetP p x => cpv p cenv benv renv env nxt (fun A n1 => ctailx x cenv benv renv (A :: env) n1)
   end.
 
@@ -1780,6 +1908,13 @@ Fixpoint wfm (sigs : wfctx) (r rm mok : bool) (nx : nat) (k : list kind) (rk : l
   | MMatchR x m => wfr sigs r mok nx k rk x && wfm sigs r rm mok nx k rk m
   | MSplitR sj x m => Nat.eqb (rtype rk x) sj && wfr sigs r mok nx k rk x && wfm sigs r rm mok nx k (rev (RJ sj) ++ rk) m
   | MMatchP p m | MLetP p m => wfpv sigs r rm mok false nx k rk p && wfm sigs r rm mok nx k rk m
+  | MCallP f ccs args p =>
+      match nth_error (fst sigs) f with
+      | Some gs => Nat.eqb (len_c ccs) (sn gs) && kinds_eqb (kinds_s rk args) (removelast (sk gs)) && sp gs && sm gs && last_num (sk gs)
+                   && sr gs && negb (sw gs || isq gs) && cfits_b gs (fbound gs f) sigs ccs
+                   && wfcs sigs r mok nx k rk ccs && wfs sigs r mok nx k rk args && wfpv sigs r rm mok false nx k rk p
+      | None => false
+      end
   end
 (* a number and a memory: its numbers and memories as a number made after memories reads them; the recursive call where [rp]
     allows it; a callee giving back a number and a memory takes one *)
@@ -1802,6 +1937,13 @@ with wfpv (sigs : wfctx) (r rm mok rp : bool) (nx : nat) (k : list kind) (rk : l
   | PvLetR x p => wfr sigs r mok nx k rk x && wfpv sigs r rm mok rp nx k (rtype rk x :: rk) p
   | PvMatchR x p => wfr sigs r mok nx k rk x && wfpv sigs r rm mok rp nx k rk p
   | PvSplitR sj x p => Nat.eqb (rtype rk x) sj && wfr sigs r mok nx k rk x && wfpv sigs r rm mok rp nx k (rev (RJ sj) ++ rk) p
+  | PvCallP f ccs args p =>
+      match nth_error (fst sigs) f with
+      | Some gs => Nat.eqb (len_c ccs) (sn gs) && kinds_eqb (kinds_s rk args) (removelast (sk gs)) && sp gs && sm gs && last_num (sk gs)
+                   && negb (sr gs) && negb (sw gs) && match sq gs with Some KNum => true | _ => false end && cfits_b gs (fbound gs f) sigs ccs
+                   && wfcs sigs r mok nx k rk ccs && wfs sigs r mok nx k rk args && wfpv sigs r rm mok rp nx k rk p
+      | None => false
+      end
   | PvLetM m p => wfm sigs r rm mok nx k rk m && wfpv sigs r rm mok rp nx k rk p
   | PvIf _ x y t f => wf sigs r mok nx k rk x && wf sigs r mok nx k rk y && wfpv sigs r rm mok rp nx k rk t && wfpv sigs r rm mok rp nx k rk f
   | PvIfB c t f => wfb sigs r mok nx k rk c && wfpv sigs r rm mok rp nx k rk t && wfpv sigs r rm mok rp nx k rk f
@@ -1834,6 +1976,13 @@ Fixpoint wfx (sigs : wfctx) (rx : bool) (nx : nat) (k : list kind) (rk : list na
   | XLetR r x => wfr sigs false true nx k rk r && wfx sigs rx nx k (rtype rk r :: rk) x
   | XMatchR r x => wfr sigs false true nx k rk r && wfx sigs rx nx k rk x
   | XSplitR sj r x => Nat.eqb (rtype rk r) sj && wfr sigs false true nx k rk r && wfx sigs rx nx k (rev (RJ sj) ++ rk) x
+  | XCallP f ccs args p =>
+      match nth_error (fst sigs) f with
+      | Some gs => Nat.eqb (len_c ccs) (sn gs) && kinds_eqb (kinds_s rk args) (removelast (sk gs)) && sp gs && sm gs && last_num (sk gs)
+                   && negb (sr gs) && negb (isq gs) && cfits_b gs (fbound gs f) sigs ccs
+                   && wfcs sigs false true nx k rk ccs && wfs sigs false true nx k rk args && wfpv sigs false false true false nx k rk p
+      | None => false
+      end
   | XMatchP p x | XLetP p x => wfpv sigs false false true false nx k rk p && wfx sigs rx nx k rk x
   end.
 
@@ -1959,11 +2108,13 @@ Fixpoint sh_m (sh : list i63) (m : smem) {struct m} : bool :=
   | MHw _ args m => sh_es sh args && sh_m sh m
   | MLetR x m | MMatchR x m | MSplitR _ x m => sh_r sh x && sh_m sh m
   | MMatchP p m | MLetP p m => sh_pv sh p && sh_m sh m
+  | MCallP _ ccs args p => sh_cs sh ccs && sh_es sh args && sh_pv sh p
   end
 with sh_pv (sh : list i63) (p : spv) {struct p} : bool :=
   match p with
   | PvMk e m => sh_e sh e && sh_m sh m
   | PvCall _ ccs args m | PvRec ccs args m => sh_cs sh ccs && sh_es sh args && sh_m sh m
+  | PvCallP _ ccs args p => sh_cs sh ccs && sh_es sh args && sh_pv sh p
   | PvLet e p => sh_e sh e && sh_pv sh p
   | PvLetB c p => sh_b sh c && sh_pv sh p
   | PvLetC c p => sh_c sh c && sh_pv sh p
@@ -1985,6 +2136,7 @@ Fixpoint sh_x (sh : list i63) (x : sx) {struct x} : bool :=
   | XMatch _ x0 x1 => sh_x sh x0 && sh_x sh x1
   | XLetC c x => sh_c sh c && sh_x sh x
   | XRec ccs args m | XCall _ ccs args m => sh_cs sh ccs && sh_es sh args && sh_m sh m
+  | XCallP _ ccs args p => sh_cs sh ccs && sh_es sh args && sh_pv sh p
   | XLetR r x | XMatchR r x | XSplitR _ r x => sh_r sh r && sh_x sh x
   | XMatchP p x | XLetP p x => sh_pv sh p && sh_x sh x
   end.
@@ -2040,11 +2192,13 @@ Definition bok (o : option Z) : bool :=
     its linear bound the first counter's less one (step 37) *)
 Definition wctx (sigs : list sig) (gs : sig) (rc : bool) : wfctx :=
   (sigs, ((sb gs, sv gs), if rc then [(None, lshift (-1) (lunit (Nat.pred (sn gs))))] else [])).
-Definition swok (gs : sig) : bool :=
+Definition swok0 (gs : sig) : bool :=
   match sv gs with
   | [] => true
   | vs => forallb (fun i => existsb (fun P => existsb (fun m => Nat.leb 1 (fst m) && list_eq_dec Nat.eq_dec (snd m) [i]) P) vs) (seq 0 (sn gs))
   end.
+(* a function's own signature: its body is read on the two components (step 44) *)
+Definition swok (gs : sig) : bool := swok0 gs && negb (sp gs).
 Definition wf_f (sigs : list sig) (gs : sig) (b : fbody) : bool :=
   bok (sb gs) && swok gs &&
   match sq gs with
@@ -2171,6 +2325,52 @@ Definition callees_ok (P : prog) (gidf : nat -> ident) (cs : list callee) : Prop
 (* ================================================================ the theorem, proved once for every syntax tree *)
 
 (** a KQL atom whose variable, if any, is below [n] *)
+(** a function with the pair (step 44): called on numbers and a memory it is the function of the components; given the
+    numbers and the pair's number, the function given the pair *)
+Lemma appc_cmapT : forall x A B (f : A -> B) h cvs, appc x B (cmapT x A B f h) cvs = f (appc x A h cvs).
+Proof. induction x as [|x IH]; intros A B f h cvs; [reflexivity | destruct cvs as [|c cvs]; cbn [appc cmapT]; apply IH]. Qed.
+Lemma appnTP_unpair : forall ks T g vs s, appnTP ks T g vs s = appnT ks true T (unpairT ks T g) vs s.
+Proof.
+  induction ks as [|[| |ri] ks IH]; intros T g vs s; cbn [appnTP appnT unpairT].
+  - reflexivity.
+  - destruct ks as [|k2 ks2].
+    + destruct vs as [|[x| |] vs]; reflexivity.
+    + destruct vs as [|[x|b|ri x] vs]; apply IH.
+  - destruct vs as [|[x|b|ri x] vs]; apply IH.
+  - destruct vs as [|v vs]; apply IH.
+Qed.
+Lemma last_num_split : forall ks, last_num ks = true -> ks = removelast ks ++ [KNum].
+Proof.
+  intros ks H. unfold last_num in H. destruct (rev ks) as [|k r] eqn:E; [discriminate|]. destruct k; try discriminate.
+  rewrite <- (rev_involutive ks), E. cbn [rev]. rewrite removelast_last. reflexivity.
+Qed.
+Lemma appnTP_snoc : forall ks T g vs x s, map kind_of vs = removelast ks -> last_num ks = true ->
+  appnTP ks T g (vs ++ [VNum x]) s = appnTPP ks T g vs (x, s).
+Proof.
+  intros ks T g vs x s Hk Hl. pose proof (last_num_split ks Hl) as Hs. clear Hl.
+  revert vs Hk g Hs. induction ks as [|k ks IH]; intros vs Hk g Hs; [discriminate Hs|].
+  destruct ks as [|k2 ks2].
+  - cbn in Hs. inversion Hs; subst. destruct vs as [|v vs]; [|discriminate Hk]. reflexivity.
+  - cbn [removelast app] in Hk, Hs. destruct vs as [|v vs]; [discriminate Hk|]. cbn [map] in Hk. injection Hk as Hv Hk.
+    assert (Hs' : k2 :: ks2 = removelast (k2 :: ks2) ++ [KNum]) by (injection Hs; auto).
+    destruct v as [n|b|ri y]; cbn [kind_of] in Hv; subst k; cbn [app appnTP appnTPP]; apply IH; auto.
+Qed.
+(** a call given the whole pair is the call given its number and memory *)
+Lemma callf_snoc : forall gs h cvs vs pr, sp gs = true -> sm gs = true -> last_num (sk gs) = true -> map kind_of vs = removelast (sk gs) ->
+  callf gs h cvs (vs ++ [VNum (fst pr)]) (snd pr) = callfp gs h cvs vs pr.
+Proof.
+  intros [x k m r w q b v p] h cvs vs [y t] P M L K. cbn [sp sm sk fst snd] in *. subst p m. cbn [callf callfp].
+  apply appnTP_snoc; assumption.
+Qed.
+Lemma callnp_snoc : forall gs h cvs vs pr, sp gs = true -> sm gs = true -> last_num (sk gs) = true -> map kind_of vs = removelast (sk gs) ->
+  calln gs h cvs (vs ++ [VNum (fst pr)]) (snd pr) = callnp gs h cvs vs pr.
+Proof. intros gs h cvs vs pr P M L K. unfold calln, callnp. rewrite (callf_snoc gs h cvs vs pr P M L K). reflexivity. Qed.
+Lemma callmp_snoc : forall gs h cvs vs pr, sp gs = true -> sm gs = true -> last_num (sk gs) = true -> map kind_of vs = removelast (sk gs) ->
+  callm gs h cvs (vs ++ [VNum (fst pr)]) (snd pr) = callmp gs h cvs vs pr.
+Proof. intros gs h cvs vs pr P M L K. unfold callm, callmp. rewrite (callf_snoc gs h cvs vs pr P M L K). reflexivity. Qed.
+Lemma kinds_snoc : forall ks vs x, last_num ks = true -> map kind_of vs = removelast ks -> map kind_of (vs ++ [VNum x]) = ks.
+Proof. intros ks vs x L K. rewrite map_app, K. cbn [map kind_of]. symmetry. apply last_num_split; exact L. Qed.
+
 Definition atom_lt (a : atom) (n : ident) : Prop := match a with Avar x => Pos.lt x n | _ => True end.
 (** [rho'] has what [rho] has below [n] *)
 Context {RLs : RecLaws}.
@@ -2545,8 +2745,12 @@ Proof. intros k r. apply appnT_false. Qed.
 
 Lemma calln_nomem : forall gs h cvs vs s s', sm gs = false -> calln gs h cvs vs s = calln gs h cvs vs s'.
 Proof.
-  intros [x k m r w q] h cvs vs s s' E; simpl in E; subst m. unfold calln, callf. cbn [sr sq].
-  destruct q as [[| |ri]|].
+  intros [x k m r w q b v p] h cvs vs s s' E; simpl in E; subst m. unfold calln, callf. cbn [sr sq].
+  destruct p; cbn iota beta; destruct q as [[| |ri]|].
+  - f_equal. apply appnT_false.
+  - f_equal. apply appnT_false.
+  - f_equal. f_equal. apply appnT_false.
+  - destruct r; simpl; try reflexivity. apply appnT_false.
   - f_equal. apply appnT_false.
   - f_equal. apply appnT_false.
   - f_equal. f_equal. apply appnT_false.
@@ -2554,7 +2758,7 @@ Proof.
 Qed.
 
 Lemma callf_nomem : forall g (h : ftype g) cvs vs s s', sm g = false -> callf g h cvs vs s = callf g h cvs vs s'.
-Proof. intros [x k m r w q] h cvs vs s s' E; simpl in E; subst m. unfold callf. apply appnT_false. Qed.
+Proof. intros [x k m r w q b v p] h cvs vs s s' E; simpl in E; subst m. unfold callf. destruct p; apply appnT_false. Qed.
 
 (** ** The slot block (step 12, part 3): a record's fields after the first are given back in its cells, which the caller
     saved and writes back afterwards, cell 0 first -- the laws [upd_upd], [upd_rd_id], [rd_upd_ne], [rd_upd_eq] of the kit's
@@ -3108,6 +3312,9 @@ Proof.
   - intros p IHp m IH; intros cs rec recm1 recm2 cenv benv renv env s r rm mok nx k rk cbo Hr W T; cbn [denote_m wfm] in *.
     apply andb_true_iff in W as [Wp Wm]. rewrite (IHp cs rec recm1 recm2 dpair cenv benv renv env s r rm mok false nx k rk _ Hr Wp T).
     apply (IH cs rec recm1 recm2 cenv benv renv _ _ r rm mok nx k rk _ Hr Wm T).
+  - intros fi ccs args p IHp; intros cs rec recm1 recm2 cenv benv renv env s r rm mok nx k rk cbo Hr W T; cbn [denote_m wfm] in *.
+    cbn [fst] in W; rewrite nth_sigs in W. unfold callee in *. destruct (nth_error cs fi) as [[gs h]|]; simpl in W; [|reflexivity].
+    split_w W. rewrite (IHp cs rec recm1 recm2 dpair cenv benv renv env s r rm mok false nx k rk _ Hr W0 T). reflexivity.
   - intros e m IHm; intros cs rec recm1 recm2 recp cenv benv renv env s r rm mok rp nx k rk cbo Hr W T; cbn [denote_pv wfpv] in *.
     split_w W. rewrite (IHm cs rec recm1 recm2 cenv benv renv env s r rm mok nx k rk _ Hr W0 T). reflexivity.
   - intros fi ccs args m IHm; intros cs rec recm1 recm2 recp cenv benv renv env s r rm mok rp nx k rk cbo Hr W T; cbn [denote_pv wfpv] in *.
@@ -3145,6 +3352,9 @@ Proof.
   - intros sj x p IH; intros cs rec recm1 recm2 recp cenv benv renv env s r rm mok rp nx k rk cbo Hr W T; cbn [denote_pv wfpv] in *.
     split_w W. apply Nat.eqb_eq in W. rewrite !rsplit_eq. apply (IH cs rec recm1 recm2 recp cenv benv _ _ s r rm mok rp nx k _ _ Hr W0).
     apply rsplit_typed; [rewrite <- W; eapply kind_denote_r; [exact W1 | exact T] | exact T].
+  - intros fi ccs args p IHp; intros cs rec recm1 recm2 recp cenv benv renv env s r rm mok rp nx k rk cbo Hr W T; cbn [denote_pv wfpv] in *.
+    cbn [fst] in W; rewrite nth_sigs in W. unfold callee in *. destruct (nth_error cs fi) as [[gs h]|]; simpl in W; [|reflexivity].
+    split_w W. rewrite (IHp cs rec recm1 recm2 recp cenv benv renv env s r rm mok rp nx k rk _ Hr W0 T). reflexivity.
 Qed.
 Lemma denote_m_recm_ext : forall m cs rec recm1 recm2 cenv benv renv env s r rm mok nx k rk cbo,
   (forall cvs l s', length cvs = nx -> map kind_of l = k -> recm1 cvs l s' = recm2 cvs l s') ->
@@ -3159,7 +3369,7 @@ Lemma denote_x_recx_ext : forall x cs rec recm recx1 recx2 cenv benv renv env s 
   denote_x cs rec recm recx1 cenv benv renv env s x = denote_x cs rec recm recx2 cenv benv renv env s x.
 Proof.
   induction x as [e | m x IH | e x IH | b x IH | c a b x1 IH1 x2 IH2 | b x1 IH1 x2 IH2 | c x0 IH0 x1 IH1 | c x IH
-                 | ccs args m | fi ccs args m | rr x IH | rr x IH | pp x IH | pp x IH | sj rr x IH]; intros cs rec recm recx1 recx2 cenv benv renv env s rx nx k rk cbo Hr W T;
+                 | ccs args m | fi ccs args m | rr x IH | rr x IH | pp x IH | pp x IH | sj rr x IH | fi ccs args pp]; intros cs rec recm recx1 recx2 cenv benv renv env s rx nx k rk cbo Hr W T;
     cbn [denote_x wfx] in *.
   - reflexivity.
   - apply andb_true_iff in W as [_ Wx]. apply (IH cs rec recm recx1 recx2 cenv benv renv env _ rx nx k rk _ Hr Wx T).
@@ -3187,6 +3397,7 @@ Proof.
   - apply andb_true_iff in W as [W Wx]. apply andb_true_iff in W as [Er Wr]. apply Nat.eqb_eq in Er. rewrite !rsplit_eq.
     apply (IH cs rec recm recx1 recx2 cenv benv _ _ s rx nx k _ _ Hr Wx).
     apply rsplit_typed; [rewrite <- Er; eapply kind_denote_r; [exact Wr | exact T] | exact T].
+  - reflexivity.
 Qed.
 
 (** the counter of a number, as the two conditional moves of [ccnt] make it *)
@@ -3699,7 +3910,7 @@ Lemma denote_pv_recp_ext : forall p cs rec recm recp1 recp2 cenv benv renv env s
   denote_pv cs rec recm recp1 cenv benv renv env s p = denote_pv cs rec recm recp2 cenv benv renv env s p.
 Proof.
   induction p as [e m | f ccs args m | ccs args m | e p IH | c p IH | c p IH | x p IH | x p IH | m p IH | c x y t IHt f IHf | c t IHt f IHf
-                 | c p0 IH0 p1 IH1 | p IHp q IHq | sj x p IH];
+                 | c p0 IH0 p1 IH1 | p IHp q IHq | sj x p IH | fi ccs args p IH];
     intros cs rec recm recp1 recp2 cenv benv renv env s r rm mok rp nx k rk cbo Hr W T; cbn [denote_pv wfpv] in *.
   - reflexivity.
   - reflexivity.
@@ -3723,6 +3934,8 @@ Proof.
     apply (IHq cs rec recm recp1 recp2 cenv benv renv _ s2 r rm mok rp nx k rk _ Hr W0 T).
   - split_w W. apply Nat.eqb_eq in W. rewrite !rsplit_eq. apply (IH cs rec recm recp1 recp2 cenv benv _ _ s r rm mok rp nx k _ _ Hr W0).
     apply rsplit_typed; [rewrite <- W; eapply kind_denote_r; [exact W1 | exact T] | exact T].
+  - cbn [fst] in W; rewrite nth_sigs in W. unfold callee in *. destruct (nth_error cs fi) as [[gs h]|]; simpl in W; [|reflexivity].
+    split_w W. rewrite (IH cs rec recm recp1 recp2 cenv benv renv env s r rm mok rp nx k rk _ Hr W0 T). reflexivity.
 Qed.
 
 (** a record taken apart one level (step 43): the atoms of its number fields, and of each record field *)
@@ -4230,7 +4443,7 @@ Proof.
   assert (Hfi : (fi < j)%nat).
   { assert (fi < length cs)%nat by (apply nth_error_Some; rewrite E; discriminate). lia. }
   pose proof (Hcs fi) as Hc. unfold callee in *. rewrite E in Hc.
-  destruct gs as [gx gk gm gr gw gq gb gv]. cbn [sq sr sw sn sk sm sb sv] in *.
+  destruct gs as [gx gk gm gr gw gq gb gv gp]. cbn [sq sr sw sn sk sm sb sv] in *.
   destruct gq as [[| |gri]|]; try discriminate Wq. destruct gr; [discriminate Wr|]. destruct gw; [discriminate Wsw|].
   assert (L1 : length (denote_cs cs rec cenv benv renv denv M ccs) = gx) by (rewrite len_denote_cs; apply Nat.eqb_eq; auto).
   assert (L2 : map kind_of (denote_es cs rec cenv benv renv denv M args) = gk)
@@ -5157,14 +5370,14 @@ Proof.
     assert (Hfi : (fi < j)%nat).
     { assert (fi < length cs)%nat by (apply nth_error_Some; rewrite Ef; discriminate). lia. }
     cbn [crec].
-    destruct gs' as [gx gk gm gr gw gq gb gv]. cbn [sq sr sw sn sk sm sb sv] in Q, Wr, Wsw, Wn, Wk, Wm. subst gq gr gw.
+    destruct gs' as [gx gk gm gr gw gq gb gv gp]. cbn [sq sr sw sn sk sm sb sv] in Q, Wr, Wsw, Wn, Wk, Wm. subst gq gr gw.
     apply IHc with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto. { eapply all_fit_wb; eauto. }
     intros rho1 n1 Cs A1 Le1 LCs VCs.
     pose proof (inv_step rho rho1 cenvA benvA renvA envA cenv benv renv denv nxt n1 Iv A1 Le1) as I1.
     apply IHs with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto.
     intros rho2 n2 As A2 Le2 LAs VAs.
     set (cvs := denote_cs cs rec cenv benv renv denv M ccs) in *. set (vs := denote_es cs rec cenv benv renv denv M args) in *.
-    set (X := callf (mksig8 gx gk gm false false (Some (KRec ri)) gb gv) h cvs vs M) in *.
+    set (X := callf (mksig9 gx gk gm false false (Some (KRec ri)) gb gv gp) h cvs vs M) in *.
     assert (LX : length (relim (RO ri) X (fun l => l)) = rn (RO ri)) by apply rl_len.
     assert (RK : runk P (gidf fi) (map ofn cvs ++ flat_map vflat vs) M (hd 0%uint63 (relim (RO ri) X (fun l => l)))
                    (wslot O (tl (relim (RO ri) X (fun l => l))) M)).
@@ -5335,7 +5548,7 @@ Proof.
   assert (Hfi : (fi < j)%nat).
   { assert (fi < length cs)%nat by (apply nth_error_Some; rewrite E; discriminate). lia. }
   pose proof (Hcs fi) as Hc. unfold callee in *. rewrite E in Hc.
-  destruct gs as [gx gk gm gr gw gq gb gv]. cbn [sq sr sw sn sk sm sb sv] in *.
+  destruct gs as [gx gk gm gr gw gq gb gv gp]. cbn [sq sr sw sn sk sm sb sv] in *.
   destruct gq as [[| |gri]|]; try discriminate Wq. destruct gr; [discriminate Wr|]. destruct gw; [discriminate Wsw|].
   assert (L1 : length (denote_cs cs rec cenv benv renv denv M ccs) = gx) by (rewrite len_denote_cs; apply Nat.eqb_eq; auto).
   assert (L2 : map kind_of (denote_es cs rec cenv benv renv denv M args) = gk)
@@ -5343,6 +5556,49 @@ Proof.
   exact (Hc Hslot _ _ M0 L1 L2 (cs_fit_bound cbs ccs cenv benv renv denv M _ _ Wsh Cb)).
 Qed.
 
+
+(** a call given the whole number-and-memory pair (step 44): the callee's theorem on the components at the pair's number and
+    memory, the call on the pair *)
+Lemma pcall_pre : forall fi gs h cvs vs pr, nth_error cs fi = Some (existT _ gs h) ->
+  sp gs = true -> sm gs = true -> last_num (sk gs) = true ->
+  length cvs = sn gs -> map kind_of vs = removelast (sk gs) -> cfits gs (fbound gs fi) cvs ->
+  if sw gs then exists M', runk P (gidf fi) (map ofn cvs ++ flat_map vflat vs ++ [fst pr]) (snd pr) (callnp gs h cvs vs pr) M'
+  else runk P (gidf fi) (map ofn cvs ++ flat_map vflat vs ++ [fst pr]) (snd pr) (callnp gs h cvs vs pr)
+         (if sr gs then callmp gs h cvs vs pr else match sq gs with Some _ => callmp gs h cvs vs pr | None => snd pr end).
+Proof.
+  intros fi gs h cvs vs pr E Sp Sm Sl L1 L2 L3.
+  pose proof (Hcs fi) as Hc. unfold callee in *. rewrite E in Hc.
+  pose proof (Hc Hslot cvs (vs ++ [VNum (fst pr)]) (snd pr) L1 (kinds_snoc _ _ _ Sl L2) L3) as H1.
+  rewrite (callnp_snoc gs h cvs vs pr Sp Sm Sl L2), (callmp_snoc gs h cvs vs pr Sp Sm Sl L2), flat_map_app in H1.
+  cbn [flat_map vflat app] in H1. exact H1.
+Qed.
+Lemma mcallp_run : forall fi gs h cvs vs pr, nth_error cs fi = Some (existT _ gs h) ->
+  sp gs = true -> sm gs = true -> last_num (sk gs) = true -> sr gs = true -> sw gs = false -> sq gs = None ->
+  length cvs = sn gs -> map kind_of vs = removelast (sk gs) -> cfits gs (fbound gs fi) cvs ->
+  runk P (gidf fi) (map ofn cvs ++ flat_map vflat vs ++ [fst pr]) (snd pr) (callnp gs h cvs vs pr) (callmp gs h cvs vs pr).
+Proof.
+  intros fi gs h cvs vs pr E Sp Sm Sl Sr Sw Sq L1 L2 L3.
+  pose proof (pcall_pre fi gs h cvs vs pr E Sp Sm Sl L1 L2 L3) as H1. rewrite Sw, Sr in H1. exact H1.
+Qed.
+Lemma pvcallp_run : forall fi gs h cvs vs pr, nth_error cs fi = Some (existT _ gs h) ->
+  sp gs = true -> sm gs = true -> last_num (sk gs) = true -> sr gs = false -> sw gs = false -> sq gs = Some KNum ->
+  length cvs = sn gs -> map kind_of vs = removelast (sk gs) -> cfits gs (fbound gs fi) cvs ->
+  runk P (gidf fi) (map ofn cvs ++ flat_map vflat vs ++ [fst pr]) (snd pr) (fst (pvf gs (callfp gs h cvs vs pr)))
+    (snd (pvf gs (callfp gs h cvs vs pr))).
+Proof.
+  intros fi gs h cvs vs pr E Sp Sm Sl Sr Sw Sq L1 L2 L3.
+  pose proof (pcall_pre fi gs h cvs vs pr E Sp Sm Sl L1 L2 L3) as H1.
+  destruct gs as [gx gk gm gr gw gq gb gv gp]. cbn [sp sm sk sr sw sq sn] in *. subst gr gw gq. exact H1.
+Qed.
+Lemma xcallp_run : forall fi gs h cvs vs pr, nth_error cs fi = Some (existT _ gs h) ->
+  sp gs = true -> sm gs = true -> last_num (sk gs) = true -> sr gs = false -> sq gs = None ->
+  length cvs = sn gs -> map kind_of vs = removelast (sk gs) -> cfits gs (fbound gs fi) cvs ->
+  exists M', runk P (gidf fi) (map ofn cvs ++ flat_map vflat vs ++ [fst pr]) (snd pr) (callnp gs h cvs vs pr) M'.
+Proof.
+  intros fi gs h cvs vs pr E Sp Sm Sl Sr Sq L1 L2 L3.
+  pose proof (pcall_pre fi gs h cvs vs pr E Sp Sm Sl L1 L2 L3) as H1. rewrite Sr, Sq in H1.
+  destruct (sw gs); [exact H1 | eexists; exact H1].
+Qed.
 (** a memory: KQL's memory after it is the memory the Rocq text makes; where a number and a memory is taken apart: the
     continuation gets the number's atom and the KQL memory is the pair's -- one mutual lemma, a memory taking a pair apart and
     a pair holding memories (step 44) *)
@@ -5590,6 +5846,36 @@ Proof.
     apply IH with (cenv := cenv) (benv := benv) (renv := renv) (denv := fst (denote_pv cs rec recm dpair cenv benv renv denv M p) :: denv) (rk := rk) (cbs := cbs); auto.
     + apply inv_let; [eapply inv_step; eauto | exact VA | exact LA].
     + intros rho2 n2 A2 Le2. apply HK; [eapply (agree_trans rho rho1 rho2 nxt n1); eauto | lia].
+  - intros fi ccs args p IHp; intros cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W Iv Rt HK; cbn [cmem wfm] in *.
+    (* MCallP *) unfold sigsv in W. cbn [fst] in W; rewrite nth_sigs in W.
+    cbn [denote_m] in HK. unfold callee in *. destruct (nth_error cs fi) as [[gs h]|] eqn:E; simpl in W; [|discriminate].
+    apply andb_true_iff in W as [W Wp]. apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [W Wc].
+    apply andb_true_iff in W as [W Wsh]. apply andb_true_iff in W as [W Wq]. apply andb_true_iff in W as [W Wr]. apply andb_true_iff in W as [W Wl].
+    apply andb_true_iff in W as [W Wsm]. apply andb_true_iff in W as [W Wsp]. apply andb_true_iff in W as [Wn Wk].
+    apply negb_true_iff, orb_false_iff in Wq as [Wsw Wq]. unfold isq in Wq. destruct (sq gs) eqn:Q; [discriminate Wq|].
+    pose proof Iv as (_ & _ & _ & _ & _ & _ & Cb & _).
+    apply ccnts_ok with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto. { eapply all_fit_wb; eauto. }
+    intros rho1 n1 Cs A1 Le1 LCs VCs.
+    pose proof (inv_step rho rho1 cenvA benvA renvA envA cenv benv renv denv nxt n1 Iv A1 Le1) as I1.
+    apply cexps_ok with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto.
+    intros rho2 n2 As A2 Le2 LAs VAs.
+    pose proof (inv_step rho1 rho2 cenvA benvA renvA envA cenv benv renv denv n1 n2 I1 A2 Le2) as I2.
+    eapply (IHp dpair false); [intros Habs; discriminate Habs | intros Habs; discriminate Habs | exact Wp | exact I2 | exact Rt | ].
+    intros rho3 n3 A A3 Le3 LA VA.
+    destruct (mcallp_run fi gs h (denote_cs cs rec cenv benv renv denv M ccs) (denote_es cs rec cenv benv renv denv M args) (denote_pv cs rec recm dpair cenv benv renv denv M p) E Wsp Wsm Wl Wr Wsw Q) as (fg & rho' & F & B & EV).
+      { rewrite len_denote_cs. apply Nat.eqb_eq; auto. }
+      { erewrite kinds_denote_es by eassumption. apply kinds_eqb_eq; auto. }
+      { eapply (cs_fit_bound cbs); eauto. }
+    assert (VC3 : avals rho3 Cs = Some (map ofn (denote_cs cs rec cenv benv renv denv M ccs))).
+    { rewrite (avals_agree rho2 rho3 n2 Cs A3 (Forall_atom_mono Cs n1 n2 LCs Le2)), (avals_agree rho1 rho2 n1 Cs A2 LCs).
+      exact VCs. }
+    assert (VA3 : avals rho3 As = Some (flat_map vflat (denote_es cs rec cenv benv renv denv M args))).
+    { rewrite (avals_agree rho2 rho3 n2 As A3 LAs). exact VAs. }
+    assert (VS3 : avals rho3 (Cs ++ As ++ [A]) = Some (map ofn (denote_cs cs rec cenv benv renv denv M ccs)
+                    ++ flat_map vflat (denote_es cs rec cenv benv renv denv M args) ++ [fst (denote_pv cs rec recm dpair cenv benv renv denv M p)])).
+    { apply avals_app; [exact VC3 | apply avals_app; [exact VA3 | cbn [avals]; rewrite VA; reflexivity]]. }
+    eapply K_call; [exact F | exact VS3 | exact B | exact EV | ].
+    apply HK; [apply agree_set1; [eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); eauto | lia] | lia].
   - intros e m IHm; intros recp rp Hrecp Hrphp cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W Iv Rt HK; cbn [cpv] in *; cbn [denote_pv] in HK.
     (* PvMk *) cbn [wfpv] in W. apply andb_true_iff in W as [We Wm].
     assert (We' : wf (sigsv cbs) r mok nx k rk e = true) by (exact We).
@@ -5771,6 +6057,41 @@ Proof.
     + apply inv_lets; [apply inv_rlets; [eapply inv_step; eauto | exact V2 | apply Forall_slices_kq; apply Forall_skipn_kq; exact LAs] | exact V1 | apply Forall_firstn_kq; exact LAs].
     + apply rsplit_typed; [exact Kx | exact Rt].
     + intros rho2 n2 a A2 Le2 La Va. apply HK; [eapply (agree_trans rho rho1 rho2 nxt n1); eauto | lia | exact La | exact Va].
+  - intros fi ccs args p IHp; intros recp rp Hrecp Hrphp cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W Iv Rt HK; cbn [cpv] in *; cbn [denote_pv] in HK. specialize (IHp recp rp Hrecp Hrphp).
+    (* PvCallP *) pose proof W as W0. cbn [wfpv] in W0. unfold sigsv in W0. cbn [fst] in W0; rewrite nth_sigs in W0.
+    unfold callee in *. destruct (nth_error cs fi) as [[gs h]|] eqn:E; simpl in W0; [|discriminate W0].
+    apply andb_true_iff in W0 as [W0 Wp]. apply andb_true_iff in W0 as [W0 Ws]. apply andb_true_iff in W0 as [W0 Wc].
+    apply andb_true_iff in W0 as [W0 Wsh]. apply andb_true_iff in W0 as [W0 Wq]. apply andb_true_iff in W0 as [W0 Wsw]. apply andb_true_iff in W0 as [W0 Wr]. apply andb_true_iff in W0 as [W0 Wl].
+    apply andb_true_iff in W0 as [W0 Wsm]. apply andb_true_iff in W0 as [W0 Wsp]. apply andb_true_iff in W0 as [Wn Wk].
+    apply negb_true_iff in Wsw, Wr. destruct (sq gs) as [[| |?]|] eqn:Q; try discriminate Wq.
+    pose proof Iv as (_ & _ & _ & _ & _ & _ & Cb & _).
+    apply ccnts_ok with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto. { eapply all_fit_wb; eauto. }
+    intros rho1 n1 Cs A1 Le1 LCs VCs.
+    pose proof (inv_step rho rho1 cenvA benvA renvA envA cenv benv renv denv nxt n1 Iv A1 Le1) as I1.
+    apply cexps_ok with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto.
+    intros rho2 n2 As A2 Le2 LAs VAs.
+    pose proof (inv_step rho1 rho2 cenvA benvA renvA envA cenv benv renv denv n1 n2 I1 A2 Le2) as I2.
+    eapply IHp; [exact Wp | exact I2 | exact Rt | ].
+    intros rho3 n3 A A3 Le3 LA VA.
+    pose proof (pvcallp_run fi gs h (denote_cs cs rec cenv benv renv denv M ccs) (denote_es cs rec cenv benv renv denv M args) (denote_pv cs rec recm recp cenv benv renv denv M p) E Wsp Wsm Wl Wr Wsw Q) as RK.
+    destruct RK as (fg & rho' & Fd & Bd & EVd).
+      { rewrite len_denote_cs. apply Nat.eqb_eq; auto. }
+      { erewrite kinds_denote_es by eassumption. apply kinds_eqb_eq; auto. }
+      { eapply (cs_fit_bound cbs); eauto. }
+    assert (VC3 : avals rho3 Cs = Some (map ofn (denote_cs cs rec cenv benv renv denv M ccs))).
+    { rewrite (avals_agree rho2 rho3 n2 Cs A3 (Forall_atom_mono Cs n1 n2 LCs Le2)), (avals_agree rho1 rho2 n1 Cs A2 LCs).
+      exact VCs. }
+    assert (VA3 : avals rho3 As = Some (flat_map vflat (denote_es cs rec cenv benv renv denv M args))).
+    { rewrite (avals_agree rho2 rho3 n2 As A3 LAs). exact VAs. }
+    assert (VS3 : avals rho3 (Cs ++ As ++ [A]) = Some (map ofn (denote_cs cs rec cenv benv renv denv M ccs)
+                    ++ flat_map vflat (denote_es cs rec cenv benv renv denv M args) ++ [fst (denote_pv cs rec recm recp cenv benv renv denv M p)])).
+    { apply avals_app; [exact VC3 | apply avals_app; [exact VA3 | cbn [avals]; rewrite VA; reflexivity]]. }
+    eapply K_call; [exact Fd | exact VS3 | exact Bd | exact EVd | ].
+    apply HK.
+    + apply agree_set1; [eapply (agree_3 rho rho1 rho2 rho3 nxt n1 n2); eauto | lia].
+    + lia.
+    + simpl. lia.
+    + cbn [aval]. rewrite PTree.gss. reflexivity.
 Qed.
 Lemma cmem_ok : forall m cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs, wfm (sigsv cbs) r rm mok nx k rk m = true ->
   inv cbs rho cenvA benvA renvA envA cenv benv renv denv nxt -> rtyped renv rk ->
@@ -6137,7 +6458,7 @@ Lemma skel_denote : forall mm ws cenv benv renv denv M, skel mm = Some ws ->
   denote_m cs rec recm cenv benv renv denv M mm = wmem (map (ival cenv benv renv denv M) ws) M.
 Proof.
   induction mm as [| h i x mm IH | e mm IH | m1 IH1 m2 IH2 | c a b m1 IH1 m2 IH2 | ccs args mm IH | fi ccs args mm IH | c m0 IH0 m1 IH1
-                 | b m1 IH1 m2 IH2 | b mm IH | h i x mm IH | c mm IH | o args mm IH | h i x mm IH | x mm IH | x mm IH | sj x mm IH | p mm IH | p mm IH]; intros ws cenv benv renv denv M Sk; cbn [skel] in Sk; try discriminate.
+                 | b m1 IH1 m2 IH2 | b mm IH | h i x mm IH | c mm IH | o args mm IH | h i x mm IH | x mm IH | x mm IH | sj x mm IH | p mm IH | p mm IH | fi ccs args p]; intros ws cenv benv renv denv M Sk; cbn [skel] in Sk; try discriminate.
   - injection Sk as <-. reflexivity.
   - destruct (skel mm) as [w|] eqn:E; [|discriminate]. cbn [option_map] in Sk. injection Sk as <-.
     cbn [denote_m map wmem ival]. rewrite (IH w cenv benv renv denv M eq_refl). reflexivity.
@@ -6146,7 +6467,7 @@ Qed.
 Lemma skel_wf : forall mm ws rk, skel mm = Some ws -> wfm (sigsv cbs) r rm mok nx k rk mm = true -> forallb (wfi rk) ws = true.
 Proof.
   induction mm as [| h i x mm IH | e mm IH | m1 IH1 m2 IH2 | c a b m1 IH1 m2 IH2 | ccs args mm IH | fi ccs args mm IH | c m0 IH0 m1 IH1
-                 | b m1 IH1 m2 IH2 | b mm IH | h i x mm IH | c mm IH | o args mm IH | h i x mm IH | x mm IH | x mm IH | sj x mm IH | p mm IH | p mm IH]; intros ws rk Sk W; cbn [skel] in Sk; try discriminate.
+                 | b m1 IH1 m2 IH2 | b mm IH | h i x mm IH | c mm IH | o args mm IH | h i x mm IH | x mm IH | x mm IH | sj x mm IH | p mm IH | p mm IH | fi ccs args p]; intros ws rk Sk W; cbn [skel] in Sk; try discriminate.
   - injection Sk as <-. reflexivity.
   - destruct (skel mm) as [w|] eqn:E; [|discriminate]. cbn [option_map] in Sk. injection Sk as <-.
     cbn [wfm] in W. apply andb_true_iff in W as [W Wm]. apply andb_true_iff in W as [W Wx]. apply andb_true_iff in W as [Wh Wi].
@@ -6189,7 +6510,7 @@ Lemma mt_m_sel : forall m T cenv benv renv denv M rk, mt_m m = Some T -> wfm (si
     rm = true /\ len_c ccs = nx /\ kinds_s rk args = k /\ rec_ok (sigsv cbs) ccs = true.
 Proof.
   induction m as [| h i x m IH | e m IH | m1 IH1 m2 IH2 | c a b m1 IH1 m2 IH2 | ccs args m IH | fi ccs args m IH | c m0 IH0 m1 IH1
-                 | b m1 IH1 m2 IH2 | b m IH | h i x m IH | c m IH | o args m IH | h i x m IH | x m IH | x m IH | sj x m IH | p m IH | p m IH]; intros T cenv benv renv denv M rk MT W; cbn [mt_m] in MT; try discriminate.
+                 | b m1 IH1 m2 IH2 | b m IH | h i x m IH | c m IH | o args m IH | h i x m IH | x m IH | x m IH | sj x m IH | p m IH | p m IH | fi ccs args p]; intros T cenv benv renv denv M rk MT W; cbn [mt_m] in MT; try discriminate.
   - destruct (mt_m m1) as [t'|] eqn:E1; [|discriminate]. destruct (mt_m m2) as [u'|] eqn:E2; [|discriminate].
     injection MT as <-. cbn [wfm] in W. apply andb_true_iff in W as [W Wm2]. apply andb_true_iff in W as [W Wm1].
     apply andb_true_iff in W as [Wa Wb].
@@ -6364,7 +6685,7 @@ Lemma ctailm_ok : forall m cenvA benvA renvA envA cenv benv renv denv nxt rho M 
   evalk P f rho M (ctailm gidf g mv m cenvA benvA renvA envA nxt) 0%uint63 (denote_m cs rec recm cenv benv renv denv M m).
 Proof.
   induction m as [| h i x m IH | e m IH | m1 IH1 m2 IH2 | c a b m1 IH1 m2 IH2 | ccs args m IH | fi ccs args m IH | c m0 IH0 m1 IH1
-                 | b m1 IH1 m2 IH2 | b m IH | h i x m IH | c m IH | o args m IH | h i x m IH | x m IH | x m IH | sj x m IH | p m IH | p m IH];
+                 | b m1 IH1 m2 IH2 | b m IH | h i x m IH | c m IH | o args m IH | h i x m IH | x m IH | x m IH | sj x m IH | p m IH | p m IH | fi ccs args p];
     intros cenvA benvA renvA envA cenv benv renv denv nxt rho M rk cbs W Iv Rt; cbn [ctailm] in *.
   - apply cmem_ok with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto. intros. apply K_ret. reflexivity.
   - apply cmem_ok with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto. intros. apply K_ret. reflexivity.
@@ -6461,6 +6782,7 @@ Proof.
     eapply (proj2 cmem_cpv_ok p dpair false); [intros Habs; discriminate Habs | intros Habs; discriminate Habs | exact Wp | exact Iv | exact Rt | ].
     intros rho1 n1 A A1 Le1 LA VA. cbn [denote_m]. cbv zeta.
     apply IH with (rk := rk) (cbs := cbs); auto. apply inv_let; [eapply inv_step; eauto | exact VA | exact LA].
+  - (* MCallP *) apply cmem_ok with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto. intros. apply K_ret. reflexivity.
 Qed.
 (** a number made after memories, in tail position (no recursive call of a number or a memory in it: [r], [rm] false; the
     memory is there: [mok]): the body ends with its number and an end memory -- the last memory made, or the one the call at
@@ -6498,7 +6820,7 @@ Lemma ctailp_ok : forall (recp : list nat -> list val -> mem -> (i63 * mem)%type
 Proof.
   intros recp rp Hrecp Hrphp Hr0 Hrm0 Hm1.
   induction p as [e m | fi ccs args m | ccs args m | e p IH | c p IH | c p IH | x p IH | x p IH | m p IH
-                 | c x y t IHt u IHu | c t IHt u IHu | c p0 IH0 p1 IH1 | p IHp q IHq | sj x p IH];
+                 | c x y t IHt u IHu | c t IHt u IHu | c p0 IH0 p1 IH1 | p IHp q IHq | sj x p IH | fi ccs args p IH];
     intros cenvA benvA renvA envA cenv benv renv denv nxt rho M rk cbs W Iv Rt; cbn [ctailp denote_pv].
   - (* PvMk *) cbn [wfpv] in W. apply andb_true_iff in W as [We Wm].
     assert (We' : wf (sigsv cbs) r mok nx k rk e = true) by (rewrite Hr0, Hm1; exact We).
@@ -6623,6 +6945,38 @@ Proof.
     destruct (split_atoms rho1 As _ sj Kx VAs) as [V1 V2].
     rewrite rsplit_eq. apply IH with (rk := rev (RJ sj) ++ rk) (cbs := cbs); auto. apply inv_lets; [apply inv_rlets; [eapply inv_step; eauto | exact V2 | apply Forall_slices_kq; apply Forall_skipn_kq; exact LAs] | exact V1 | apply Forall_firstn_kq; exact LAs].
     apply rsplit_typed; [exact Kx | exact Rt].
+  - (* PvCallP *) pose proof W as W0. cbn [wfpv] in W0. unfold sigsv in W0. cbn [fst] in W0; rewrite nth_sigs in W0.
+    unfold callee in *. destruct (nth_error cs fi) as [[gs h]|] eqn:E; simpl in W0; [|discriminate W0].
+    apply andb_true_iff in W0 as [W0 Wp]. apply andb_true_iff in W0 as [W0 Ws]. apply andb_true_iff in W0 as [W0 Wc].
+    apply andb_true_iff in W0 as [W0 Wsh]. apply andb_true_iff in W0 as [W0 Wq]. apply andb_true_iff in W0 as [W0 Wsw]. apply andb_true_iff in W0 as [W0 Wr]. apply andb_true_iff in W0 as [W0 Wl].
+    apply andb_true_iff in W0 as [W0 Wsm]. apply andb_true_iff in W0 as [W0 Wsp]. apply andb_true_iff in W0 as [Wn Wk].
+    apply negb_true_iff in Wsw, Wr. destruct (sq gs) as [[| |?]|] eqn:Q; try discriminate Wq.
+    assert (Ws' : wfs (sigsv cbs) r mok nx k rk args = true) by (rewrite Hr0, Hm1; exact Ws).
+    assert (Wc' : wfcs (sigsv cbs) r mok nx k rk ccs = true) by (rewrite Hr0, Hm1; exact Wc).
+    pose proof Iv as (_ & _ & _ & _ & _ & _ & Cb & _).
+    apply ccnts_ok with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto. { eapply all_fit_wb; eauto. }
+    intros rho1 n1 Cs A1 Le1 LCs VCs.
+    pose proof (inv_step rho rho1 cenvA benvA renvA envA cenv benv renv denv nxt n1 Iv A1 Le1) as I1.
+    apply cexps_ok with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto.
+    intros rho2 n2 As A2 Le2 LAs VAs.
+    pose proof (inv_step rho1 rho2 cenvA benvA renvA envA cenv benv renv denv n1 n2 I1 A2 Le2) as I2.
+    eapply (cpv_ok recp rp Hrecp Hrphp Hr0 Hrm0 Hm1 p); [exact Wp | exact I2 | exact Rt | ].
+    intros rho3 n3 A A3 Le3 LA VA.
+    pose proof (pvcallp_run fi gs h (denote_cs cs rec cenv benv renv denv M ccs) (denote_es cs rec cenv benv renv denv M args) (denote_pv cs rec recm recp cenv benv renv denv M p) E Wsp Wsm Wl Wr Wsw Q) as RK.
+    destruct RK as (fg & rho' & Fd & Bd & EVd).
+      { rewrite len_denote_cs. apply Nat.eqb_eq; auto. }
+      { erewrite kinds_denote_es by eassumption. apply kinds_eqb_eq; auto. }
+      { eapply (cs_fit_bound cbs); eauto. }
+    assert (VC3 : avals rho3 Cs = Some (map ofn (denote_cs cs rec cenv benv renv denv M ccs))).
+    { rewrite (avals_agree rho2 rho3 n2 Cs A3 (Forall_atom_mono Cs n1 n2 LCs Le2)), (avals_agree rho1 rho2 n1 Cs A2 LCs).
+      exact VCs. }
+    assert (VA3 : avals rho3 As = Some (flat_map vflat (denote_es cs rec cenv benv renv denv M args))).
+    { rewrite (avals_agree rho2 rho3 n2 As A3 LAs). exact VAs. }
+    assert (VS3 : avals rho3 (Cs ++ As ++ [A]) = Some (map ofn (denote_cs cs rec cenv benv renv denv M ccs)
+                    ++ flat_map vflat (denote_es cs rec cenv benv renv denv M args) ++ [fst (denote_pv cs rec recm recp cenv benv renv denv M p)])).
+    { apply avals_app; [exact VC3 | apply avals_app; [exact VA3 | cbn [avals]; rewrite VA; reflexivity]]. }
+    eapply K_call; [exact Fd | exact VS3 | exact Bd | exact EVd | ].
+    apply K_ret. cbn [aval]. rewrite PTree.gss. reflexivity.
 Qed.
 
 Lemma ctailx_ok : forall x cenv benv renv denv M rk cbs, r = false -> rm = false -> mok = true -> wfx (sigsv cbs) rx nx k rk x = true -> rtyped renv rk ->
@@ -6631,7 +6985,7 @@ Lemma ctailx_ok : forall x cenv benv renv denv M rk cbs, r = false -> rm = false
     evalk P f rho M (ctailx gidf g mv x cenvA benvA renvA envA nxt) (denote_x cs rec recm recx cenv benv renv denv M x) Me.
 Proof.
   induction x as [e | m x IH | e x IH | b x IH | c a b x1 IH1 x2 IH2 renv | b x1 IH1 x2 IH2 renv | c x0 IH0 x1 IH1 renv | c x IH
-                 | ccs args m | fi ccs args m | rr x IH | rr x IH | pp x IH | pp x IH | sj rr x IH];
+                 | ccs args m | fi ccs args m | rr x IH | rr x IH | pp x IH | pp x IH | sj rr x IH | fi ccs args pp];
     intros cenv benv renv denv M rk cbs Hr0 Hrm0 Hm1 W Rt Cb; cbn [wfx] in W.
   - (* XRet *) exists M. intros cenvA benvA renvA envA nxt rho Iv. cbn [ctailx denote_x].
     assert (We : wf (sigsv cbs) r mok nx k rk e = true) by (rewrite Hr0, Hm1; exact W).
@@ -6802,6 +7156,41 @@ Proof.
     apply crec_ok with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto. intros rho1 n1 As A1 Le1 LAs VAs.
     destruct (split_atoms rho1 As _ sj Kx VAs) as [V1 V2].
     apply HMe. apply inv_lets; [apply inv_rlets; [eapply inv_step; eauto | exact V2 | apply Forall_slices_kq; apply Forall_skipn_kq; exact LAs] | exact V1 | apply Forall_firstn_kq; exact LAs].
+  - (* XCallP *) unfold sigsv in W. cbn [fst] in W; rewrite nth_sigs in W.
+    unfold callee in *. destruct (nth_error cs fi) as [[gs h]|] eqn:E; simpl in W; [|discriminate].
+    apply andb_true_iff in W as [W Wpp]. apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [W Wc].
+    apply andb_true_iff in W as [W Wsh]. apply andb_true_iff in W as [W Wq]. apply andb_true_iff in W as [W Wr]. apply andb_true_iff in W as [W Wl].
+    apply andb_true_iff in W as [W Wsm]. apply andb_true_iff in W as [W Wsp]. apply andb_true_iff in W as [Wn Wk].
+    apply negb_true_iff in Wr. unfold isq in Wq. apply negb_true_iff in Wq. destruct (sq gs) eqn:Q; [discriminate Wq|].
+    destruct (denote_pv cs rec recm dpair cenv benv renv denv M pp) as [x0 s0] eqn:Ep.
+    destruct (xcallp_run fi gs h (denote_cs cs rec cenv benv renv denv M ccs) (denote_es cs rec cenv benv renv denv M args) (x0, s0)
+                E Wsp Wsm Wl Wr Q) as [Me RK].
+      { rewrite len_denote_cs. apply Nat.eqb_eq; auto. }
+      { erewrite kinds_denote_es by eassumption. apply kinds_eqb_eq; auto. }
+      { eapply (cs_fit_bound cbs); eauto. }
+    exists Me. intros cenvA benvA renvA envA nxt rho Iv. cbn [ctailx denote_x]. unfold callee. rewrite E, Ep.
+    assert (Wc' : wfcs (sigsv cbs) r mok nx k rk ccs = true) by (rewrite Hr0, Hm1; exact Wc).
+    assert (Ws' : wfs (sigsv cbs) r mok nx k rk args = true) by (rewrite Hr0, Hm1; exact Ws).
+    apply ccnts_ok with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto. { eapply all_fit_wb; eauto. }
+    intros rho1 n1 Cs A1 Le1 LCs VCs.
+    pose proof (inv_step rho rho1 cenvA benvA renvA envA cenv benv renv denv nxt n1 Iv A1 Le1) as I1.
+    apply cexps_ok with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto.
+    intros rho2 n2 As A2 Le2 LAs VAs.
+    pose proof (inv_step rho1 rho2 cenvA benvA renvA envA cenv benv renv denv n1 n2 I1 A2 Le2) as I2.
+    eapply (cpv_ok dpair false); [intros Habs; discriminate Habs | intros Habs; discriminate Habs | exact Hr0 | exact Hrm0 | exact Hm1
+                                  | exact Wpp | exact I2 | exact Rt | ].
+    intros rho3 n3 A A3 Le3 LA VA. rewrite Ep in VA |- *. cbn [fst snd] in VA |- *.
+    destruct RK as (fg & rho' & F & B & EV).
+    assert (VC3 : avals rho3 Cs = Some (map ofn (denote_cs cs rec cenv benv renv denv M ccs))).
+    { rewrite (avals_agree rho2 rho3 n2 Cs A3 (Forall_atom_mono Cs n1 n2 LCs Le2)), (avals_agree rho1 rho2 n1 Cs A2 LCs).
+      exact VCs. }
+    assert (VA3 : avals rho3 As = Some (flat_map vflat (denote_es cs rec cenv benv renv denv M args))).
+    { rewrite (avals_agree rho2 rho3 n2 As A3 LAs). exact VAs. }
+    assert (VS3 : avals rho3 (Cs ++ As ++ [A]) = Some (map ofn (denote_cs cs rec cenv benv renv denv M ccs)
+                    ++ flat_map vflat (denote_es cs rec cenv benv renv denv M args) ++ [fst ((x0, s0))])).
+    { apply avals_app; [exact VC3 | apply avals_app; [exact VA3 | cbn [avals]; rewrite VA; reflexivity]]. }
+    eapply K_call; [exact F | exact VS3 | exact B | exact EV | ].
+    apply K_ret. cbn [aval]. rewrite PTree.gss. reflexivity.
 Qed.
 (* ---------------------------------------------------------------- a boolean given back (step 24) *)
 Variables (recb : list nat -> list val -> mem -> bool) (rbb : bool).
@@ -7317,7 +7706,7 @@ Proof. intros bo j H. destruct bo as [b0|]; [unfold bok in H; apply andb_true_if
     of at least 1 *)
 Lemma cfits_forall : forall gs B cvs, swok gs = true -> length cvs = sn gs -> cfits gs B cvs -> Forall (fun c => (Z.of_nat c < B)%Z) cvs.
 Proof.
-  intros gs B cvs Sw L C. unfold swok, cfits in *. destruct (sv gs) as [|v vs]; [exact C|].
+  intros gs B cvs Sw L C. unfold swok in Sw. apply andb_true_iff in Sw as [Sw _]. unfold swok0, cfits in *. destruct (sv gs) as [|v vs]; [exact C|].
   rewrite forallb_forall in Sw. rewrite Forall_forall in C.
   apply Forall_forall. intros c Hc. apply (In_nth cvs c O) in Hc as (i & Hi & <-).
   specialize (Sw i ltac:(apply in_seq; lia)). apply existsb_exists in Sw as (P0 & HP & Hm).
@@ -7747,12 +8136,24 @@ Proof.
       * eapply rlt_all_mono; [exact LRmv | lia].
 Qed.
 
+(** a function with the pair (step 44): its theorem from the theorem of the function on the two components *)
+Lemma callee_ok_unpair : forall P id B x k r w q b v (h : ftype (mksig9 x k true r w q b v true)),
+  callee_ok P id B (mksig9 x k true r w q b v false) (cmapT x _ _ (unpairT k (rtq r q)) h) ->
+  callee_ok P id B (mksig9 x k true r w q b v true) h.
+Proof.
+  intros P id B x k r w q b v h H. unfold callee_ok in *. intros Hsl cvs vs M L K C. specialize (H Hsl cvs vs M L K C).
+  assert (E : forall s, callf (mksig9 x k true r w q b v true) h cvs vs s
+               = callf (mksig9 x k true r w q b v false) (cmapT x _ _ (unpairT k (rtq r q)) h) cvs vs s).
+  { intros s. cbn [callf]. rewrite appc_cmapT. apply appnTP_unpair. }
+  unfold calln, callm in *. cbn [sw sr sq sn sk] in *. rewrite !E. exact H.
+Qed.
 Theorem compile_f_ok : forall P cs gidf j gs b,
   find P (gidf j) = Some (compile_f gidf j gs b) -> wf_f (map (@projT1 _ _) cs) gs b = true -> callees_ok P gidf cs ->
   Nat.leb (length cs) j = true -> (Z.of_nat j <? 1099511627776)%Z = true ->
   callee_ok P (gidf j) (fbound gs j) gs (denote_f cs gs b).
 Proof.
-  intros P cs gidf j [x k m r w q bo vw] b Hf W Hcs Hlen Hj. apply Nat.leb_le in Hlen. apply Z.ltb_lt in Hj.
+  intros P cs gidf j [x k m r w q bo vw sp0] b Hf W Hcs Hlen Hj. apply Nat.leb_le in Hlen. apply Z.ltb_lt in Hj.
+  destruct sp0; [exfalso; revert W; unfold wf_f, swok; cbn [sp negb]; rewrite !andb_false_r; cbn; discriminate |].
   destruct q as [[| |ri]|]; [exact (compile_f_ok_pair P cs gidf j x k m r w b bo vw Hf W Hcs Hlen Hj) | exact (compile_f_ok_bool P cs gidf j x k m r w b bo vw Hf W Hcs Hlen Hj) |
     exact (compile_f_ok_rec P cs gidf j x k m r w ri b bo vw Hf W Hcs Hlen Hj)|]. cbn [wf_f sq] in W.
   apply andb_true_iff in W as [Hbok W]. apply andb_true_iff in Hbok as [Hbok Hsw]. cbn [sb] in Hbok.
@@ -8279,6 +8680,7 @@ Lemma all_ok_callees : forall P gidf cs, all_ok P gidf cs 0 -> callees_ok P gidf
 Proof. intros P gidf cs H f. exact (all_ok_nth P gidf cs 0 H f). Qed.
 
 End Recs.
+Notation mksig8 x k m r w q b v := (mksig9 x k m r w q b v false).
 
 (** a program with no record types *)
 #[global] Instance no_recs : RecTypes | 100 :=

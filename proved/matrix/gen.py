@@ -410,6 +410,24 @@ addA("par_intmem_mem_nested", "", "rd 2 0 (wn n a s)",
      "Fixpoint wn (n : nat) (x : int) (t : mem) : mem := match n with O => t | S m => let '(y, t2) := g2 n x t in wn m y t2 end.\n")
 addA("par_intmem_param", "", "k n (a, s)",
      "Fixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\n")
+# a number and a memory as a parameter (step 44 continued): after other parameters; the function giving back a memory, a pair, a
+# boolean; a call given a pair a function gives (a number, a memory, a pair given back); the pair taken apart in the body; the
+# recursion given the pair as it is; a call inside an expression given a pair a function gives (a writing function inside an
+# expression, a later item)
+addA("par_pm_param_after", "", "k n b (a, s)",
+     "Fixpoint k (n : nat) (y : int) (p : int * mem) : int := match n with O => fst p + y | S m => k m (y + 1) (fst p + rd 0 0 (snd p), snd p) end.\n")
+addA("par_pm_param_mem", "", "rd 0 0 (k n (a, s))", "Fixpoint k (n : nat) (p : int * mem) : mem := match n with O => upd 0 (fst p) 0 (snd p) | S m => k m (fst p + 1, upd 1 (fst p) 0 (snd p)) end.\n")
+addA("par_pm_param_pv", "", "let '(x, t) := k n (a, s) in x + rd 0 0 t", "Fixpoint k (n : nat) (p : int * mem) : int * mem := match n with O => p | S m => k m (fst p + 1, upd 0 (fst p) 0 (snd p)) end.\n")
+addA("par_pm_param_bool", "", "if k n (a, s) then 1 else 0", "Fixpoint k (n : nat) (p : int * mem) : bool := match n with O => fst p <? rd 0 0 (snd p) | S m => k m (fst p + 1, snd p) end.\n")
+addA("par_pm_call_fn", "", "k n (g n a s)", "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\n")
+addA("par_pm_call_fn_mem", "", "rd 0 0 (k n (g n a s))", "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : mem := match n with O => upd 0 (fst p) 0 (snd p) | S m => k m (fst p + 1, upd 1 (fst p) 0 (snd p)) end.\n")
+addA("par_pm_call_fn_pv", "", "let '(x, t) := k n (g n a s) in x + rd 0 0 t", "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int * mem := match n with O => p | S m => k m (fst p + 1, upd 0 (fst p) 0 (snd p)) end.\n")
+addA("par_pm_match_body", "", "k n (a, s)",
+     "Fixpoint k (n : nat) (p : int * mem) : int := match n with O => let '(x, t) := p in x + rd 0 0 t | S m => let '(x, t) := p in k m (x + 1, upd 0 x x t) end.\n")
+addA("par_pm_rec_as_is", "", "k n (a, s)",
+     "Fixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p + rd 0 0 (snd p) | S m => k m p end.\n")
+addA("par_pm_call_expr", "", "k n (g n a s) + 1", "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\n")
+addA("par_pm_call_bool_fn", "", "if k n (g n a s) then 1 else 0", "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : bool := match n with O => fst p <? rd 0 0 (snd p) | S m => k m (fst p + 1, snd p) end.\n")
 # a mutual block (step 17): members of different signatures; members giving back a memory
 addA("par_mutual_sig", "", "ev n a",
      "Fixpoint ev (n : nat) (x : int) : int := match n with O => x | S m => od m (x + 1) 3 end\n"
