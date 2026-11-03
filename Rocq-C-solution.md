@@ -4307,6 +4307,24 @@ Built, the design's record half:
   The step goes on with the own call not at the end, templates giving back a record or a boolean that writes, and the pair a let
   holds.
 
+**Step 48 continued, templates giving back a boolean or a record that writes — the design (2026-11-04).**  Two of the places the
+record half left: `A_par_tmpl_bool_write`, `A_par_tmpl_rec_write` — a template (a recursive function taking functions, §5.1)
+whose body writes and gives back a boolean or a record.  Each call giving it known functions gets a copy, read with the
+function parameters bound, and a copy's theorem comes from its two equations (`compile_f_okrx` for a number that writes, step
+46); a copy whose body is an X body of booleans or of records has no such theorem, and the reader of copies has no X body for
+those results.  So:
+- *`KQR.v`*: the copies' theorems for an X body of booleans and of records (`compile_f_okrxb`, `compile_f_okrxr`), from
+  `compile_f_ok` and the meanings' independence of the own call beyond its values (`denote_xb_recb_ext`, `denote_xr_recr_ext`,
+  as `denote_x_recx_ext`).
+- *The reifier*: a copy giving back a boolean or a record that the readers of booleans and records refuse, read as an X body (as
+  `read_fun_c` reads a function since the record half).
+- *`kitc.py`*: a copy whose signature writes and gives back a boolean or a record gets those theorems.
+- *Cells*: the two pinned; a template giving back a boolean and a record that writes through a call (not only through its
+  recursion).
+*Expected*: those four cells.  The pair a let holds needs the pair as a value in the meanings (the call `k n p` is not
+convertible with `k n (fst p, snd p)`: `prod` has no eta, and `k`'s recursion on a symbolic counter does not reduce), so it is a
+design of its own; the function's own call not at the end comes after this one.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4486,7 +4504,8 @@ Pushed to the public repository up to `2d66918` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 48 continued (functions giving back a record whose body writes: the construct table 939 of 952, 2 by design; the own call not at the end, templates and the pair a let holds go on), the C, the gate |
+| (this commit) | §12.V: step 48 continued, templates giving back a boolean or a record that writes, the design (the copies' theorems for X bodies of booleans and records) |
+| `454364a` | §12.V: step 48 continued (functions giving back a record whose body writes: the construct table 939 of 952, 2 by design; the own call not at the end, templates and the pair a let holds go on), the C, the gate |
 | `2d66918` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 48 continued: `callmw`, `XRetR`, `XBindRM`, `denote_xr`, `ctailxr_ok`, a record whose body writes; the reifier reads it as an X body and looks into a let's bound term for a call to bind; 9 cells |
 | `ffd7eed` | §12.V: step 48 continued's record half, the design (the contract keeps the slot block of a record that writes; `XRetR`, `denote_xr`, `ctailxr_ok`; `XBindRM`) |
 | `6fd239e` | §12.V: step 49 (two versions of the memory both used: the boundary pinned; the construct table 933 of 943, 2 by design), the gate |
