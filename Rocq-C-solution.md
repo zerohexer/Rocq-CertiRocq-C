@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **932 of 939, 5 gaps, 1 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **933 of 943, 7 gaps, 2 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4224,6 +4224,25 @@ other version still reads.  So (F63):
 - No change to `KQR.v`, the reifier or `kitc.py`: the C and the gate are `f70ad99`'s; the construct table is run.
 *Expected*: 943 cells (the four new); 933 proved (`A_par_write_two_seq`), 2 by design, 7 gaps, 1 not Rocq.
 
+**Step 49 done (2026-11-03): two versions of the memory both used — the boundary pinned.**  Built as designed, in the table only:
+- *§0.5's third refusal* is worded by the size of the difference (F63): two versions of the memory both used are refused when
+  they differ in cells whose number comes from the data; when they differ in cells fixed by the text, the old values can be kept
+  and put back, and the place is a gap.
+- *Cells*: 4 more (943).  The pin `A_par_write_two_data` (`wp n a s + wp n b s`, each call a prefix sum in place over `n` cells
+  from its own index, both given the memory before both): refused, by design (`DESIGN_CELLS`); its control
+  `A_par_write_two_seq` (the same two calls, the first giving back its memory and the second given it): proved.  The fixed side
+  in each place — two calls in an expression of a number (`A_par_write_two`, step 47), a call that writes inside a memory's body
+  (`A_par_write_in_mem`), a let (`P_mem_both`, §0.5's old example): refused, gaps of one category (`BY_NAME`).  Run alone
+  beside `P_mem_dup` (the second version never used: proved), each verdict as listed.
+- No change to `KQR.v`, the reifier or `kitc.py`.
+- *A slip of step 48 continued found*: its boolean half reads the function's own call at the end of a boolean that writes, not
+  bound by a let or negated, and that place got no cell; it gets one with the record half (next), recorded there.
+- The C: the same (`KQR.v`, `KQRReify.v` and `kitc.py` byte-identical to `f70ad99`'s).  The construct table (on `5057f75`): **933
+  of 943 through the verified compiler**, 2 by design, 7 gaps, 1 not Rocq (was 932 of 939: the control read, the pin by design,
+  two gaps added).  The gate on `5057f75`, the walk switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five
+  kernels (11 / 12 / 12 / 13 / 13 s); **71 programs through the verified compiler, 0 refused**; the trusted base unchanged.  Step
+  48 continued goes on with a record whose body writes and the pair a let holds.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4399,11 +4418,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `f70ad99` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `5057f75` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §0.5, §11 F63, §12.V: step 49's design (two versions of the memory both used: the third refusal by the size of the difference; a pin from the data with its control, the fixed side as gaps) |
+| (this commit) | §12.V: step 49 (two versions of the memory both used: the boundary pinned; the construct table 933 of 943, 2 by design), the gate |
+| `5057f75` | `proved/matrix/gen.py` + `classify.py` step 49: the pin `A_par_write_two_data` by design, its control `A_par_write_two_seq`, the fixed side's gaps `A_par_write_in_mem`, `P_mem_both`; 4 cells |
+| `3d57a2e` | §0.5, §11 F63, §12.V: step 49's design (two versions of the memory both used: the third refusal by the size of the difference; a pin from the data with its control, the fixed side as gaps) |
 | `4d17a62` | §12.V: step 48 continued (functions giving back a boolean whose body writes: the construct table 932 of 939, 1 by design; records and the pair a let holds go on), the C, the gate |
 | `f70ad99` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 48 continued: `XRetB`, `denote_xb`, a boolean whose body writes, `after_free`; the reifier reads it as an X body; 2 cells |
 | `7556d7b` | §11 F62, §12.V: the reifier's timing of steps 44 continued to 48 corrected (the working tree's scanned directories) |
