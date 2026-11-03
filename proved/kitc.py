@@ -382,12 +382,13 @@ def reflect(name, entry, prog, no_proof):
     f0 = os.path.join(GEN, f"{name}_r.v")
     open(f0, "w").write(HDR + "From KQC Require KQR KQRReify.\n" + prog
         + f"\nDefinition {name}_res := ltac:(run_template_program (tmQuoteRec {entry})\n"
-        + "  (fun q => let r := eval vm_compute in (KQRReify.reify_prog2 q, KQRReify.reify_why q, KQRReify.rec_info q) in exact r)).\n"
-        + f"Definition {name}_src := option_map fst (fst (fst {name}_res)).\n"
-        + f"Definition {name}_mts := match fst (fst {name}_res) with Some x => snd x | None => [] end.\n"
+        + "  (fun q => let r := eval vm_compute in (KQRReify.reify_prog2 q, KQRReify.reify_why q, KQRReify.rec_info q, KQRReify.entry_perm q) in exact r)).\n"
+        + f"Definition {name}_src := option_map fst (fst (fst (fst {name}_res))).\n"
+        + f"Definition {name}_mts := match fst (fst (fst {name}_res)) with Some x => snd x | None => [] end.\n"
         + f'Redirect "{name}_rinfo" Eval vm_compute in (option_map KQRReify.info_of {name}_src).\n'
-        + f'Redirect "{name}_rwhy" Eval vm_compute in (snd (fst {name}_res)).\n'
-        + f'Redirect "{name}_rrec" Eval vm_compute in (snd {name}_res).\n'
+        + f'Redirect "{name}_rwhy" Eval vm_compute in (snd (fst (fst {name}_res))).\n'
+        + f'Redirect "{name}_rrec" Eval vm_compute in (snd (fst {name}_res)).\n'
+        + f'Redirect "{name}_rperm" Eval vm_compute in (snd {name}_res).\n'
         + (f'Redirect "{name}_rsh" Eval vm_compute in (match {name}_src with Some l => map (fun f => (snd (fst (fst f)), '
            f'KQR.sh_ok kq_shared (snd f))) l | None => [] end).\n' if shared else "")
         # a copy of a recursive function for the functions it is given: its meaning, the function applied to them (step 10)
@@ -528,22 +529,28 @@ def reflect(name, entry, prog, no_proof):
     # function applied to a written counter (f 20 ..) would otherwise be worked out round by round (F50).  The order of
     # unfolding only: nothing that converts stops converting
     # the templates the copies come from (step 10); a local fixpoint's copy (kqlfix__cK, step 31) has no template constant
-    tmpls = sorted({f[0].split("__c")[0] for f in fs if "__c" in f[0]} - {"kqlfix"})
-    t += "Strategy opaque [" + " ".join([f[0] for f in fs if "__c" not in f[0]] + tmpls) + "].\n"   # a copy is unfolded first
+    iswr = lambda nm: "__c" in nm or bool(re.search(r"__on?$", nm))   # a copy, or a wrapper (step 41)
+    tmpls = sorted(({f[0].split("__c")[0] for f in fs if "__c" in f[0]} | {re.sub(r"__on?$", "", f[0]) for f in fs if re.search(r"__on?$", f[0])}) - {"kqlfix"})
+    t += "Strategy opaque [" + " ".join([f[0] for f in fs if not iswr(f[0])] + tmpls) + "].\n"   # a copy is unfolded first
     if not no_proof:
         for j, f in enumerate(fs):
             cs = "[" + "; ".join(f"existT (@KQR.ftype {inst}) {sig(g)} {g[0]}" for g in fs[:j]) + "]"
             oks = "".join(f"(conj {name}_rok{i} " for i in range(j)) + "Logic.I" + ")" * j
             t += f"Lemma {name}_rok{j} : @KQR.callee_ok {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {sig(f)} {f[0]}.\n"
-            if "__c" in f[0]:
+            if "__c" in f[0] or f[0].endswith("__o"):
                 # a copy: not a fix over its counter, so its statement comes from its two equations, each by conversion
                 # (a copy that writes the memory and gives back a number has a memory: no memory argument)
-                thm, p0, p1, mm = (("compile_f_okrm", "KQR.fm0", "KQR.fm1", f" {f[3]}") if f[4] == "true" else
+                # (step 41) a boolean, a number and a memory, a record given back: their own copies' theorems
+                ri = f" {ord(f[6]) - ord('a')}" if f[6] not in ("", "B", "P") else ""
+                thm, p0, p1, mm = (("compile_f_okrb", "KQR.fbb0", "KQR.fbb1", f" {f[3]}") if f[6] == "B" else
+                                   ("compile_f_okrp", "KQR.fpv0", "KQR.fpv1", f" {f[3]}") if f[6] == "P" else
+                                   ("compile_f_okrr", "KQR.fbr0", "KQR.fbr1", f" {f[3]}") if ri else
+                                   ("compile_f_okrm", "KQR.fm0", "KQR.fm1", f" {f[3]}") if f[4] == "true" else
                                    ("compile_f_okrx", "KQR.fx0", "KQR.fx1", "") if f[5] == "true" else
                                    ("compile_f_okr", "KQR.fr0", "KQR.fr1", f" {f[3]}"))
                 b = f"(KQRReify.body_at {name}_funs {j})"
                 t += (f"Proof. exact_no_check (@KQR.{thm} {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {int(f[1]) - 1} {kl(f)}{mm} ({p0} {b}) ({p1} {b})"
-                      f" {bo(f)} {ws(f)} {f[0]} eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl eq_refl"
+                      f" {bo(f)} {ws(f)}{ri} {f[0]} eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl eq_refl"
                       f" (fun n => eq_refl)). Qed.\n")
             else:
                 t += (f"Proof. exact_no_check (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j})"
@@ -558,7 +565,8 @@ def reflect(name, entry, prog, no_proof):
     if rc != 0:
         print(name, "REFLECT CHECK FAILED" + FOLLOW + ":", out[-400:].replace("\n", " "), flush=True)
         return None
-    idx = [f[0] for f in fs].index(entry) if entry in [f[0] for f in fs] else len(fs) - 1
+    names = [re.sub(r"__on?$", "", f[0]) for f in fs]   # a wrapper stands for its function (step 41)
+    idx = names.index(entry) if entry in names else len(fs) - 1
     e = fs[idx]
     if any(c not in "IB" for c in e[2]) or e[6] not in ("", "B"):   # an entry taking or giving back a record: main gives and takes numbers
         print(name, "reflect: the entry takes or gives back a record" + FOLLOW, flush=True)
@@ -567,7 +575,11 @@ def reflect(name, entry, prog, no_proof):
     # the slot block: room for the fields after the first of each record type of the program ([KQR.slot_room], which every
     # theorem of the program takes; the driver provides it, as for the translator's two results)
     slots = max([int(n) for (_, _, n, _) in recs] + [1]) - 1
-    return 1000 + idx, kinds, "M" if e[4] == "true" else "I", len(fs), slots
+    # an entry whose parameters stand in another order: the order the syntax takes, each its place in main's call (step 41)
+    pp = os.path.join(GEN, f"{name}_rperm.out")
+    pm = re.search(r"Some\s*\[([^\]]*)\]", open(pp).read()) if os.path.exists(pp) else None
+    perm = [int(x) for x in re.findall(r"\d+", pm.group(1))] if pm else None
+    return 1000 + idx, kinds, "M" if e[4] == "true" else "I", len(fs), slots, perm
 
 def main():
     build = True
@@ -627,7 +639,9 @@ def main():
                 print(name, "REFUSED: not compiled by the verified compiler (the reasons above)", flush=True)
                 continue
             if r:
-                eid, kinds, res, n, slots = r
+                eid, kinds, res, n, slots, perm = r
+                if perm:
+                    args = [args[i] for i in perm]
                 print(name, ("NOT PROVED (proofs skipped)" if no_proof else "PROVED"), n, "functions by the verified compiler; entry",
                       entry, "id", eid, kinds, "->", res, flush=True)
                 write_c(name, eid, kinds, res, args, wrap, bare, prefix, entry_name, secondary, ext, [], slots)

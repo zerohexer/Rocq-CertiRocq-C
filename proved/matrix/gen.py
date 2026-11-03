@@ -393,6 +393,24 @@ addA("par_write_fn_expr", "", "wr n s + 1",
 # the translator's own conventions (§3.7): the counter not first, the memory not last
 addA("par_conv_nat_second", "", "k a n", "Fixpoint k (x : int) (n : nat) : int := match n with O => x | S m => k (x + 1) m end.\n")
 addA("par_conv_mem_first", "", "k n s a", "Fixpoint k (n : nat) (t : mem) (x : int) : int := match n with O => x + rd 0 0 t | S m => k m t (x + 1) end.\n")
+# parameters in any order (step 41): a boolean and a record before the counter, the recursion on the second counter, the memory
+# between two numbers; each result kind with its parameters in another order; an entry with its parameters in another order
+addA("par_conv_bool_rec_first", "", "k (a <? b) (mk3 a b 0) n",
+     "Fixpoint k (c : bool) (r : r3) (n : nat) : int := match n with O => if c then f1 r else f2 r | S m => k c r m end.\n")
+addA("par_conv_rec_second", "", "k n n a", "Fixpoint k (m n : nat) (x : int) : int := match n with O => x + 1 | S p => k m p (x + 1) end.\n")
+addA("par_conv_mem_middle", "", "k n a s b",
+     "Fixpoint k (n : nat) (x : int) (t : mem) (y : int) : int := match n with O => x + y + rd 0 0 t | S m => k m (x + 1) t y end.\n")
+addA("par_conv_res_bool", "", "if k a n then 1 else 0", "Fixpoint k (x : int) (n : nat) : bool := match n with O => x <? 5 | S m => k (x + 1) m end.\n")
+addA("par_conv_res_pair", "", "let '(x, y) := k a b n in x + y", "Fixpoint k (x y : int) (n : nat) : int * int := match n with O => (x, y) | S m => k y x m end.\n")
+addA("par_conv_res_mem", "", "rd 0 0 (k s n a)", "Fixpoint k (t : mem) (n : nat) (x : int) : mem := match n with O => t | S m => k (upd 0 x x t) m (x + 1) end.\n")
+addA("par_conv_res_intmem", "", "let '(x, s2) := k s n a in x + rd 0 0 s2",
+     "Fixpoint k (t : mem) (n : nat) (x : int) : int * mem := match n with O => (x, t) | S m => k (upd 0 x x t) m (x + 1) end.\n")
+addA("par_conv_res_write", "", "k s a n", "Fixpoint k (t : mem) (x : int) (n : nat) : int := match n with O => rd 0 0 t | S m => k (upd 0 x x t) (x + 1) m end.\n")
+addA("par_conv_lfix", "", "let fix g (x : int) (m : nat) : int := match m with O => x | S p => g (x + 1) p end in g a n", "")   # a local fix, its recursion on its second parameter
+addA("par_conv_tmpl", "", "foldf (fun i acc => acc + i) n 0 a",
+     "Fixpoint foldf (f : int -> int -> int) (n : nat) (i acc : int) : int := match n with O => acc | S m => foldf f m (i + 1) (f i acc) end.\n")   # a template, its function given first
+A.append(("par_conv_entry", "Fixpoint go2 (x : int) (n : nat) : int := match n with O => x | S m => go2 (x + 1) m end.\n"
+          "Definition main : int :=\n  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in\n  go2 (kq_arg 1) (kq_nat (kq_arg 0)).\n"))
 
 # ---------------------------------------------------------------- family N: every nesting of a small core
 # contexts with a hole (HOLE) of result kind int; the core is a producer of int
@@ -430,7 +448,7 @@ def write(outdir):
         open(os.path.join(outdir, f"P_{i}.body"), "w").write(body)
         rows.append((f"P_{i}", "producer", k))
     for (i, text) in A:
-        open(os.path.join(outdir, f"A_{i}.body"), "w").write(PRE + text + MAIN)
+        open(os.path.join(outdir, f"A_{i}.body"), "w").write(PRE + text + ("" if "Definition main" in text else MAIN))   # a cell with its own main (step 41)
         rows.append((f"A_{i}", "parameter", i))
     for (i, text) in N:
         body = PRE + text + f"Definition go {SIG} : int :=\n  f n a b s.\n" + MAIN

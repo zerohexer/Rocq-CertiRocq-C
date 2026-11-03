@@ -105,7 +105,8 @@ Definition cmp_v (s : ident) : option cmpop :=
     versions of the memory), a counter (a [nat] parameter, or the predecessor a match on a counter inside the body binds),
     the predecessor of the first counter that the match a recursive function starts with binds (a counter too, and the one
     its recursive call is given first), the function itself, a boolean *)
-Inductive cent := CNum | CMem | CDead | CCnt | CPred | CSelf | CBool | CFn (p : nat) (t : term) | CRec | CSib (j : nat).
+Inductive cent := CNum | CMem | CDead | CCnt | CPred | CSelf | CBool | CFn (p : nat) (t : term) | CRec | CSib (j : nat)
+  | CCntP (j : nat) | CSelfP (perm : list nat).
 (* CFn p t: the function parameter number p of a template's copy, bound to the function t given (its captured variables
    numbered 0 .. in the order they first appear: the context's entries after the copy's own, CSelf, step 13).  CSib j: member
    j of a mutual block (step 17) *)
@@ -122,13 +123,17 @@ Fixpoint num_index (ctx : list cent) (i : nat) : option nat :=
   | [], _ => None
   end.
 
-Definition is_cnt (c : cent) : bool := match c with CCnt | CPred => true | _ => false end.
+Definition is_cnt (c : cent) : bool := match c with CCnt | CPred | CCntP _ => true | _ => false end.
+(* a parameter counter of a function whose parameters are in another order (step 41): its index among the parameter counters
+   given, the local counters (lets, predecessors) counted before it *)
+Definition is_lcnt (c : cent) : bool := match c with CCnt | CPred => true | _ => false end.
 
 (** the syntax index of the counter at place [i] of the context: the counters nearer than it *)
 Fixpoint cnt_index (ctx : list cent) (i : nat) : option nat :=
   match ctx, i with
+  | CCntP j :: _, O => Some j
   | c :: _, O => if is_cnt c then Some O else None
-  | c :: r, S i => option_map (fun j => if is_cnt c then S j else j) (cnt_index r i)
+  | c :: r, S i => option_map (fun j => if is_lcnt c then S j else j) (cnt_index r i)
   | [], _ => None
   end.
 
@@ -156,10 +161,13 @@ Definition is_bool (t : term) : bool := match t with tInd i _ => Kername.eqb (in
 
 Definition is_ent (e : cent) (ctx : list cent) (i : nat) : bool :=
   match nth_error ctx i, e with
-  | Some CMem, CMem | Some CCnt, CCnt | Some CPred, CPred | Some CSelf, CSelf => true
+  | Some CMem, CMem | Some CCnt, CCnt | Some CPred, CPred | Some CSelf, CSelf | Some (CSelfP _), CSelf => true
   | _, _ => false
   end.
 
+(** the arguments of a recursive call in the order the syntax takes (step 41): the user's, put in that order *)
+Definition self_perm (ctx : list cent) (fi : nat) (args : list term) : list term :=
+  match nth_error ctx fi with Some (CSelfP perm) => map (fun i => nth i args (tRel 0)) perm | _ => args end.
 Fixpoint to_sexps (l : list sexp) : sexps := match l with [] => SNil | e :: l => SCons e (to_sexps l) end.
 Fixpoint to_args (l : list (option (sexp + (sbool + srec)))) : option sexps :=
   match l with
@@ -775,7 +783,8 @@ Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option 
             end
         | None => match hb kn with Some b => reify fuel ctx (wout b args) | None => None end
         end
-  | tApp (tRel fi) args0 =>
+  | tApp (tRel fi) args00 =>
+      let args0 := self_perm ctx fi args00 in
       match nth_error ctx fi, args0 with
       | Some (CFn _ t), _ => reify fuel ctx (wout (capsub ctx t) args0)
       (* member j of a mutual block on the predecessor: the block function itself, given the selector j last *)
@@ -1189,7 +1198,8 @@ Fixpoint reify_m (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
             else None
         | None => match hb kn with Some b => reify_m fuel ctx (wout b args) | None => None end
         end
-  | tApp (tRel fi) args0 =>
+  | tApp (tRel fi) args00 =>
+      let args0 := self_perm ctx fi args00 in
       match nth_error ctx fi, args0 with
       | Some (CFn _ t), _ => reify_m fuel ctx (wout (capsub ctx t) args0)
       | _, tRel mi :: rest0 =>
@@ -1311,7 +1321,8 @@ Fixpoint reify_pv (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
       end
   | tConst kn _ => match hb kn with Some b => reify_pv fuel ctx b | None => None end
   | tApp (tLambda _ _ _ as f) args => reify_pv fuel ctx (wout f args)
-  | tApp (tRel fi) args0 =>
+  | tApp (tRel fi) args00 =>
+      let args0 := self_perm ctx fi args00 in
       match nth_error ctx fi, args0 with
       | Some (CFn _ t), _ => reify_pv fuel ctx (wout (capsub ctx t) args0)
       | _, tRel mi :: rest0 =>
@@ -1516,7 +1527,8 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
         | _, _ => fallback
         end
   | tConst kn _ => match hb kn with Some b => reify_x fuel ctx b | None => fallback end
-  | tApp (tRel fi) args0 =>
+  | tApp (tRel fi) args00 =>
+      let args0 := self_perm ctx fi args00 in
       match nth_error ctx fi, args0 with
       | Some (CFn _ t), _ => reify_x fuel ctx (wout (capsub ctx t) args0)
       | _, tRel mi :: rest0 =>
@@ -1554,7 +1566,8 @@ Fixpoint reify_br (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
     to_args (map (fun a => match reify fuel ctx a with Some e => Some (inl e) | None =>
                             match reify_b fuel ctx a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel ctx a) end end) l) in
   (* the function itself: its counter's predecessor, its counters after the first, its numbers, the memory *)
-  let self_call (u : term) : option (scnts * sexps) :=
+  let self_call (u0 : term) : option (scnts * sexps) :=
+    let u := match u0 with tApp (tRel fi) args => tApp (tRel fi) (self_perm ctx fi args) | _ => u0 end in
     match u with
     | tApp (tRel fi) (tRel mi :: rest0) =>
         match option_map (with_caps ctx) (drop_fns ctx fd rest0) with
@@ -1662,7 +1675,8 @@ Fixpoint reify_bb (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
     to_args (map (fun a => match reify fuel ctx a with Some e => Some (inl e) | None =>
                             match reify_b fuel ctx a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel ctx a) end end) l) in
   (* the function itself: its counter's predecessor, its counters after the first, its numbers, the memory *)
-  let self_call (u : term) : option (scnts * sexps) :=
+  let self_call (u0 : term) : option (scnts * sexps) :=
+    let u := match u0 with tApp (tRel fi) args => tApp (tRel fi) (self_perm ctx fi args) | _ => u0 end in
     match u with
     | tApp (tRel fi) (tRel mi :: rest0) =>
         match option_map (with_caps ctx) (drop_fns ctx fd rest0) with
@@ -1804,9 +1818,38 @@ Definition ispq (gs : sig) : bool := match sq gs with Some KNum => true | _ => f
 Definition cent_of (k : kind) : cent := match k with KNum => CNum | KBool => CBool | KRec _ => CRec end.
 Definition fun_ctx (gs : sig) : list cent := (if sm gs then [CMem] else []) ++ rev (map cent_of (sk gs)) ++ repeat CCnt (sn gs).
 
+(** a function's parameters in the order the syntax takes (step 41): the recursion's counter, the other counters, the numbers,
+    booleans and records, the memory -- each its place in the user's order *)
+Definition canon_perm (tys : list term) (r : option nat) : list nat :=
+  let ty i := nth i tys (tRel 0) in
+  let idx := seq 0 (length tys) in
+  let isr i := match r with Some r0 => Nat.eqb i r0 | None => false end in
+  (match r with Some r0 => [r0] | None => [] end) ++ filter (fun i => is_nat (ty i) && negb (isr i)) idx
+  ++ filter (fun i => negb (is_nat (ty i)) && negb (is_ty kn_mem (ty i))) idx ++ filter (fun i => is_ty kn_mem (ty i)) idx.
+Fixpoint pos_in (u : nat) (l : list nat) : nat := match l with [] => O | x :: r => if Nat.eqb x u then O else S (pos_in u r) end.
+(** the context of such a body: each binder as the syntax takes it, a counter its index among the counters *)
+Definition perm_ctx (rt : list rentry) (tys : list term) (perm : list nat) : list cent :=
+  let k := length (filter (fun i => is_nat (nth i tys (tRel 0))) perm) in
+  map (fun u => let ty := nth u tys (tRel 0) in
+                if is_nat ty then CCntP (Nat.sub (Nat.sub k 1) (pos_in u perm))
+                else if is_ty kn_mem ty then CMem
+                else match kind_ty rt ty with Some kd => cent_of kd | None => CDead end)
+      (rev (seq 0 (length tys))).
+(** whether a function's parameters stand in another order, and the order: none when the syntax's *)
+Definition fun_perm (Σ : global_env) (kn : kername) : option (list nat) :=
+  match lookup_env Σ kn with
+  | Some (ConstantDecl cb) =>
+      let pm := match cst_body cb with
+                | Some (tFix [d] 0) => canon_perm (fst (lams (dbody d))) (Some (rarg d))
+                | Some b => canon_perm (fst (lams b)) None
+                | None => []
+                end in
+      if list_eq_dec Nat.eq_dec pm (seq 0 (length pm)) then None else Some pm
+  | _ => None
+  end.
 (** one function of the program, given the ones before it, as its text reads: a recursive function starts with a match
     on its first counter *)
-Definition read_fun (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
+Definition read_fun_c (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
   (callees : list (kername * sig)) (kn : kername) : option (sig * fbody) :=
   match lookup_env Σ kn with
   | Some (ConstantDecl cb) =>
@@ -1879,6 +1922,89 @@ Definition read_fun (Σ : global_env) (hb : kername -> option term) (tc : kernam
       end
   | _ => None
   end.
+
+(** the same, the parameters in another order (step 41): the body read with each binder at its place in the order the syntax
+    takes, a recursive call's arguments put in that order ([CSelfP]) *)
+Definition read_fun_p (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
+  (callees : list (kername * sig)) (kn : kername) : option (sig * fbody) :=
+  match lookup_env Σ kn with
+  | Some (ConstantDecl cb) =>
+      match cst_body cb with
+      | Some (tFix [d] 0) =>
+          if true then
+            let '(tys, body) := lams (dbody d) in
+            let perm := canon_perm tys (Some (rarg d)) in
+            match read_sig rt (map (fun i => nth i tys (tRel 0)) perm) (ret_ty (dtype d)), body with
+            | Some gs, tCase ci _ (tRel cnt) [b0; b1] =>
+                let nx := Nat.pred (sn gs) in
+                if negb (Nat.eqb (sn gs) 0) && Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_nat)
+                   && Nat.eqb cnt (Nat.sub (Nat.sub (length tys) 1) (rarg d)) then
+                  let ctx := perm_ctx rt tys perm ++ [CSelfP perm] in
+                  if ispq gs then
+                    match reify_pv callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_pv callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
+                    | Some p0, Some p1 => Some (gs, FRecP p0 p1)
+                    | _, _ => None
+                    end
+                  else if isbq gs then
+                    match reify_bb callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_bb callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
+                    | Some r0, Some r1 => Some (gs, FRecB r0 r1)
+                    | _, _ => None
+                    end
+                  else if isq gs then
+                    match reify_br callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_br callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
+                    | Some r0, Some r1 => Some (gs, FRecR r0 r1)
+                    | _, _ => None
+                    end
+                  else if sr gs then
+                    match reify_m callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_m callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
+                    | Some m0, Some m1 => Some (gs, FRecM m0 m1)
+                    | _, _ => None
+                    end
+                  else
+                    match reify callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
+                    | Some e0, Some e1 => Some (gs, FRec e0 e1)
+                    | _, _ =>
+                        (* a number made after memories in both branches: a loop that writes and gives back a number *)
+                        if sm gs then
+                          match reify_x callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0),
+                                reify_x callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
+                          | Some x0, Some x1 => Some (mksig (sn gs) (sk gs) true false true None, FRecX x0 x1)
+                          | _, _ => None
+                          end
+                        else None
+                    end
+                else None
+            | _, _ => None
+            end
+          else None
+      | Some b =>
+          let '(tys, body) := lams b in
+          let perm := canon_perm tys None in
+          match read_sig rt (map (fun i => nth i tys (tRel 0)) perm) (ret_ty (cst_type cb)) with
+          | Some gs =>
+              let nx := Nat.pred (sn gs) in
+              if ispq gs then option_map (fun r => (gs, FPlainP r)) (reify_pv callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body)
+              else if isbq gs then option_map (fun r => (gs, FPlainB r)) (reify_bb callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body)
+              else if isq gs then option_map (fun r => (gs, FPlainR r)) (reify_br callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body)
+              else if sr gs then option_map (fun m => (gs, FPlainM m)) (reify_m callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body)
+              else match reify callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body with
+                   | Some e => Some (gs, FPlain e)
+                   | None => if sm gs then
+                               option_map (fun x => (mksig (sn gs) (sk gs) true false true None, FPlainX x))
+                                          (reify_x callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body)
+                             else None
+                   end
+          | None => None
+          end
+      | None => None
+      end
+  | _ => None
+  end.
+
+(** one function of the program: as its text reads, its parameters in the syntax's order or not (step 41) *)
+Definition read_fun (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
+  (callees : list (kername * sig)) (kn : kername) : option (sig * fbody) :=
+  match fun_perm Σ kn with None => read_fun_c Σ hb tc rt callees kn | Some _ => read_fun_p Σ hb tc rt callees kn end.
 
 (** record types with these numbers of fields and nothing else: well-formedness reads only a record type's number of fields *)
 Definition arity_recs (ars : list (nat * option (list nat))) : RecTypes :=
@@ -2333,6 +2459,29 @@ Definition nonfn_args (tys args : list term) : list term := map snd (filter (fun
     slow under [vm_compute], F2) *)
 (** the copies made: the template, the functions given, the copy's name, its meaning (the template applied to them) *)
 Definition copytab := list (kername * (list term * list cent) * kername * term).
+(** the wrapper of a function whose parameters stand in another order (step 41): its parameters in the syntax's order, the
+    function given them in its own -- a caller's text converts with it by one beta step *)
+Definition perm_meaning (kn : kername) (tys : list term) (perm : list nat) : term :=
+  let N := length tys in
+  fold_right (fun ty b => tLambda {| binder_name := nAnon; binder_relevance := Relevant |} ty b)
+             (tApp (tConst kn []) (map (fun u => tRel (Nat.sub (Nat.sub N 1) (pos_in u perm))) (seq 0 N)))
+             (map (fun i => nth i tys (tRel 0)) perm).
+Definition fun_tys (Σ : global_env) (kn : kername) : list term * bool :=
+  match lookup_env Σ kn with
+  | Some (ConstantDecl cb) => match cst_body cb with Some (tFix [d] 0) => (fst (lams (dbody d)), true) | Some b => (fst (lams b), false) | None => ([], false) end
+  | _ => ([], false)
+  end.
+(** a function read: under its own name, or (step 41) as its wrapper -- [kn__o] when it recurses, [kn__on] when not *)
+(** the entry's parameter order when it is not the syntax's: [main]'s arguments put in that order *)
+Definition entry_perm (p : program) : option (list nat) := match p with (Σ, tConst root _) => fun_perm Σ root | _ => None end.
+Definition add_fun (Σ : global_env) (kn : kername) (gs : sig) (b : fbody) (es : list (kername * sig * fbody)) (tbl : copytab) :
+  list (kername * sig * fbody) * copytab :=
+  match fun_perm Σ kn with
+  | None => (es ++ [(kn, gs, b)], tbl)
+  | Some pm => let '(tys, isfix) := fun_tys Σ kn in
+               let ckn := (fst kn, snd kn ^ (if isfix then "__o" else "__on")) in
+               (es ++ [(ckn, gs, b)], tbl ++ [(kn, ([], [CSelfP pm]), ckn, perm_meaning kn tys pm)])
+  end.
 Definition find_copy (T : kername) (fargs : list term) (capk : list cent) (tbl : copytab) : option kername :=
   option_map (fun e => snd (fst e)) (List.find (fun e => Kername.eqb T (fst (fst (fst e))) && teqs fargs (fst (snd (fst (fst e))))
                                                          && capk_eqb capk (snd (snd (fst (fst e))))) tbl).
@@ -2341,7 +2490,7 @@ Definition find_copy (T : kername) (fargs : list term) (capk : list cent) (tbl :
 (** a local fixpoint's key: the fixpoint with its captured variables numbered the last first, so that read with them after
     the copy's own parameters ([rev capk], as a template's copy is read) each is the parameter of its kind (step 31) *)
 Definition lfix_key (fx : term) : list nat * term := let fv := fvs 1000 0 fx [] in (fv, abs_caps (rev fv) fx).
-Definition tc_of (Σ : global_env) (mp : modpath) (tbl : copytab) (kn : kername) (args : list term) : option (kername * list term) :=
+Definition tc_of_t (Σ : global_env) (mp : modpath) (tbl : copytab) (kn : kername) (args : list term) : option (kername * list term) :=
   if existsb (fun e => Kername.eqb kn (fst (fst (fst e)))) tbl then   (* a template with a copy: no look-up otherwise *)
     if Kername.eqb kn kn_lfix then
       match args with
@@ -2376,6 +2525,14 @@ Definition tc_of (Σ : global_env) (mp : modpath) (tbl : copytab) (kn : kername)
     | None => None
     end
   else None.
+
+(** a call of a function whose parameters stand in another order (step 41): a call of its wrapper, the arguments in the
+    syntax's order *)
+Definition tc_of (Σ : global_env) (mp : modpath) (tbl : copytab) (kn : kername) (args : list term) : option (kername * list term) :=
+  match List.find (fun e => Kername.eqb kn (fst (fst (fst e))) && match snd (snd (fst (fst e))) with [CSelfP _] => true | _ => false end) tbl with
+  | Some (_, (_, [CSelfP pm]), ckn, _) => if Nat.eqb (length args) (length pm) then Some (ckn, map (fun i => nth i args (tRel 0)) pm) else None
+  | _ => tc_of_t Σ mp tbl kn args
+  end.
 
 (** the meaning of a copy: [fun x1 .. xn => T .. f .. xi ..], the functions given in their places; with captured variables
     (step 13) [fun c1 .. b1 .. x1 .. s => T .. f ..]: the template's counters, the captured numbers and booleans, the
@@ -2754,11 +2911,11 @@ Definition reify_prog2b (bt : kername -> option Z) (chk : bool) (p : program) : 
                                 | None => None
                                 end
                               else match reify_fun Σ hb (tc_of Σ mp tbl) rt (callees_of es) kn bt chk with
-                                   | Some (gs, b) => Some (es ++ [(kn, gs, b)], tbl)
+                                   | Some (gs, b) => Some (add_fun Σ kn gs b es tbl)
                                    | None => None
                                    end
                           | _ => match reify_fun Σ hb (tc_of Σ mp tbl) rt (callees_of es) kn bt chk with
-                                 | Some (gs, b) => Some (es ++ [(kn, gs, b)], tbl)
+                                 | Some (gs, b) => Some (add_fun Σ kn gs b es tbl)
                                  | None => None
                                  end
                           end
@@ -2951,7 +3108,7 @@ Definition why_fun (Σ : global_env) (hb : kername -> option term) (tc : kername
       | Some b =>
           let '(rec, body, ty) :=
             match b with
-            | tFix [d] _ => (if Nat.eqb (rarg d) 0 then "" else "recursion not on the first parameter", dbody d, dtype d)
+            | tFix [d] _ => (""%bs, dbody d, dtype d)
             | tFix _ _ => ("mutual recursion", b, cst_type cb)
             | _ => (""%bs, b, cst_type cb)
             end in
@@ -2961,9 +3118,10 @@ Definition why_fun (Σ : global_env) (hb : kername -> option term) (tc : kername
           let nohb := fun _ : kername => @None term in
           let odd := fold_left (fun a t => if is_ty kn_int t || is_ty kn_mem t || is_nat t then a else add_s (head_name t) a)
                                (filter (fun t => negb (is_bool t) && match rindex t rt 0 with Some _ => false | None => true end) tys ++ [ret_ty ty]) [] in
-          let sigr := match read_sig rt tys (ret_ty ty), odd with
+          let sigr := match read_sig rt (map (fun i => nth i tys (tRel 0)) (canon_perm tys (match b with tFix [d] _ => Some (rarg d) | _ => None end)))
+                                     (ret_ty ty), odd with
                       | Some _, _ => []
-                      | None, [] => ["parameters in an order not read (a counter after a number, or the memory not last)"]
+                      | None, [] => ["two memories as parameters"]
                       | None, x :: r => ["a parameter or result of type " ^ fold_left (fun a y => a ^ ", " ^ y) r x]
                       end in
           let r0 := if rec == "" then sigr else rec :: sigr in
@@ -3009,7 +3167,7 @@ Definition reify_why (p : program) : list (string * list string) :=
               (es, tbl, bad ++ [kn], out ++ [(snd kn, "gives functions to a recursive function whose copy for them is not read" :: tr)])
           | Some (es', tbl') =>
               match reify_fun Σ hb (tc_of Σ mp tbl') rt (callees_of es') kn (fun _ => None) true with
-              | Some (gs, b) => (es' ++ [(kn, gs, b)], tbl', bad, out)
+              | Some (gs, b) => let '(es2, tbl2) := add_fun Σ kn gs b es' tbl' in (es2, tbl2, bad, out)
               | None => (es', tbl', bad ++ [kn], out ++ [(snd kn, why_fun Σ hb (tc_of Σ mp tbl') rt kns bad (callees_of es') kn)])
               end
           end) kns ([], [], [], []) in
@@ -4696,3 +4854,67 @@ Proof.
     eq_refl eq_refl).
 Time Qed.
 Print Assumptions w40go_ok_r.
+
+(* ---------------------------------------------------------------- parameters in any order (step 41) *)
+(* the counter after a number, the memory before a number, the recursion on the second of two counters: each read in the order
+   the syntax takes, as its wrapper (k__o), a call of it as a call of the wrapper; the theorems from the two equations *)
+Fixpoint w41a (x : i63) (n : nat) : i63 := match n with O => x | S m => w41a (PrimInt63.add x 1) m end.
+Fixpoint w41b (n : nat) (t : mem) (x : i63) : i63 := match n with O => PrimInt63.add x (KQ.KQRun.rd 0 0 t) | S m => w41b m t (PrimInt63.add x 1) end.
+Fixpoint w41c (m n : nat) (x : i63) : i63 := match n with O => x | S p => w41c m p (PrimInt63.add x 1) end.
+Definition w41go (n : nat) (a b : i63) (s : mem) : i63 := PrimInt63.add (PrimInt63.add (w41a a n) (w41b n s a)) (w41c n n b).
+Definition w41_res := ltac:(run_template_program (tmQuoteRec w41go)
+  (fun q => let r := eval vm_compute in (reify_prog2 q) in match r with Some ?x => exact x end)).
+Definition w41_src := fst w41_res.
+Check (eq_refl : map (fun x => (snd (fst (fst x)), snd x)) w41_src =
+  [("w41a__o"%bs, FRec (SVar 0) (SRec CNil (SCons (SOp Badd (SVar 0) (SInt 1)) SNil)));
+   ("w41b__o"%bs, FRec (SOp Badd (SVar 0) (SRd (SInt 0) (SInt 0))) (SRec CNil (SCons (SOp Badd (SVar 0) (SInt 1)) SNil)));
+   ("w41c__o"%bs, FRec (SVar 0) (SRec (CCons (CVar 1) CNil) (SCons (SOp Badd (SVar 0) (SInt 1)) SNil)));
+   ("w41go"%bs, FPlain (SOp Badd (SOp Badd (SCall 0 (CCons (CVar 0) CNil) (SCons (SVar 1) SNil)) (SCall 1 (CCons (CVar 0) CNil) (SCons (SVar 1) SNil)))
+                             (SCall 2 (CCons (CVar 0) (CCons (CVar 0) CNil)) (SCons (SVar 0) SNil))))]).
+MetaRocq Run (tmMkDefinition "w41a_o"%bs (meaning_of (snd w41_res) "w41a__o"%bs)).
+MetaRocq Run (tmMkDefinition "w41b_o"%bs (meaning_of (snd w41_res) "w41b__o"%bs)).
+MetaRocq Run (tmMkDefinition "w41c_o"%bs (meaning_of (snd w41_res) "w41c__o"%bs)).
+Definition w41_Pr := mkprog (funs_of 0 w41_src) [].
+Time Lemma w41a_ok : callee_ok w41_Pr (gid1 0) (cbz 0) (sig_at w41_src 0) w41a_o.
+Proof.
+  Time exact_no_check (compile_f_okr w41_Pr [] gid1 0 0 (nk 1) false (fr0 (body_at w41_src 0)) (fr1 (body_at w41_src 0)) None [] w41a_o
+    eq_refl eq_refl (no_callees w41_Pr gid1) eq_refl eq_refl eq_refl (fun n => eq_refl)).
+Time Qed.
+Definition w41_cs1 := [existT ftype (sig_at w41_src 0) w41a_o].
+Time Lemma w41b_ok : callee_ok w41_Pr (gid1 1) (cbz 1) (sig_at w41_src 1) w41b_o.
+Proof.
+  Time exact_no_check (compile_f_okr w41_Pr w41_cs1 gid1 1 0 (nk 1) true (fr0 (body_at w41_src 1)) (fr1 (body_at w41_src 1)) None [] w41b_o
+    eq_refl eq_refl (all_ok_callees w41_Pr gid1 w41_cs1 (conj w41a_ok Logic.I)) eq_refl eq_refl eq_refl (fun n => eq_refl)).
+Time Qed.
+Definition w41_cs2 := [existT ftype (sig_at w41_src 0) w41a_o; existT ftype (sig_at w41_src 1) w41b_o].
+Time Lemma w41c_ok : callee_ok w41_Pr (gid1 2) (cbz 2) (sig_at w41_src 2) w41c_o.
+Proof.
+  Time exact_no_check (compile_f_okr w41_Pr w41_cs2 gid1 2 1 (nk 1) false (fr0 (body_at w41_src 2)) (fr1 (body_at w41_src 2)) None [] w41c_o
+    eq_refl eq_refl (all_ok_callees w41_Pr gid1 w41_cs2 (conj w41a_ok (conj w41b_ok Logic.I))) eq_refl eq_refl eq_refl (fun n => eq_refl)).
+Time Qed.
+Definition w41_cs3 := [existT ftype (sig_at w41_src 0) w41a_o; existT ftype (sig_at w41_src 1) w41b_o; existT ftype (sig_at w41_src 2) w41c_o].
+Time Lemma w41go_ok : callee_ok w41_Pr (gid1 3) (cbz 3) (sig_at w41_src 3) w41go.
+Proof.
+  Time exact_no_check (compile_f_ok w41_Pr w41_cs3 gid1 3 (sig_at w41_src 3) (body_at w41_src 3) eq_refl eq_refl
+    (all_ok_callees w41_Pr gid1 w41_cs3 (conj w41a_ok (conj w41b_ok (conj w41c_ok Logic.I)))) eq_refl eq_refl).
+Time Qed.
+Print Assumptions w41go_ok.
+(* a function giving back a boolean, its counter after a number: its wrapper's theorem from the boolean copies' theorem *)
+Fixpoint w41d (x : i63) (n : nat) : bool := match n with O => PrimInt63.ltb x 5 | S m => w41d (PrimInt63.add x 1) m end.
+Definition w41dgo (n : nat) (a b : i63) (s : mem) : i63 := if w41d a n then 1 else 0.
+Definition w41d_res := ltac:(run_template_program (tmQuoteRec w41dgo)
+  (fun q => let r := eval vm_compute in (reify_prog2 q) in match r with Some ?x => exact x end)).
+Definition w41d_src := fst w41d_res.
+Check (eq_refl : map (fun x => snd (fst (fst x))) w41d_src = ["w41d__o"; "w41dgo"]%bs).
+MetaRocq Run (tmMkDefinition "w41d_o"%bs (meaning_of (snd w41d_res) "w41d__o"%bs)).
+Definition w41d_Pr := mkprog (funs_of 0 w41d_src) [].
+Time Lemma w41d_ok : callee_ok w41d_Pr (gid1 0) (cbz 0) (sig_at w41d_src 0) w41d_o.
+Proof.
+  Time exact_no_check (compile_f_okrb w41d_Pr [] gid1 0 0 (nk 1) false (fbb0 (body_at w41d_src 0)) (fbb1 (body_at w41d_src 0)) None [] w41d_o
+    eq_refl eq_refl (no_callees w41d_Pr gid1) eq_refl eq_refl eq_refl (fun n => eq_refl)).
+Time Qed.
+Time Lemma w41dgo_ok : callee_ok w41d_Pr (gid1 1) (cbz 1) (sig_at w41d_src 1) w41dgo.
+Proof.
+  Time exact_no_check (compile_f_ok w41d_Pr [existT ftype (sig_at w41d_src 0) w41d_o] gid1 1 (sig_at w41d_src 1) (body_at w41d_src 1) eq_refl eq_refl
+    (all_ok_callees w41d_Pr gid1 [existT ftype (sig_at w41d_src 0) w41d_o] (conj w41d_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
