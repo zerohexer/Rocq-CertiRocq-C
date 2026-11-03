@@ -988,6 +988,7 @@ with reify_r (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sr
           end
       | tConst kn _ => match hb kn with Some b => reify_r fuel ctx b | None => None end
       | tApp (tLambda _ _ _ as f) args => reify_r fuel ctx (wout f args)
+      | tApp (tRel i) args => match nth_error ctx i with Some (CFn _ t) => reify_r fuel ctx (wout (capsub ctx t) args) | _ => None end
       (* a record chosen by a test of one comparison (step 21): its type the match's *)
       | tCase ci p c0 [b0; b1] =>
           if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_bool) then
@@ -2777,11 +2778,12 @@ Fixpoint sites (fuel : nat) (Σ : global_env) (tms : list kername) (hb : kername
   end.
 
 (** a copy's parameters, nearest first: a function parameter bound to the function given *)
-Fixpoint tkinds (tys fargs : list term) (p : nat) : list cent :=
+Fixpoint tkinds (rt : list rentry) (tys fargs : list term) (p : nat) : list cent :=
   match tys with
   | [] => []
-  | t :: r => if is_prod t then match fargs with f :: fa => CFn p f :: tkinds r fa (S p) | [] => [] end
-              else (if is_nat t then CCnt else if is_ty kn_mem t then CMem else if is_bool t then CBool else CNum) :: tkinds r fargs p
+  | t :: r => if is_prod t then match fargs with f :: fa => CFn p f :: tkinds rt r fa (S p) | [] => [] end
+              else (if is_nat t then CCnt else if is_ty kn_mem t then CMem else if is_bool t then CBool
+                    else match kind_ty rt t with Some (KRec _) => CRec | _ => CNum end) :: tkinds rt r fargs p
   end.
 Fixpoint tdrop (tys : list term) (p : nat) : list (option nat) :=
   match tys with [] => [] | t :: r => if is_prod t then Some p :: tdrop r (S p) else None :: tdrop r p end.
@@ -2790,9 +2792,14 @@ Fixpoint tdrop (tys : list term) (p : nat) : list (option nat) :=
     passes them on, and they are dropped *)
 Definition read_def (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
   (callees : list (kername * sig)) (d : def term) (fargs : list term) (capk : list cent) : option (sig * fbody) :=
-          let '(tys, body) := lams (dbody d) in
+          let '(tys0, body0) := lams (dbody d) in
+          (* (step 46) the last parameter a number-and-memory pair: read on its components, the signature flagged *)
+          let pmx := last_pm tys0 in
+          let body := pm_body callees tys0 true body0 in
+          let tys := if pmx then removelast tys0 ++ [tConst kn_int []; tConst kn_mem []] else tys0 in
           let pa := canon_perm tys (Some (rarg d)) in
           let tysc := map (fun i => nth i tys (tRel 0)) pa in
+          option_map (fun gb => (with_sp pmx (fst gb), snd gb))
           match read_sig rt (filter (fun t => negb (is_prod t)) tysc) (ret_ty (dtype d)), body with
           | Some gs0, tCase ci _ (tRel cnt) [b0; b1] =>
               (* the captured numbers and booleans before the template's other parameters, the captured memory last *)
@@ -2803,11 +2810,11 @@ Definition read_def (hb : kername -> option term) (tc : kername -> list term -> 
                               (sm gs0 || existsb is_memc capk) (sr gs0) (sw gs0) (sq gs0) in
               let nx := Nat.pred (sn gs) in
               let fd := tdrop (tl tysc) 0 in
-              if negb (Nat.eqb (sn gs) 0) && negb (isq gs) && negb (sm gs0 && existsb is_memc capk)
+              if negb (Nat.eqb (sn gs) 0) && negb (sm gs0 && existsb is_memc capk)
                  && Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_nat)
                  && Nat.eqb cnt (Nat.sub (Nat.pred (length tys)) (rarg d)) && is_nat (nth (rarg d) tys (tRel 0)) then
                 let k := length (filter is_nat tys) in
-                let tk := tkinds tys fargs 0 in
+                let tk := tkinds rt tys fargs 0 in
                 let kt := k in
                 let k := Nat.add kt ncc in
                 (* the captured variables (step 42): a counter at its place after the template's, a record as a record *)
@@ -2821,6 +2828,25 @@ Definition read_def (hb : kername -> option term) (tc : kername -> list term -> 
                   match reify_m callees (sm gs) nx hb tc fd rt 100000 ctx (bbody b0),
                         reify_m callees (sm gs) nx hb tc fd rt 100000 (CPred :: ctx) (bbody b1) with
                   | Some m0, Some m1 => Some (gs, FRecM m0 m1)
+                  | _, _ => None
+                  end
+                (* (step 46) a copy giving back a number and a memory, a boolean, a record *)
+                else if ispq gs then
+                  match reify_pv callees (sm gs) nx hb tc fd rt 100000 ctx (bbody b0),
+                        reify_pv callees (sm gs) nx hb tc fd rt 100000 (CPred :: ctx) (bbody b1) with
+                  | Some p0, Some p1 => Some (gs, FRecP p0 p1)
+                  | _, _ => None
+                  end
+                else if isbq gs then
+                  match reify_bb callees (sm gs) nx hb tc fd rt 100000 ctx (bbody b0),
+                        reify_bb callees (sm gs) nx hb tc fd rt 100000 (CPred :: ctx) (bbody b1) with
+                  | Some r0, Some r1 => Some (gs, FRecB r0 r1)
+                  | _, _ => None
+                  end
+                else if isq gs then
+                  match reify_br callees (sm gs) nx hb tc fd rt 100000 ctx (bbody b0),
+                        reify_br callees (sm gs) nx hb tc fd rt 100000 (CPred :: ctx) (bbody b1) with
+                  | Some r0, Some r1 => Some (gs, FRecR r0 r1)
                   | _, _ => None
                   end
                 else
@@ -2864,12 +2890,12 @@ Fixpoint ensure (fuel : nat) (Σ : global_env) (mp : modpath) (hb : kername -> o
             match fargs with
             | [tFix [d] 0 as fx] =>
                 let '(tys, body) := lams (dbody d) in
-                let nested := sites 1000 Σ tms hb th (map Some (rev (tkinds tys [] 0) ++ [CSelf] ++ rev capk)) body [] in
+                let nested := sites 1000 Σ tms hb th (map Some (rev (tkinds rt tys [] 0) ++ [CSelf] ++ rev capk)) body [] in
                 match fold_left (fun st s => ensure fuel Σ mp hb rt th tms bt chk s st) (rev nested) st with
                 | Some (es, tbl) =>
                     let ckn := (MPfile ["kqcopy"%bs], snd T ^ "__c" ^ string_of_nat (length tbl)) in
                     match read_def hb (tc_of Σ mp tbl) rt (callees_of es) d [] capk with
-                    | Some (gs, b) => match (if chk then wf_sig (fun g => wf_f (map snd (callees_of es)) g b) gs b (bt ckn) else Some gs) with
+                    | Some (gs, b) => match option_map (with_sp (sp gs)) (if chk then wf_sig (fun g => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt) (rjs rt)) (map snd (callees_of es)) (with_sp false g) b) gs b (bt ckn) else Some gs) with
                                       | Some g => Some (es ++ [(ckn, g, b)], tbl ++ [(T, (fargs, capk), ckn, lfix_meaning fx tys capk (match fx with tFix [d] 0 => nonfn_perm tys (rarg d) | _ => seq 0 (length tys) end))])
                                       | None => None
                                       end
@@ -2890,7 +2916,7 @@ Fixpoint ensure (fuel : nat) (Σ : global_env) (mp : modpath) (hb : kername -> o
                                 match cst_body cb with
                                 | Some (tFix [d] 0) =>
                                     let body := snd (lams (dbody d)) in
-                                    sites 1000 Σ tms hb th (map Some (rev (tkinds tys fargs 0) ++ [CSelf] ++ rev capk)) body nested
+                                    sites 1000 Σ tms hb th (map Some (rev (tkinds rt tys fargs 0) ++ [CSelf] ++ rev capk)) body nested
                                 | _ => nested
                                 end
                             | _ => nested
@@ -2899,7 +2925,7 @@ Fixpoint ensure (fuel : nat) (Σ : global_env) (mp : modpath) (hb : kername -> o
               | Some (es, tbl) =>
                   let ckn := (MPfile ["kqcopy"%bs], snd T ^ "__c" ^ string_of_nat (length tbl)) in
                   match read_tmpl Σ hb (tc_of Σ mp tbl) rt (callees_of es) T fargs capk with
-                  | Some (gs, b) => match (if chk then wf_sig (fun g => wf_f (map snd (callees_of es)) g b) gs b (bt ckn) else Some gs) with
+                  | Some (gs, b) => match option_map (with_sp (sp gs)) (if chk then wf_sig (fun g => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt) (rjs rt)) (map snd (callees_of es)) (with_sp false g) b) gs b (bt ckn) else Some gs) with
                                     | Some g => Some (es ++ [(ckn, g, b)], tbl ++ [(T, (fargs, capk), ckn, copy_meaning T tys fargs capk (nonfn_perm tys (tmpl_rarg Σ T)))])
                                     | None => None
                                     end
@@ -5567,3 +5593,38 @@ Proof.
     (all_ok_callees w45_Pr gid1 [existT ftype (sig_at w45_src 0) w45blk; existT ftype (sig_at w45_src 1) w45a] (conj w45blk_ok (conj w45a_ok Logic.I)))
     eq_refl eq_refl).
 Time Qed.
+(* ---- a template of any signature (step 46): [w46foldp] takes a record (a pair of numbers) and gives one back, and is given a
+   function; its copy for [fun z => z + 1] read as a function giving back a record, its theorem from its two equations
+   ([compile_f_okrr]) *)
+Fixpoint w46foldp (n : nat) (p : i63 * i63) (g : i63 -> i63) : i63 * i63 :=
+  match n with O => p | S m => w46foldp m (g (fst p), PrimInt63.add (snd p) 1) g end.
+Definition w46go (n : nat) (a b : i63) (s : KQ.KQRun.mem) : i63 :=
+  let '(x, y) := w46foldp n (a, b) (fun z => PrimInt63.add z 1) in PrimInt63.add x y.
+Definition w46_res := ltac:(run_template_program (tmQuoteRec w46go)
+  (fun q => let r := eval vm_compute in (reify_prog2 q) in match r with Some ?x => exact x end)).
+Definition w46_src := fst w46_res.
+Check (eq_refl : map (fun x => snd x) w46_src =
+  [FRecR (BRet (RVar 0))
+     (BRec CNil (SConsR (RMk 0 (SCons (SLet (SMatchR (RVar 0) (SVar 1)) (SOp Badd (SVar 0) (SInt 1)))
+                                      (SCons (SOp Badd (SMatchR (RVar 0) (SVar 0)) (SInt 1)) SNil))) SNil));
+   FPlain (SMatchR (RCall 0 0 (CCons (CVar 0) CNil) (SConsR (RMk 0 (SCons (SVar 1) (SCons (SVar 0) SNil))) SNil)) (SOp Badd (SVar 1) (SVar 0)))]).
+Check (eq_refl : map (fun x => snd (fst x)) w46_src =
+  [mksig8 1 [KRec 0] false false false (Some (KRec 0)) None []; mksig8 1 [KNum; KNum] true false false None None []]).
+MetaRocq Run (tmMkDefinition "w46cp"%bs (meaning_of (snd w46_res) "w46foldp__c0"%bs)).
+Section W46.
+#[local] Instance w46_recs : RecTypes | 0 :=
+  mkrecs (fun _ => (i63 * i63)%type) (fun _ => mkrops 2 None (fun l => (nth 0 l 0%uint63, nth 1 l 0%uint63)) (fun P v k => match v with (a, b) => k [a; b] end)) (fun _ => (0%uint63, 0%uint63)).
+#[local] Instance w46_laws : RecLaws.
+Proof. apply laws_of; [intros i [a b] P k; reflexivity | intros i [a b]; reflexivity | intros i [|a [|b [|c l]]] E L; try discriminate; reflexivity | intros i ws c rest E; discriminate E]. Qed.
+Definition w46_Pr := mkprog (funs_of 0 w46_src) [].
+Time Lemma w46cp_ok : callee_ok w46_Pr (gid1 0) (cbz 0) (sig_at w46_src 0) w46cp.
+Proof.
+  Time exact_no_check (@compile_f_okrr w46_recs w46_laws w46_Pr [] gid1 0 0 [KRec 0] false (fbr0 (body_at w46_src 0)) (fbr1 (body_at w46_src 0)) None [] 0 w46cp
+    eq_refl eq_refl (no_callees w46_Pr gid1) eq_refl eq_refl eq_refl (fun n => eq_refl)).
+Time Qed.
+Time Lemma w46go_ok : callee_ok w46_Pr (gid1 1) (cbz 1) (sig_at w46_src 1) w46go.
+Proof.
+  Time exact_no_check (@compile_f_ok w46_recs w46_laws w46_Pr [existT ftype (sig_at w46_src 0) w46cp] gid1 1 (sig_at w46_src 1) (body_at w46_src 1)
+    eq_refl eq_refl (all_ok_callees w46_Pr gid1 [existT ftype (sig_at w46_src 0) w46cp] (conj w46cp_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
+End W46.

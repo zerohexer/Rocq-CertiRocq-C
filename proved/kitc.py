@@ -587,7 +587,8 @@ def reflect(name, entry, prog, no_proof):
             t += f"Lemma {name}_rok{j} : @KQR.callee_ok {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {sig(f)} {f[0]}.\n"
             # (step 45) a member of a mutual block (a `with NAME (..)` in its Fixpoint) is one call of its block: not a fix over its counter
             mfx = re.search(r"Fixpoint\s+" + re.escape(f[0]) + r"\b(.*?)\.\s*$", prog, re.S | re.M)
-            prec = isp(f) and mfx is not None and not re.search(r"\bwith\s+[A-Za-z_][\w']*\s*[({]", mfx.group(1))
+            # (step 46) a copy is a fix over its counter too
+            prec = isp(f) and ("__c" in f[0] or (mfx is not None and not re.search(r"\bwith\s+[A-Za-z_][\w']*\s*[({]", mfx.group(1))))
             if "__c" in f[0] or f[0].endswith("__o") or prec:
                 # a copy: not a fix over its counter, so its statement comes from its two equations, each by conversion
                 # (a copy that writes the memory and gives back a number has a memory: no memory argument)

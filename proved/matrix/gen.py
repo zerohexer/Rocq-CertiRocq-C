@@ -481,6 +481,35 @@ addA("par_capture_tmpl_perm", "", "foldf (fun i acc => acc + b) n 0 a",
 # a template giving back a record (step 12)
 addA("par_fun_rec_pair", "", "let '(x, y) := foldp n (a, b) (fun z => z + 1) in x + y",
      "Fixpoint foldp (n : nat) (p : int * int) (g : int -> int) : int * int := match n with O => p | S m => foldp m (g (fst p), snd p + 1) g end.\n")
+# a template of any signature (step 46): giving back a boolean (a capture among its functions), a record (a capture), a number
+# and a memory; a record and a boolean among its parameters; a local fixpoint giving back a record; functions given that give
+# back a record, take a record, write the memory, take a boolean; the pair as a parameter
+addA("par_tmpl_bool", "", "if allp n a (fun z => z <? 1000) then 1 else 0",
+     "Fixpoint allp (n : nat) (x : int) (g : int -> bool) : bool := match n with O => true | S m => if g x then allp m (x + 1) g else false end.\n")
+addA("par_tmpl_bool_cap", "", "if allp n a (fun z => z <? b) then 1 else 0",
+     "Fixpoint allp (n : nat) (x : int) (g : int -> bool) : bool := match n with O => true | S m => if g x then allp m (x + 1) g else false end.\n")
+addA("par_tmpl_rec3", "", "f1 (fr n (mk3 a b 0) (fun z => z * 2)) + f3 (fr n (mk3 b a 1) (fun z => z * 2))",
+     "Fixpoint fr (n : nat) (w : r3) (g : int -> int) : r3 := match n with O => w | S m => fr m (mk3 (g (f1 w)) (f2 w) (f3 w + 1)) g end.\n")
+addA("par_tmpl_rec3_cap", "", "f1 (fr n (mk3 a b 0) (fun z => z + b))",
+     "Fixpoint fr (n : nat) (w : r3) (g : int -> int) : r3 := match n with O => w | S m => fr m (mk3 (g (f1 w)) (f2 w) (f3 w + 1)) g end.\n")
+addA("par_tmpl_pv", "", "let '(x, t) := fpv n a (fun z => z + 1) s in x + rd 0 0 t",
+     "Fixpoint fpv (n : nat) (x : int) (g : int -> int) (t : mem) : int * mem := match n with O => (x, t) | S m => fpv m (g x) g (upd 0 x x t) end.\n")
+addA("par_tmpl_rec_param", "", "sumr n (mk3 a b 0) (fun z => z + 3)",
+     "Fixpoint sumr (n : nat) (w : r3) (g : int -> int) : int := match n with O => f1 w + f3 w | S m => sumr m (mk3 (g (f1 w)) (f2 w) (f3 w + 1)) g end.\n")
+addA("par_tmpl_bool_param", "", "fb n (a <? b) a (fun z => z + 1)",
+     "Fixpoint fb (n : nat) (c : bool) (x : int) (g : int -> int) : int := match n with O => if c then x else 0 | S m => fb m (negb c) (g x) g end.\n")
+addA("par_lfix_rec3", "", "let fix lf (k : nat) (w : r3) : r3 := match k with O => w | S m => lf m (mk3 (f1 w + a) (f2 w) (f3 w)) end in f1 (lf n (mk3 a b 0))",
+     "")
+addA("par_tmpl_fn_rec_res", "", "fq n a (fun z => mk3 z (z + 1) 0)",
+     "Fixpoint fq (n : nat) (x : int) (g : int -> r3) : int := match n with O => x | S m => fq m (f1 (g x) + f2 (g x)) g end.\n")
+addA("par_tmpl_fn_rec_arg", "", "fw n (mk3 a b 0) (fun v => f1 v + f3 v)",
+     "Fixpoint fw (n : nat) (w : r3) (g : r3 -> int) : int := match n with O => g w | S m => fw m (mk3 (g w) (f2 w) (f3 w)) g end.\n")
+addA("par_tmpl_fn_mem", "", "rd 0 0 (fmw n a (fun z u => upd 0 z z u) s)",
+     "Fixpoint fmw (n : nat) (x : int) (g : int -> mem -> mem) (t : mem) : mem := match n with O => t | S m => fmw m (x + 1) g (g x t) end.\n")
+addA("par_tmpl_fn_bool_arg", "", "fba n a (fun c => if c then 1 else 2)",
+     "Fixpoint fba (n : nat) (x : int) (g : bool -> int) : int := match n with O => x | S m => fba m (x + g (x <? 10)) g end.\n")
+addA("par_tmpl_pm_param", "", "fpm n (fun z => z + 1) (a, s)",
+     "Fixpoint fpm (n : nat) (g : int -> int) (p : int * mem) : int := match n with O => fst p + rd 0 0 (snd p) | S m => fpm m g (g (fst p), snd p) end.\n")
 # a number function that writes, called inside an expression (step 11)
 addA("par_write_fn_expr", "", "wr n s + 1",
      "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\n")
