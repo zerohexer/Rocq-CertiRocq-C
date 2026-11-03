@@ -513,6 +513,27 @@ addA("par_tmpl_pm_param", "", "fpm n (fun z => z + 1) (a, s)",
 # a number function that writes, called inside an expression (step 11)
 addA("par_write_fn_expr", "", "wr n s + 1",
      "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\n")
+# a call inside an expression that writes the memory or is given a pair (step 47): after a read of the memory, before one, in a
+# test, bound by a let, its result used twice, as a call's argument; the function's own; given a pair, giving back a record (a
+# later step); two calls that write in one expression (each given the memory before both: a gap until a copy is decided)
+addA("par_write_after_read", "", "rd 1 0 s + wr n s",
+     "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\n")
+addA("par_write_before_read", "", "wr n s * 2 + rd 1 0 s",
+     "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\n")
+addA("par_write_in_test", "", "if wr n s <? 5 then a else b",
+     "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\n")
+addA("par_write_let", "", "let v := wr n s in v * 2 + a",
+     "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\n")
+addA("par_write_twice_use", "", "let v := wr n s in v * v",
+     "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\n")
+addA("par_write_call_arg", "", "h (wr n s) a",
+     "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\n")
+addA("par_write_self_expr", "", "f n a b s",
+     "Fixpoint f (n : nat) (a b : int) (s : mem) : int := match n with O => rd 0 0 s | S m => (f m a b (upd 0 a b s) + 1) * 2 end.\n")
+addA("par_pm_call_rec", "", "f1 (kr n (g n a s))",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint kr (n : nat) (p : int * mem) : r3 := match n with O => mk3 (fst p) (rd 0 0 (snd p)) 0 | S m => kr m (fst p + 1, snd p) end.\n")
+addA("par_write_two", "", "wr n s + wr2 n s",
+     "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\nFixpoint wr2 (n : nat) (t : mem) : int := match n with O => rd 1 0 t | S m => wr2 m (upd 1 0 (rd 1 0 t + 2) t) end.\n")
 # the translator's own conventions (§3.7): the counter not first, the memory not last
 addA("par_conv_nat_second", "", "k a n", "Fixpoint k (x : int) (n : nat) : int := match n with O => x | S m => k (x + 1) m end.\n")
 addA("par_conv_mem_first", "", "k n s a", "Fixpoint k (n : nat) (t : mem) (x : int) : int := match n with O => x + rd 0 0 t | S m => k m t (x + 1) end.\n")

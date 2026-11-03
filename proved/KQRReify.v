@@ -741,6 +741,100 @@ Fixpoint tag_chain {A : Type} (mk : nat -> A -> A -> A) (es : list A) (k : nat) 
 Definition tag_test (ws : list nat) (k : nat) : sexp * sexp := (SVar (tag_w ws), SInt (ofn k)).
 
 (** a number; and a counter: a counter variable, [O], [S c], [kq_nat e] *)
+(** (step 47) a number holding a call to make first -- of a function that writes, of a function given a pair not built in
+    place, of the function itself -- in a place evaluated before the rest (an operand, a call's argument, a test): the call
+    bound by a let, the operands of the numbers' operations that read the memory bound before it (the meaning is Rocq's, which
+    no order changes; the lets are a conversion away), the rest after it with the call's result *)
+Definition pair_lit (a : term) : bool :=
+  match a with tApp (tConstruct i 0 _) [_; _; _; _] => Kername.eqb (inductive_mind i) (inductive_mind ind_prod) | _ => false end.
+Definition bcall_q (u : term) : option bool :=
+  match u with
+  | tApp (tConst kn _) args =>
+      match find_callee kn callees 0 with
+      | Some (_, gs) =>
+          if negb (sr gs) && (sw gs || (sp gs && match rev args with a :: _ => negb (pair_lit a) | [] => false end))
+          then Some (match sq gs with Some KBool => true | _ => false end) else None
+      | None => None
+      end
+  | _ => None
+  end.
+Definition bind_first (ctx : list cent) (t : term) : option term :=
+  let bq (u : term) : option bool :=
+    match u with
+    | tApp (tRel fi) _ => if is_ent CSelf ctx fi then Some false else None
+    | _ => bcall_q u
+    end in
+  let fix find (fu : nat) (u : term) {struct fu} : option term :=
+    match fu with
+    | O => None
+    | S fu =>
+        match bq u with
+        | Some _ => Some u
+        | None =>
+            match u with
+            | tApp _ args => fold_left (fun a x => match a with Some _ => a | None => find fu x end) args None
+            | tCase _ _ c _ => find fu c
+            | _ => None
+            end
+        end
+    end in
+  let fix occ (fu : nat) (c u : term) {struct fu} : bool :=
+    match fu with
+    | O => false
+    | S fu => teq 1000 u c || match u with
+                             | tApp f args => occ fu c f || existsb (occ fu c) args
+                             | tCase _ _ c0 brs => occ fu c c0 || existsb (fun br => occ fu c (bbody br)) brs
+                             | tLambda _ _ b | tLetIn _ _ _ b => occ fu c b
+                             | _ => false
+                             end
+    end in
+  let memv (u : term) : bool := existsb (fun i => match nth_error ctx i with Some CMem => true | _ => false end) (fvs 1000 0 u []) in
+  (* the term with the call a placeholder, each hoisted operand one *)
+  let fix skel (fu : nat) (c u : term) (hs : list term) {struct fu} : term * list term :=
+    match fu with
+    | O => (u, hs)
+    | S fu =>
+        if teq 1000 u c then (tVar "kq_v"%bs, hs) else
+        match u with
+        | tApp (tConst kn _ as f) args =>
+            let num_op := eq_mp (fst kn) prim_mp in
+            let '(args', hs') := fold_left (fun acc a => let '(l, h) := acc in
+                                   if occ 1000 c a then let '(a', h') := skel fu c a h in (l ++ [a'], h')
+                                   else if num_op && memv a then (l ++ [tVar ("kq_h"%bs ^ string_of_nat (length h))], h ++ [a])
+                                   else (l ++ [a], h)) args ([], hs) in
+            (tApp f args', hs')
+        | tApp f args =>
+            let '(args', hs') := fold_left (fun acc a => let '(l, h) := acc in
+                                   if occ 1000 c a then let '(a', h') := skel fu c a h in (l ++ [a'], h') else (l ++ [a], h)) args ([], hs) in
+            (tApp f args', hs')
+        | tCase ci p c0 brs => let '(c0', hs') := skel fu c c0 hs in (tCase ci p c0' brs, hs')
+        | _ => (u, hs)
+        end
+    end in
+  let fix repl (fu : nat) (k : nat) (u : term) {struct fu} : term :=
+    match fu with
+    | O => u
+    | S fu =>
+        match u with
+        | tVar v => if String.eqb v "kq_v"%bs then tRel 0
+                    else match List.find (fun i => String.eqb v ("kq_h"%bs ^ string_of_nat i)) (seq 0 k) with
+                         | Some i => tRel (k - i) | None => u end
+        | tApp f args => tApp (repl fu k f) (map (repl fu k) args)
+        | tCase ci p c0 brs => tCase ci p (repl fu k c0) brs
+        | _ => u
+        end
+    end in
+  match find 1000 t with
+  | None => None
+  | Some c =>
+      let '(sk, hs) := skel 1000 c t [] in
+      let k := length hs in
+      let tyv := match bq c with Some true => tInd ind_bool [] | _ => tConst kn_int [] end in
+      let anon := {| binder_name := nAnon; binder_relevance := Relevant |} in
+      Some (fold_right (fun ih b => tLetIn anon (lift0 (fst ih) (snd ih)) (tConst kn_int []) b)
+                       (tLetIn anon (lift0 k c) tyv (repl 1000 k (lift0 (S k) sk))) (combine (seq 0 k) hs))
+  end.
+
 Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sexp :=
   match fuel with
   | O => None
@@ -1483,7 +1577,56 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
     to_args (map (fun a => match reify fuel c a with Some e => Some (inl e) | None =>
                             match reify_b fuel c a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel c a) end end) l) in
   let reify_cs (c : list cent) (l : list term) : option scnts := option_map to_scnts (opt_all (map (reify_c fuel c) l)) in
-  match head_r t with Some t' => reify_x fuel ctx t' | None =>
+  (* (step 47) [let v := b in body], b a call of a function that writes, of one given a pair not built in place, of the function
+     itself: what follows on the memory the call was given, or (after a call that writes) reading no memory *)
+  let bindc (bq : bool) (b body : term) : option sx :=
+    let cv := if bq then CBool else CNum in
+    let after (w : bool) := if w then option_map XRet (reify fuel (cv :: kill_mem ctx) body) else reify_x fuel (cv :: ctx) body in
+    match b with
+    | tApp (tConst kn _) args =>
+        let '(kn1, args1) := tcall ctx kn args in
+        match find_callee kn1 callees 0, rev args1 with
+        | Some (f, gs), m :: rnums =>
+            let rest := rev rnums in
+            if negb (sr gs) && Nat.leb (sn gs) (length rest) then
+              if sp gs && negb (pair_lit m) then
+                match reify_pv fuel ctx m, reify_cs ctx (firstn (sn gs) rest), reify_args ctx (skipn (sn gs) rest), after (sw gs) with
+                | Some p, Some cs, Some As, Some x => Some (XBindP bq f cs As p x)
+                | _, _, _, _ => None
+                end
+              else if sw gs && sm gs && negb (sp gs) then
+                match reify_m fuel ctx m, reify_cs ctx (firstn (sn gs) rest), reify_args ctx (skipn (sn gs) rest), after true with
+                | Some mm, Some cs, Some As, Some x => Some (XBind bq f cs As mm x)
+                | _, _, _, _ => None
+                end
+              else None
+            else None
+        | _, _ => None
+        end
+    | tApp (tRel fi) args00 =>
+        match self_perm ctx fi args00 with
+        | tRel mi :: rest0 =>
+            if is_ent CSelf ctx fi && is_ent CPred ctx mi then
+              match option_map (with_caps ctx) (drop_fns ctx fd rest0) with
+              | Some rest =>
+                  if Nat.leb fnx (length rest) then
+                    match rev (skipn fnx rest) with
+                    | m :: rnums =>
+                        match reify_cs ctx (firstn fnx rest), reify_args ctx (rev rnums), reify_m fuel ctx m, after true with
+                        | Some cs, Some As, Some d, Some x => Some (XBindR cs As d x)
+                        | _, _, _, _ => None
+                        end
+                    | [] => None
+                    end
+                  else None
+              | None => None
+              end
+            else None
+        | _ => None
+        end
+    | _ => None
+    end in
+  match (match head_r t with Some t' => reify_x fuel ctx t' | None =>
   match tag_parts t with
   | Some (ri, ws, c, bs) =>
       match reify_r fuel ctx c, opt_all (map (reify_x fuel (repeat CNum (S (tag_w ws)) ++ ctx)) bs) with
@@ -1502,9 +1645,9 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
         | _, _ => None
         end
       else if is_ty kn_int ty then
-        match reify fuel ctx b, reify_x fuel (CNum :: ctx) body with Some e, Some x => Some (XLet e x) | _, _ => None end
+        match reify fuel ctx b, reify_x fuel (CNum :: ctx) body with Some e, Some x => Some (XLet e x) | _, _ => bindc false b body end
       else if is_bool ty then
-        match reify_b fuel ctx b, reify_x fuel (CBool :: ctx) body with Some e, Some x => Some (XLetB e x) | _, _ => None end
+        match reify_b fuel ctx b, reify_x fuel (CBool :: ctx) body with Some e, Some x => Some (XLetB e x) | _, _ => bindc true b body end
       else if is_nat ty then
         match reify_c fuel ctx b, reify_x fuel (CCnt :: ctx) body with Some c, Some x => Some (XLetC c x) | _, _ => None end
       else match reify_r fuel ctx b, reify_x fuel (CRec :: ctx) body with Some r, Some x => Some (XLetR r x) | _, _ => None end
@@ -1629,6 +1772,9 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
   | _ => fallback
   end
   end
+  end) with
+  | Some x => Some x
+  | None => match bind_first ctx t with Some t' => reify_x fuel ctx t' | None => None end
   end
   end.
 (** a record given back: at the end a record (built, or given by a call), the function itself at the end, the function itself
@@ -2284,6 +2430,9 @@ Fixpoint cl_x (B : Z) (bs : list cbe) (x : sx) {struct x} : list site :=
   | XRec ccs args m => (None, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m
   | XCall f ccs args m => (Some f, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m
   | XCallP f ccs args p => (Some f, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_pv B bs p
+  | XBind _ f ccs args m x => (Some f, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m ++ cl_x B bs x
+  | XBindR ccs args m x => (None, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m ++ cl_x B bs x
+  | XBindP _ f ccs args p x => (Some f, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_pv B bs p ++ cl_x B bs x
   | XLetR r x | XMatchR r x | XSplitR _ r x => cl_r B bs r ++ cl_x B bs x
   | XMatchP p x | XLetP p x => cl_pv B bs p ++ cl_x B bs x
   end.
@@ -5628,3 +5777,21 @@ Proof.
     eq_refl eq_refl (all_ok_callees w46_Pr gid1 [existT ftype (sig_at w46_src 0) w46cp] (conj w46cp_ok Logic.I)) eq_refl eq_refl).
 Time Qed.
 End W46.
+(* ---- a call inside an expression that writes the memory (step 47): [w47go] reads the memory and adds what [w47wr] gives,
+   which writes it -- the read bound first, then the call (XBind), the sum after it reading no memory *)
+Fixpoint w47wr (n : nat) (t : KQ.KQRun.mem) : i63 :=
+  match n with O => KQ.KQRun.rd 0 0 t | S m => w47wr m (KQ.KQRun.upd 0 0 (PrimInt63.add (KQ.KQRun.rd 0 0 t) 1) t) end.
+Definition w47go (n : nat) (a : i63) (s : KQ.KQRun.mem) : i63 := PrimInt63.add (KQ.KQRun.rd 1 0 s) (w47wr n s).
+Definition w47_src := ltac:(run_template_program (tmQuoteRec w47go)
+  (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
+Check (eq_refl : map (fun x => snd x) w47_src =
+  [FRecX (XRet (SRd (SInt 0) (SInt 0))) (XRec CNil SNil (MUpd (SInt 0) (SInt 0) (SOp Badd (SRd (SInt 0) (SInt 0)) (SInt 1)) MCur));
+   FPlainX (XLet (SRd (SInt 1) (SInt 0)) (XBind false 0 (CCons (CVar 0) CNil) SNil MCur (XRet (SOp Badd (SVar 1) (SVar 0)))))]).
+Definition w47_Pr := mkprog (funs_of 0 w47_src) [].
+Time Lemma w47wr_ok : callee_ok w47_Pr (gid1 0) (cbz 0) (sig_at w47_src 0) w47wr.
+Proof. Time exact_no_check (compile_f_ok w47_Pr [] gid1 0 (sig_at w47_src 0) (body_at w47_src 0) eq_refl eq_refl (no_callees w47_Pr gid1) eq_refl eq_refl). Time Qed.
+Time Lemma w47go_ok : callee_ok w47_Pr (gid1 1) (cbz 1) (sig_at w47_src 1) w47go.
+Proof.
+  Time exact_no_check (compile_f_ok w47_Pr [existT ftype (sig_at w47_src 0) w47wr] gid1 1 (sig_at w47_src 1) (body_at w47_src 1)
+    eq_refl eq_refl (all_ok_callees w47_Pr gid1 [existT ftype (sig_at w47_src 0) w47wr] (conj w47wr_ok Logic.I)) eq_refl eq_refl).
+Time Qed.
