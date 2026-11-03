@@ -758,11 +758,26 @@ Definition bcall_q (u : term) : option bool :=
       end
   | _ => None
   end.
+Definition bcall_rec (u : term) : option term :=
+  match u with
+  | tApp (tConst kn _) args =>
+      match find_callee kn callees 0 with
+      | Some (_, gs) =>
+          match sq gs with
+          | Some (KRec ri) =>
+              if negb (sr gs) && negb (sw gs) && sp gs && match rev args with a :: _ => negb (pair_lit a) | [] => false end
+              then option_map (fun e => let '(_, ty, _, _, _, _, _) := e in ty) (nth_error rt ri) else None
+          | _ => None
+          end
+      | None => None
+      end
+  | _ => None
+  end.
 Definition bind_first (ctx : list cent) (t : term) : option term :=
   let bq (u : term) : option bool :=
     match u with
     | tApp (tRel fi) _ => if is_ent CSelf ctx fi then Some false else None
-    | _ => bcall_q u
+    | _ => match bcall_rec u with Some _ => Some false | None => bcall_q u end
     end in
   let fix find (fu : nat) (u : term) {struct fu} : option term :=
     match fu with
@@ -829,7 +844,7 @@ Definition bind_first (ctx : list cent) (t : term) : option term :=
   | Some c =>
       let '(sk, hs) := skel 1000 c t [] in
       let k := length hs in
-      let tyv := match bq c with Some true => tInd ind_bool [] | _ => tConst kn_int [] end in
+      let tyv := match bcall_rec c with Some ty => ty | None => match bq c with Some true => tInd ind_bool [] | _ => tConst kn_int [] end end in
       let anon := {| binder_name := nAnon; binder_relevance := Relevant |} in
       Some (fold_right (fun ih b => tLetIn anon (lift0 (fst ih) (snd ih)) (tConst kn_int []) b)
                        (tLetIn anon (lift0 k c) tyv (repl 1000 k (lift0 (S k) sk))) (combine (seq 0 k) hs))
@@ -1650,7 +1665,32 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
         match reify_b fuel ctx b, reify_x fuel (CBool :: ctx) body with Some e, Some x => Some (XLetB e x) | _, _ => bindc true b body end
       else if is_nat ty then
         match reify_c fuel ctx b, reify_x fuel (CCnt :: ctx) body with Some c, Some x => Some (XLetC c x) | _, _ => None end
-      else match reify_r fuel ctx b, reify_x fuel (CRec :: ctx) body with Some r, Some x => Some (XLetR r x) | _, _ => None end
+      else match reify_r fuel ctx b, reify_x fuel (CRec :: ctx) body with
+           | Some r, Some x => Some (XLetR r x)
+           | _, _ =>
+               (* (step 48) a call given a pair not built in place, giving back a record *)
+               match b with
+               | tApp (tConst kn _) args =>
+                   let '(kn1, args1) := tcall ctx kn args in
+                   match find_callee kn1 callees 0, rev args1 with
+                   | Some (f, gs), m :: rnums =>
+                       let rest := rev rnums in
+                       match sq gs with
+                       | Some (KRec ri) =>
+                           if sp gs && negb (pair_lit m) && Nat.leb (sn gs) (length rest) then
+                             match reify_pv fuel ctx m, reify_cs ctx (firstn (sn gs) rest), reify_args ctx (skipn (sn gs) rest),
+                                   reify_x fuel (CRec :: ctx) body with
+                             | Some p, Some cs, Some As, Some x => Some (XBindPR ri f cs As p x)
+                             | _, _, _, _ => None
+                             end
+                           else None
+                       | _ => None
+                       end
+                   | _, _ => None
+                   end
+               | _ => None
+               end
+           end
   | tCase ci p c0 [br] =>
       (* a record taken apart, the number after it made after memories; or a number *)
       let c := match c0 with tApp (tConst kn _) args => match hb kn with Some hbd => wout hbd args | None => c0 end | _ => c0 end in
@@ -2432,7 +2472,7 @@ Fixpoint cl_x (B : Z) (bs : list cbe) (x : sx) {struct x} : list site :=
   | XCallP f ccs args p => (Some f, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_pv B bs p
   | XBind _ f ccs args m x => (Some f, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m ++ cl_x B bs x
   | XBindR ccs args m x => (None, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_m B bs m ++ cl_x B bs x
-  | XBindP _ f ccs args p x => (Some f, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_pv B bs p ++ cl_x B bs x
+  | XBindP _ f ccs args p x | XBindPR _ f ccs args p x => (Some f, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_pv B bs p ++ cl_x B bs x
   | XLetR r x | XMatchR r x | XSplitR _ r x => cl_r B bs r ++ cl_x B bs x
   | XMatchP p x | XLetP p x => cl_pv B bs p ++ cl_x B bs x
   end.

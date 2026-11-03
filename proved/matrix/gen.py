@@ -534,6 +534,11 @@ addA("par_pm_call_rec", "", "f1 (kr n (g n a s))",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint kr (n : nat) (p : int * mem) : r3 := match n with O => mk3 (fst p) (rd 0 0 (snd p)) 0 | S m => kr m (fst p + 1, snd p) end.\n")
 addA("par_write_two", "", "wr n s + wr2 n s",
      "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\nFixpoint wr2 (n : nat) (t : mem) : int := match n with O => rd 1 0 t | S m => wr2 m (upd 1 0 (rd 1 0 t + 2) t) end.\n")
+# a call given a pair giving back a record, bound by a let, inside a test (step 48)
+addA("par_pm_call_rec_let", "", "let w := kr n (g n a s) in f1 w + f2 w * f3 w",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint kr (n : nat) (p : int * mem) : r3 := match n with O => mk3 (fst p) (rd 0 0 (snd p)) 0 | S m => kr m (fst p + 1, snd p) end.\n")
+addA("par_pm_call_rec_test", "", "if f2 (kr n (g n a s)) <? 7 then a else b",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint kr (n : nat) (p : int * mem) : r3 := match n with O => mk3 (fst p) (rd 0 0 (snd p)) 0 | S m => kr m (fst p + 1, snd p) end.\n")
 # a call given a pair not built in place inside an expression of a function giving back a boolean, a record, a number and a
 # memory, a memory (the places step 47 leaves: it reads them in a number's body only)
 addA("par_pm_call_in_bool", "", "if kb n a s then 1 else 0",
