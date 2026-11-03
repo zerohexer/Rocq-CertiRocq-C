@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **929 of 937, 6 gaps, 1 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **932 of 939, 5 gaps, 1 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4166,6 +4166,35 @@ the design (2026-11-03).**  The four places of `1fab4bb`.
   holds given to a call inside a test and twice.
 *Expected*: the four cells and those.
 
+**Step 48 continued (2026-11-03): functions giving back a boolean whose body writes the memory; records and the pair a let holds
+go on.**  Built, the first of the design's two parts for booleans:
+- *`KQR.v`*: a boolean as a leaf of the sort of a number that writes (`XRetB`: its code 1 or 0, from the newest memory) and the
+  boolean such a body gives (`denote_xb`, the function's own call `recb`; `xresb`, `xrecb`); a function giving back a boolean
+  whose signature writes (`sw`) has an X body whose leaves are booleans or its own call (`xbool`), its meaning `denote_xb`
+  (`denote_f0`); `denote_x_xb` (the body's number is its boolean as 1 or 0, `xres_xresb`, `xrec_xrecb`); `compile_f_ok_bool`
+  gains the case, built on the X case's proof and that lemma.  A call that writes may give back a boolean (`XBind` /
+  `XBindP` with `bq`); what follows it reads no memory and may be a boolean (`xfree` with `XRetB`), proved once for every such
+  place by `after_free` (the code run on the memory the call left gives the meaning on the memory it was given; the five places
+  of steps 47 and 48 end with it).  No new hypothesis; `Print Assumptions` the same base.
+- *The reifier*: a boolean as the last resort of a number that writes (`XRetB`); a function giving back a boolean that its
+  readers of booleans refuse read as an X body of booleans, its signature writing (`wsig`); what follows a call that writes may
+  be a boolean; a binding call found through the helpers written out where they are used (`bind_first`).
+- *Cells*: 2 more (939): a boolean through a call that writes, a boolean whose recursion is given a memory it writes.  Run
+  alone: both proved, and with them `A_par_pm_call_in_bool`.  Run as a check beside them, 442 cells (booleans, pairs, writes,
+  mutual blocks, memories, and every eleventh cell of the table): 437 proved, the other 5 the known gaps.  (The binding through
+  helpers wrote out a record's projection on a first build and lost `A_par_pm_call_rec_test`; it now writes helpers out only
+  when the text as written holds no call to bind.)
+- *Not built yet, the step's continuation*: a record whose body writes (`A_par_pm_call_in_rec`: the same with a record leaf, its
+  fields to the slot block at the end) and the pair a let holds given to a call (`A_par_pm_call_in_pv`, `A_par_pm_call_in_mem`).
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the
+  trees without their generated files, F62; step 48's files / this step's): `HWP_kernel` 2.56 / 2.55 s, `HWP_own` 1.94 / 1.93,
+  `HWP_irqnow` 1.62 / 1.64 — the same.
+- The C: 63 of 63 byte-identical.  The construct table (on `f70ad99`): **932 of 939 through the verified compiler**, 1 by design,
+  5 gaps, 1 not Rocq (was 929 of 937: the two new cells read and `A_par_pm_call_in_bool`).  The gate on `f70ad99`, the walk
+  switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (14 / 12 / 12 / 15 / 13 s); **71 programs
+  through the verified compiler, 0 refused**; the trusted base unchanged.  The step goes on with a record whose body writes and
+  the pair a let holds.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4341,11 +4370,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `10a5276` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `f70ad99` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 48 continued's design (functions giving back a boolean or a record that write the memory; a call given the pair a let holds) |
+| (this commit) | §12.V: step 48 continued (functions giving back a boolean whose body writes: the construct table 932 of 939, 1 by design; records and the pair a let holds go on), the C, the gate |
+| `f70ad99` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 48 continued: `XRetB`, `denote_xb`, a boolean whose body writes, `after_free`; the reifier reads it as an X body; 2 cells |
+| `7556d7b` | §11 F62, §12.V: the reifier's timing of steps 44 continued to 48 corrected (the working tree's scanned directories) |
+| `dad6b6d` | §12.V: step 48 continued's design (functions giving back a boolean or a record that write the memory; a call given the pair a let holds) |
 | `eee39e5` | §12.V: step 48 (a call given a pair, bound, giving back a record: the construct table 929 of 937, 1 by design; the bodies of the other sorts go on), the C, the gate |
 | `10a5276` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 48: `XBindPR`, its fields from the slot block, `ctailx_ok`'s case; the reifier binds such a call with its record type; 2 cells |
 | `45ecac0` | §12.V: step 48's design (calls given a pair inside expressions of every sort) |
