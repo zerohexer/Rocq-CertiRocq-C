@@ -4044,6 +4044,31 @@ unchanged):
   through the verified compiler, 0 refused**; the trusted base unchanged.  Next: calls inside expressions that write the memory or
   are given a pair (the record of 2026-11-02's order).
 
+**Step 47, calls inside expressions that write the memory or are given a pair — the design (2026-11-03).**  The eighth item of
+the record of 2026-11-02's order: `A_par_write_fn_expr` (`wr n s + 1`, `wr` a number function that writes the memory),
+`P_int_write_nontail` (`f m a b (upd 0 a b s) + 1`, the function's own recursive call inside an expression), and the two places
+step 44 continued left: `A_par_pm_call_expr` (`k n (g n a s) + 1`) and `A_par_pm_call_bool_fn` (`if k n (g n a s) then ..`).
+A number function that writes (`XCall`, `XRec`, `XCallP`, steps 11 and 44) is read only at the end of a body: its theorem says
+the memory after it is *some* memory, so nothing after it may read the memory, and the sort of numbers has no place for a call
+that changes it.  A call of a function given a pair, whatever it gives back, is read only at the end of a body too.
+- *`KQR.v`*: the sort of a number that writes gets `XBind f cs args m x` (function `f` on the memory `m`, its result — a number,
+  a boolean, a record — the nearest value of its kind in `x`), `XBindR cs args m x` (the function itself) and `XBindP f cs args p
+  x` (given the pair `p`): `x` runs after the call.  When the callee writes, `x` is a number that reads no memory (`XRet e`, `e`
+  checked without one): its value the same whatever the memory (`denote_nomem`); when it does not, `x` is any number that writes,
+  on the memory the call was given.  C: the call into a variable (`Ecall`; the function's own name for `XBindR`, a call that is
+  not a loop), then `x`'s code.  The proofs: the callee's theorem (for `XBindR` the induction hypothesis on the counter), then
+  `x`'s; a case in each lemma over the sort.
+- *The reifier*: a number expression holding a call of a function that writes, or of a function given a pair that is not built
+  in place: the parts that read the memory and stand outside the call bound before it by lets (the meaning is Rocq's, which no
+  order of evaluation changes; the lets are a conversion away from the text), the call bound (`XBind`, `XBindR`, `XBindP`), the
+  rest after it with the call's result (a read of the memory always goes before: in Rocq it reads the memory the call was given).
+  Two calls that write the memory in one expression: refused (below).
+- *Cells*: a writing call inside an expression after a read of the memory, before one, inside a test, under a let, its result
+  used twice; the function's own writing call inside an expression; a call given a pair inside an expression, giving back a
+  number, a boolean, a record; two writing calls in one expression (refused: each is given the memory before both, which needs
+  a copy of the memory; whether that is by design is §0.5's question, answered with a pin and a control when it is built).
+*Expected*: the four cells and those.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4223,7 +4248,8 @@ Pushed to the public repository up to `4283f5d` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 46 (templates of any signature: the construct table 915 of 922, 1 by design), the C, the gate |
+| (this commit) | §12.V: step 47's design (calls inside expressions that write the memory or are given a pair) |
+| `f9131bd` | §12.V: step 46 (templates of any signature: the construct table 915 of 922, 1 by design), the C, the gate |
 | `4283f5d` | `proved/KQRReify.v` + `kitc.py` + `matrix/gen.py` step 46: a copy read for every result sort, a record parameter a record, the pair as a parameter, checked with the program's record types; 13 cells |
 | `4102c0a` | §12.V: step 46's design (templates of any signature) |
 | `df2e4aa` | §12.V: step 45 (mutual blocks of any signature: the construct table 901 of 909, 1 by design), the C, the gate |
