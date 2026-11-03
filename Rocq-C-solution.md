@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **855 of 868, 11 gaps, 1 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **870 of 879, 7 gaps, 1 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -3796,6 +3796,36 @@ so one chosen by a test or a match has no type:
 by a let, one given back by a function, three levels of records, and an inner record taken apart one level in a test and in
 functions giving back a boolean, a memory, a number after memories, a number and a memory, and a record.
 
+**Step 43 done (2026-11-03): records holding records as values.**  Built as designed:
+- *`KQR.v`*: `RecTypes` gains each record type's one-level match and constructor and its record fields' types (`RS`, `RB`, `RJ`),
+  `RecLaws` their four laws (`rs_nat`, `rs_flat`, `rs_kinds`, `rb_mk`); `mkrecs` and `laws_of` give them to a program without
+  records holding records from its matches and constructors (every record table of the tests is now made that way).  The eight
+  one-level take-aparts and `RMkR`: their meaning `rsplit` (the record's own one-level match, its record fields as record
+  values) and `RB`; their C the record's words split among the fields (`rnn`, `rsl`); `wf` asks the record's type and gives the
+  body its record fields' types.  The proofs: the fields' atoms from the laws (`split_atoms`, `slices_ok`), the record variables
+  they make (`inv_rlets`, `rsplit_typed`), the constructor's records (`rec_vals`); a case in each lemma over the syntax.  No new
+  hypothesis; `Print Assumptions` the same base.
+- *The reifier*: the record table keeps each record's field types (`rftys`), and holds the bodies' records holding records
+  after every other; a match not taken apart at once is read as the one-level take-apart (`rbs`), in each sort; the function's
+  own result is bound by a let first (`BLetRec`, then `BSplitR`); a constructor given a record value is `RMkR`; a record holding
+  records built of plain values is put in where it is bound (`held`).  `rec_info` names each record holding records' record
+  fields' types after its shape (`N:pair(pair(i,i),i)@1`).  Test `w43go` (`w43k` rebuilding its own result from the inner
+  record, `w43go` giving the inner record to `w43pf` and taking it apart after a let; the record table as kitc.py makes it, its
+  laws by the fixed script; the three theorems); each theorem in milliseconds.
+- *kitc.py*: each program's one-level match and constructor (`_rs`, `_rb`, `_rj`), their laws by the fixed script
+  (`KQR.kq_rb_case`).
+- *Cells*: 11 more (879): an inner record rebuilt in a recursion and by a let, bound by a let, given back by a function, three
+  levels, taken apart one level in a test and in functions giving back a boolean, a memory, a number after memories, a number
+  and a memory, a record.  Run alone: all 11 proved, and with them `A_par_pairp_proj`, `_late`, `_pass` and
+  `P_pairp_match_nat`.  Run as a check beside them, the 309 cells that involve records: 305 proved, the other 4 the known gaps
+  (a template giving back a pair, the two number-and-memory pairs) and the cell refused by design.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest; step 42's files /
+  step 43's): `HWP_kernel` 2.56 / 2.67 s, `HWP_own` 1.98 / 2.06, `HWP_irqnow` 1.66 / 1.74 -- each about 0.1 s more, every round.
+- The C: 63 of 63 byte-identical.  The construct table (on `4840d28`): **870 of 879 through the verified compiler**, 1 by design,
+  7 gaps, 1 not Rocq (was 855 of 868: the eleven new cells and the four records holding records).  The gate on `4840d28`, the
+  walk switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (12 / 12 / 12 / 14 / 13 s); **71
+  programs through the verified compiler, 0 refused**; the trusted base unchanged.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -3971,11 +4001,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `d45b0f0` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `4840d28` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 43's design (records holding records as values) |
+| (this commit) | §12.V: step 43 done (records holding records as values: the construct table 870 of 879, 1 by design), the C, the gate |
+| `4840d28` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` step 43: one-level match and constructor (`RS`, `RB`, `RJ`), `*SplitR` in every sort, `RMkR`; the reifier's fallback and the bodies' records in its table; 11 cells |
+| `bf502ea` | §12.V: step 43's design (records holding records as values) |
 | `d45b0f0` | §12.V: step 42 done (captures of every kind: the construct table 855 of 868, 1 by design), the C, the gate |
 | `8ab60a6` | `proved/KQRReify.v` + `matrix/gen.py` step 42: captured counters and records, a match's variables their fields' kinds; 4 cells |
 | `60915d3` | §12.V: step 42's design (captures of every kind) |
