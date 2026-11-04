@@ -66,9 +66,8 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
-3. **The translator's own side conditions** (§3.7): the counter must be the first parameter, the memory the last, at most one
-   memory, functions only from the program's own file — conventions a user has to learn, which the construct table does not yet
-   vary because its generator writes programs that way.  They are over-rejections until a theorem needs them.
+3. **The translator's own side conditions** (§3.7): at most one memory per recursive function (the counter at any position and the
+   memory at any position since step 41, functions of any module and file since step 51).  An over-rejection until a theorem needs it.
 4. **Rocq's own measure recursion** (`Program Fixpoint {measure ..}`, `Function`, `Equations`): what the owner asked for as
    loops "level 2".  `wfix` is the step built so far; the owner's form is owed (§4.5, §12.P).
 5. **The operations of freestanding C not yet in KQL** (§2.1): `uint64_t` division and remainder, signed 64-bit arithmetic, the
@@ -208,6 +207,9 @@ inlining, join points, lambda lifting, specialization, tail calls as jumps — i
    behind the programmer's back.  Two versions differing in cells fixed by the text (`let t := upd 0 a b s in .. t .. s ..`, a call
    that writes one cell named in its text) need neither: the old values of those cells are kept in variables and put back, as a
    C programmer writes it (F63).
+4. **A constant with no body in Rocq's kernel**: an `Axiom`, a `Parameter`, a function behind a module's `:`.  This one has nothing to do
+   with a runtime: Rocq itself cannot run such a constant and nothing says what it computes, so no theorem can say the C computes it
+   (F65).  `<:` keeps a module's bodies; what only the hardware defines is named by a machine operation with its law (§1.8).
 
 **Whether a value needs a runtime is decided by its size and its lifetime, never by its type.**  A value of a non-recursive
 inductive type of numbers (`option int`, `int + int`, an enumeration whose constructors carry numbers) has a fixed size: it is
@@ -263,7 +265,7 @@ convenient.
    for the model.  If the change needs a new assumption, it is a decision for the owner, not a step.
 2. **Is it natural and native?**  Would ordinary Rocq or Lean code look like this?  Then it must be accepted.  Does the change
    make the user write something they would not otherwise write (an order of parameters, a wrapper, a special name, a budget to
-   guess)?  Then it is the wrong change, unless Rocq itself imposes it or a theorem needs it (D22).  The only refusals are the three
+   guess)?  Then it is the wrong change, unless Rocq itself imposes it or a theorem needs it (D22).  The only refusals are the four
    of §0.5.
 3. **Is it general?**  It applies to every program with that construct, not to the program in front of you.  It is found and
    tested by construct (§3), never by fixing the sample that failed.  An optimization removes a cost the translation adds to every
@@ -1017,7 +1019,7 @@ is a rule a user must learn today, and each is an over-rejection unless a theore
 | the counter a function recurses on is its **first** parameter | `fparts`: `rarg d = 0` | no: the statement's induction can be on any `nat` parameter | read `rarg d = k` for any `k`; induct on parameter `k` |
 | the memory is the **last** parameter | `tr_call` (`[KMem], [m]` last), `mk_info` | no: the memory is one KQL argument wherever it stands | accept the memory at any position |
 | at most **one memory** per function | `mk_info` (`restmem && capmem` refused), the walk | partly: one memory is the linearity that makes in-place update correct; two *different* memory parameters both live would alias the one global memory | refuse only two memories used at once (by design, with pin and control); accept two parameters of which one is dead or one is the other (`A_par_mem_two`, two memory parameters of which one is unused, is already accepted) |
-| a function to translate is in the **program's own file** (or the kit) | `is_fun`, `reach`: `eq_mp (fst kn) mp` | no: a function of another file is quoted the same way | translate functions of any file the program imports (a multi-file program, a user library) — the cost-shape work measured the same need (a course library in a separate file) |
+| a function to translate is in the **program's own file** (or the kit) | `is_fn`, `reach`: `in_prog` since step 51 | no: a function of another file is quoted the same way | done (step 51): a constant of any file that is not a library's, of a nested module, of a functor's instance; a file the program requires beside it is compiled first |
 | a captured variable is a number, a counter or a memory | `cap_ok` | no: a captured boolean, pair or record is a parameter like any other | accept every kind `kind_of` accepts |
 | a helper larger than 40 nodes becomes a function of its own | `big_fun` | none (a proof-size choice, not a refusal) | keep; it is not visible to the user |
 | a choice between values reads at most three times to be a conditional move | `choice_ok` | none (a speed choice, measured) | keep; above three it is a branch, not a refusal |
@@ -1614,6 +1616,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F62 | The reifier's step was timed in two trees whose directories differ in size: `coqc` scans every directory `-R` and `-Q` give it, and the working tree holds every cell's generated files and the cells themselves (234 MB against 101 MB), so a file that loads only MetaRocq takes 0.80 s there against 0.73 s.  The 0.04–0.08 s the records of steps 44 continued to 48 put on the libraries' loading (and on the reifier's tests) was this.  Timed in copies of both trees without those directories, step 44 continued's files against step 48's: `HWP_kernel` 2.50 / 2.52 s, `HWP_own` 1.93 / 1.95, `HWP_irqnow` 1.63 / 1.64 — the same.  The timing now makes those copies. |
 | F63 | §0.5's third refusal took its example from a fixed difference: `let t := upd .. s in .. t .. s ..` differs from `s` in one cell, whose old value a variable keeps and puts back, as a C programmer does; `A_par_write_two` (step 47, one cell named in the callee's text) is the same.  Only two versions differing in cells whose number comes from the data need a copy (found by step 49's design, 2026-11-03) | §0.5's third refusal worded by the size of the difference, as values are (F35); the fixed side gets cells (gaps), a pin and a control show the side from the data (step 49) |
 | F64 | `&&` and `||` are functions: under `vm_compute` both sides are evaluated, and a scan written `is_pm ty && pm_bare 100000 0 body` walked the whole body at every let, a fuel literal of 100000 built each time, quadratic on a long chain of lets.  The first version of step 48 continued's `has_pm_let` cost 27% on the kernels' reifier step (`HWP_kernel` 2.36 to 3.00 s), found by the timing before its commit (2026-11-04) | the test written with `if`, the cheap one first: back to 2.38 s.  The same as F58: a test the reifier runs often goes cheapest first, and only `if` makes that an order |
+| F65 | §0.5 said three refusals, and a function behind a module's `:` is not one of them and not a gap: the kernel holds no body for it, Rocq cannot run it, and `denote s = f` has nothing to unfold.  The same for an `Axiom` and a `Parameter`.  Refused only with its short name until now, as if it were something not read.  And `kitc.py` looked for `kq_shared` in the body's own text alone, so a list of shared blocks in another file would have meant no check of them, silently (found by step 51's design, 2026-11-04) | a fourth refusal in §0.5 with its own reason, which names `<:`; `kq_shared` looked for wherever the program's text is, with the refusal of a plain access pinned from a module and from a file |
 | F38 | MetaRocq's formal evaluation (`EWcbvEval.eval`, `PCUICWcbvEval`) has rules for primitive values only, none for primitive operations: `PrimInt63.add` has no body, `eval_delta` cannot fire, every program here is stuck in it | the verified compiler is built by reflection over our own syntax instead (D26, §1.12) (read in the image's MetaRocq sources, 2026-10-30) |
 | F37 | CakeML's architecture is ours: a proof-producing translator from the logic's functions on top, one verified compiler below; Pancake is verified through a proof-producing decompiler.  The difference is that CakeML builds each proof by construction while ours searches | D25, §1.11 (read in the CakeML repository, 2026-10-30) |
 
@@ -4721,7 +4724,8 @@ Pushed to the public repository up to `0b929ef` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §11 F65, §0.5, §3.7, §12.V: step 51 (programs across modules and files: the construct table 1079 of 1093, 7 by design), the C, the gate |
+| (this commit) | §11 F65, §0.5, §3.7: the changes `959967b` names, which that commit left out (its edit script stopped on a mismatch and the record went ahead) |
+| `959967b` | §11 F65, §0.5, §3.7, §12.V: step 51 (programs across modules and files: the construct table 1079 of 1093, 7 by design), the C, the gate |
 | `0b929ef` | `proved/KQRReify.v` + `kitc.py` + `matrix/gen.py` + `classify.py` + `examples/modules` step 51: programs across modules and files: `in_prog`, full names, nothing guessed from names or text, files, a section's let; 107 cells |
 | `379bddc` | §12.V: step 51's design (programs across modules and files: in the program, full names, no guessing from names or text, files, sections; a constant with no body the fourth refusal) |
 | `684dbda` | §12.V: step 50 (a read of the memory before a write, standing after it: the construct table 977 of 986, 2 by design), the C, the gate |
