@@ -4681,6 +4681,17 @@ of a write, a call, a let of a call, none) × fourteen places × three sorts.  M
   kernels (12 / 12 / 12 / 13 / 13 s); **73 programs through the verified compiler, 0 refused**; the trusted base unchanged.  Next:
   §12.P, Rocq's own measure recursion; the own call under a choice wants the X body's code to take a continuation.
 
+**Step 56, Rocq's own measure recursion: `Program Fixpoint` (§12.P, §4.5, the owner's "level 2") — the design (2026-11-04).**  `Program Fixpoint f (x ..) {measure (m x)} := body` elaborates to `Fix_sub` over `MR lt m` on an `Acc` proof, each
+recursive call given a proof.  Conversion can never open it: the recursion is on the `Acc` proof, stuck at a variable.  Measured on gcd and a binary search on the memory, with their real elaborated terms:
+- *The one lemma* (`fix_sub_budget`, written once): given `G : nat -> A -> B` and `Fs`, the elaborated functional, if `Fs x h = G k x` whenever `h` agrees with `G (k - 1)` (or a default at `k = 0`) on what `h` is given, then
+  `Fix_sub .. x = G k x` for every `k >= m x`.  By induction on the `Acc` proof.  `fix_sub_eq`'s extensionality premise is not needed, so neither functional extensionality nor proof irrelevance is: `Print Assumptions` shows none.
+- *The premise, per function*: a few tests walked by a small tactic, in 0 s on both: a test's convoy (`(if c as a return a = c -> R then t else f) eq_refl`) by one lemma of its own, since `destruct c` is ill-typed under the obligations' proofs.
+- *`G`*: the body with its proofs dropped, as a fixpoint on a budget, read by the reader as any fixpoint: `Fs` is a term the reifier takes apart, untrusted, and the kernel checks everything.  The program's `f` is then `fun x => G K x`.
+- *The budget, with no run-time measure and no cap in the theorem*: a measure `Z.to_nat (Sint63.to_Z e)` is below 2^62 whatever `e` is, so `K = kq_nat 2^60 + kq_nat 2^60 + kq_nat 2^60 + kq_nat (2^60 - 1)`, a constant, within the counters' bound of step 40; §4.5's plan (a measure computed at
+  run time, 2^60 "in the domain") is dropped: the equation holds for every argument, so a caller's text, which names `f`, is compiled as it stands.  A measure that is a counter expression: that expression.  Any other measure: refused with its reason, a cell.
+- *The theorem about `f`*: `callee_ok` of `fun x => G K x` by the compiler's theorem, then `callee_ok_eq`, proved once: a function's theorem holds of any function equal to it at every argument.  Nothing added to the trust.
+- *Cells*: the sorts of function and of result, one parameter and several, a memory, a test, nested tests, a match on a counter, a non-tail call, a caller; a proof of a real obligation in an example, `proved/examples/program_fix`, answers worked out apart.  Left for what follows: `Function`, `Equations`, `{wf R x}`, `dec`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4860,7 +4871,8 @@ Pushed to the public repository up to `417fcc1` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 55 (the function's own call in every place: the construct table 1933 of 1995, 11 by design, 50 gaps, 36 of them one class), the C, the gate |
+| (this commit) | §12.V: step 56's design (Rocq's own measure recursion, `Program Fixpoint`: one lemma from `Fix_sub` to a budget function, no extensionality; no cap in the theorem) |
+| `56d7dd3` | §12.V: step 55 (the function's own call in every place: the construct table 1933 of 1995, 11 by design, 50 gaps, 36 of them one class), the C, the gate |
 | `417fcc1` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` + `classify.py` step 55: the function's own call in every place: a family of the table, 225 programs; `BbLetRec`; bound where it stands in a body with no memory; `float_op` |
 | `f7ae8f7` | §12.V: step 55's design (the function's own call in every place: a family of the table; `BbLetRec`; bound where it stands in a body with no memory; the own call under a choice in an operand left, 36 cells) |
 | `2d315a4` | §12.V: step 54 (a family of the table crossing what writes with what is around it: the construct table 1736 of 1762, 11 by design, 14 gaps), the C, the gate |
