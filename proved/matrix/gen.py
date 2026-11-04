@@ -616,6 +616,22 @@ addA("par_pm_let_fst_pv", "", "let '(x, t) := kz n a s in x + rd 0 0 t",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : int * mem := let p := g n x t in (fst p + 1, snd p).\n")
 addA("par_pm_let_fst_mem", "", "rd 0 0 (kz n a s)",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : mem := let p := g n x t in upd 0 (fst p) 1 (snd p).\n")
+addA("par_own_nomem_record_let", "", "f1 (kf n a b)",
+     "Fixpoint kf (n : nat) (a b : int) : r3 := match n with O => mk3 a b 0 | S m => let w := kf m (a + 1) b in mk3 (f1 w + a) b 0 end.\n")
+addA("par_own_nomem_bool_let_num", "", "if kf n a b then a else b",
+     "Fixpoint kf (n : nat) (a b : int) : bool := match n with O => a <? b | S m => let c := kf m (a + 1) b in (if c then 1 else 2) + a <? b end.\n")
+addA("par_own_nomem_bool_let_neg", "", "if kf n a b then a else b",
+     "Fixpoint kf (n : nat) (a b : int) : bool := match n with O => a <? b | S m => let c := kf m (a + 1) b in negb c end.\n")
+addA("par_own_nomem_bool_let_test", "", "if kf n a b then a else b",
+     "Fixpoint kf (n : nat) (a b : int) : bool := match n with O => a <? b | S m => let c := kf m (a + 1) b in if c then a <? b else b <? a end.\n")
+addA("par_own_nomem_bool_test", "", "if kf n a b then a else b",
+     "Fixpoint kf (n : nat) (a b : int) : bool := match n with O => a <? b | S m => if kf m (a + 1) b then a <? b else b <? a end.\n")
+addA("par_own_nomem_record_match", "", "f1 (kf n a b)",
+     "Fixpoint kf (n : nat) (a b : int) : r3 := match n with O => mk3 a b 0 | S m => match kf m (a + 1) b with mk3 x y z => mk3 (x + a) y z end end.\n")
+addA("par_own_nomem_pair_let", "", "fst (kf n a b)",
+     "Fixpoint kf (n : nat) (a b : int) : int * int := match n with O => (a, b) | S m => let p := kf m (a + 1) b in (fst p + a, snd p) end.\n")
+addA("par_own_nomem_num_let", "", "kf n a b",
+     "Fixpoint kf (n : nat) (a b : int) : int := match n with O => a | S m => let c := kf m (a + 1) b in if c <? b then c else b end.\n")
 addA("par_pm_let_nested", "", "kn2 n a s",
      "Fixpoint gg (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => gg m (x + 1) (upd 0 x x t) end.\nDefinition kp (p : int * mem) : int := fst p + rd 0 0 (snd p).\nDefinition gg2 (p : int * mem) : int * mem := (fst p + 1, upd 1 0 (fst p) (snd p)).\nDefinition kn2 (n : nat) (x : int) (t : mem) : int := let p := gg n x t in let q := gg2 p in kp q + 1.\n")
 addA("par_own_opnd_choice", "", "ko n a s",
@@ -1166,6 +1182,36 @@ for e, f in itertools.product(XE, XF): addX("fix", "rd", e, f)
 for c, f in itertools.product(XC, XF): addX("fix", c, "left", f)
 for m, f in itertools.product(XM, XF): addX(m, "rd", "left", f)
 
+# ---------------------------------------------------------------- the function's own call x where it stands x its memory x the sort of the function (step 55)
+YMEM = {"same": ("", "s"), "upd": ("", "(upd 0 a b s)"), "letupd": ("let u := upd 0 a b s in ", "u"), "fill": ("", "(fill m a s)"), "letfill": ("let u := fill m a s in ", "u"), "none": ("", None)}
+YE = {"tail": "X", "left": "X + a", "right": "a + X", "twice": "(X + a) * 2", "test": "if X <? a then a else b", "let": "let y := X in y + a", "helper": "h X a", "call": "ff m X",
+      "field": "f1 (mk3 X a b)", "pair": "fst (X, a)", "ifop": "(if a <? b then X else a) + b", "inlet": "(let y := a + 1 in X + y) + a", "branch": "if a <? b then X else a + 1",
+      "branch2": "if a <? b then X + 1 else a"}
+YH = """Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.
+Fixpoint fill (n : nat) (i : int) (t : mem) : mem := match n with O => t | S m => fill m (i + 1) (upd 0 i (i * 2) t) end.
+"""
+Y = {}
+def addY(mm, e, sort):
+    pre, m = YMEM[mm]
+    arg = f"kf m (a + 1) b {m}" if m else "kf m (a + 1) b"
+    call = {"int": arg, "bool": f"(if {arg} then 1 else 2)", "record": f"(f1 ({arg}))"}[sort]
+    if e != "tail":
+        call = "(" + call + ")"
+    body = YE[e].replace("X", call)
+    params = "(n : nat) (a b : int)" + (" (s : mem)" if m else "")
+    c = "kf n a b s" if m else "kf n a b"
+    if sort == "int":
+        d = f"Fixpoint kf {params} : int := match n with O => a | S m => {pre}{body} end.\n"; g = c
+    elif sort == "bool":
+        d = f"Fixpoint kf {params} : bool := match n with O => a <? b | S m => {pre}(({body}) <? b) end.\n"; g = f"if {c} then a else b"
+    else:
+        d = f"Fixpoint kf {params} : r3 := match n with O => mk3 a b 0 | S m => {pre}mk3 ({body}) b 0 end.\n"; g = f"f1 ({c})"
+    Y[f"{mm}_{e}_{sort}"] = YH + d + f"Definition go {SIG} : int :=\n  {g}.\n"
+for mm, e, sort in itertools.product(YMEM, YE, ["int", "bool", "record"]):
+    if mm == "none" and e not in ("left", "test", "let", "field", "ifop"):
+        continue
+    addY(mm, e, sort)
+
 # ---------------------------------------------------------------- write
 def write(outdir):
     os.makedirs(outdir, exist_ok=True)
@@ -1182,6 +1228,9 @@ def write(outdir):
         body = PRE + text + f"Definition go {SIG} : int :=\n  f n a b s.\n" + MAIN
         open(os.path.join(outdir, f"N_{i}.body"), "w").write(body)
         rows.append((f"N_{i}", "nesting", i))
+    for (i, text) in Y.items():
+        open(os.path.join(outdir, f"Y_{i}.body"), "w").write(PRE + text + MAIN)
+        rows.append((f"Y_{i}", "own call", i))
     for (i, text) in X.items():
         open(os.path.join(outdir, f"X_{i}.body"), "w").write(PRE + text + MAIN)
         rows.append((f"X_{i}", "cross", i))
@@ -1192,7 +1241,7 @@ def write(outdir):
     with open(os.path.join(outdir, "cells.tsv"), "w") as fh:
         for r in rows:
             fh.write("\t".join(r) + "\n")
-    print(len(rows), "cells:", len(P), "producers,", len(A), "parameters,", len(N), "nestings,", len(X), "crossings")
+    print(len(rows), "cells:", len(P), "producers,", len(A), "parameters,", len(N), "nestings,", len(X), "crossings,", len(Y), "own calls")
 
 if __name__ == "__main__":
     write(sys.argv[1] if len(sys.argv) > 1 else "cells")

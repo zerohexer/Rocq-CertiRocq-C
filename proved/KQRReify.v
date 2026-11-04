@@ -1858,6 +1858,26 @@ with reify_pv (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option s
 (** a number made after memories: lets of memories, numbers and booleans, tests, and at the end a number from the newest
     memory.  A read or a call whose memory is made in place ([rd h i (f .. s)]) is read as [let s2 := f .. s in rd h i s2] --
     the same term up to [let]; its numbers are read with the older memories dead, so they may not name one *)
+(** a let inside an argument: up to zeta the let first (step 55) *)
+Fixpoint float_op (fuel : nat) (t : term) : option term :=
+  match fuel with
+  | O => None
+  | S fuel =>
+      match t with
+      | tApp f args =>
+          let fix go (l pre : list term) : option term :=
+            match l with
+            | [] => None
+            | a :: r =>
+                match (match a with tLetIn _ _ _ _ => Some a | _ => float_op fuel a end) with
+                | Some (tLetIn na e ty b) => Some (tLetIn na e ty (tApp (lift0 1 f) (map (lift0 1) (rev pre) ++ b :: map (lift0 1) r)))
+                | _ => go r (a :: pre)
+                end
+            end in
+          go args []
+      | _ => None
+      end
+  end.
 (** whether a term calls the function being read *)
 Fixpoint has_self (fuel : nat) (ctx : list cent) (d : nat) (t : term) : bool :=
   match fuel with
@@ -1971,6 +1991,8 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
         match reify_b fuel ctx b, reify_x fuel (CBool :: ctx) body with Some e, Some x => Some (XLetB e x) | _, _ => bindc true b body end
       else if is_nat ty then
         match reify_c fuel ctx b, reify_x fuel (CCnt :: ctx) body with Some c, Some x => Some (XLetC c x) | _, _ => None end
+      (* the function's own call inside the record: bound first, by the fallback (step 55) *)
+      else if (if has_self 1000 ctx 0 b then match b with tApp (tRel _) _ => false | _ => true end else false) then None
       else match reify_r fuel ctx b, reify_x fuel (CRec :: ctx) body with
            | Some r, Some x => Some (XLetR r x)
            | _, _ =>
@@ -2186,7 +2208,11 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
                         match (match hoist_read ctx t with Some t' => reify_x fuel ctx t' | None => None end) with
                         | Some x => Some x
                         (* (step 52) a memory made in place and read inside an expression: bound by a let *)
-                        | None => match bind_first true None ctx t with Some t' => reify_x fuel ctx t' | None => None end
+                        | None =>
+                            match bind_first true None ctx t with
+                            | Some t' => reify_x fuel ctx t'
+                            | None => match float_op 100 t with Some t' => reify_x fuel ctx t' | None => None end
+                            end
                         end
                     end
                 end
@@ -2219,7 +2245,7 @@ Fixpoint reify_br (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
         end
     | _ => None
     end in
-  match head_r t with Some t' => reify_br fuel ctx t' | None =>
+  match (match head_r t with Some t' => reify_br fuel ctx t' | None =>
   match tag_parts t with
   | Some (ri, ws, c, bs) =>
       match reify_r fuel ctx c, opt_all (map (reify_br fuel (repeat CNum (S (tag_w ws)) ++ ctx)) bs) with
@@ -2309,6 +2335,16 @@ Fixpoint reify_br (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
   end
   end
   end
+  end) with
+  | Some r => Some r
+  | None =>
+      if fm then None else
+      if has_self 1000 ctx 0 t then
+        match bind_first false (Some (tVar "kq_rec"%bs)) ctx t with
+        | Some t' => reify_br fuel ctx t'
+        | None => match float_op 100 t with Some t' => reify_br fuel ctx t' | None => None end
+        end
+      else None
   end
   end.
 
@@ -2354,7 +2390,7 @@ Fixpoint reify_bb (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
         end
     | _, _ => None
     end in
-  match head_r t with Some t' => reify_bb fuel ctx t' | None =>
+  match (match head_r t with Some t' => reify_bb fuel ctx t' | None =>
   match tag_parts t with
   | Some (ri, ws, c, bs) =>
       match reify_r fuel ctx c, opt_all (map (reify_bb fuel (repeat CNum (S (tag_w ws)) ++ ctx)) bs) with
@@ -2418,7 +2454,10 @@ Fixpoint reify_bb (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
       if is_ty kn_int ty then
         match reify fuel ctx b, reify_bb fuel (CNum :: ctx) body with Some x, Some y => Some (BbLet x y) | _, _ => None end
       else if is_bool ty then
-        match reify_b fuel ctx b, reify_bb fuel (CBool :: ctx) body with Some x, Some y => Some (BbLetB x y) | _, _ => None end
+        match self_call b with
+        | Some (cs, a) => option_map (BbLetRec cs a) (reify_bb fuel (CBool :: ctx) body)
+        | None => match reify_b fuel ctx b, reify_bb fuel (CBool :: ctx) body with Some x, Some y => Some (BbLetB x y) | _, _ => None end
+        end
       else if is_nat ty then
         match reify_c fuel ctx b, reify_bb fuel (CCnt :: ctx) body with Some x, Some y => Some (BbLetC x y) | _, _ => None end
       else
@@ -2427,6 +2466,16 @@ Fixpoint reify_bb (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
   end
   end
   end
+  end) with
+  | Some r => Some r
+  | None =>
+      if fm then None else
+      if has_self 1000 ctx 0 t then
+        match bind_first false (Some (tInd ind_bool [])) ctx t with
+        | Some t' => reify_bb fuel ctx t'
+        | None => match float_op 100 t with Some t' => reify_bb fuel ctx t' | None => None end
+        end
+      else None
   end
   end.
 End R.
@@ -2946,6 +2995,7 @@ Fixpoint cl_bb (B : Z) (bs : list cbe) (b : sbb) {struct b} : list site :=
   match b with
   | BbRet x => cl_b B bs x
   | BbRec ccs args | BbNotRec ccs args => (None, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args
+  | BbLetRec ccs args b => (None, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args ++ cl_bb B bs b
   | BbLet e b => cl_e B bs e ++ cl_bb B bs b
   | BbLetB c b => cl_b B bs c ++ cl_bb B bs b
   | BbLetC c b => cl_c B bs c ++ cl_bb B (clet B bs c) b
