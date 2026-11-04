@@ -1,0 +1,10 @@
+(* what Rocq's libraries define, written out where it is used; a cast.  With a = 2: Nat.iter 3 times + 2 gives 8; xorb gives 10; Sint63.abs (2 - 9) is 7; a + 1 is 3; nat_rect 4 times + 1 gives 6.  8 + 10 + 7 + 3 + 6 = 34. *)
+Definition solve (a : int) (s : mem) : int :=
+  Nat.iter (kq_nat 3) (fun v => v + 2) a
+  + (if xorb (a <? 5) false then 10 else 20)
+  + Sint63.abs (a - 9)
+  + (a + 1 : int)
+  + nat_rect (fun _ => int) a (fun _ r => r + 1) (kq_nat 4).
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve 2 (kq_input 0).

@@ -40,6 +40,20 @@ Definition lib_file (d : dirpath) : bool :=
       else false
   | [] => false
   end.
+Fixpoint lib_file_of (m : modpath) : string :=
+  match m with
+  | MPfile (x :: _) => x
+  | MPdot m' _ => lib_file_of m'
+  | _ => ""%bs
+  end.
+Definition lib_open (kn : kername) : bool :=
+  let f := lib_file_of (fst kn) in
+  (* a definition the readers do not know as an operation *)
+  if existsb (String.eqb f) ["Bool"%bs; "Uint63"%bs; "Uint63Axioms"%bs; "Sint63"%bs; "Sint63Axioms"%bs] then true
+  else if String.eqb f "Datatypes"%bs then existsb (String.eqb (snd kn)) ["xorb"%bs; "implb"%bs; "nat_rect"%bs; "nat_rec"%bs; "nat_ind"%bs]
+  else if String.eqb f "Nat"%bs then existsb (String.eqb (snd kn)) ["iter"%bs; "even"%bs; "odd"%bs]
+  else if String.eqb f "Specif"%bs then existsb (String.eqb (snd kn)) ["proj1_sig"%bs; "sumbool_rect"%bs; "sumbool_rec"%bs]
+  else false.
 (** a constant of the program: of the root's module first (the common case, one comparison), else of any file not a library's
     (step 51: a nested module, another of the program's files).  Whatever it lets in is still checked: the meaning of what is
     read is compared with the function by the kernel *)
@@ -611,7 +625,8 @@ Definition iota_go (ci : case_info) (c : term) (brs : list (branch term)) : opti
       if Kername.eqb (inductive_mind ind) (inductive_mind (ci_ind ci)) then
         let fields := skipn (ci_npar ci) args in
         match nth_error brs k with
-        | Some br => if Nat.eqb (length (bcontext br)) (length fields) && forallb (plain_val 100) fields
+        | Some br => if Nat.eqb (length (bcontext br)) (length fields)
+                        && forallb (plain_val 100) (if String.eqb (snd (inductive_mind ind)) "sig"%bs then firstn 1 fields else fields)
                      then Some (subst (rev fields) 0 (bbody br)) else None
         | None => None
         end
@@ -791,7 +806,10 @@ Definition head_r (t : term) : option term :=
       | Some t' => Some t'
       | None =>
           match t with
-          | tCase ci _ c brs => if generic_ind (ci_ind ci) then iota_go ci (hnf_con 50 c) brs else None
+          | tCase ci _ c brs =>
+              if generic_ind (ci_ind ci) then iota_go ci (hnf_con 50 c) brs
+              else if (if String.eqb (snd (inductive_mind (ci_ind ci))) "unit"%bs then true else String.eqb (snd (inductive_mind (ci_ind ci))) "sig"%bs) then iota_go ci (hnf_con 50 c) brs
+              else None
           | tApp (tCase ci _ c brs) args => option_map (fun t' => mkApps t' args) (iota_go ci (hnf_con 50 c) brs)
           | tApp (tFix [_] 0 as fx) args => Some (tApp (tConst kn_lfix []) (fx :: args))
           | _ => None
@@ -2488,7 +2506,12 @@ Fixpoint lams (t : term) : list term * term :=
 
 
 (** the result type of a function type *)
-Fixpoint ret_ty (t : term) : term := match t with tProd _ _ b => ret_ty b | _ => t end.
+Fixpoint ret_ty (t : term) : term :=
+  match t with
+  | tProd _ _ b => ret_ty b
+  | tApp (tLambda _ _ b) [a] => subst10 a b
+  | _ => t
+  end.
 
 (** the counters a parameter list starts with, and the parameters after them *)
 Fixpoint lead_nats (tys : list term) : nat * list term :=
@@ -3284,6 +3307,13 @@ Definition helper_of (Σ : global_env) (mp : modpath) (fns : list kername) (kn :
     end
   else if eq_mp (fst kn) kit_mp || eq_mp (fst kn) uint63_mp then
     match body_of Σ kn with Some b => if has_fix 1000 b then None else Some b | None => None end
+  (* (step 63) what Rocq's libraries define over machine numbers, booleans and counters: a definition, written out as the program's are; a fixpoint inside it, a local one *)
+  else if lib_open kn then
+    match body_of Σ kn with
+    | Some (tFix _ _) => None
+    | Some b => if negb (has_fix 1000 b) then Some b else if lfix_body b then Some b else None
+    | None => None
+    end
   else None.
 
 (* ---------------------------------------------------------------- functions given to functions *)
@@ -5509,6 +5539,36 @@ Definition pf_info (p : program) : list (string * string * nat * string * string
       end
   | _ => []
   end.
+Definition ty_nf (t : term) : term := match t with tApp (tLambda _ _ b) [a] => subst10 a b | _ => t end.
+Definition ty_red (t : term) : bool := match t with tApp (tLambda _ _ _) [_] => true | _ => false end.
+Fixpoint ty_has (fuel : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      match t with
+      | tCast _ _ _ => true
+      | tLambda _ ty b => if ty_red ty then true else ty_has fuel b
+      | tLetIn _ v ty b => if ty_red ty then true else if ty_has fuel v then true else ty_has fuel b
+      | tApp f args => if ty_has fuel f then true else existsb (ty_has fuel) args
+      | tCase _ _ c brs => if ty_has fuel c then true else existsb (fun br => ty_has fuel (bbody br)) brs
+      | tFix mfix _ => existsb (fun d => ty_has fuel (dbody d)) mfix
+      | _ => false
+      end
+  end.
+Fixpoint ty_beta (fuel : nat) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      match t with
+      | tCast c _ _ => ty_beta fuel c
+      | tLambda na ty b => tLambda na (ty_nf ty) (ty_beta fuel b)
+      | tLetIn na v ty b => tLetIn na (ty_beta fuel v) (ty_nf ty) (ty_beta fuel b)
+      | tApp f args => tApp (ty_beta fuel f) (map (ty_beta fuel) args)
+      | tCase ci p c brs => tCase ci p (ty_beta fuel c) (map (fun br => {| bcontext := bcontext br; bbody := ty_beta fuel (bbody br) |}) brs)
+      | tFix mfix k => tFix (map (fun d => {| dname := dname d; dtype := dtype d; rarg := rarg d; dbody := ty_beta fuel (dbody d) |}) mfix) k
+      | _ => t
+      end
+  end.
 Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env * bool :=
   fold_left (fun st kn =>
     let '(S1, ch) := st in
@@ -5516,12 +5576,19 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
       match lookup_env S1 kn with
       | Some (ConstantDecl cb) =>
           match cst_body cb with
-          | Some (tFix [d] 0) =>
-              match y_fix d with
-              | Some f' => (add_decl (add_decl S1 (copy_mp, snd kn ^ "__wy"%bs) (cst_type cb) f') kn (cst_type cb) f', true)
-              | None => st
+          | Some b0 =>
+              (* (step 63) a binder's type a redex, from a motive, a cast: the same up to beta *)
+              let c0 := ty_has 1000 b0 in
+              let b := if c0 then ty_beta 1000 b0 else b0 in
+              match b with
+              | tFix [d] 0 =>
+                  match y_fix d with
+                  | Some f' => (add_decl (add_decl S1 (copy_mp, snd kn ^ "__wy"%bs) (cst_type cb) f') kn (cst_type cb) f', true)
+                  | None => if c0 then (add_decl S1 kn (cst_type cb) b, true) else st
+                  end
+              | _ => if c0 then (add_decl S1 kn (cst_type cb) b, true) else st
               end
-          | _ => st
+          | None => st
           end
       | _ => st
       end
@@ -5553,7 +5620,7 @@ Definition reify_prog2c (lo : bool) (bt : kername -> option Z) (chk : bool) (p :
       let hb := helper_of Σ mp kns in
       let rt := rtab_of Σ hb kns in
       (* a local fixpoint in a definition of the program's file: its copies are looked for as a template's are (step 31) *)
-      let lf := existsb (fun e => if in_prog mp (fst (fst e)) then
+      let lf := existsb (fun e => if (if in_prog mp (fst (fst e)) then true else lib_open (fst e)) then
                                     match snd e with
                                     | ConstantDecl cb => match cst_body cb with Some b => lfix_body b | None => false end
                                     | _ => false end else false) (declarations Σ) in
@@ -5934,7 +6001,7 @@ Definition reify_why (p : program) : list (string * list string) :=
       let hb := helper_of Σ mp kns in
       let rt := rtab_of Σ hb kns in
       (* a local fixpoint in a definition of the program's file: its copies are looked for as a template's are (step 31) *)
-      let lf := existsb (fun e => if in_prog mp (fst (fst e)) then
+      let lf := existsb (fun e => if (if in_prog mp (fst (fst e)) then true else lib_open (fst e)) then
                                     match snd e with
                                     | ConstantDecl cb => match cst_body cb with Some b => lfix_body b | None => false end
                                     | _ => false end else false) (declarations Σ) in

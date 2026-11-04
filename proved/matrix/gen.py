@@ -616,6 +616,155 @@ addA("par_pm_let_fst_pv", "", "let '(x, t) := kz n a s in x + rd 0 0 t",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : int * mem := let p := g n x t in (fst p + 1, snd p).\n")
 addA("par_pm_let_fst_mem", "", "rd 0 0 (kz n a s)",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : mem := let p := g n x t in upd 0 (fst p) 1 (snd p).\n")
+# natural forms found by a probe (step 63): what Rocq's libraries define, the operations of PrimInt63, casts, data of other sorts
+addA("n_nat_iter", "", "Nat.iter n (fun v => v + 1) a",
+     "")
+addA("n_nat_iter_mem", "", "rd 0 0 (Nat.iter n (fun t => upd 0 a b t) s)",
+     "")
+addA("n_nat_rect", "", "nat_rect (fun _ => int) a (fun _ r => r + 1) n",
+     "")
+addA("n_nat_rec", "", "nat_rec (fun _ => int) a (fun _ r => r + 1) n",
+     "")
+addA("n_compare", "", "match PrimInt63.compare a b with Eq => 0 | Lt => 1 | Gt => 2 end",
+     "")
+addA("n_compares", "", "match PrimInt63.compares a b with Eq => 0 | Lt => 1 | Gt => 2 end",
+     "")
+addA("n_xorb", "", "if xorb (a <? b) (b <? a) then a else b",
+     "")
+addA("n_bool_eqb", "", "if Bool.eqb (a <? b) (b <? a) then a else b",
+     "")
+addA("n_implb", "", "if implb (a <? b) (b <? a) then a else b",
+     "")
+addA("n_nat_eqb", "", "if Nat.eqb n 0 then a else b",
+     "")
+addA("n_nat_leb", "", "if Nat.leb n 3 then a else b",
+     "")
+addA("n_nat_ltb", "", "if Nat.ltb n 3 then a else b",
+     "")
+addA("n_nat_pred", "", "if Nat.ltb (Nat.pred n) 3 then a else b",
+     "")
+addA("n_nat_min", "", "if Nat.ltb (Nat.min n 3) 2 then a else b",
+     "")
+addA("n_head0", "", "PrimInt63.head0 a",
+     "")
+addA("n_tail0", "", "PrimInt63.tail0 a",
+     "")
+addA("n_mulc", "", "match PrimInt63.mulc a b with pair h l => h + l end",
+     "")
+addA("n_addc", "", "match PrimInt63.addc a b with C0 v => v | C1 v => v + 1 end",
+     "From Corelib Require Import Numbers.Cyclic.Int63.CarryType.\n")
+addA("n_subc", "", "match PrimInt63.subc a b with C0 v => v | C1 v => v + 1 end",
+     "From Corelib Require Import Numbers.Cyclic.Int63.CarryType.\n")
+addA("n_diveucl", "", "match PrimInt63.diveucl a b with pair q r => q + r end",
+     "")
+addA("n_diveucl_21", "", "match PrimInt63.diveucl_21 a b 3 with pair q r => q + r end",
+     "")
+addA("n_addmuldiv", "", "PrimInt63.addmuldiv a b 3",
+     "")
+addA("n_sint_abs", "", "Sint63.abs a",
+     "")
+addA("n_sint_asr", "", "PrimInt63.asr a 1",
+     "")
+addA("n_uint_opp", "", "Uint63.opp a",
+     "")
+addA("n_uint_oppc", "", "Uint63.oppcarry a",
+     "")
+addA("n_uint_pred", "", "Uint63.pred a",
+     "")
+addA("n_uint_succ", "", "Uint63.succ a",
+     "")
+addA("n_is_zero", "", "if Uint63.is_zero a then a else b",
+     "")
+addA("n_is_even", "", "if Uint63.is_even a then a else b",
+     "")
+addA("n_uint_eqb", "", "if PrimInt63.eqb a b then a else b",
+     "")
+addA("n_pat_let", "", "let '(x, y) := hp a b in x + y",
+     "")
+addA("n_pat_let_rec", "", "let 'mk3 p q r := hr a b in p + q + r",
+     "")
+addA("n_nested_pair", "", "let '(x, (y, z)) := tp a b in x + y + z",
+     "Definition tp (a b : int) : int * (int * int) := (a, (b, a + b)).\n")
+addA("n_idd", "", "idd a + b",
+     "Definition idd {A : Type} (x : A) : A := x.\n")
+addA("n_poly_fst", "", "fsta (a, b)",
+     "Definition fsta {A B : Type} (p : A * B) : A := fst p.\n")
+addA("n_section", "", "sf a n b",
+     "Section Sc.\nVariable k : int.\nFixpoint sf (m : nat) (x : int) : int := match m with O => x + k | S q => sf q (x + k) end.\nEnd Sc.\n")
+addA("n_section_ctx", "", "sg a b",
+     "Section Sc.\nContext (k : int).\nDefinition sg (x : int) : int := x + k.\nEnd Sc.\n")
+addA("n_sig_param", "", "sp (exist _ 1 one_pos) + a",
+     "Definition sp (x : {v : int | (0 < Sint63.to_Z v)%Z}) : int := proj1_sig x + 1.\nLemma one_pos : (0 < Sint63.to_Z 1)%Z. Proof. reflexivity. Qed.\n")
+addA("n_sig_result", "", "proj1_sig (sr a) + b",
+     "Definition sr (x : int) : {v : int | v = x} := exist _ x eq_refl.\n")
+addA("n_enum", "", "cn (col a) + b",
+     "Inductive color := Red | Green | Blue.\nDefinition cn (c : color) : int := match c with Red => 1 | Green => 2 | Blue => 3 end.\nDefinition col (x : int) : color := if x <? 0 then Red else if x <? 5 then Green else Blue.\n")
+addA("n_sum_ty", "", "match sm a with inl v => v | inr c => if c then 1 else 2 end",
+     "Definition sm (x : int) : int + bool := if x <? 0 then inl x else inr (x <? 5).\n")
+addA("n_ind_args", "", "ar (mks a) + b",
+     "Inductive sh := Cir (r : int) | Rect (w h : int) | Pt.\nDefinition ar (s0 : sh) : int := match s0 with Cir r => r * r | Rect w h => w * h | Pt => 0 end.\nDefinition mks (x : int) : sh := if x <? 0 then Pt else if x <? 5 then Cir x else Rect x x.\n")
+addA("n_unit_arg", "", "un tt a",
+     "Definition un (u : unit) (x : int) : int := x + 1.\n")
+addA("n_unit_res", "", "match unr a with tt => b end",
+     "Definition unr (x : int) : unit := tt.\n")
+addA("n_bool_let", "", "let c := a <? b in let d := negb c in if andb c d then a else b",
+     "")
+addA("n_nat_let", "", "let k := S n in if Nat.ltb k 3 then a else b",
+     "")
+addA("n_coerc", "", "(a <? b) + (b : int)",
+     "Definition b2i (c : bool) : int := if c then 1 else 0.\nCoercion b2i : bool >-> int.\n")
+addA("n_notation_op", "", "a ** b",
+     "Notation \"x ** y\" := (x * y + 1) (at level 40).\n")
+addA("n_record_update", "", "f1 (up1 (mk3 a b 0) 7) + f2 (up1 (mk3 a b 0) 7)",
+     "Definition up1 (r : r3) (v : int) : r3 := {| f1 := v; f2 := f2 r; f3 := f3 r |}.\n")
+addA("n_record_in_record", "", "f1 (g1 (mk2 (mk3 a b 0) 1)) + g2 (mk2 (mk3 a b 0) 1)",
+     "Record r2 := mk2 { g1 : r3; g2 : int }.\n")
+addA("n_match_int_lit", "", "lk a",
+     "Definition lk (x : int) : int := if x =? 0 then 10 else if x =? 1 then 11 else 12.\n")
+addA("n_big_lit", "", "a + 4611686018427387903",
+     "")
+addA("n_neg_lit", "", "a + (-5)%sint63",
+     "")
+addA("n_hex_lit", "", "a land 0xff",
+     "")
+addA("n_shift", "", "(a << 3) >> 1",
+     "")
+addA("n_fun_ret", "", "adder a b",
+     "Definition adder (k : int) : int -> int := fun x => x + k.\n")
+addA("n_fun_compose", "", "cmp (fun v => v + 1) (fun v => v * 2) a",
+     "Definition cmp (f g : int -> int) (x : int) : int := f (g x).\n")
+addA("n_fun_pair", "", "twoa (fun v => v + 1, a)",
+     "Definition twoa (p : (int -> int) * int) : int := (fst p) (snd p).\n")
+addA("n_fix_in_let", "", "let k := (fix lp (m : nat) (x : int) : int := match m with O => x | S q => lp q (x + 1) end) n a in k + b",
+     "")
+addA("n_wildcard_nat", "", "wn n a",
+     "Fixpoint wn (m : nat) (x : int) : int := match m with S (S (S q)) => wn q (x + 3) | S _ => x + 1 | O => x end.\n")
+addA("n_nat_lit_match", "", "nl n a",
+     "Definition nl (m : nat) (x : int) : int := match m with 0%nat => x | 1%nat => x + 1 | 2%nat => x + 2 | _ => x + 3 end.\n")
+addA("n_unit_arg2", "", "un (unr a) b",
+     "Definition unr (x : int) : unit := tt.\nDefinition un (u : unit) (x : int) : int := x + 1.\n")
+addA("n_coerc0", "", "b2i (a <? b) + b",
+     "Definition b2i (c : bool) : int := if c then 1 else 0.\n")
+addA("n_cast", "", "(a + b : int)",
+     "")
+addA("n_cast_arg", "", "h (a + b : int) b",
+     "")
+addA("n_cast_in_fix", "", "cf n a",
+     "Fixpoint cf (m : nat) (x : int) : int := match m with O => x | S q => (cf q (x + 1) : int) + 1 end.\n")
+addA("n_nat_max", "", "if Nat.ltb (Nat.max n 3) 2 then a else b",
+     "")
+addA("n_nat_sub", "", "if Nat.ltb (Nat.sub n 1) 2 then a else b",
+     "")
+addA("n_nat_even", "", "if Nat.even n then a else b",
+     "")
+addA("n_nat_div2", "", "if Nat.ltb (Nat.div2 n) 2 then a else b",
+     "")
+addA("n_nat_mul", "", "if Nat.ltb (Nat.mul n 2) 9 then a else b",
+     "")
+addA("n_option_bool", "", "match ob a with Some c => if c then 1 else 2 | None => b end",
+     "Definition ob (x : int) : option bool := if x <? 0 then None else Some (x <? 5).\n")
+addA("n_record_bool", "", "if b1 (mr a) then b2 (mr b) else a",
+     "Record rb := mkb { b1 : bool; b2 : int }.\nDefinition mr (x : int) : rb := mkb (x <? 3) x.\n")
 # (step 62) wf lt; a mutual block of mixed sorts that only reads; a mutual block whose match gives a function
 addA("pf_wf_lt", "", "pq n a",
      "From Stdlib Require Import Program.Wf.\nProgram Fixpoint pq (n : nat) (x : int) {wf lt n} : int :=\n  match n with O => x | S m => pq m (x + 1) end.\n")
