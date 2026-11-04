@@ -4545,6 +4545,19 @@ read from it is compared with it by the kernel.  So, with `KQR.v` unchanged:
   trusted base unchanged.  Next: a memory made in place and read inside an expression; a second memory parameter of a recursive
   function; the function's own call in a let of a pair used bare; a mutual part of two types.
 
+**Step 52, a memory made in place and read inside an expression — the design (2026-11-04).**  Found by step 51's example, no cell before:
+`rd 0 2 (fill n 0 s) + a` refused, where `let t := fill n 0 s in rd 0 2 t + a` is read, and so is `rd 0 2 (fill n 0 s)` alone.  Step 47 binds a
+call of a function that writes when it stands inside an expression; a memory made in place, given to a read or to a function that reads,
+is the same case: up to zeta the term is `let t := .. in .. rd 0 2 t ..`, every occurrence of the same memory term one let.  So, in the reader alone:
+- *`bind_first`*: the memory given to `rd`, `rd32`, `kq_size` or a function taking a memory, when it is not a variable, is what to bind, with
+  the type of a memory.  What the operands read of the memory before it is bound before it, as step 47 has it.
+- *The place left, by design*: `upd 1 (rd 0 2 (fill n 0 t)) x t` and `rd 0 2 (fill n 0 s) + rd 0 3 (fill n 1 s)`: two versions of the memory both
+  used, differing in cells whose number comes from the data (§0.5, third reason); the controls hand the memory on.
+- *Cells*: on the left and the right of an operation; `upd`, a let, a call in the place of the memory; `rd32`, `rd8`, `rd16`, `kq_size`; in a test, a
+  let's value, a call's argument, a helper's; a read of the old memory before and after it; a function that reads, a function that writes, given it;
+  a chain of two; the same term twice; in the body of a boolean, a record, a recursive function; the pins and their controls.
+*Expected*: those, but the pins.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4724,7 +4737,8 @@ Pushed to the public repository up to `0b929ef` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §11 F65, §0.5, §3.7: the changes `959967b` names, which that commit left out (its edit script stopped on a mismatch and the record went ahead) |
+| (this commit) | §12.V: step 52's design (a memory made in place and read inside an expression: bound by a let) |
+| `001b5e2` | §11 F65, §0.5, §3.7: the changes `959967b` names, which that commit left out (its edit script stopped on a mismatch and the record went ahead) |
 | `959967b` | §11 F65, §0.5, §3.7, §12.V: step 51 (programs across modules and files: the construct table 1079 of 1093, 7 by design), the C, the gate |
 | `0b929ef` | `proved/KQRReify.v` + `kitc.py` + `matrix/gen.py` + `classify.py` + `examples/modules` step 51: programs across modules and files: `in_prog`, full names, nothing guessed from names or text, files, a section's let; 107 cells |
 | `379bddc` | §12.V: step 51's design (programs across modules and files: in the program, full names, no guessing from names or text, files, sections; a constant with no body the fourth refusal) |
