@@ -4623,6 +4623,20 @@ function of two is read as a function of one, by a wrapper, as parameter order i
   them, where the expression stands and the sort of the function, which step 52's accident showed was missing; then the gaps,
   §12.P.
 
+**Step 54, a family of the table crossing what writes with what is around it (§3.1) — the design (2026-11-04).**  Step 52's gap was found by accident, writing an example: the
+table's nesting family nests one pure core in its contexts, and nothing crossed a memory made in place with the places it can stand in.  So a new family, `X_*`, by construct: ten ways of
+making a memory (`upd`, `upd32`, two writes, a let, a recursive call, a helper, a choice, a match, a chain, `snd` of a pair) × twelve ways of reading it (`rd`, `rd32`, `kq_size`, a function that
+reads, one that writes, a helper, `fst`, a record's field, a boolean, a pair bound and read, `snd`, a pair taken apart) × eighteen places (the whole, an operand on either side, a test, a let's
+value, an argument of a helper, of a call, of a template, a field, a pair, under a let, under a choice, under a match) × four sorts of function, every two of the four crossed: 591 programs.  Measured
+on step 53's reader: 465 read.  The refusals are three classes, each general:
+- *A helper hiding the read*: `h ..` whose text reads the memory it is given, itself hidden in a helper: helpers written out a level at a time until the made memory shows.
+- *The first part of a call that gives back a pair*: `fst (g n b s) + a`: bound by a let of the pair, read through `fst` and `snd` as since step 26.
+- *An operand that writes under a let or a match*: `(if a <? b then rd 0 b (fill n a s) else a) + b`.  A let of it cannot be written: a match on a stuck term does not commute with what is around it,
+  so `(if c then x else y) + b` and `if c then x + b else y + b` do not convert.  But `f a b n s + b`, with `f` a new function of its free variables and that operand its body, does: delta and beta.
+  So it is lifted, as the pair a let holds is (step 48 continued); `KQR.v` unchanged.  As a fallback for the whole program: a program read today keeps its C.  The function's own call in such an operand
+  cannot be lifted out of the fixpoint: a cell, a gap, with `A_par_pm_let_own`.
+*Expected*: every `X_*` cell read; the C byte-identical.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4802,7 +4816,8 @@ Pushed to the public repository up to `3fc8bcf` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §3.7, §12.V: step 53 (a second memory parameter: the construct table 1144 of 1169, 11 by design, 13 gaps), the C, the gate |
+| (this commit) | §12.V: step 54's design (a family of the table crossing what writes with what is around it; an operand that writes under a let or a match, a function of its own) |
+| `112ef49` | §3.7, §12.V: step 53 (a second memory parameter: the construct table 1144 of 1169, 11 by design, 13 gaps), the C, the gate |
 | `3fc8bcf` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` + `classify.py` + `examples/two_mems` step 53: a second memory parameter: the same memory by a wrapper; a memory never read by `callee_ok_dead`; 37 cells |
 | `5dd81f5` | §12.V: step 53's design (a second memory parameter: the same memory by a wrapper, a memory never read by `callee_ok_dead`, both live by design) |
 | `864e0be` | §12.V: step 52 (a memory made in place and read inside an expression: the construct table 1116 of 1132, 9 by design), the C, the gate |
