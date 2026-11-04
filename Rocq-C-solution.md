@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **1144 of 1169, 13 gaps, 11 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **1736 of 1762, 14 gaps, 11 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4637,6 +4637,22 @@ on step 53's reader: 465 read.  The refusals are three classes, each general:
   cannot be lifted out of the fixpoint: a cell, a gap, with `A_par_pm_let_own`.
 *Expected*: every `X_*` cell read; the C byte-identical.
 
+**Step 54 done (2026-11-04): a family of the table crossing what writes with what is around it.**  Built as designed, in the reifier and the generator (`KQR.v` unchanged):
+- *The family*: `X_*`, 591 programs: ten ways of making a memory × twelve ways of reading it × eighteen places × four sorts of function, every two of the four crossed.  On step 53's reader 465 were read.
+- *The reader*: helpers written out a level at a time until a memory made in place shows (`unroll`); `fst` of a call giving back a pair: the call bound by a let of the pair; an operand, a call's argument, a let's value,
+  a test that writes under a let or a match: a function of its free variables (`lift_ops`, `__kq`), the same term up to delta and beta, as a fallback for the whole program, so a program read before keeps its C.
+- *Found by the family*: a function the reifier made, named in the text of another (a lift inside a lift), was named `kqcopy..`, which is no constant: Rocq's anomaly at the definition.  The same since step 51 for
+  a pair let inside a pair let, which had no cell.  Now named by the name its definition has (`real_copies`); `A_par_pm_let_nested`.
+- *Left, a gap with its cell*: the function's own call in an operand under a choice (`A_par_own_opnd_choice`): it names the fixpoint, so it cannot be lifted out, as `A_par_pm_let_own`.
+- *Cells*: 593 more (1762).  All of `X_*` proved when run alone, with `A_par_pm_let_nested`.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the trees without their generated files, F62; step 53's files / these): `HWP_kernel`
+  2.50 / 2.51 s, `HWP_own` 1.90 / 1.91, `HWP_irqnow` 1.60 / 1.61 — the same.
+- The C: 65 of 65 byte-identical.  The construct table (on `e86d7c8`): **1736 of 1762 through the verified compiler**, 11 by
+  design, 14 gaps, 1 not Rocq (was 1144 of 1169: the 591 new `X_*` cells and `A_par_pm_let_nested` read, the one place left added
+  as a gap).  The gate on `e86d7c8`, the walk switched off: `make.sh` `core-ok`; examples 29 / 29; corpus 36 / 36; the five
+  kernels (12 / 12 / 12 / 14 / 13 s); **73 programs through the verified compiler, 0 refused**; the trusted base unchanged.  Next:
+  the same for the function's own call; then the gaps, §12.P.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4812,11 +4828,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `3fc8bcf` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `e86d7c8` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 54's design (a family of the table crossing what writes with what is around it; an operand that writes under a let or a match, a function of its own) |
+| (this commit) | §12.V: step 54 (a family of the table crossing what writes with what is around it: the construct table 1736 of 1762, 11 by design, 14 gaps), the C, the gate |
+| `e86d7c8` | `proved/KQRReify.v` + `kitc.py` + `matrix/gen.py` + `classify.py` step 54: a family of the table crossing what writes with what is around it, 591 programs; `unroll`, `lift_ops` |
+| `01d17c6` | §12.V: step 54's design (a family of the table crossing what writes with what is around it; an operand that writes under a let or a match, a function of its own) |
 | `112ef49` | §3.7, §12.V: step 53 (a second memory parameter: the construct table 1144 of 1169, 11 by design, 13 gaps), the C, the gate |
 | `3fc8bcf` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` + `classify.py` + `examples/two_mems` step 53: a second memory parameter: the same memory by a wrapper; a memory never read by `callee_ok_dead`; 37 cells |
 | `5dd81f5` | §12.V: step 53's design (a second memory parameter: the same memory by a wrapper, a memory never read by `callee_ok_dead`, both live by design) |
