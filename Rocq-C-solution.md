@@ -4477,6 +4477,38 @@ the memory at run time.  Step 47 does this for the operands of one expression; a
   modules and files (§12.L), then a second memory parameter of a recursive function, the function's own call in a let of a pair
   used bare, a mutual part of two types.
 
+**Step 51, programs across modules and files (§12.L, §3.7) — the design (2026-11-04).**  Measured refused: a function, a fixpoint, a
+writing function, a record in a nested `Module Lib`.  The reifier asks of every constant whether it stands in the root's module
+(`eq_mp (fst kn) mp`), and `kitc.py` writes the kernel's short name as a Rocq term, and takes facts about a function from its name and
+from the text of the program.  No theorem needs any of this: a constant of another module or file is quoted the same way, and what is
+read from it is compared with it by the kernel.  So, with `KQR.v` unchanged:
+- *In the program*: a constant of the root's module, or of any file that is not a library's (Rocq's, MetaRocq's, this compiler's, the
+  kit's).  Whatever that lets in is still checked by `denote s = f`.  In `reach`, `is_fn`, `helper_of`, `is_tmpl`, the scan for local
+  fixpoints.  A mutual block's members stand in the block's module, not the root's.
+- *Names*: what `kitc.py` writes is the kernel's full name, which no later name can shadow: functions, record types, constructors.  A
+  function the reifier makes (a wrapper, a block, a lifted pair) carries its origin's full name in one identifier, so that two
+  functions of one short name in two modules or files have two wrappers.
+- *No guessing from names or text*: the reifier says which functions it made and of what constant (for the unfolding order), and which
+  are one fixpoint; a user function named like a derived one (`f__c3`, `g__o`) is then an ordinary function.  The entry is the last
+  function read.  `kq_shared` is looked for wherever the program's text is, a module or a file included: found nowhere it would mean
+  no check of the shared blocks, silently.
+- *Files*: a file the program's text requires (or loads) that stands in its directory is compiled first, those it requires first,
+  with that directory as a library of no prefix: `Require Import Other.`, `From sub Require Import X.`, as `coqc -Q . ""` would have it.
+- *Sections*: a closed section's `Variable` is a parameter; its `Let` leaves a let before the function's next parameter
+  (`fun k => let y := e in fun x => b`).  Up to zeta that is `fun k x => let y := e in b`: a helper is written out through the let, a
+  function read with the let floated.  A let applied (`(let y := e in fun x => b) a`), which nothing read before, is the same.
+- *The refusal left, and a fourth in §0.5*: a constant with no body in Rocq's kernel (an `Axiom`, a `Parameter`, a function behind a
+  module's `:`).  Rocq itself cannot run it and there is nothing to compare a meaning with, so no theorem can say the C computes it.
+  The refusal says so and names `<:`, which keeps the body.  Pinned, with `<:` as the control.  Refusing a plain access to a block listed
+  in `kq_shared` (§9.4) gets its first pins too, its list in a module and in a file, so a list in another place cannot go unnoticed.
+- *Cells*: every sort of function and value in a nested module and in another file (number, writing, reading, boolean, a number and a
+  memory, record, record given back, record holding a record, data type, constant, big, function given, captures, mutual, parameters in
+  another order, local fixpoint, lifted pair); two levels of modules and of files; one short name in two modules or in a module and the
+  file, for each sort; the entry in a module and in a file; `Import`, `Require Export`, `Load`; an alias, `Include`, `<:`, `:`, a functor's
+  one and two instances; closed sections with `Variable` and `Let`; a primitive record, a type alias, a class in a module.
+*Expected*: 1079 of 1093, 7 by design, 6 gaps.  Left for the next step of §12.L: a second memory parameter of a recursive function
+(dead or an alias: to read; both live: to pin).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4656,7 +4688,8 @@ Pushed to the public repository up to `ddfc85b` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 50 (a read of the memory before a write, standing after it: the construct table 977 of 986, 2 by design), the C, the gate |
+| (this commit) | §12.V: step 51's design (programs across modules and files: in the program, full names, no guessing from names or text, files, sections; a constant with no body the fourth refusal) |
+| `684dbda` | §12.V: step 50 (a read of the memory before a write, standing after it: the construct table 977 of 986, 2 by design), the C, the gate |
 | `ddfc85b` | `proved/KQRReify.v` + `matrix/gen.py` + `classify.py` step 50: a read of the memory before a write, standing after it, bound before it (`hoist_read`); the pin of linearity moved; 14 cells |
 | `e4188df` | §12.V: step 50's design (a read of the memory before a write, standing after it: bound before it, in the reader) |
 | `381e3fa` | §11 F64, §12.V: step 48 continued (a call given the pair a let holds, by lifting the let: the construct table 963 of 972, 2 by design), the C, the gate |
