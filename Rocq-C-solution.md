@@ -4736,6 +4736,13 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   36 / 36; the five kernels (12 / 12 / 12 / 13 / 13 s); **75 programs through the verified compiler, 0 refused**; the trusted base
   unchanged.  Next: any measure with a bound, then a function as a parameter, then `Equations`.
 
+**Step 58, any measure with a bound (§12.P, §4.5) — the design (2026-11-04).**  Step 56 and 57 read two measures: a machine number through `Z.to_nat (Sint63.to_Z e)`, and a counter expression.  Left refused: `n - i`, `mu x / 2`, `Nat.max`, `Z.to_nat (Sint63.to_Z hi - Sint63.to_Z lo)`, the width of a range, the natural measure of a binary search; `mu x + mu y`.  The last two reach 2^63, above a counter's 2^62, so they are not a matter of reading only.
+- *The bound*: what the budget needs is a number or a counter above the measure, not the measure's shape.  The reader writes the measure's definitions out (`pf_unf`), then bounds it: an interval for a term of `Z` (`zb`: `to_Z` of `Sint63` and `Uint63`, literals, `+`, `-`, `min`, `max`, by a literal `*`, `/`, `mod`), a number or a counter expression for a `nat` (`nb`: `+`, `S`, a `-` by what it subtracts from, `min`, `max`, `/`, `mod`, `pred`, `log2`, `sqrt`, `div2`, a product of numbers).  Nothing here is trusted: the one tactic `KQRWf.bound_le`, the bounds of the machine numbers in it and arithmetic, proves it, and a wrong bound is a failed proof.  The forms step 56 and 57 read keep their terms and their C.
+- *A budget in phases*: a counter stops at 2^62 (its room for arithmetic: `cbz_small`), the width of a range reaches 2^63 - 1.  A budget function's budget run out does not have to end: it hands on to the phase before it, whose own budget is full.  `G1 0 x` is the body with its calls of `G0 K`, `G1 (S k) x` the body with its calls of `G1 k`: read as any fixpoint, the O branch's call a call of another function, so nothing is added to `S`.  One lemma, `KQRWf.fix_sub_phase_F`, from the phase before to the next, on `fix_sub_budget_F`'s form, so no proof irrelevance is needed: `m x <= k + S Kp`.  As many phases as the bound asks; a program whose measure fits has one, and the same C.
+- *`Function`*: the same, each phase's lemma by its induction principle; by `functional induction`, since `f_ind` takes a parameter uniform in the recursion ahead of its motive (`A_fn_m_sub_counter`, found by its cell).
+- *Cells*: 18: `A_pf_m_*` each operation on machine numbers and on counters, a measure of the program's own, `A_fn_m_*`; `A_fn_sum`, `A_pf_sum_machine` read, no longer gaps.
+- *The acceptance (§4.5, again)*: `proved/examples/program_fix_mem` is `wfix_mem.body`, the binary search, the fill and the recursion that is not a tail call, as `Program Fixpoint`, with `lo + (hi - lo) / 2`, every obligation proved, the answer worked out apart: 544.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4915,7 +4922,8 @@ Pushed to the public repository up to `e2a5c2c` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 57 (`Function`: the construct table 1980 of 2050, 11 by design, 58 gaps), the C, the gate; §4.5, §12.P, D12, READ THIS FIRST |
+| (this commit) | §12.V: step 58's design -- any measure with a bound: the bound read from the measure and proved by one tactic; a budget in phases above a counter's range; the binary search as Program Fixpoint |
+| `42d96e3` | §12.V: step 57 (`Function`: the construct table 1980 of 2050, 11 by design, 58 gaps), the C, the gate; §4.5, §12.P, D12, READ THIS FIRST |
 | `e2a5c2c` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix/gen.py` + `classify.py` + `examples/function_fix` step 57: `Function`: its plain functional, one tactic over its induction principle, the measure read back through its patterns; a lighter quote; 30 cells; `KQR.v` unchanged |
 | `b6967e4` | §12.V: step 57's design -- Function: its plain functional, one tactic over its induction principle, the measure read back through its patterns; a lighter quote; a function as a parameter and a sum of machine numbers left, with their cells |
 | `c69897e` | §12.V: step 56 (`Program Fixpoint`, the owner's "level 2": the construct table 1957 of 2020, 11 by design, 51 gaps), the C, the gate; §4.5, §12.P, D12, READ THIS FIRST |
