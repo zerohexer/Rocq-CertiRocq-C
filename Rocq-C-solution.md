@@ -4841,6 +4841,16 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   / 36; the five kernels (12 / 13 / 13 / 18 / 14 s); **79 programs through the verified compiler, 0 refused**; the trusted base
   unchanged.  Next: natural forms the table had no cell for.
 
+**Step 63, natural forms the table had no cell for (§3.1, §12.A) — the design (2026-11-05).**  Step 61 found Fibonacci refused, in a table of two thousand cells: the families vary what the reader was built for.  So a probe, 74 programs written as one writes Rocq, without looking at the reader.  54 are read or are read after this step; the rest are classes, each with its cells:
+- *What Rocq's libraries define*: `xorb`, `implb`, `Bool.eqb`, `Sint63.abs`, `Uint63.is_zero`, `is_even`, `oppcarry`, `Nat.iter`, `nat_rect`, `nat_rec`, `proj1_sig` were refused by name, as a library's.  They are helpers like the program's: written out, the same up to delta, so a conversion checks them.  `lib_open` says which, by file and for two files by name, since the readers know `Nat.ltb`, `Nat.add`, `andb` as operations.  A fixpoint inside one is a local fixpoint.
+- *A motive*: `nat_rect (fun _ => int) ..` leaves `(fun _ => int) n` as a fixpoint's type and a binder's.  The same up to beta; as a last resort on a program not read, so nothing else changes.
+- *A cast*: `(a + b : int)` was refused, a term the readers do not take apart.  The same up to conversion; the same last resort.
+- *A value holding a proof*: `proj1_sig (exist _ v p)` read as `v` where it is built in place: the proof is no value, so it need not be plain.
+- *`unit`*: a match on `tt`.
+- *Left, each with its cells*: an operation of Rocq's machine numbers KQL has no instruction for: `compare`, `compares`, `head0`, `tail0`, `mulc`, `addc`, `subc`, `diveucl`, `diveucl_21`, `addmuldiv` (§12.O, which has them in part); a library function on a counter beyond `S`, `+`, `pred`: `min`, `max`, `sub`, `div2`, `even`, `mul`; a boolean as a field of a record or a data type; a `sig` given back by a function.
+- *Cells*: 74, `A_n_*`.
+- *The acceptance*: `proved/examples/lib_fix`: `Nat.iter`, `xorb`, `Sint63.abs`, a cast, `nat_rect`; the answer worked out apart: 34.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5020,7 +5030,8 @@ Pushed to the public repository up to `4ed9b94` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 62 (a mutual block of different result types: the construct table 2115 of 2147, 15 by design, 16 gaps), the C, the gate |
+| (this commit) | §12.V: step 63's design -- natural forms the table had no cell for: a probe, what Rocq's libraries define, a motive, a cast, a value holding a proof |
+| `c0f9a51` | §12.V: step 62 (a mutual block of different result types: the construct table 2115 of 2147, 15 by design, 16 gaps), the C, the gate |
 | `4ed9b94` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix/gen.py` + `classify.py` step 62: a mutual block of different result types, the others written out in a hub; a member's match that gives a function; 6 cells; `KQR.v` unchanged |
 | `8cd569a` | §12.V: step 62's design -- a mutual block of different result types, the other members read through a hub |
 | `4bace15` | §12.V: step 61 (the own call under a choice and on a deeper counter: the construct table 2108 of 2141, 14 by design, 18 gaps), the C, the gate; READ THIS FIRST |
