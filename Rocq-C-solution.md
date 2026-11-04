@@ -4436,6 +4436,21 @@ in the reifier alone (`KQR.v` and `kitc.py` unchanged):
   / 13 s); **71 programs through the verified compiler, 0 refused**; the trusted base unchanged.  What is left of step 48: the two
   places of these cells.
 
+**Step 50, a read of the memory before a write, standing after the write — the design (2026-11-04).**  `A_par_pm_let_old` and forms that
+had no cell, measured refused: `let v := wr n s in v * 2 + rd 1 0 s`, `let t := upd 0 a b s in rd 0 b t + rd 1 0 s`, `let '(x, t) := g n a s
+in x + rd 1 0 s + rd 0 0 t`, a pair let read through `fst`, a memory's body.  In Rocq the read sees the memory before the write, so
+the read can go first: `let r := rd 1 0 s in let t := .. in .. r ..` is the same term up to zeta, and there is no second version of
+the memory at run time.  Step 47 does this for the operands of one expression; a let holds the same.  So, in the reader alone:
+- *`hoist_read`*: when a body with a let or a match of a pair or a record first is not read, the first read of the newest memory in what
+  follows it (`rd`, `rd32`, `rd8`, or a call of a function that reads the memory and does not write it, giving a number or a boolean),
+  whose arguments name nothing bound after that first binding, is bound before it, and the body read again; a read at a later place
+  in turn.  A fallback: a program read today keeps its C.  In the readers of a number that writes, a memory, a number and a memory
+  (`reify_x`, `reify_m`, `reify_pv`); the lift of a pair (step 48 continued) does the same for a memory it would otherwise have to take.
+- *The place left*: a read whose index comes from what the write gives (`let v := wr n s in rd 1 v s`) must see the old memory after the
+  write: it stays a gap of the fixed side of §0.5's third refusal, or by design when the write's cells come from the data.
+- *Cells*: those forms; a read in a test after the write; a read-only call after the write; two reads; that place.
+*Expected*: those, but the place left.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4615,7 +4630,8 @@ Pushed to the public repository up to `ffd7312` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §11 F64, §12.V: step 48 continued (a call given the pair a let holds, by lifting the let: the construct table 963 of 972, 2 by design), the C, the gate |
+| (this commit) | §12.V: step 50's design (a read of the memory before a write, standing after it: bound before it, in the reader) |
+| `381e3fa` | §11 F64, §12.V: step 48 continued (a call given the pair a let holds, by lifting the let: the construct table 963 of 972, 2 by design), the C, the gate |
 | `ffd7312` | `proved/KQRReify.v` + `matrix/gen.py` step 48 continued: a let of a pair used bare lifted to a function of the pair (`lift_pm`, `lift_all`); `KQR.v` unchanged; 10 cells |
 | `c632d1e` | §12.V: step 48 continued, a call given the pair a let holds, the design (the let lifted to a function of the pair, no new construct of `S`) |
 | `dd55ebd` | §12.V: step 48 continued (the own call not at the end of a boolean or a record that writes, mutual blocks of them: the construct table 953 of 962, 2 by design; the pair a let holds goes on), the C, the gate |
