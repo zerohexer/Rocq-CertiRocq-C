@@ -61,6 +61,30 @@ Ltac wf_step :=
                 | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
                 | match goal with |- context [match ?c with pair _ _ => _ end] => destruct c end ]).
 
+(** a branch of a [Function]'s induction principle: its tests known, each recursive call's measure below by its [tcc] lemma [T] *)
+Ltac fn_branch T :=
+  repeat match goal with
+         | z := _ |- _ => subst z
+         | H : ?n = S _ |- _ => subst n
+         | H : ?n = O |- _ => subst n
+         | H : ?c = true |- context [?c] => rewrite H
+         | H : ?c = false |- context [?c] => rewrite H
+         end;
+  cbn beta iota zeta;
+  repeat match goal with
+         | IH : forall kqk : nat, ?w <= kqk -> _ |- _ =>
+             match goal with
+             | kqh : ?m <= ?K |- _ =>
+                 let L := fresh "kqL" in
+                 assert (L : w < m) by (pose proof T as kqT; decompose [and] kqT; eauto);
+                 match K with
+                 | O => exfalso; lia
+                 | S ?k => rewrite (IH k) by lia; clear IH L
+                 end
+             end
+         end;
+  try reflexivity.
+
 (** the budget of a measure on a machine number: above it whatever the number *)
 Definition kq_budget : nat :=
   (kq_nat 1152921504606846976 + (kq_nat 1152921504606846976 + (kq_nat 1152921504606846976 + kq_nat 1152921504606846975)))%nat.

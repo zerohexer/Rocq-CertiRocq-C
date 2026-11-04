@@ -451,8 +451,13 @@ def reflect(name, entry, prog, no_proof):
     shared = shared_term(prog)
     f0 = os.path.join(GEN, f"{name}_r.v")
     open(f0, "w").write(HDR + "From KQC Require KQR KQRReify.\n" + prog
-        + f"\nDefinition {name}_res := ltac:(run_template_program (tmQuoteRec {entry})\n"
-        + "  (fun q => let r := eval vm_compute in (let r0 := KQRReify.reify_prog2 q in (r0, KQRReify.reify_why q, KQRReify.rec_info2 q r0, KQRReify.entry_perm q, KQRReify.fix1_info q, KQRReify.pf_info q)) in exact r)).\n"
+        + f"\nDefinition {name}_res := ltac:(let k q := (let r := eval vm_compute in (let r0 := KQRReify.reify_prog2 q in (r0, KQRReify.reify_why q, KQRReify.rec_info2 q r0, KQRReify.entry_perm q, KQRReify.fix1_info q, KQRReify.pf_info q)) in exact r) in\n"
+        + f"  run_template_program (tmQuoteRecTransp {entry} false)\n"
+        + "  (fun q0 => let b := eval vm_compute in (KQRReify.has_function q0) in\n"
+        + "   match b with\n"
+        + "   | false => k q0\n"
+        + "   | true => run_template_program (KQRReify.quote_function q0) (fun q => k q)\n"
+        + "   end)).\n"
         + f"Definition {name}_src := option_map fst (fst (fst (fst (fst (fst {name}_res))))).\n"
         + f"Definition {name}_mts := match fst (fst (fst (fst (fst {name}_res)))) with Some x => snd x | None => [] end.\n"
         + f'Redirect "{name}_rinfo" Eval vm_compute in (option_map KQRReify.info_of {name}_src).\n'
@@ -520,7 +525,7 @@ def reflect(name, entry, prog, no_proof):
     bnd = lambda f, j: f"(KQR.cbz {j})" if not f[7] else f"{f[7]}%Z"
     # (step 56) a Program Fixpoint: its name, the constant holding its Fix_sub, its parameters, its made functions' stem, a measure on a machine number
     fp = os.path.join(GEN, f"{name}_rpf.out")
-    pfs = {m[0]: m for m in re.findall(r'\("([^"]*)"(?:%bs)?,\s*"([^"]*)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([^"]*)"(?:%bs)?,\s*(true|false)\)', open(fp).read())} if os.path.exists(fp) else {}
+    pfs = {m[0]: m for m in re.findall(r'\("([^"]*)"(?:%bs)?,\s*"([^"]*)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([^"]*)"(?:%bs)?,\s*(true|false),\s*(true|false)\)', open(fp).read())} if os.path.exists(fp) else {}
     t = HDR + "From KQC Require KQR KQRReify" + (" KQRWf" if pfs else "") + ".\nImport ListNotations.\n" + f"From KQG Require Import {name}_r.\n"
     # the program's record types (step 12): each its type, its constructor and match, a value of it; the laws by a fixed script
     rp = os.path.join(GEN, f"{name}_rrec.out")
@@ -667,8 +672,8 @@ def reflect(name, entry, prog, no_proof):
     # (step 56) a Program Fixpoint equal to its budget function's call at every argument (KQRWf.fix_sub_budget), before anything is made opaque
     for j, f in enumerate(fs):
         if f[0] in pfs:
-            _, func, np, stem, machine = pfs[f[0]]
-            np = int(np); W, G, D = stem + "__w", stem + "__wg", stem + "__wd"
+            _, func, np, stem, machine, isfn = pfs[f[0]]
+            np = int(np); W, G, D, WM = stem + "__w", stem + "__wg", stem + "__wd", stem + "__wm"
             ps = [f"kqp{q}" for q in range(np)]
             def proj(r, q):
                 u = r
@@ -680,6 +685,15 @@ def reflect(name, entry, prog, no_proof):
             xs = [f"kqx{q}" for q in range(np)]
             pat = xs[-1]
             for q in reversed(xs[:-1]): pat = f"[{q} {pat}]"
+            if isfn == "true":
+                # (step 57) a Function: by its own induction principle, each call's measure below by its tcc lemma
+                ss = " ".join(ps)
+                t += (f"Lemma {name}_req{j} : forall {ss}, {W} {ss} = {f[0]} {ss}.\n"
+                      f"Proof.\n  assert (kqA : forall {ss} kqk (kqh : {WM} {ss} <= kqk), {G} kqk {ss} = {f[0]} {ss}).\n"
+                      f"  {{ intros {ss}. apply ({f[0]}_ind (fun {ss} kqv => forall kqk (kqh : {WM} {ss} <= kqk), {G} kqk {ss} = kqv));\n"
+                      f"    clear; intros; destruct kqk as [|kqk]; cbn [{G}]; unfold {WM} in *; KQRWf.fn_branch {f[0]}_tcc. }}\n"
+                      f"  intros {ss}. unfold {W}. apply kqA. unfold {WM}. " + ("exact (KQRWf.to_nat_le_budget _)" if machine == "true" else "exact (le_n _)") + ".\nQed.\n")
+                continue
             t += (f"Lemma {name}_req{j} : forall {' '.join(ps)}, {W} {' '.join(ps)} = {f[0]} {' '.join(ps)}.\n"
                   f"Proof.\n  intros {' '.join(ps)}. symmetry. unfold {W}, {f[0]}{', ' + func if func else ''}.\n"
                   f"  refine (@KQRWf.fix_sub_budget _ _ _ _ _ (fun k r => {G} k {unp('r')}) (fun r => {D} {unp('r')}) _ _ {pack} _).\n"
