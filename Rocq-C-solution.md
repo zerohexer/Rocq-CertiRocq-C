@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **977 of 986, 6 gaps, 2 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **1079 of 1093, 6 gaps, 7 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4509,6 +4509,39 @@ read from it is compared with it by the kernel.  So, with `KQR.v` unchanged:
 *Expected*: 1079 of 1093, 7 by design, 6 gaps.  Left for the next step of §12.L: a second memory parameter of a recursive function
 (dead or an alias: to read; both live: to pin).
 
+**Step 51 done (2026-11-04): programs across modules and files.**  Built as designed, with `KQR.v` unchanged:
+- *In the program*: `in_prog`: a constant of the root's module, or of any file that is not a library's.  In `reach`, `is_fn`, `helper_of`,
+  `is_tmpl`, the scan for local fixpoints (which now runs only over the program's constants: it was written with `&&`, F64).  A mutual
+  block's members stand in the block's module.
+- *Names*: what `kitc.py` writes is the kernel's full name: functions, record types, constructors.  A wrapper, a block, a lifted pair
+  carry their origin's full name in one identifier (`mangle`), so two of one short name have two of them.  Copies were unique already.
+- *Nothing guessed*: the reifier gives `kitc.py` the functions it made and what each is made from (`mts_info`) and the functions that are one
+  fixpoint (`fix1_info`), in place of two patterns on names and one on the program's text; the entry is the last function read.
+  `A_par_name_like_derived` is the case that was wrong before: a user function named `foo__c3` or `bar__o` was taken for a copy or a wrapper.
+  The parser of a record's shape took a constructor whose name starts with `i` for a number field; fixed.
+- *`kq_shared`*: looked for in the program's text and its files, in a module or not (`shared_term`).  Found only in the body's own text, a
+  list in another file would have meant no check of the shared blocks, silently.  So the refusal of a plain access gets its first pins, a
+  list in a module and in a file.
+- *Files*: a file the text requires or loads that stands in its directory is compiled first, those it requires first, with that directory
+  as a library of no prefix; a program with no such file keeps its flags.  An example runs across them: `proved/examples/modules`, two
+  functions of one short name, an entry in a module, a section's `Let`, a record and a writing function of another file, built and giving
+  the answer worked out apart from Rocq (89).
+- *Sections*: a helper is written out through a let before its next parameter (`wout`), a function read with the let floated
+  (`float_all`, its type by `zeta_prods`), a let applied as a lambda is, in the 11 readers that apply a lambda.
+- *The fourth refusal (§0.5, F65)*: a constant with no body in the kernel, with its own reason, which names `<:`.
+- *A gap found, no cell before*: `rd 0 2 (fill n 0 s) + a`, a read of a memory made in place as an operand, is refused, while the same with a
+  let reads.  Nothing to do with modules: the next step, its cells with it.
+- *Cells*: 107 more (1093), in `A_mod_*` and `A_file_*`.  Run alone: 102 proved, the five pins refused with their reasons.  Run as a check
+  beside them, 647 cells (booleans, pairs, writes, records, templates, functions given, mutual blocks, memories, and every eleventh cell of the table): 634 proved, the other 13 the six known gaps and the seven cells refused by design.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the trees
+  without their generated files, F62; step 50's files / these): `HWP_kernel` 2.54 / 2.54 s, `HWP_own` 1.94 / 1.91, `HWP_irqnow` 1.61 / 1.59 — the same.
+- The C: the 63 programs before byte-identical, the new example through the verified compiler.  The construct table (on
+  `0b929ef`): **1079 of 1093 through the verified compiler**, 7 by design, 6 gaps, 1 not Rocq (was 977 of 986: the 102 new cells
+  read, the five pins refused with their reasons).  The gate on `0b929ef`, the walk switched off: `make.sh` `core-ok`; examples 28
+  / 28; corpus 36 / 36; the five kernels (11 / 11 / 11 / 13 / 12 s); **72 programs through the verified compiler, 0 refused**; the
+  trusted base unchanged.  Next: a memory made in place and read inside an expression; a second memory parameter of a recursive
+  function; the function's own call in a let of a pair used bare; a mutual part of two types.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4684,11 +4717,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `ddfc85b` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `0b929ef` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 51's design (programs across modules and files: in the program, full names, no guessing from names or text, files, sections; a constant with no body the fourth refusal) |
+| (this commit) | §11 F65, §0.5, §3.7, §12.V: step 51 (programs across modules and files: the construct table 1079 of 1093, 7 by design), the C, the gate |
+| `0b929ef` | `proved/KQRReify.v` + `kitc.py` + `matrix/gen.py` + `classify.py` + `examples/modules` step 51: programs across modules and files: `in_prog`, full names, nothing guessed from names or text, files, a section's let; 107 cells |
+| `379bddc` | §12.V: step 51's design (programs across modules and files: in the program, full names, no guessing from names or text, files, sections; a constant with no body the fourth refusal) |
 | `684dbda` | §12.V: step 50 (a read of the memory before a write, standing after it: the construct table 977 of 986, 2 by design), the C, the gate |
 | `ddfc85b` | `proved/KQRReify.v` + `matrix/gen.py` + `classify.py` step 50: a read of the memory before a write, standing after it, bound before it (`hoist_read`); the pin of linearity moved; 14 cells |
 | `e4188df` | §12.V: step 50's design (a read of the memory before a write, standing after it: bound before it, in the reader) |
