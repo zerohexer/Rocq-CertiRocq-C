@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **2053 of 2122, 55 gaps, 13 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **2108 of 2141, 18 gaps, 14 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4807,6 +4807,20 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Cells*: 19: two choices, one inside the own call's argument, a let of the choice, in a test, in a helper's argument, nested, a read after; the deeper counter at the end and in an operand, reading, writing, giving back a memory, a boolean, a record, Fibonacci.
 - *The acceptance*: `proved/examples/own_fix`: Fibonacci, two steps at a time over a memory, the own call under a choice with a write; the answer worked out apart: 65.
 
+**Step 61 done (2026-11-04): the function's own call under a choice and on a deeper counter.**  Built as designed:
+- *`KQRWf.v`*: `own_step`, `deep_step`.  `KQR.v` unchanged.
+- *The reader*: `y_pull`, `y_tail`, `y_fix`, `y_all`, `y_rows`, the last resort of `reify_prog2`; `deep_call`, `deep_body`, `deep_make`, `deep_kns`.  The first version of `deep_body` gave its scan a fuel of 100000 and made `HWP_irqnow` 1.62 to 1.71 s on the reifier's step, found by the timing: a `nat` literal is built each time it is evaluated (F64); 3000 is enough for a body's depth, back to the same.
+- *`kitc.py`*: `yf`, `sp == "d"`, each the equation before `Strategy opaque` and then `callee_ok_eq`.
+- *The acceptance*: `proved/examples/own_fix`: proved, built, 65.
+- *Cells*: 19 more (2141): 18 proved, `A_own_two_choices` by design (14 now); the class of step 55, 36 cells and `A_par_own_opnd_choice`, read.
+- *Left*: `A_par_pm_let_own` (a let of a pair holding the own call, used bare), the second memory parameter (7), fixed differences (4), `A_par_mutual_mixed`, `{wf R x}` (3), a mutual block whose match gives a function (2).
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the trees without their generated files, F62; step 60's files / these): `HWP_kernel` 2.56 / 2.56 s, `HWP_own` 1.94 / 1.96, `HWP_irqnow` 1.64 / 1.65 — the same.
+- The C: the 70 programs before byte-identical, the new example through the verified compiler.  The construct table (on
+  `d3999c8`): **2108 of 2141 through the verified compiler**, 14 by design, 18 gaps, 1 not Rocq (was 2053 of 2122: the class of
+  step 55, 36 cells and `A_par_own_opnd_choice`, read; 18 of the 19 new cells read).  The gate on `d3999c8`, the walk switched
+  off: `make.sh` `core-ok`; examples 35 / 35; corpus 36 / 36; the five kernels (12 / 13 / 13 / 13 / 13 s); **79 programs through
+  the verified compiler, 0 refused**; the trusted base unchanged.  Next: a mutual block of different result types.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4982,11 +4996,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `0efd280` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `d3999c8` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 61's design -- the function's own call under a choice, floated out; on a deeper counter, a budget function; each equal to the user's at every argument |
+| (this commit) | §12.V: step 61 (the own call under a choice and on a deeper counter: the construct table 2108 of 2141, 14 by design, 18 gaps), the C, the gate; READ THIS FIRST |
+| `d3999c8` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix/gen.py` + `classify.py` + `examples/own_fix` step 61: the function's own call under a choice, the choice floated out; on a deeper counter, a budget of its own; 19 cells; `KQR.v` unchanged |
+| `a207dda` | §12.V: step 61's design -- the function's own call under a choice, floated out; on a deeper counter, a budget function; each equal to the user's at every argument |
 | `bb8dbc8` | §12.V: step 60 (`Equations`: the construct table 2053 of 2122, 13 by design, 55 gaps), the C, the gate; §4.5, §12.P, D12, READ THIS FIRST |
 | `0efd280` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix/gen.py` + `classify.py` + `examples/equations_fix` step 60: `Equations`: `FixWf` over its functional, its clauses written out, one lemma and one tactic, no axiom; a match on the counter that gives a function; 28 cells; `KQR.v` unchanged |
 | `91d188b` | §12.V: step 60's design -- Equations: FixWf over its functional, its clauses written out, one lemma and one tactic; a match on the counter that gives a function |
