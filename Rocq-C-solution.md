@@ -4556,7 +4556,10 @@ is the same case: up to zeta the term is `let t := .. in .. rd 0 2 t ..`, every 
 - *Cells*: on the left and the right of an operation; `upd`, a let, a call in the place of the memory; `rd32`, `rd8`, `rd16`, `kq_size`; in a test, a
   let's value, a call's argument, a helper's; a read of the old memory before and after it; a function that reads, a function that writes, given it;
   a chain of two; the same term twice; in the body of a boolean, a record, a recursive function; the pins and their controls.
-*Expected*: those, but the pins.
+- *Found while narrowing it, no cell before*: `let u := upd 0 x x t in kq m x u + 1` in a function that writes, refused as not well formed, where
+  `kq m x (upd 0 x x t) + 1` is read: at the end of a body that writes, the function's own call on the memory a let made was read as a number of the
+  body, which `wfx` refuses (rightly: it writes).  It is bound instead, as step 48 continued has it, as an operand, a let's value, a test.
+*Expected*: those, but the pins: 1116 of 1132, 9 by design, 6 gaps.
 
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
