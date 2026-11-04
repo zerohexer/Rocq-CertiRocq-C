@@ -2842,9 +2842,49 @@ Definition big_def (Σ : global_env) (kn : kername) : bool :=
 
 (** a function of the program (the translator's [is_fun]): the root, and the definitions of its file that are a fixpoint
     or too large to be written out *)
+Definition kn_fst := kn_of <% @fst %>.
+Definition kn_snd := kn_of <% @snd %>.
+(** (step 48 continued) whether a term uses the variable [d], a number and a memory, bare: other than through [fst], [snd] or taken
+    apart by a match.  [k n p] is not convertible with [k n (fst p, snd p)], so such a let is lifted to a function of the pair *)
+Fixpoint pm_bare (fuel d : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      match t with
+      | tRel i => Nat.eqb i d
+      | tApp (tConst kn _) [a; b; tRel i] =>
+          if Kername.eqb kn kn_fst || Kername.eqb kn kn_snd then false else pm_bare fuel d a || pm_bare fuel d b || Nat.eqb i d
+      | tApp f args => pm_bare fuel d f || existsb (pm_bare fuel d) args
+      | tLambda _ _ b => pm_bare fuel (S d) b
+      | tLetIn _ b _ body => pm_bare fuel d b || pm_bare fuel (S d) body
+      | tCase _ _ c brs =>
+          match c with tRel _ => false | _ => pm_bare fuel d c end
+          || existsb (fun br => pm_bare fuel (d + length (bcontext br)) (bbody br)) brs
+      | tFix mfix _ => existsb (fun df => pm_bare fuel (d + length mfix) (dbody df)) mfix
+      | _ => false
+      end
+  end.
+Fixpoint has_pm_let (fuel : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      match t with
+      | tApp f args => if has_pm_let fuel f then true else existsb (has_pm_let fuel) args
+      | tLambda _ _ b => has_pm_let fuel b
+      | tLetIn _ b ty body =>
+          (* tests in this order, with [if]: [&&] and [||] evaluate both sides under the machine, and a body is long *)
+          if is_pm ty then
+            if pm_bare 100000 0 body then true else if has_pm_let fuel b then true else has_pm_let fuel body
+          else if has_pm_let fuel b then true else has_pm_let fuel body
+      | tCase _ _ c brs => if has_pm_let fuel c then true else existsb (fun br => has_pm_let fuel (bbody br)) brs
+      | tFix mfix _ => existsb (fun df => has_pm_let fuel (dbody df)) mfix
+      | _ => false
+      end
+  end.
 Definition is_fn (Σ : global_env) (mp : modpath) (root kn : kername) : bool :=
   Kername.eqb kn root
-  || (eq_mp (fst kn) mp && (match body_of Σ kn with Some (tFix _ _) => true | _ => false end || big_def Σ kn)).
+  || (eq_mp (fst kn) mp && (match body_of Σ kn with Some (tFix _ _) => true | _ => false end || big_def Σ kn
+                            || (if eq_mp (fst kn) mp then match body_of Σ kn with Some b => has_pm_let 1000 b | None => false end else false))).
 
 (** the program's functions reachable from the root, callees first; the helpers they use (definitions of the file or of
     the kit that are not functions) are looked through for the functions they call, as the translator's [reach] does --
@@ -2871,8 +2911,6 @@ Definition reach (fuel : nat) (Σ : global_env) (mp : modpath) (root kn : kernam
     ([KQRun.v]) or of [Uint63] that is not a function of the program and has no fixpoint.  Bytes and halfwords ([rd8],
     [upd8], and so [rd16], [upd16] over them) are left for one byte access each, as the translator makes them, not shifts of
     4-byte cells; a 64-bit operation is one instruction; a budget ([kq_nat]) is a counter of its own *)
-Definition kn_fst := kn_of <% @fst %>.
-Definition kn_snd := kn_of <% @snd %>.
 Definition helper_of (Σ : global_env) (mp : modpath) (fns : list kername) (kn : kername) : option term :=
   if Kername.eqb kn kn_fst || Kername.eqb kn kn_snd then body_of Σ kn else
   if Kername.eqb kn kn_rd8 || Kername.eqb kn kn_upd8 || Kername.eqb kn kn_w64_op || Kername.eqb kn kn_kq_nat
@@ -3694,11 +3732,97 @@ Fixpoint ensure_part (fuel : nat) (Σ : global_env) (mp : modpath) (hb : kername
       end
   end.
 
+(** (step 48 continued) [let p := e in body], p a number and a memory that [body] uses bare, in tail position or as an operand: a function
+    of its own, the free variables of the body its parameters (the counters first) and the pair the last, and the let a call of it
+    given [e]: up to beta and zeta the same term, and a call given a pair and a function with a pair parameter are read since step
+    44.  A variable that is not a number, a boolean, a counter or a record (the function itself, another memory: two versions), or of
+    a type not known here, leaves the let as it is *)
+Definition lift_param (y : term) : bool :=
+  match y with
+  | tInd _ _ => true
+  | tConst kn _ => Kername.eqb kn kn_int
+  | _ => false
+  end.
+Fixpoint ins_desc (x : nat) (l : list nat) : list nat :=
+  match l with [] => [x] | y :: r => if Nat.ltb y x then x :: l else y :: ins_desc x r end.
+Definition lift_tys (ci : case_info) (p : predicate term) (br : branch term) : list (option term) :=
+  if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_nat) then map (fun _ => Some (tInd ind_nat [])) (bcontext br)
+  else if is_pm_case ci p br then [Some (tConst kn_mem []); Some (tConst kn_int [])]
+  else map (fun _ => None) (bcontext br).
+Fixpoint lift_pm (fuel : nat) (mp : modpath) (base : string) (rq : option term) (ctx : list (option term)) (acc : list (string * term * term))
+  (t : term) {struct fuel} : term * list (string * term * term) :=
+  match fuel with
+  | O => (t, acc)
+  | S fuel =>
+      match t with
+      | tLambda na ty b => let '(b', acc') := lift_pm fuel mp base rq (Some ty :: ctx) acc b in (tLambda na ty b', acc')
+      | tFix [d] k =>
+          let '(b', acc') := lift_pm fuel mp base (Some (ret_ty (dtype d))) (None :: ctx) acc (dbody d) in
+          (tFix [{| dname := dname d; dtype := dtype d; dbody := b'; rarg := rarg d |}] k, acc')
+      | tCase ci p c brs =>
+          let '(c', acc1) := lift_pm fuel mp base None ctx acc c in
+          let '(brs', acc2) := fold_left (fun st br =>
+                let '(l, a) := st in
+                let '(bb, a') := lift_pm fuel mp base rq (lift_tys ci p br ++ ctx) a (bbody br) in
+                (l ++ [{| bcontext := bcontext br; bbody := bb |}], a')) brs ([], acc1) in
+          (tCase ci p c' brs', acc2)
+      | tApp f args =>
+          let rq' := match f with tConst kn _ => if eq_mp (fst kn) prim_mp then Some (tConst kn_int []) else None | _ => None end in
+          let '(args', acc') := fold_left (fun st a =>
+                let '(l, ac) := st in
+                let '(a', ac') := lift_pm fuel mp base rq' ctx ac a in (l ++ [a'], ac')) args ([], acc) in
+          (tApp f args', acc')
+      | tLetIn na b ty body =>
+          let '(b', acc1) := lift_pm fuel mp base None ctx acc b in
+          let '(body', acc2) := lift_pm fuel mp base rq (Some ty :: ctx) acc1 body in
+          let t' := tLetIn na b' ty body' in
+          match rq with
+          | Some T =>
+              if is_pm ty && pm_bare 100000 0 body' then
+                let fv := fvs 1000 1 body' [] in
+                let tyof j := match nth_error ctx j with Some (Some y) => if lift_param y then Some y else None | _ => None end in
+                match opt_all (map tyof fv) with
+                | Some _ =>
+                    let dflt := tRel 0 in
+                    let isn j := match tyof j with Some y => is_nat y | None => false end in
+                    let P := fold_right ins_desc [] (filter isn fv) ++ fold_right ins_desc [] (filter (fun j => negb (isn j)) fv) in
+                    let m := length P in
+                    let tys := map (fun j => match tyof j with Some y => y | None => dflt end) P ++ [ty] in
+                    let sg := map (fun j => match find_idx j P with Some q => tRel (m - 1 - q) | None => dflt end) (seq 0 (length ctx)) in
+                    let nm := base ^ "__l"%bs ^ string_of_nat (length acc2) in
+                    (tApp (tConst (mp, nm) []) (map tRel P ++ [b']), acc2 ++ [(nm, pis_of tys T, lams_of tys (subst sg 1 body'))])
+                | None => (t', acc2)
+                end
+              else (t', acc2)
+          | None => (t', acc2)
+          end
+      | _ => (t, acc)
+      end
+  end.
+(** the program with its lets lifted: the environment with the new functions and each function's new text, the functions, the new
+    functions' terms *)
+Definition lift_all (Σ : global_env) (mp : modpath) (kns : list kername) : global_env * list kername * copytab :=
+  fold_left (fun st kn =>
+    let '(S1, ks, tb) := st in
+    match lookup_env S1 kn with
+    | Some (ConstantDecl cb) =>
+        match cst_body cb with
+        | Some b =>
+            if has_pm_let 1000 b then
+              let '(b', ls) := lift_pm 100000 mp (snd kn) (Some (ret_ty (cst_type cb))) [] [] b in
+              let S2 := fold_left (fun s l => add_decl s (mp, fst (fst l)) (snd (fst l)) (snd l)) ls S1 in
+              (add_decl S2 kn (cst_type cb) b', ks ++ map (fun l => (mp, fst (fst l))) ls ++ [kn],
+               tb ++ map (fun l => ((mp, fst (fst l)), ([], []), (mp, fst (fst l)), snd l)) ls)
+            else (S1, ks ++ [kn], tb)
+        | None => (S1, ks ++ [kn], tb)
+        end
+    | _ => (S1, ks ++ [kn], tb)
+    end) kns (Σ, [], []).
 Definition reify_prog2b (bt : kername -> option Z) (chk : bool) (p : program) : option (list (kername * sig * fbody) * list (string * term)) :=
   match p with
-  | (Σ, tConst root _) =>
+  | (Σ0, tConst root _) =>
       let mp := fst root in
-      let kns := reach 1000 Σ mp root root [] in
+      let '(Σ, kns, lts) := lift_all Σ0 mp (reach 1000 Σ0 mp root root []) in
       let hb := helper_of Σ mp kns in
       let rt := rtab_of Σ hb kns in
       (* a local fixpoint in a definition of the program's file: its copies are looked for as a template's are (step 31) *)
@@ -3735,7 +3859,7 @@ Definition reify_prog2b (bt : kername -> option Z) (chk : bool) (p : program) : 
                           end
                       | None => None
                       end
-                  end) kns (Some ([], [])) in
+                  end) kns (Some ([], lts)) in
       option_map (fun et => (fst et, map (fun e => (snd (snd (fst e)), snd e)) (snd et))) st
   | _ => None
   end.

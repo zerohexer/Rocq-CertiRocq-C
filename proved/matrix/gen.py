@@ -561,6 +561,29 @@ addA("par_pm_call_in_pv", "", "let '(x, t) := kp n a s in x + rd 0 0 t",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\nDefinition kp (n : nat) (x : int) (t : mem) : int * mem := let p := g n x t in (k n p + 1, snd p).\n")
 addA("par_pm_call_in_mem", "", "rd 0 0 (km n a s)",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\nDefinition km (n : nat) (x : int) (t : mem) : mem := let p := g n x t in upd 0 (k n p) 0 (snd p).\n")
+# the pair a let holds, used bare (step 48 continued): given to two calls, in the body of a number, a boolean, a record; given in a
+# test; given back; in a recursive function; as an operand; and the places left: the function's own call in the let's body, the
+# memory before the pair read in it
+addA("par_pm_let_two", "", "let '(x, t) := kx n a s in x + rd 0 0 t",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\nFixpoint k2 (n : nat) (p : int * mem) : int := match n with O => snd (fst p, 1) | S m => k2 m (fst p + 2, snd p) end.\nDefinition kx (n : nat) (x : int) (t : mem) : int * mem := let p := g n x t in (k n p + k2 n p, snd p).\n")
+addA("par_pm_let_num", "", "kx n a s + 1",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\nDefinition kx (n : nat) (x : int) (t : mem) : int := let p := g n x t in k n p + fst p.\n")
+addA("par_pm_let_bool", "", "if kx n a s then a else b",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\nDefinition kx (n : nat) (x : int) (t : mem) : bool := let p := g n x t in k n p <? fst p.\n")
+addA("par_pm_let_rec", "", "f1 (kx n a s)",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\nDefinition kx (n : nat) (x : int) (t : mem) : r3 := let p := g n x t in mk3 (k n p) (fst p) 0.\n")
+addA("par_pm_let_test", "", "kx n a s",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\nDefinition kx (n : nat) (x : int) (t : mem) : int := let p := g n x t in if fst p <? 3 then k n p else rd 0 0 (snd p).\n")
+addA("par_pm_let_back", "", "let '(x, t) := kx n a s in x + rd 0 0 t",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\nDefinition kx (n : nat) (x : int) (t : mem) : int * mem := let p := g n x t in p.\n")
+addA("par_pm_let_in_fix", "", "kx n a s",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\nFixpoint kx (m : nat) (x : int) (t : mem) : int := match m with O => let p := g 2 x t in k 2 p | S q => kx q (x + 1) t end.\n")
+addA("par_pm_let_operand", "", "1 + (let p := g n a s in k n p)",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\n\n")
+addA("par_pm_let_own", "", "kx n a s",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\nFixpoint kx (m : nat) (x : int) (t : mem) : int := match m with O => rd 0 0 t | S q => let p := g 2 x t in k 2 p + kx q (fst p) (snd p) end.\n")
+addA("par_pm_let_old", "", "kx n a s",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\nDefinition kx (n : nat) (x : int) (t : mem) : int := let p := g n x t in k n p + rd 0 0 t.\n")
 # a function giving back a boolean whose body writes the memory (step 48 continued): through a call that writes, its recursion
 # given a memory it writes
 addA("par_bool_write_call", "", "if kbr n a s then a else b",
