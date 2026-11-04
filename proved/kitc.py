@@ -705,9 +705,11 @@ def reflect(name, entry, prog, no_proof):
             for q in range(1, ph): Kp.append(f"({K} + S {Kp[-1]})")
             if sp == "d":
                 # (step 61) a budget function above a fixpoint with its own call on a deeper counter
+                # (step 62) a member of a mixed block: the others unfolded as the tests take the counter apart
+                mem = "cbn [" + " ".join(func.split()) + "]" if func.strip() else "idtac"
                 t += (f"Lemma {reqs[pf0]} : forall {ss}, {W} {ss} = {f[0]} {ss}.\n"
                       f"Proof.\n  assert (kqA : forall kqk {ss} (kqh : {WM} {ss} <= kqk), {G} kqk {ss} = {f[0]} {ss}).\n"
-                      f"  {{ induction kqk as [|kqk IH]; intros {ss} kqh; unfold {WM} in *; cbn [{G}]; destruct {ps[0]}; cbn [{f[0]}]; KQRWf.deep_step IH. }}\n"
+                      f"  {{ induction kqk as [|kqk IH]; intros {ss} kqh; unfold {WM} in *; cbn [{G}]; destruct {ps[0]}; cbn [{f[0]}]; KQRWf.deep_step IH ltac:({mem}). }}\n"
                       f"  intros {ss}. unfold {W}. apply kqA. unfold {WM}. exact (le_n _).\nQed.\n")
                 continue
             if sp == "e":

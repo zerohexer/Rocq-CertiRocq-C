@@ -13,6 +13,10 @@ import re, sys, collections
 # differs only in the cause.  The cells once listed here (option, sum, a list cell, a function in a pair, a function returned,
 # a dead memory let) build and take apart their value in place, so they are gaps.
 DESIGN_CELLS = {
+  # a mutual block of a memory and a number: the member giving a memory writes on what the other's call, writing too, was given: two versions
+  # differing in cells whose number comes from the data (Rocq-C-solution.md §0.5, third reason); control: A_par_mutual_int_bool_mem, a block of
+  # different types that reads (step 62)
+  "A_par_mutual_mixed",
   # two calls of a function that writes at each round, each from the same memory, under two choices: two versions differing in cells
   # whose number comes from the data (Rocq-C-solution.md §0.5, third reason); control: A_own_two_choices_read, the same with no write (step 61)
   "A_own_two_choices",
@@ -52,8 +56,6 @@ BY_NAME = {
   "A_pf_wf_rel": "a Program Fixpoint, a Function or Equations on a relation of the user's, {wf R x}: no measure to put a budget above",
   "A_fn_wf_rel": "a Program Fixpoint, a Function or Equations on a relation of the user's, {wf R x}: no measure to put a budget above",
   "A_eq_wf_rel": "a Program Fixpoint, a Function or Equations on a relation of the user's, {wf R x}: no measure to put a budget above",
-  "A_eq_mutual": "a mutual block whose match on the counter gives a function, Equations' spelling of one",
-  "A_par_match_fun_mutual": "a mutual block whose match on the counter gives a function, Equations' spelling of one",
   **{c: "the function's own call under a choice in an operand, in a body that writes or a boolean's or a record's: its value joined after the choice" for c in (
      "Y_fill_branch2_bool",
      "Y_fill_branch2_record",
@@ -92,8 +94,8 @@ BY_NAME = {
      "Y_upd_ifop_int",
      "Y_upd_ifop_record",
   )},
-  "A_par_own_opnd_choice": "the function's own call where it cannot be lifted out of the fixpoint: in a let of a pair used bare, in an operand under a choice",
-  "A_par_pm_let_own": "the function's own call where it cannot be lifted out of the fixpoint: in a let of a pair used bare, in an operand under a choice",
+  "A_par_pm_let_own": "the function's own call beside a call given a number and a memory, in a let of the pair",
+  "A_par_mutual_both_self": "a mutual block of different result types whose members call each other and themselves: no member the only one called",
   **{c: "a second memory parameter: never read, but given another memory by the call or by the recursion; beside a pair parameter; never read, in a copy or a mutual block"
      for c in ("A_par_mem2_dead_other", "A_par_mem2_dead_moved", "A_par_mem2_dead_pair_param", "A_par_mem2_hand_on_pair_param",
                "A_par_mem2_tmpl_dead", "A_par_mem2_lfix_dead", "A_par_mem2_mutual_moved")},

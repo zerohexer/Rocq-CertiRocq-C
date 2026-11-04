@@ -5158,31 +5158,6 @@ Definition deep_make (Σ : global_env) (kn : kername) : option pfg :=
       end
   | _ => None
   end.
-Definition deep_kns (Σ : global_env) (mp : modpath) : list kername :=
-  flat_map (fun e => if in_prog mp (fst (fst e)) then
-                       match snd e with
-                       | ConstantDecl cb => match cst_body cb with
-                                            | Some b => match deep_body b with Some _ => [fst e] | None => [] end
-                                            | None => []
-                                            end
-                       | _ => []
-                       end
-                     else []) (declarations Σ).
-Definition pf_make (Σ : global_env) (kn : kername) : option pfg :=
-  match pf_make_p Σ kn with
-  | Some r => Some r
-  | None =>
-      match fn_make Σ kn with
-      | Some r => Some r
-      | None => match eq_make Σ kn with Some r => Some r | None => deep_make Σ kn end
-      end
-  end.
-(** whether the program holds a [Function]: Recdef's [iter] is in what it names *)
-Definition kn_iter : kername := (MPfile ["Recdef"%bs; "funind"%bs; "Stdlib"%bs], "iter"%bs).
-Definition pf_has_iter (Σ : global_env) : bool :=
-  match lookup_env Σ kn_iter with Some _ => true | None => match lookup_env Σ kn_fixwf with Some _ => true | None => false end end.
-(** the program with each [Program Fixpoint] or [Function] its budget function, and the function one call of it *)
-(** (step 60) a fixpoint whose match on its counter gives a function (Equations writes its clauses so, and a user may): the application pushed into the branches, read as any fixpoint.  No conversion opens a match on a variable, so it is not [denote s = f]; its two equations, at [O] and [S _], hold by conversion: the theorem a copy takes (kitc.py) *)
 Definition conv_def (Σ : global_env) (mp : modpath) (d : def term) : option (def term) :=
   let '(tys, body0) := lams (dbody d) in
   let body := body0 in
@@ -5202,77 +5177,105 @@ Definition conv_def (Σ : global_env) (mp : modpath) (d : def term) : option (de
   | tCase ci p (tRel c) brs => match k with O => None | S _ => mk ci p c brs rels end
   | _ => None
   end.
-Definition conv_fix (Σ : global_env) (mp : modpath) (b : term) : option term :=
-  match b with
-  (* a block's members are one call of the block: a member so written is a gap, with its cells *)
-  | tFix [d] i => match conv_def Σ mp d with Some e => Some (tFix [e] i) | None => None end
+(** (step 62) a mutual block whose members give back different types, one member [h] the only one the others call and none of them calling itself: [FRec] and a block's one result cannot hold them, and they do not need to.  The others written out in [h] (its own call then on deeper counters, a budget function as for those, a test on the call floated out), the others then ordinary functions calling [h] *)
+Definition mix_unf (Σ : global_env) (mp : modpath) (d : def term) : def term :=
+  let '(tys, body) := lams (dbody d) in
+  let d1 := match body with
+            | tApp (tConst fk _) args =>
+                if in_prog mp (fst fk) then
+                  match body_of Σ fk with
+                  | Some fb => {| dname := dname d; dtype := dtype d; rarg := rarg d; dbody := lams_of tys (pf_beta fb args) |}
+                  | None => d
+                  end
+                else d
+            | _ => d
+            end in
+  match conv_def Σ mp d1 with Some e => e | None => d1 end.
+Definition mix_direct (Σ : global_env) (mp : modpath) (d : def term) : bool :=
+  match conv_def Σ mp d, snd (lams (dbody d)) with
+  | None, tCase _ _ (tRel _) [_; _] => true
+  | _, _ => false
+  end.
+Definition mix_hub (Σ : global_env) (mp : modpath) (mfix0 : mfixpoint term) (k : nat) : option nat :=
+  let mfix := map (mix_unf Σ mp) mfix0 in
+  let L := length mfix in
+  let g := map (mcalls L) mfix in
+  if (if Nat.ltb L 2 then false else if mixed_part mfix k then true else negb (forallb (mix_direct Σ mp) mfix0)) then
+    if Nat.eqb (length (part_of g L k)) L then
+      if forallb (fun d => Nat.eqb (rarg d) 0) mfix then
+        List.find (fun h => forallb (fun j => if Nat.eqb j h then true else forallb (Nat.eqb h) (nth j g [])) (seq 0 L)) (seq 0 L)
+      else None
+    else None
+  else None.
+Definition mix_make (Σ : global_env) (kn : kername) : option pfg :=
+  match body_of Σ kn with
+  | Some (tFix mfix0 k) =>
+      match mix_hub Σ (fst kn) mfix0 k with
+      | Some h =>
+          let mp := fst kn in
+          let mfix := map (mix_unf Σ mp) mfix0 in
+          let L := length mfix in
+          let d := nth k mfix dflt_def in
+          let rels (f : nat -> term) := map f (rev (seq 0 L)) in
+          let self := tVar "kqself"%bs in
+          let t :=
+            if Nat.eqb k h then
+              subst (rels (fun q => if Nat.eqb q h then self
+                                    else subst (rels (fun q2 => if Nat.eqb q2 h then self else tVar "kqnone"%bs)) 0 (dbody (nth q mfix dflt_def))))
+                    0 (dbody (nth h mfix dflt_def))
+            else subst (rels (fun q => if Nat.eqb q h then tConst (mem_kn mp mfix h) [] else tVar "kqnone"%bs)) 0 (dbody d) in
+          let '(tys, body) := lams t in
+          let n := length tys in
+          let cs := fold_right (fun q a => string_of_kername (mem_kn mp mfix q) ^ " "%bs ^ a) ""%bs (seq 0 L) in
+          (* the functional of each, Equations' spelling *)
+          let cs := fold_right (fun d0 a =>
+                      match snd (lams (dbody d0)) with
+                      | tApp (tConst fk _) _ => if in_prog mp (fst fk) then string_of_kername fk ^ " "%bs ^ a else a
+                      | _ => a
+                      end) cs mfix0 in
+          pf_gen Σ kn tys (ret_ty (dtype d)) (tRel (n - 1)) (eq_norm 100000 Σ mp 1000000 body)
+                 (fun base => map (fun i => tRel (base + i)) (seq 0 n)) "d"%bs cs
+      | None => None
+      end
   | _ => None
   end.
-Definition conv_kns (Σ : global_env) (mp : modpath) : list kername :=
+Definition mix_kns (Σ : global_env) (mp : modpath) : list kername :=
   flat_map (fun e => if in_prog mp (fst (fst e)) then
                        match snd e with
                        | ConstantDecl cb => match cst_body cb with
-                                            | Some b => match conv_fix Σ mp b with Some _ => [fst e] | None => [] end
+                                            | Some (tFix mfix k) => match mix_hub Σ mp mfix k with Some _ => [fst e] | None => [] end
+                                            | _ => []
+                                            end
+                       | _ => []
+                       end
+                     else []) (declarations Σ).
+Definition deep_kns (Σ : global_env) (mp : modpath) : list kername :=
+  flat_map (fun e => if in_prog mp (fst (fst e)) then
+                       match snd e with
+                       | ConstantDecl cb => match cst_body cb with
+                                            | Some b => match deep_body b with Some _ => [fst e] | None => [] end
                                             | None => []
                                             end
                        | _ => []
                        end
                      else []) (declarations Σ).
-Definition conv_all (Σ : global_env) (mp : modpath) : global_env :=
-  match conv_kns Σ mp with
-  | [] => Σ
-  | ks =>
-      fold_left (fun S kn =>
-        match lookup_env S kn with
-        | Some (ConstantDecl cb) =>
-            match cst_body cb with
-            | Some b => match conv_fix Σ mp b with Some b' => add_decl S kn (cst_type cb) b' | None => S end
-            | None => S
-            end
-        | _ => S
-        end) ks Σ
-  end.
-Definition pf_all (Σ0 : global_env) (mp : modpath) (root : kername) : global_env * copytab :=
-  let Σ := conv_all Σ0 mp in
-  match (match lookup_env Σ kn_fix_sub with Some _ => true | None => if pf_has_iter Σ then true else match deep_kns Σ mp with [] => false | _ => true end end) with
-  | false => (Σ, [])
-  | true =>
-      fold_left (fun st kn =>
-        let '(S1, tb) := st in
-        if in_prog mp (fst kn) then
-          match pf_make S1 kn, lookup_env S1 kn with
-          | Some r, Some (ConstantDecl cb) =>
-              let m := mangle kn in
-              let wk := (copy_mp, m ^ "__w"%bs) in
-              let dk := (copy_mp, m ^ "__wd"%bs) in
-              let mk := (copy_mp, m ^ "__wm"%bs) in
-              let nk := (copy_mp, m ^ "__wn"%bs) in
-              (add_decl (fold_left (fun S g => add_decl S (fst g) (pg_gty r) (snd g)) (pg_gs r) S1) kn (cst_type cb) (pg_w r),
-               tb ++ map (fun g => (fst g, ([], []), fst g, snd g)) (pg_gs r)
-                  ++ [(wk, ([], []), wk, pg_w r); (dk, ([], []), dk, pg_d r); (mk, ([], []), mk, pg_m r); (nk, ([], []), nk, pg_n r)])
-          | _, _ => st
-          end
-        else st) (snd (reach_go 1000 Σ mp root root ([], []))) (Σ, [])
-  end.
-(** for kitc.py: each such function: its name, the constant holding its [Fix_sub], its number of parameters, its three made functions, and whether its measure is on a machine number *)
-Definition pf_info (p : program) : list (string * string * nat * string * string * string * nat) :=
-  match p with
-  | (Σ, tConst root _) =>
-      map (fun kn => (string_of_kername kn, ""%bs, O, ""%bs, ""%bs, "c"%bs, O)) (conv_kns Σ (fst root)) ++
-      match (match lookup_env Σ kn_fix_sub with Some _ => true | None => if pf_has_iter Σ then true else match deep_kns Σ (fst root) with [] => false | _ => true end end) with false => [] | true =>
-      flat_map (fun kn =>
-        match pf_make Σ kn with
-        | Some r =>
-            match pf_parts Σ kn with
-            | Some (tys, _, _, _, fk) =>
-                [(string_of_kername kn, match fk with Some f => string_of_kername f | None => ""%bs end, length tys, mangle kn, pg_tag r, pg_sp r, pg_ph r)]
-            | None => [(string_of_kername kn, pg_cs r, length (fst (lams (pg_m r))), mangle kn, pg_tag r, pg_sp r, pg_ph r)]
-            end
-        | None => []
-        end) (filter (fun kn => in_prog (fst root) (fst kn)) (snd (reach_go 1000 Σ (fst root) root root ([], []))))
+Definition pf_make (Σ : global_env) (kn : kername) : option pfg :=
+  match pf_make_p Σ kn with
+  | Some r => Some r
+  | None =>
+      match fn_make Σ kn with
+      | Some r => Some r
+      | None => match eq_make Σ kn with
+                | Some r => Some r
+                | None => match deep_make Σ kn with Some r => Some r | None => mix_make Σ kn end
+                end
       end
-  | _ => []
   end.
+(** whether the program holds a [Function]: Recdef's [iter] is in what it names *)
+Definition kn_iter : kername := (MPfile ["Recdef"%bs; "funind"%bs; "Stdlib"%bs], "iter"%bs).
+Definition pf_has_iter (Σ : global_env) : bool :=
+  match lookup_env Σ kn_iter with Some _ => true | None => match lookup_env Σ kn_fixwf with Some _ => true | None => false end end.
+(** the program with each [Program Fixpoint] or [Function] its budget function, and the function one call of it *)
 (** (step 61) the function's own call under a choice in an operand: [(if c then f m x else a) + b].  It cannot be bound (it would run when the test is false), nor lifted (it names the fixpoint), and a match on a stuck test does not commute by conversion.  So the choice is floated out, [if c then f m x + b else a + b]: the fixpoint read is that one, equal to the user's at each counter by [KQRWf.own_step], and [callee_ok_eq] as for a measure.  Only for a program not read as it stands, whose C is then not changed *)
 Fixpoint y_pull (fuel self : nat) (t : term) {struct fuel} : option (case_info * predicate term * term * list (branch term)) :=
   match fuel with
@@ -5319,6 +5322,27 @@ Fixpoint y_pull (fuel self : nat) (t : term) {struct fuel} : option (case_info *
       | _ => None
       end
   end.
+Definition y_case_pair := <% fun p : PrimInt63.int * KQ.KQRun.mem => let (a, b) := p in O %>.
+Fixpoint y_red (fuel : nat) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      match t with
+      | tApp (tConst k u) [A; B; p] =>
+          let p' := y_red fuel p in
+          if Kername.eqb k kn_fst then
+            match p' with tApp (tConstruct _ 0 _) [_; _; a; _] => a | _ => tApp (tConst k u) [A; B; p'] end
+          else if Kername.eqb k kn_snd then
+            match p' with tApp (tConstruct _ 0 _) [_; _; _; b] => b | _ => tApp (tConst k u) [A; B; p'] end
+          else tApp (tConst k u) [A; B; p']
+      | tApp f args => tApp (y_red fuel f) (map (y_red fuel) args)
+      | tLambda na ty b => tLambda na ty (y_red fuel b)
+      | tLetIn na v ty b => tLetIn na (y_red fuel v) ty (y_red fuel b)
+      | tCase ci p c brs =>
+          tCase ci p (y_red fuel c) (map (fun br => {| bcontext := bcontext br; bbody := y_red fuel (bbody br) |}) brs)
+      | _ => t
+      end
+  end.
 Definition y_ret (p : predicate term) (T : term) : predicate term :=
   {| pparams := pparams p; puinst := puinst p; pcontext := pcontext p; preturn := lift0 (length (pcontext p)) T |}.
 Fixpoint y_tail (fuel self : nat) (T t : term) {struct fuel} : term :=
@@ -5348,7 +5372,19 @@ Fixpoint y_tail (fuel self : nat) (T t : term) {struct fuel} : term :=
               y_tail fuel self T (tCase ci (y_ret p T) c (map (fun br =>
                 let k := length (bcontext br) in
                 {| bcontext := bcontext br; bbody := tLetIn na (bbody br) (lift0 k ty) (lift k 1 body) |}) brs))
-          | None => tLetIn na b ty (y_tail fuel (S self) (lift0 1 T) body)
+          | None =>
+              (* (step 62) a let of a number and a memory, the own call in what follows: taken apart, the pair made where it is used bare *)
+              if is_pm ty && tm_has_rel 1000 (S self) body then
+                match y_case_pair with
+                | tLambda _ _ (tCase ci p _ [br]) =>
+                    let pr := tApp (tConstruct {| inductive_mind := inductive_mind (ci_ind ci); inductive_ind := 0 |} 0 [])
+                                   [tConst kn_int []; tConst kn_mem []; tRel 1; tRel 0] in
+                    y_tail fuel self T (tCase ci (y_ret p T) b
+                      [{| bcontext := bcontext br;
+                          bbody := y_red 100000 (subst10 pr (lift 2 1 body)) |}])
+                | _ => t
+                end
+              else tLetIn na b ty (y_tail fuel (S self) (lift0 1 T) body)
           end
       | tApp _ _ =>
           match y_pull fuel self t with
@@ -5371,6 +5407,107 @@ Definition y_fix (d : def term) : option term :=
                             dbody := lams_of tys (tCase ci p (tRel c) [b0; {| bcontext := bcontext b1; bbody := b1' |}]) |}] 0)
       else None
   | _ => None
+  end.
+(** (step 60) a fixpoint whose match on its counter gives a function (Equations writes its clauses so, and a user may): the application pushed into the branches, read as any fixpoint.  No conversion opens a match on a variable, so it is not [denote s = f]; its two equations, at [O] and [S _], hold by conversion: the theorem a copy takes (kitc.py) *)
+Definition conv_fix (Σ : global_env) (mp : modpath) (b : term) : option term :=
+  match b with
+  (* a block's members are one call of the block: a member so written is a gap, with its cells *)
+  | tFix [d] i => match conv_def Σ mp d with Some e => Some (tFix [e] i) | None => None end
+  | _ => None
+  end.
+Definition conv_kns (Σ : global_env) (mp : modpath) : list kername :=
+  flat_map (fun e => if in_prog mp (fst (fst e)) then
+                       match snd e with
+                       | ConstantDecl cb => match cst_body cb with
+                                            | Some b => match conv_fix Σ mp b with Some _ => [fst e] | None => [] end
+                                            | None => []
+                                            end
+                       | _ => []
+                       end
+                     else []) (declarations Σ).
+Definition conv_all (Σ : global_env) (mp : modpath) : global_env :=
+  match conv_kns Σ mp with
+  | [] => Σ
+  | ks =>
+      fold_left (fun S kn =>
+        match lookup_env S kn with
+        | Some (ConstantDecl cb) =>
+            match cst_body cb with
+            | Some b => match conv_fix Σ mp b with Some b' => add_decl S kn (cst_type cb) b' | None => S end
+            | None => S
+            end
+        | _ => S
+        end) ks Σ
+  end.
+(** (step 62) the budget function read: the own call under a choice in an operand floated out, as in [y_fix]; the budget function is the reader's own, so no equation for it *)
+Definition y_post (g : kername * term) : kername * term :=
+  match snd g with
+  | tFix [d] 0 => match y_fix d with Some f' => (fst g, f') | None => g end
+  | _ => g
+  end.
+Definition mix_decls (Σ : global_env) (mp : modpath) : global_env :=
+  fold_left (fun S e =>
+    if in_prog mp (fst (fst e)) then
+      match snd e with
+      | ConstantDecl cb =>
+          match cst_body cb with
+          | Some (tFix mfix k) =>
+              match mix_hub Σ mp mfix k with
+              | Some _ =>
+                  fold_left (fun S2 q =>
+                    let kq := mem_kn (fst (fst e)) mfix q in
+                    match lookup_env S2 kq with
+                    | Some _ => S2
+                    | None => add_decl S2 kq (dtype (nth q mfix dflt_def)) (tFix mfix q)
+                    end) (seq 0 (length mfix)) S
+              | None => S
+              end
+          | _ => S
+          end
+      | _ => S
+      end
+    else S) (declarations Σ) Σ.
+Definition pf_all (Σ00 : global_env) (mp : modpath) (root : kername) : global_env * copytab :=
+  let Σ0 := mix_decls Σ00 mp in
+  let Σ := conv_all Σ0 mp in
+  match (match lookup_env Σ kn_fix_sub with Some _ => true | None => if pf_has_iter Σ then true else match deep_kns Σ mp with [] => match mix_kns Σ mp with [] => false | _ => true end | _ => true end end) with
+  | false => (Σ, [])
+  | true =>
+      fold_left (fun st kn =>
+        let '(S1, tb) := st in
+        if in_prog mp (fst kn) then
+          match pf_make S1 kn, lookup_env S1 kn with
+          | Some r, Some (ConstantDecl cb) =>
+              let m := mangle kn in
+              let wk := (copy_mp, m ^ "__w"%bs) in
+              let dk := (copy_mp, m ^ "__wd"%bs) in
+              let mk := (copy_mp, m ^ "__wm"%bs) in
+              let nk := (copy_mp, m ^ "__wn"%bs) in
+              (add_decl (fold_left (fun S g => add_decl S (fst g) (pg_gty r) (snd g)) (map y_post (pg_gs r)) S1) kn (cst_type cb) (pg_w r),
+               tb ++ map (fun g => (fst g, ([], []), fst g, snd g)) (map y_post (pg_gs r))
+                  ++ [(wk, ([], []), wk, pg_w r); (dk, ([], []), dk, pg_d r); (mk, ([], []), mk, pg_m r); (nk, ([], []), nk, pg_n r)])
+          | _, _ => st
+          end
+        else st) (mix_kns Σ mp ++ snd (reach_go 1000 Σ mp root root ([], []))) (Σ, [])
+  end.
+(** for kitc.py: each such function: its name, the constant holding its [Fix_sub], its number of parameters, its three made functions, and whether its measure is on a machine number *)
+Definition pf_info (p : program) : list (string * string * nat * string * string * string * nat) :=
+  match p with
+  | (Σ, tConst root _) =>
+      map (fun kn => (string_of_kername kn, ""%bs, O, ""%bs, ""%bs, "c"%bs, O)) (conv_kns Σ (fst root)) ++
+      match (match lookup_env Σ kn_fix_sub with Some _ => true | None => if pf_has_iter Σ then true else match deep_kns Σ (fst root) with [] => match mix_kns (mix_decls Σ (fst root)) (fst root) with [] => false | _ => true end | _ => true end end) with false => [] | true =>
+      flat_map (fun kn =>
+        match pf_make Σ kn with
+        | Some r =>
+            match pf_parts Σ kn with
+            | Some (tys, _, _, _, fk) =>
+                [(string_of_kername kn, match fk with Some f => string_of_kername f | None => ""%bs end, length tys, mangle kn, pg_tag r, pg_sp r, pg_ph r)]
+            | None => [(string_of_kername kn, pg_cs r, length (fst (lams (pg_m r))), mangle kn, pg_tag r, pg_sp r, pg_ph r)]
+            end
+        | None => []
+        end) (mix_kns (mix_decls Σ (fst root)) (fst root) ++ filter (fun kn => in_prog (fst root) (fst kn)) (snd (reach_go 1000 Σ (fst root) root root ([], []))))
+      end
+  | _ => []
   end.
 Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env * bool :=
   fold_left (fun st kn =>

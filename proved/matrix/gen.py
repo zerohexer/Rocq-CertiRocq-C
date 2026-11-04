@@ -616,6 +616,21 @@ addA("par_pm_let_fst_pv", "", "let '(x, t) := kz n a s in x + rd 0 0 t",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : int * mem := let p := g n x t in (fst p + 1, snd p).\n")
 addA("par_pm_let_fst_mem", "", "rd 0 0 (kz n a s)",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : mem := let p := g n x t in upd 0 (fst p) 1 (snd p).\n")
+# (step 62) wf lt; a mutual block of mixed sorts that only reads; a mutual block whose match gives a function
+addA("pf_wf_lt", "", "pq n a",
+     "From Stdlib Require Import Program.Wf.\nProgram Fixpoint pq (n : nat) (x : int) {wf lt n} : int :=\n  match n with O => x | S m => pq m (x + 1) end.\n")
+addA("fn_wf_lt", "", "pq n a",
+     "From Stdlib Require Import Recdef Lia Wf_nat Arith.\nFunction pq (n : nat) (x : int) {wf lt n} : int :=\n  match n with O => x | S m => pq m (x + 1) end.\nProof. intros; lia. exact lt_wf. Defined.\n")
+addA("par_mutual_int_bool", "", "ev n a",
+     "Fixpoint ev (n : nat) (x : int) : int := match n with O => x | S m => if od m x then x else x + 1 end\nwith od (n : nat) (x : int) : bool := match n with O => x <? 3 | S m => ev m x <? 5 end.\n")
+addA("par_mutual_int_bool_mem", "", "ev n a s",
+     "Fixpoint ev (n : nat) (x : int) (t : mem) : int := match n with O => rd 0 x t | S m => if od m x t then x else x + 1 end\nwith od (n : nat) (x : int) (t : mem) : bool := match n with O => x <? rd 0 x t | S m => ev m x t <? 5 end.\n")
+addA("par_mutual_int_record", "", "ev n a",
+     "Fixpoint ev (n : nat) (x : int) : int := match n with O => x | S m => f1 (od m x) + x end\nwith od (n : nat) (x : int) : r3 := match n with O => mk3 x 0 0 | S m => mk3 (ev m x) x 1 end.\n")
+addA("par_mutual_three", "", "ev n a",
+     "Fixpoint ev (n : nat) (x : int) : int := match n with O => x | S m => if od m x then f1 (pd m x) else x + 1 end\nwith od (n : nat) (x : int) : bool := match n with O => x <? 3 | S m => ev m x <? 5 end\nwith pd (n : nat) (x : int) : r3 := match n with O => mk3 x 0 0 | S m => mk3 (ev m (x + 1)) x 1 end.\n")
+addA("par_mutual_both_self", "", "ev n a",
+     "Fixpoint ev (n : nat) (x : int) : int := match n with O => x | S m => if od m x then ev m (x + 1) else x + 1 end\nwith od (n : nat) (x : int) : bool := match n with O => x <? 3 | S m => if ev m x <? 5 then od m (x + 1) else true end.\n")
 # the function's own call under a choice, the places around it (step 61)
 addA("own_two_choices", "", "ko n a b s",
      "Fixpoint ko (n : nat) (a b : int) (t : mem) : int := match n with O => a | S m => (if a <? b then ko m (a + 1) b (upd 0 a b t) else a) + (if b <? a then ko m a (b + 1) t else b) end.\n")
