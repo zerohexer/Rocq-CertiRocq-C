@@ -21,6 +21,16 @@ DESIGN_CELLS = {
   # over n cells, both given the memory before both -- keeping the old one takes a copy or a log as long as the data
   # (Rocq-C-solution.md §0.5, third reason); control: A_par_write_two_seq, the same two calls with the memory handed on (step 49)
   "A_par_write_two_data",
+  # a constant with no body in Rocq's kernel: an Axiom, a Parameter, a function behind a module's ":".  Rocq cannot run it and nothing
+  # says what it computes, so no theorem can say the C does (Rocq-C-solution.md §0.5, fourth reason); control: A_mod_ascribe, the
+  # same function behind "<:", which keeps its body, and A_par_int, a Definition in the Parameter's place (step 51)
+  "A_mod_sealed",
+  "A_mod_sealed_helper",
+  "A_mod_parameter",
+  # a plain access to a block listed in kq_shared: the sequential meaning describes the program only if it reaches a shared block
+  # through marked operations (§9.4), wherever the list stands; control: A_mod_shared, A_file_shared, a plain access to another block
+  "A_mod_shared_plain",
+  "A_file_shared_plain",
 }
 # gaps whose refusal message is shared with another category: classified by name
 BY_NAME = {

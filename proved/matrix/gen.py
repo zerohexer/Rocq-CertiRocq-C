@@ -246,6 +246,7 @@ add("int_write_rec_succ", "int", K37 + "(x : int) (t : mem) : int := match n wit
 
 # ---------------------------------------------------------------- family A: parameters
 A = []
+LIBS = {}     # the program's other files (step 51): a name under the cell's directory, its text
 def addA(i, params, call, helper):
     A.append((i, helper + f"Definition go {SIG} : int :=\n  {call}.\n"))
 addA("par_int", "", "k a b", "Definition k (x y : int) : int := x + y.\n")
@@ -615,6 +616,261 @@ addA("par_pm_let_fst_pv", "", "let '(x, t) := kz n a s in x + rd 0 0 t",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : int * mem := let p := g n x t in (fst p + 1, snd p).\n")
 addA("par_pm_let_fst_mem", "", "rd 0 0 (kz n a s)",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : mem := let p := g n x t in upd 0 (fst p) 1 (snd p).\n")
+# programs across modules (step 51): each sort of function in a nested module, two levels, two modules with one short name each, the
+# entry in a module, an alias, an inclusion, a transparent ascription, a functor's instances, a section's closed variables; a sealed
+# module has no body the kernel can see: the pin
+addA("mod_fn", "", "Lib.hh a b",
+     "Module Lib.\nDefinition hh (x y : int) : int := x * 3 + y.\nEnd Lib.\n")
+addA("mod_fix", "", "Lib.ff n a",
+     "Module Lib.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nEnd Lib.\n")
+addA("mod_write", "", "rd 0 0 (Lib.ww n a s)",
+     "Module Lib.\nFixpoint ww (n : nat) (x : int) (t : mem) : mem := match n with O => t | S m => ww m (x + 1) (upd 0 x x t) end.\nEnd Lib.\n")
+addA("mod_write_num", "", "Lib.wn n a s",
+     "Module Lib.\nFixpoint wn (n : nat) (x : int) (t : mem) : int := match n with O => rd 0 0 t | S m => wn m (x + 1) (upd 0 0 x t) end.\nEnd Lib.\n")
+addA("mod_read", "", "Lib.sm n a s",
+     "Module Lib.\nFixpoint sm (n : nat) (x : int) (t : mem) : int := match n with O => x | S m => sm m (x + rd 1 x t) t end.\nEnd Lib.\n")
+addA("mod_bool", "", "if Lib.ev n a then a else b",
+     "Module Lib.\nFixpoint ev (n : nat) (x : int) : bool := match n with O => x <? 3 | S m => ev m (x + 1) end.\nEnd Lib.\n")
+addA("mod_pm", "", "let '(x, t) := Lib.g n a s in x + rd 0 0 t",
+     "Module Lib.\nFixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nEnd Lib.\n")
+addA("mod_record", "", "Lib.mid (Lib.mkp a b)",
+     "Module Lib.\nRecord pt := mkp { px : int; py : int }.\nDefinition mid (p : pt) : int := px p + py p.\nEnd Lib.\n")
+addA("mod_record_fix", "", "Lib.sumr n (Lib.mkp a b)",
+     "Module Lib.\nRecord pt := mkp { px : int; py : int }.\nFixpoint sumr (n : nat) (p : pt) : int := match n with O => px p + py p | S m => sumr m (mkp (py p) (px p + 1)) end.\nEnd Lib.\n")
+addA("mod_record_ret", "", "Lib.px (Lib.mv n a b)",
+     "Module Lib.\nRecord pt := mkp { px : int; py : int }.\nFixpoint mv (n : nat) (x y : int) : pt := match n with O => mkp x y | S m => mv m (y + 1) x end.\nEnd Lib.\n")
+addA("mod_record_holds", "", "Lib.qs (Lib.mkq (Lib.mkp a b) a)",
+     "Module Lib.\nRecord pt := mkp { px : int; py : int }.\nRecord pq := mkq { q1 : pt; q2 : int }.\nDefinition qs (w : pq) : int := px (q1 w) + py (q1 w) + q2 w.\nEnd Lib.\n")
+addA("mod_data", "", "Lib.tv (Lib.tm n a)",
+     "Module Lib.\nInductive tg := T0 | T1 (x : int) | T2 (x y : int).\nFixpoint tm (n : nat) (x : int) : tg := match n with O => if x <? 3 then T1 x else T2 x x | S m => tm m (x + 1) end.\nDefinition tv (w : tg) : int := match w with T0 => 0 | T1 x => x | T2 x y => x + y end.\nEnd Lib.\n")
+addA("mod_const", "", "a + Lib.c",
+     "Module Lib.\nDefinition c : int := 7.\nEnd Lib.\n")
+addA("mod_big", "", "Lib.big a b",
+     "Module Lib.\nDefinition big (x y : int) : int :=\n  let v1 := x * 1 + y in\n  let v2 := x * 2 + y in\n  let v3 := x * 3 + y in\n  let v4 := x * 4 + y in\n  let v5 := x * 5 + y in\n  let v6 := x * 6 + y in\n  let v7 := x * 7 + y in\n  let v8 := x * 8 + y in\n  let v9 := x * 9 + y in\n  let v10 := x * 10 + y in\n  let v11 := x * 11 + y in\n  let v12 := x * 12 + y in\n  let v13 := x * 13 + y in\n  let v14 := x * 14 + y in\n  let v15 := x * 15 + y in\n  v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13 + v14 + v15.\nEnd Lib.\n")
+addA("mod_two_levels", "", "Lib.In.ff n a",
+     "Module Lib.\nModule In.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nEnd In.\nEnd Lib.\n")
+addA("mod_up", "", "Lib.ff n a",
+     "Module Lib.\nFixpoint ff (n : nat) (x : int) : int := match n with O => h x x | S m => ff m (h x 1) end.\nEnd Lib.\n")
+addA("mod_up_fix", "", "Lib.ff n a",
+     "Fixpoint wf (n : nat) (x : int) : int := match n with O => x | S m => wf m (x + 1) end.\nModule Lib.\nDefinition ff (n : nat) (x : int) : int := wf n x + 1.\nEnd Lib.\n")
+addA("mod_two_mods", "", "A2.gg n a",
+     "Module A1.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nEnd A1.\nModule A2.\nFixpoint gg (n : nat) (x : int) : int := match n with O => A1.ff n x | S m => gg m (A1.ff n x) end.\nEnd A2.\n")
+addA("mod_tmpl", "", "Lib.apl n a Lib.inc",
+     "Module Lib.\nFixpoint apl (n : nat) (x : int) (f : int -> int) : int := match n with O => x | S m => apl m (f x) f end.\nDefinition inc (x : int) : int := x + 1.\nEnd Lib.\n")
+addA("mod_tmpl_cap", "", "Lib.apl n a (fun x => x + b)",
+     "Module Lib.\nFixpoint apl (n : nat) (x : int) (f : int -> int) : int := match n with O => x | S m => apl m (f x) f end.\nEnd Lib.\n")
+addA("mod_tmpl_top", "", "fold n a b Lib.add2",
+     "Module Lib.\nDefinition add2 (x y : int) : int := x + y + 2.\nEnd Lib.\n")
+addA("mod_mutual", "", "if Lib.evn n then a else b",
+     "Module Lib.\nFixpoint evn (n : nat) : bool := match n with O => true | S m => odd m end\nwith odd (n : nat) : bool := match n with O => false | S m => evn m end.\nEnd Lib.\n")
+addA("mod_mutual_int", "", "Lib.mu1 n a",
+     "Module Lib.\nFixpoint mu1 (n : nat) (x : int) : int := match n with O => x | S m => mu2 m (x + 1) end\nwith mu2 (n : nat) (x : int) : int := match n with O => x * 2 | S m => mu1 m (x + 2) end.\nEnd Lib.\n")
+addA("mod_order", "", "Lib.pf a n",
+     "Module Lib.\nFixpoint pf (x : int) (n : nat) {struct n} : int := match n with O => x | S m => pf (x + 1) m end.\nEnd Lib.\n")
+addA("mod_order_def", "", "Lib.pn s a",
+     "Module Lib.\nDefinition pn (t : mem) (x : int) : int := rd 0 x t.\nEnd Lib.\n")
+addA("mod_lfix", "", "Lib.lo n a",
+     "Module Lib.\nDefinition lo (n : nat) (x : int) : int := (fix go (k : nat) (y : int) : int := match k with O => y | S j => go j (y + 1) end) n x.\nEnd Lib.\n")
+addA("mod_lift", "", "Lib.kl n a s",
+     "Module Lib.\nFixpoint gg (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => gg m (x + 1) (upd 0 x x t) end.\nDefinition kp (p : int * mem) : int := fst p + rd 0 0 (snd p).\nDefinition kl (n : nat) (x : int) (t : mem) : int := let p := gg n x t in kp p + 1.\nEnd Lib.\n")
+addA("mod_same_fn", "", "A1.hh a + A2.hh b",
+     "Module A1.\nDefinition hh (x : int) : int := x + 1.\nEnd A1.\nModule A2.\nDefinition hh (x : int) : int := x + 2.\nEnd A2.\n")
+addA("mod_same_fix", "", "A1.ff n a + A2.ff n b",
+     "Module A1.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nEnd A1.\nModule A2.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x * 2 | S m => ff m (x + 2) end.\nEnd A2.\n")
+addA("mod_same_write", "", "rd 0 0 (A1.ww n a (A2.ww n b s))",
+     "Module A1.\nFixpoint ww (n : nat) (x : int) (t : mem) : mem := match n with O => t | S m => ww m (x + 1) (upd 0 x x t) end.\nEnd A1.\nModule A2.\nFixpoint ww (n : nat) (x : int) (t : mem) : mem := match n with O => t | S m => ww m (x + 2) (upd 1 x x t) end.\nEnd A2.\n")
+addA("mod_same_tmpl", "", "A1.apl n a h1 + A2.apl n b h2",
+     "Definition h1 (x : int) : int := x + 1.\nDefinition h2 (x : int) : int := x + 2.\nModule A1.\nFixpoint apl (n : nat) (x : int) (f : int -> int) : int := match n with O => x | S m => apl m (f x) f end.\nEnd A1.\nModule A2.\nFixpoint apl (n : nat) (x : int) (f : int -> int) : int := match n with O => x | S m => apl m (f (x + 1)) f end.\nEnd A2.\n")
+addA("mod_same_order", "", "A1.pf a n + A2.pf b n",
+     "Module A1.\nFixpoint pf (x : int) (n : nat) {struct n} : int := match n with O => x | S m => pf (x + 1) m end.\nEnd A1.\nModule A2.\nFixpoint pf (x : int) (n : nat) {struct n} : int := match n with O => x | S m => pf (x + 2) m end.\nEnd A2.\n")
+addA("mod_same_order_def", "", "A1.pn s a + A2.pn s b",
+     "Module A1.\nDefinition pn (t : mem) (x : int) : int := rd 0 x t.\nEnd A1.\nModule A2.\nDefinition pn (t : mem) (x : int) : int := rd 1 x t.\nEnd A2.\n")
+addA("mod_same_mutual", "", "(if A1.evn n then a else b) + (if A2.evn n then a else b)",
+     "Module A1.\nFixpoint evn (n : nat) : bool := match n with O => true | S m => odd m end\nwith odd (n : nat) : bool := match n with O => false | S m => evn m end.\nEnd A1.\nModule A2.\nFixpoint evn (n : nat) : bool := match n with O => false | S m => odd m end\nwith odd (n : nat) : bool := match n with O => true | S m => evn m end.\nEnd A2.\n")
+addA("mod_same_lift", "", "if a <? b then A1.kl n a s else A2.kl n b s",
+     "Module A1.\nFixpoint gg (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => gg m (x + 1) (upd 0 x x t) end.\nDefinition kp (p : int * mem) : int := fst p + rd 0 0 (snd p).\nDefinition kl (n : nat) (x : int) (t : mem) : int := let p := gg n x t in kp p + 1.\nEnd A1.\nModule A2.\nFixpoint gg (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => gg m (x + 1) (upd 0 x x t) end.\nDefinition kp (p : int * mem) : int := fst p + rd 0 0 (snd p).\nDefinition kl (n : nat) (x : int) (t : mem) : int := let p := gg n x t in kp p + 2.\nEnd A2.\n")
+addA("mod_same_lfix", "", "A1.lo n a + A2.lo n b",
+     "Module A1.\nDefinition lo (n : nat) (x : int) : int := (fix go (k : nat) (y : int) : int := match k with O => y | S j => go j (y + 1) end) n x.\nEnd A1.\nModule A2.\nDefinition lo (n : nat) (x : int) : int := (fix go (k : nat) (y : int) : int := match k with O => y | S j => go j (y + 2) end) n x.\nEnd A2.\n")
+addA("mod_same_record", "", "A1.m (A1.mk a b) + A2.m (A2.mk a b a)",
+     "Module A1.\nRecord rr := mk { p1 : int; p2 : int }.\nDefinition m (w : rr) : int := p1 w + p2 w.\nEnd A1.\nModule A2.\nRecord rr := mk { p1 : int; p2 : int; p3 : int }.\nDefinition m (w : rr) : int := p1 w + p2 w * p3 w.\nEnd A2.\n")
+addA("mod_same_top", "", "ff n a + top n b",
+     "Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition top := ff.\nModule Lib.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x * 2 | S m => ff m (x + 2) end.\nEnd Lib.\nImport Lib.\n")
+addA("mod_import", "", "ff n a",
+     "Module Lib.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nEnd Lib.\nImport Lib.\n")
+addA("mod_alias", "", "N.ff n a",
+     "Module Lib.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nEnd Lib.\nModule N := Lib.\n")
+addA("mod_include", "", "B.ff n a",
+     "Module Lib.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nEnd Lib.\nModule B.\nInclude Lib.\nEnd B.\n")
+addA("mod_ascribe", "", "Lib.ff n a",
+     "Module Type T.\nParameter ff : nat -> int -> int.\nEnd T.\nModule Lib <: T.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nEnd Lib.\n")
+addA("mod_sealed", "", "S.ff n a",
+     "Module Type T.\nParameter ff : nat -> int -> int.\nEnd T.\nModule S : T.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nEnd S.\n")
+addA("mod_functor", "", "I.ff n a",
+     "Module Type TC.\nParameter c : int.\nEnd TC.\nModule C3 <: TC.\nDefinition c : int := 3.\nEnd C3.\nModule C4 <: TC.\nDefinition c : int := 4.\nEnd C4.\nModule F (X : TC).\nFixpoint ff (n : nat) (x : int) : int := match n with O => x + X.c | S m => ff m (x + 1) end.\nEnd F.\nModule I := F(C3).\n")
+addA("mod_functor_two", "", "I.ff n a + J.ff n b",
+     "Module Type TC.\nParameter c : int.\nEnd TC.\nModule C3 <: TC.\nDefinition c : int := 3.\nEnd C3.\nModule C4 <: TC.\nDefinition c : int := 4.\nEnd C4.\nModule F (X : TC).\nFixpoint ff (n : nat) (x : int) : int := match n with O => x + X.c | S m => ff m (x + 1) end.\nEnd F.\nModule I := F(C3).\nModule J := F(C4).\n")
+addA("mod_section", "", "fk b n a + dk b a",
+     "Section Sc.\nVariable k : int.\nFixpoint fk (n : nat) (x : int) : int := match n with O => x + k | S m => fk m (x + k) end.\nDefinition dk (x : int) : int := x * k.\nEnd Sc.\n")
+addA("mod_section_in_mod", "", "Lib.fk b n a + Lib.dk b a",
+     "Module Lib.\nSection Sc.\nVariable k : int.\nFixpoint fk (n : nat) (x : int) : int := match n with O => x + k | S m => fk m (x + k) end.\nDefinition dk (x : int) : int := x * k.\nEnd Sc.\nEnd Lib.\n")
+addA("mod_lemma", "", "Lib.ff n a",
+     "Module Lib.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nLemma ff_0 (x : int) : ff O x = x.\nProof. reflexivity. Qed.\nEnd Lib.\n")
+addA("mod_parameter", "", "ext a",
+     "Parameter ext : int -> int.\n")
+addA("mod_sealed_helper", "", "kh n a",
+     "Module Type T.\nParameter ff : nat -> int -> int.\nEnd T.\nModule S : T.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nEnd S.\nDefinition kh (n : nat) (x : int) : int := S.ff n x + 1.\n")
+addA("mod_prime_order", "", "Lib.pf' a n",
+     "Module Lib.\nFixpoint pf' (x : int) (n : nat) {struct n} : int := match n with O => x | S m => pf' (x + 1) m end.\nEnd Lib.\n")
+addA("mod_prim_record", "", "Lib.pa (Lib.mkq2 a b)",
+     "Module Lib.\nSet Primitive Projections.\nRecord pr2 := mkq2 { pa : int; pb : int }.\nUnset Primitive Projections.\nEnd Lib.\n")
+addA("mod_type_alias", "", "Lib.kk a",
+     "Module Lib.\nDefinition myint := int.\nDefinition kk (x : myint) : myint := x + 1.\nEnd Lib.\n")
+addA("mod_section_let", "", "dl b a",
+     "Section Sl.\nVariable k : int.\nLet k2 : int := k + 1.\nDefinition dl (x : int) : int := x * k2.\nEnd Sl.\n")
+addA("mod_section_let_fix", "", "fl b n a",
+     "Section Sf.\nVariable k : int.\nLet k2 : int := k + 1.\nFixpoint fl (n : nat) (x : int) : int := match n with O => x + k2 | S m => fl m (x + k2) end.\nEnd Sf.\n")
+addA("mod_section_let_two", "", "d2 b a a",
+     "Section S2.\nVariable k : int.\nLet k2 : int := k + 1.\nVariable j : int.\nLet k3 : int := j * k2.\nDefinition d2 (x : int) : int := x * k3 + j.\nEnd S2.\n")
+addA("mod_section_let_big", "", "bl b a",
+     "Section Sb.\nVariable k : int.\nLet k2 : int := k + 1.\nDefinition bl (x : int) : int :=\n  let y := k2 in\n  let v1 := x * 1 + y in\n  let v2 := x * 2 + y in\n  let v3 := x * 3 + y in\n  let v4 := x * 4 + y in\n  let v5 := x * 5 + y in\n  let v6 := x * 6 + y in\n  let v7 := x * 7 + y in\n  let v8 := x * 8 + y in\n  let v9 := x * 9 + y in\n  let v10 := x * 10 + y in\n  let v11 := x * 11 + y in\n  let v12 := x * 12 + y in\n  let v13 := x * 13 + y in\n  let v14 := x * 14 + y in\n  let v15 := x * 15 + y in\n  v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13 + v14 + v15.\nEnd Sb.\n")
+addA("par_let_then_fun", "", "lt1 a b",
+     "Definition lt1 (x : int) : int -> int := let y := x + 1 in fun z => z * y.\n")
+addA("par_app_let", "", "(let y := a + 1 in fun x => x * y) b",
+     "")
+addA("par_let_then_fun_big", "", "lt2 a b",
+     "Definition lt2 (x : int) : int -> int :=\n let w := x + 1 in fun y =>\n  let v1 := x * 1 + y in\n  let v2 := x * 2 + y in\n  let v3 := x * 3 + y in\n  let v4 := x * 4 + y in\n  let v5 := x * 5 + y in\n  let v6 := x * 6 + y in\n  let v7 := x * 7 + y in\n  let v8 := x * 8 + y in\n  let v9 := x * 9 + y in\n  let v10 := x * 10 + y in\n  let v11 := x * 11 + y in\n  let v12 := x * 12 + y in\n  let v13 := x * 13 + y in\n  let v14 := x * 14 + y in\n  let v15 := x * 15 + y in\n  v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13 + v14 + v15.\n")
+addA("mod_class", "", "Lib.useit a",
+     "Module Lib.\nClass Cl := { cv : int }.\n#[export] Instance i3 : Cl := { cv := 3 }.\nDefinition useit (x : int) : int := x + cv.\nEnd Lib.\n")
+addA("mod_shared", "", "rd32 5 a s",
+     "Module Cfg.\nDefinition kq_shared : list int := cons 6 nil.\nEnd Cfg.\n")
+addA("mod_shared_plain", "", "rd32 6 a s",
+     "Module Cfg.\nDefinition kq_shared : list int := cons 6 nil.\nEnd Cfg.\n")
+addA("par_name_like_derived", "", "foo__c3 n a + bar__o n b + baz__cblk n a + qux__on a b",
+     "Fixpoint foo__c3 (n : nat) (x : int) : int := match n with O => x | S m => foo__c3 m (x + 1) end.\nFixpoint bar__o (n : nat) (x : int) : int := match n with O => x | S m => bar__o m (x + 2) end.\nFixpoint baz__cblk (n : nat) (x : int) : int := match n with O => x | S m => baz__cblk m (x + 3) end.\nDefinition qux__on (x y : int) : int := x + y.\n")
+A.append(("mod_section_let_root", "Section Sr.\nVariable k : int.\nLet k2 : int := k + 1.\nDefinition go2 (n : nat) (a b : int) (s : mem) : int := a * k2 + b.\nEnd Sr.\nDefinition main : int :=\n  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in\n  go2 3 (kq_nat (kq_arg 0)) (kq_arg 1) (kq_arg 2) (kq_input 0).\n"))
+A.append(("mod_root", "Module P.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition go " + SIG + " : int := ff n a + b.\nEnd P.\nDefinition main : int :=\n  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in\n  P.go (kq_nat (kq_arg 0)) (kq_arg 1) (kq_arg 2) (kq_input 0).\n"))
+A.append(("mod_root_order", "Module P.\nDefinition go (s : mem) (a : int) (n : nat) (b : int) : int := rd 0 a s + b.\nEnd P.\nDefinition main : int :=\n  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in\n  P.go (kq_input 0) (kq_arg 1) (kq_nat (kq_arg 0)) (kq_arg 2).\n"))
+A.append(("mod_root_fix", "Module P.\nFixpoint go (n : nat) (a b : int) (s : mem) : int := match n with O => a + b | S m => go m (a + 1) b s end.\nEnd P.\nDefinition main : int :=\n  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in\n  P.go (kq_nat (kq_arg 0)) (kq_arg 1) (kq_arg 2) (kq_input 0).\n"))
+# programs across files (step 51): each sort of function, a record, a data type, a function given, in a file the program requires
+LIBS['A_file_fn_lib'] = 'From KQ Require Import KQRun.\nDefinition hh (x y : int) : int := x * 3 + y.\n'
+addA("file_fn", "", "hh a b",
+     "Require Import A_file_fn_lib.\n")
+LIBS['A_file_fix_lib'] = 'From KQ Require Import KQRun.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n'
+addA("file_fix", "", "ff n a",
+     "Require Import A_file_fix_lib.\n")
+LIBS['A_file_write_lib'] = 'From KQ Require Import KQRun.\nFixpoint ww (n : nat) (x : int) (t : mem) : mem := match n with O => t | S m => ww m (x + 1) (upd 0 x x t) end.\n'
+addA("file_write", "", "rd 0 0 (ww n a s)",
+     "Require Import A_file_write_lib.\n")
+LIBS['A_file_write_num_lib'] = 'From KQ Require Import KQRun.\nFixpoint wn (n : nat) (x : int) (t : mem) : int := match n with O => rd 0 0 t | S m => wn m (x + 1) (upd 0 0 x t) end.\n'
+addA("file_write_num", "", "wn n a s",
+     "Require Import A_file_write_num_lib.\n")
+LIBS['A_file_read_lib'] = 'From KQ Require Import KQRun.\nFixpoint sm (n : nat) (x : int) (t : mem) : int := match n with O => x | S m => sm m (x + rd 1 x t) t end.\n'
+addA("file_read", "", "sm n a s",
+     "Require Import A_file_read_lib.\n")
+LIBS['A_file_bool_lib'] = 'From KQ Require Import KQRun.\nFixpoint ev (n : nat) (x : int) : bool := match n with O => x <? 3 | S m => ev m (x + 1) end.\n'
+addA("file_bool", "", "if ev n a then a else b",
+     "Require Import A_file_bool_lib.\n")
+LIBS['A_file_pm_lib'] = 'From KQ Require Import KQRun.\nFixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\n'
+addA("file_pm", "", "let '(x, t) := g n a s in x + rd 0 0 t",
+     "Require Import A_file_pm_lib.\n")
+LIBS['A_file_record_lib'] = 'From KQ Require Import KQRun.\nRecord pt := mkp { px : int; py : int }.\nDefinition mid (p : pt) : int := px p + py p.\n'
+addA("file_record", "", "mid (mkp a b)",
+     "Require Import A_file_record_lib.\n")
+LIBS['A_file_record_fix_lib'] = 'From KQ Require Import KQRun.\nRecord pt := mkp { px : int; py : int }.\nFixpoint sumr (n : nat) (p : pt) : int := match n with O => px p + py p | S m => sumr m (mkp (py p) (px p + 1)) end.\n'
+addA("file_record_fix", "", "sumr n (mkp a b)",
+     "Require Import A_file_record_fix_lib.\n")
+LIBS['A_file_record_ret_lib'] = 'From KQ Require Import KQRun.\nRecord pt := mkp { px : int; py : int }.\nFixpoint mv (n : nat) (x y : int) : pt := match n with O => mkp x y | S m => mv m (y + 1) x end.\n'
+addA("file_record_ret", "", "px (mv n a b)",
+     "Require Import A_file_record_ret_lib.\n")
+LIBS['A_file_record_holds_lib'] = 'From KQ Require Import KQRun.\nRecord pt := mkp { px : int; py : int }.\nRecord pq := mkq { q1 : pt; q2 : int }.\nDefinition qs (w : pq) : int := px (q1 w) + py (q1 w) + q2 w.\n'
+addA("file_record_holds", "", "qs (mkq (mkp a b) a)",
+     "Require Import A_file_record_holds_lib.\n")
+LIBS['A_file_data_lib'] = 'From KQ Require Import KQRun.\nInductive tg := T0 | T1 (x : int) | T2 (x y : int).\nFixpoint tm (n : nat) (x : int) : tg := match n with O => if x <? 3 then T1 x else T2 x x | S m => tm m (x + 1) end.\nDefinition tv (w : tg) : int := match w with T0 => 0 | T1 x => x | T2 x y => x + y end.\n'
+addA("file_data", "", "tv (tm n a)",
+     "Require Import A_file_data_lib.\n")
+LIBS['A_file_const_lib'] = 'From KQ Require Import KQRun.\nDefinition c : int := 7.\n'
+addA("file_const", "", "a + c",
+     "Require Import A_file_const_lib.\n")
+LIBS['A_file_big_lib'] = 'From KQ Require Import KQRun.\nDefinition big (x y : int) : int :=\n  let v1 := x * 1 + y in\n  let v2 := x * 2 + y in\n  let v3 := x * 3 + y in\n  let v4 := x * 4 + y in\n  let v5 := x * 5 + y in\n  let v6 := x * 6 + y in\n  let v7 := x * 7 + y in\n  let v8 := x * 8 + y in\n  let v9 := x * 9 + y in\n  let v10 := x * 10 + y in\n  let v11 := x * 11 + y in\n  let v12 := x * 12 + y in\n  let v13 := x * 13 + y in\n  let v14 := x * 14 + y in\n  let v15 := x * 15 + y in\n  v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13 + v14 + v15.\n'
+addA("file_big", "", "big a b",
+     "Require Import A_file_big_lib.\n")
+LIBS['A_file_tmpl_lib'] = 'From KQ Require Import KQRun.\nFixpoint apl (n : nat) (x : int) (f : int -> int) : int := match n with O => x | S m => apl m (f x) f end.\nDefinition inc (x : int) : int := x + 1.\n'
+addA("file_tmpl", "", "apl n a inc",
+     "Require Import A_file_tmpl_lib.\n")
+LIBS['A_file_tmpl_cap_lib'] = 'From KQ Require Import KQRun.\nFixpoint apl (n : nat) (x : int) (f : int -> int) : int := match n with O => x | S m => apl m (f x) f end.\n'
+addA("file_tmpl_cap", "", "apl n a (fun x => x + b)",
+     "Require Import A_file_tmpl_cap_lib.\n")
+LIBS['A_file_tmpl_given_lib'] = 'From KQ Require Import KQRun.\nFixpoint apl (n : nat) (x : int) (f : int -> int) : int := match n with O => x | S m => apl m (f x) f end.\n'
+addA("file_tmpl_given", "", "apl n a h3",
+     "Require Import A_file_tmpl_given_lib.\nDefinition h3 (x : int) : int := x + 3.\n")
+LIBS['A_file_mutual_lib'] = 'From KQ Require Import KQRun.\nFixpoint evn (n : nat) : bool := match n with O => true | S m => odd m end\nwith odd (n : nat) : bool := match n with O => false | S m => evn m end.\n'
+addA("file_mutual", "", "if evn n then a else b",
+     "Require Import A_file_mutual_lib.\n")
+LIBS['A_file_mutual_int_lib'] = 'From KQ Require Import KQRun.\nFixpoint mu1 (n : nat) (x : int) : int := match n with O => x | S m => mu2 m (x + 1) end\nwith mu2 (n : nat) (x : int) : int := match n with O => x * 2 | S m => mu1 m (x + 2) end.\n'
+addA("file_mutual_int", "", "mu1 n a",
+     "Require Import A_file_mutual_int_lib.\n")
+LIBS['A_file_order_lib'] = 'From KQ Require Import KQRun.\nFixpoint pf (x : int) (n : nat) {struct n} : int := match n with O => x | S m => pf (x + 1) m end.\n'
+addA("file_order", "", "pf a n",
+     "Require Import A_file_order_lib.\n")
+LIBS['A_file_order_def_lib'] = 'From KQ Require Import KQRun.\nDefinition pn (t : mem) (x : int) : int := rd 0 x t.\n'
+addA("file_order_def", "", "pn s a",
+     "Require Import A_file_order_def_lib.\n")
+LIBS['A_file_lfix_lib'] = 'From KQ Require Import KQRun.\nDefinition lo (n : nat) (x : int) : int := (fix go (k : nat) (y : int) : int := match k with O => y | S j => go j (y + 1) end) n x.\n'
+addA("file_lfix", "", "lo n a",
+     "Require Import A_file_lfix_lib.\n")
+LIBS['A_file_lift_lib'] = 'From KQ Require Import KQRun.\nFixpoint gg (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => gg m (x + 1) (upd 0 x x t) end.\nDefinition kp (p : int * mem) : int := fst p + rd 0 0 (snd p).\nDefinition kl (n : nat) (x : int) (t : mem) : int := let p := gg n x t in kp p + 1.\n'
+addA("file_lift", "", "kl n a s",
+     "Require Import A_file_lift_lib.\n")
+LIBS['A_file_in_module_lib'] = 'From KQ Require Import KQRun.\nModule Lib.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nEnd Lib.\n'
+addA("file_in_module", "", "Lib.ff n a",
+     "Require Import A_file_in_module_lib.\n")
+LIBS['A_file_lemma_lib'] = 'From KQ Require Import KQRun.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nLemma ff_0 (x : int) : ff O x = x.\nProof. reflexivity. Qed.\n'
+addA("file_lemma", "", "ff n a",
+     "Require Import A_file_lemma_lib.\n")
+LIBS['A_file_unused_lib'] = 'From KQ Require Import KQRun.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition unused (n : nat) : nat := n + n.\n'
+addA("file_unused", "", "ff n a",
+     "Require Import A_file_unused_lib.\n")
+LIBS['A_file_same_name_lib'] = 'From KQ Require Import KQRun.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x * 2 | S m => ff m (x + 2) end.\n'
+addA("file_same_name", "", "ff n a + A_file_same_name_lib.ff n b",
+     "Require Import A_file_same_name_lib.\nDefinition ff0 := A_file_same_name_lib.ff.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n\n")
+LIBS['A_file_shared_lib'] = 'From KQ Require Import KQRun.\nDefinition kq_shared : list int := cons 6 nil.\n'
+addA("file_shared", "", "rd32 5 a s",
+     "Require Import A_file_shared_lib.\n")
+LIBS['A_file_shared_plain_lib'] = 'From KQ Require Import KQRun.\nDefinition kq_shared : list int := cons 6 nil.\n'
+addA("file_shared_plain", "", "rd32 6 a s",
+     "Require Import A_file_shared_plain_lib.\n")
+LIBS["A_file_load_lib"] = 'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n'
+addA("file_load", "", "ff n a",
+     "Load A_file_load_lib.\n")
+LIBS['A_file_same_module_lib'] = 'From KQ Require Import KQRun.\nModule Lib.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x * 2 | S m => ff m (x + 2) end.\nEnd Lib.\n'
+addA("file_same_module", "", "Lib.ff n a + A_file_same_module_lib.Lib.ff n b",
+     "Require Import A_file_same_module_lib.\nModule Lib.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nEnd Lib.\n")
+LIBS['A_file_same_record_lib'] = 'From KQ Require Import KQRun.\nRecord rr := mk { p1 : int; p2 : int; p3 : int }.\nDefinition m (w : rr) : int := p1 w + p2 w * p3 w.\n'
+addA("file_same_record", "", "m (mk a b) + A_file_same_record_lib.m (A_file_same_record_lib.mk a b a)",
+     "Require Import A_file_same_record_lib.\nRecord rr := mk { p1 : int; p2 : int }.\nDefinition m (w : rr) : int := p1 w + p2 w.\n")
+LIBS["ilib_A_file_holds_i"] = 'From KQ Require Import KQRun.\nRecord ip := imk { ia : int; ib : int }.\nRecord iq := iqk { ic : ip; id : int }.\nDefinition qs (w : iq) : int := ia (ic w) + id w.\n'
+addA("file_holds_i", "", "qs (iqk (imk a b) a)",
+     "Require Import ilib_A_file_holds_i.\n")
+LIBS['A_file_lib_loop_lib'] = 'From KQ Require Import KQRun.\nFrom KQ.lib Require Import Loop.\nDefinition tot (a b : int) : int := loop_up 0 a b (fun i acc => acc + i).\n'
+addA("file_lib_loop", "", "tot a b",
+     "Require Import A_file_lib_loop_lib.\n")
+LIBS["A_file_root_lib"] = 'From KQ Require Import KQRun.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition rg (n : nat) (a b : int) (s : mem) : int := ff n a + rd 0 b s.\n'
+A.append(("file_root", "Require Import A_file_root_lib.\n" + 'Definition main : int :=\n  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in\n  rg (kq_nat (kq_arg 0)) (kq_arg 1) (kq_arg 2) (kq_input 0).\n'))
+LIBS["A_file_two_lib0"] = 'From KQ Require Import KQRun.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n'
+LIBS["A_file_two_lib"] = 'From KQ Require Import KQRun.\nRequire Import A_file_two_lib0.\nDefinition hh (n : nat) (x : int) : int := ff n x + 1.\n'
+addA("file_two", "", "hh n a",
+     "Require Import A_file_two_lib.\n")
+LIBS["A_file_export_lib0"] = 'From KQ Require Import KQRun.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n'
+LIBS["A_file_export_lib"] = 'From KQ Require Import KQRun.\nRequire Export A_file_export_lib0.\n'
+addA("file_export", "", "ff n a",
+     "Require Import A_file_export_lib.\n")
+LIBS["A_file_sub_d/X"] = 'From KQ Require Import KQRun.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n'
+addA("file_sub", "", "ff n a",
+     "From A_file_sub_d Require Import X.\n")
+LIBS["A_file_two_sorts_lib"] = 'From KQ Require Import KQRun.\nRecord pt := mkp { px : int; py : int }.\nDefinition mid (p : pt) : int := px p + py p.\nFixpoint sumr (n : nat) (p : pt) : int := match n with O => px p + py p | S m => sumr m (mkp (py p) (px p + 1)) end.\n'
+LIBS["A_file_two_sorts_lib2"] = 'From KQ Require Import KQRun.\nRequire Import A_file_two_sorts_lib.\nFixpoint qq (n : nat) (p : pt) (x : int) : int := match n with O => mid p + x | S m => qq m (mkp x (px p)) (sumr n p) end.\n'
+addA("file_two_sorts", "", "qq n (mkp a b) a",
+     "Require Import A_file_two_sorts_lib A_file_two_sorts_lib2.\n")
 # a function giving back a boolean whose body writes the memory (step 48 continued): through a call that writes, its recursion
 # given a memory it writes
 addA("par_bool_write_call", "", "if kbr n a s then a else b",
@@ -732,6 +988,10 @@ def write(outdir):
         body = PRE + text + f"Definition go {SIG} : int :=\n  f n a b s.\n" + MAIN
         open(os.path.join(outdir, f"N_{i}.body"), "w").write(body)
         rows.append((f"N_{i}", "nesting", i))
+    for (f, text) in LIBS.items():
+        p = os.path.join(outdir, f + ".v")
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        open(p, "w").write(text)
     with open(os.path.join(outdir, "cells.tsv"), "w") as fh:
         for r in rows:
             fh.write("\t".join(r) + "\n")

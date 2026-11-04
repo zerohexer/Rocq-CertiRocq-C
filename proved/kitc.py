@@ -27,10 +27,63 @@ Import KQMTrans KQMAuto.
 Open Scope bool_scope.
 """
 
+# the directory of a program whose text requires files beside it (step 51): those files are libraries of its directory
+USER = []
+USER_FILES = []   # those files: each its path and the prefix of its names
+LOADED = []       # the files it loads, whose text is read in place
+
 def coqc(path, extra=()):
-    r = subprocess.run(["coqc", "-w", "-all", "-R", ROOT, "KQ", "-Q", os.path.join(ROOT, "proved"), "KQC", "-Q", GEN, "KQG", *extra, path],
+    r = subprocess.run(["coqc", "-w", "-all", "-R", ROOT, "KQ", "-Q", os.path.join(ROOT, "proved"), "KQC", "-Q", GEN, "KQG", *USER, *extra, path],
                        capture_output=True, text=True, cwd=GEN)
     return r.returncode, r.stdout + r.stderr
+
+def required(text):
+    """the files a text requires, as paths under its directory: `Require [Import|Export] a b.`, `From d Require ..`"""
+    text = re.sub(r"\(\*.*?\*\)", " ", text, flags=re.S)
+    out = []
+    for m in re.finditer(r"(?:\bFrom\s+([\w.']+)\s+)?\bRequire\s+(?:Import\s+|Export\s+)?([^.]*(?:\.[\w'][^.]*)*)\.(?:\s|$)", text):
+        for w in m.group(2).split():
+            out.append(((m.group(1) + "." if m.group(1) else "") + w).replace(".", "/"))
+    return out
+
+def loaded(text):
+    """the files a text loads: `Load a.`, its text read in place"""
+    text = re.sub(r"\(\*.*?\*\)", " ", text, flags=re.S)
+    return [m.group(1).replace(".", "/") for m in re.finditer(r"\bLoad\s+(?:Verbose\s+)?([\w'./]+)\.(?:\s|$)", text)]
+
+def user_files(text, d, seen, order):
+    """the program's other files (step 51): each file a text requires that stands in its directory, those it requires first"""
+    for p in required(text):
+        f = os.path.join(d, p + ".v")
+        if p not in seen and os.path.exists(f):
+            seen.add(p)
+            user_files(open(f).read(), d, seen, order)
+            order.append(f)
+    for p in loaded(text):
+        f = os.path.join(d, p + ".v")
+        if ("L", p) not in seen and os.path.exists(f):
+            seen.add(("L", p))
+            LOADED.append(f)
+            user_files(open(f).read(), d, seen, order)
+
+def build_user_files(body, path):
+    """-> None, or Rocq's error for a file of the program that does not compile"""
+    d = os.path.dirname(os.path.abspath(path))
+    fs = []
+    LOADED[:] = []
+    user_files(body, d, set(), fs)
+    USER[:] = ["-Q", d, ""] if fs or LOADED else []
+    USER_FILES[:] = [(f, os.path.relpath(f, d)[:-2].replace(os.sep, ".") + ".") for f in fs] + [(f, "") for f in LOADED]
+    newest = 0
+    for f in fs:
+        vo = f + "o"
+        newest = max(newest, os.path.getmtime(f))
+        if not os.path.exists(vo) or os.path.getmtime(vo) < newest:
+            rc, out = coqc(f)
+            if rc != 0:
+                return out
+        newest = max(newest, os.path.getmtime(vo))
+    return None
 
 def split_main(body):
     i = body.index("Definition main")
@@ -368,6 +421,23 @@ def run(cmd, **kw):
 # what follows a program the verified compiler does not take: a refusal, or with --walk the retired route
 FOLLOW = "; refused"
 
+def shared_term(prog):
+    """the list of blocks a program shares with another processor, `kq_shared`: its name, wherever it stands in the program's text
+    and its files, in a module or not (step 51).  A program with none has no shared block; one it does not find here would go
+    unchecked, so this looks wherever the program's text is"""
+    for text, pre in [(prog, "")] + [(open(f).read(), n) for f, n in USER_FILES]:
+        text = re.sub(r"\(\*.*?\*\)", " ", text, flags=re.S)
+        m = re.search(r"Definition\s+kq_shared\b", text)
+        if m:
+            mods = []
+            for t in re.finditer(r"\bModule\s+([\w']+)\s*(?:<?:\s*[\w'.]+\s*)?\.(?:\s|$)|\bEnd\s+([\w']+)\s*\.", text[:m.start()]):
+                if t.group(1):
+                    mods.append(t.group(1))
+                elif mods and mods[-1] == t.group(2):
+                    mods.pop()
+            return pre + "".join(x + "." for x in mods) + "kq_shared"
+    return None
+
 def reflect(name, entry, prog, no_proof):
     """--reflect: the verified compiler (proved/KQR.v, Rocq-C-solution.md §1.12).  The reifier reads the entry `main`
     applies and every function it reaches (proved/KQRReify.v); each function is compiled by KQR.compile_f, and gets its
@@ -378,19 +448,21 @@ def reflect(name, entry, prog, no_proof):
     # a program that shares blocks with another processor (step 18): a plain access to a narrow block names an unshared block
     # by a written number (the translator's rule, §9.4) -- KQR.sh_ok, worked out here on the trees read and proved by the
     # kernel beside each function's theorem
-    shared = bool(re.search(r"Definition\s+kq_shared\b", prog))
+    shared = shared_term(prog)
     f0 = os.path.join(GEN, f"{name}_r.v")
     open(f0, "w").write(HDR + "From KQC Require KQR KQRReify.\n" + prog
         + f"\nDefinition {name}_res := ltac:(run_template_program (tmQuoteRec {entry})\n"
-        + "  (fun q => let r := eval vm_compute in (KQRReify.reify_prog2 q, KQRReify.reify_why q, KQRReify.rec_info q, KQRReify.entry_perm q) in exact r)).\n"
-        + f"Definition {name}_src := option_map fst (fst (fst (fst {name}_res))).\n"
-        + f"Definition {name}_mts := match fst (fst (fst {name}_res)) with Some x => snd x | None => [] end.\n"
+        + "  (fun q => let r := eval vm_compute in (KQRReify.reify_prog2 q, KQRReify.reify_why q, KQRReify.rec_info q, KQRReify.entry_perm q, KQRReify.fix1_info q) in exact r)).\n"
+        + f"Definition {name}_src := option_map fst (fst (fst (fst (fst {name}_res)))).\n"
+        + f"Definition {name}_mts := match fst (fst (fst (fst {name}_res))) with Some x => snd x | None => [] end.\n"
         + f'Redirect "{name}_rinfo" Eval vm_compute in (option_map KQRReify.info_of {name}_src).\n'
-        + f'Redirect "{name}_rwhy" Eval vm_compute in (snd (fst (fst {name}_res))).\n'
-        + f'Redirect "{name}_rrec" Eval vm_compute in (snd (fst {name}_res)).\n'
-        + f'Redirect "{name}_rperm" Eval vm_compute in (snd {name}_res).\n'
+        + f'Redirect "{name}_rwhy" Eval vm_compute in (snd (fst (fst (fst {name}_res)))).\n'
+        + f'Redirect "{name}_rrec" Eval vm_compute in (snd (fst (fst {name}_res))).\n'
+        + f'Redirect "{name}_rperm" Eval vm_compute in (snd (fst {name}_res)).\n'
+        + f'Redirect "{name}_rfix" Eval vm_compute in (snd {name}_res).\n'
+        + f'Redirect "{name}_rmts" Eval vm_compute in (KQRReify.mts_info {name}_mts).\n'
         + (f'Redirect "{name}_rsh" Eval vm_compute in (match {name}_src with Some l => map (fun f => (snd (fst (fst f)), '
-           f'KQR.sh_ok kq_shared (snd f))) l | None => [] end).\n' if shared else "")
+           f'KQR.sh_ok {shared} (snd f))) l | None => [] end).\n' if shared else "")
         # a copy of a recursive function for the functions it is given: its meaning, the function applied to them (step 10)
         + f"MetaRocq Run (monad_iter (fun p => tmMkDefinition (fst p) (snd p)) (KQRReify.plain_mts {name}_mts)).\n")
     rc, out = coqc(f0)
@@ -461,7 +533,7 @@ def reflect(name, entry, prog, no_proof):
             def node():
                 j = sh.index("(", pos[0]); cn = sh[pos[0]:j]; pos[0] = j + 1; fs = []
                 while True:
-                    if sh[pos[0]] == "i": fs.append("i"); pos[0] += 1
+                    if sh[pos[0]] == "i" and sh[pos[0] + 1] in ",)": fs.append("i"); pos[0] += 1
                     else: fs.append(node())
                     c = sh[pos[0]]; pos[0] += 1
                     if c == ")": return (cn, fs)
@@ -577,19 +649,27 @@ def reflect(name, entry, prog, no_proof):
     # function applied to a written counter (f 20 ..) would otherwise be worked out round by round (F50).  The order of
     # unfolding only: nothing that converts stops converting
     # the templates the copies come from (step 10); a local fixpoint's copy (kqlfix__cK, step 31) has no template constant
-    iswr = lambda nm: "__c" in nm or bool(re.search(r"__on?$", nm))   # a copy, or a wrapper (step 41)
-    tmpls = sorted(({f[0].split("__c")[0] for f in fs if "__c" in f[0]} | {re.sub(r"__on?$", "", f[0]) for f in fs if re.search(r"__on?$", f[0])}) - {"kqlfix"})
+    # what the reifier made: each its name and the constant it is a copy or a wrapper of (step 51)
+    mp = os.path.join(GEN, f"{name}_rmts.out")
+    mts = re.findall(r'\("([^"]*)"(?:%bs)?,\s*"([^"]*)"(?:%bs)?\)', open(mp).read()) if os.path.exists(mp) else []
+    made = {m for m, _ in mts}
+    iscp = lambda nm: nm in made and re.search(r"__c(\d+|blk)$", nm) is not None   # a copy, a block
+    isw = lambda nm: nm in made and nm.endswith("__o")                              # a wrapper of a function that recurses (step 41)
+    iswr = lambda nm: iscp(nm) or (nm in made and re.search(r"__on?$", nm) is not None)   # a copy, or a wrapper (step 41)
+    tmpls = sorted({h for m, h in mts if h and re.search(r"__c\d+$|__on?$", m)})
+    # the functions that are one fixpoint, not a member of a block (step 51)
+    xp = os.path.join(GEN, f"{name}_rfix.out")
+    fix1 = set(re.findall(r'"([^"]*)"', open(xp).read())) if os.path.exists(xp) else set()
     t += "Strategy opaque [" + " ".join([f[0] for f in fs if not iswr(f[0])] + tmpls) + "].\n"   # a copy is unfolded first
     if not no_proof:
         for j, f in enumerate(fs):
             cs = "[" + "; ".join(f"existT (@KQR.ftype {inst}) {sig(g)} {g[0]}" for g in fs[:j]) + "]"
             oks = "".join(f"(conj {name}_rok{i} " for i in range(j)) + "Logic.I" + ")" * j
             t += f"Lemma {name}_rok{j} : @KQR.callee_ok {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {sig(f)} {f[0]}.\n"
-            # (step 45) a member of a mutual block (a `with NAME (..)` in its Fixpoint) is one call of its block: not a fix over its counter
-            mfx = re.search(r"Fixpoint\s+" + re.escape(f[0]) + r"\b(.*?)\.\s*$", prog, re.S | re.M)
+            # (step 45) a member of a mutual block is one call of its block: not a fix over its counter
             # (step 46) a copy is a fix over its counter too
-            prec = isp(f) and ("__c" in f[0] or (mfx is not None and not re.search(r"\bwith\s+[A-Za-z_][\w']*\s*[({]", mfx.group(1))))
-            if "__c" in f[0] or f[0].endswith("__o") or prec:
+            prec = isp(f) and (iscp(f[0]) or f[0] in fix1)
+            if iscp(f[0]) or isw(f[0]) or prec:
                 # a copy: not a fix over its counter, so its statement comes from its two equations, each by conversion
                 # (a copy that writes the memory and gives back a number has a memory: no memory argument)
                 # (step 41) a boolean, a number and a memory, a record given back: their own copies' theorems
@@ -624,7 +704,7 @@ def reflect(name, entry, prog, no_proof):
                       f" eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl). Qed.\n")
             if shared:
                 # the sequential meaning describes the program only if it reaches its shared blocks through marked operations
-                t += f"Lemma {name}_rsh{j} : KQR.sh_ok kq_shared (KQRReify.body_at {name}_funs {j}) = true.\nProof. exact eq_refl. Qed.\n"
+                t += f"Lemma {name}_rsh{j} : KQR.sh_ok {shared} (KQRReify.body_at {name}_funs {j}) = true.\nProof. exact eq_refl. Qed.\n"
     t += c_print(name)
     f1 = os.path.join(GEN, f"{name}_rp.v")
     open(f1, "w").write(t)
@@ -632,8 +712,7 @@ def reflect(name, entry, prog, no_proof):
     if rc != 0:
         print(name, "REFLECT CHECK FAILED" + FOLLOW + ":", out[-400:].replace("\n", " "), flush=True)
         return None
-    names = [re.sub(r"__on?$", "", f[0]) for f in fs]   # a wrapper stands for its function (step 41)
-    idx = names.index(entry) if entry in names else len(fs) - 1
+    idx = len(fs) - 1   # the entry is the last function read: every function is read after those it calls
     e = fs[idx]
     if any(c not in "IB" for c in e[2]) or e[6] not in ("", "B"):   # an entry taking or giving back a record: main gives and takes numbers
         print(name, "reflect: the entry takes or gives back a record" + FOLLOW, flush=True)
@@ -696,6 +775,13 @@ def main():
                 lt = open(os.path.join(ROOT, "lib", lib + ".v")).read()
                 body = lt[lt.index(f"(* {mark}-BEGIN *)") + len(f"(* {mark}-BEGIN *)"):lt.index(f"(* {mark}-END *)")] + "\n" + body
         prog, mt = split_main(body)
+        err = build_user_files(body, path)
+        if err:
+            m = re.search(r"Error:\s*(.*?)(?:\n\n|$)", err, re.S)
+            print(name, "reflect: not read by the verified compiler's reifier (Rocq refused a file of the program: "
+                  + (" ".join(m.group(1).split())[:200] if m else "it did not compile") + ")" + FOLLOW, flush=True)
+            print(name, "REFUSED: not compiled by the verified compiler (the reasons above)", flush=True)
+            continue
         try:
             entry, args, wrap = parse_main(mt)
         except SystemExit as ex:

@@ -1,0 +1,22 @@
+(* a program across modules and files: two functions of one short name, an entry in a module, a record and a writing function of another file *)
+Require Import modules_lib.
+Module A.
+  Fixpoint f (n : nat) (x : int) : int := match n with O => x | S m => f m (x + 1) end.
+End A.
+Module B.
+  Fixpoint f (n : nat) (x : int) : int := match n with O => x * 2 | S m => f m (x + 2) end.
+End B.
+Section Scaled.
+  Variable k : int.
+  Let k2 : int := k + 1.
+  Definition scaled (x : int) : int := x * k2.
+End Scaled.
+Module P.
+  Definition go (n : nat) (a b : int) (s : mem) : int :=
+    let w := walk n (mkp a b) in
+    let t := Cells.fill n 0 s in
+    A.f n (px w) + B.f n (py w) + scaled 3 (rd 0 2 t).
+End P.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  P.go (kq_nat (kq_arg 0)) (kq_arg 1) (kq_arg 2) (kq_input 0).
