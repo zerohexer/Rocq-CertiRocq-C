@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **1079 of 1093, 6 gaps, 7 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **1116 of 1132, 6 gaps, 9 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4561,6 +4561,25 @@ is the same case: up to zeta the term is `let t := .. in .. rd 0 2 t ..`, every 
   body, which `wfx` refuses (rightly: it writes).  It is bound instead, as step 48 continued has it, as an operand, a let's value, a test.
 *Expected*: those, but the pins: 1116 of 1132, 9 by design, 6 gaps.
 
+**Step 52 done (2026-11-04): a memory made in place and read inside an expression.**  Built as designed, in the reifier alone (`KQR.v` and
+`kitc.py` unchanged):
+- *The reader*: `bind_first`'s new mode: the memory given to `rd`, `rd32`, `rd8`, `kq_size`, a function taking a memory or a helper taking one (at its
+  parameter's place), when it is not a variable, bound by a let, every occurrence of the same term one let, what the operands read of the
+  memory before it bound before it.  The same term up to zeta.  A fallback, last in `reify_x`: a program read before keeps its C.
+- *What narrowing it found*: at the end of a body that writes, the function's own call on the memory a let made was read as a number of the
+  body and refused as not well formed.  `has_self`: it is bound instead, as an operand, a let's value, a test's operand, as step 48 continued has it.
+- *By design*: `A_par_made_two` and `A_par_made_old_write`: two versions both used, differing in cells whose number comes from the data; control
+  `A_par_made_seq`, the memory handed on.
+- *Cells*: 39 more (1132): `A_par_made_*`, `A_par_own_let_mem_*`.  Run alone: 37 proved, the two pins refused.  Run as a check beside them, 615
+  cells: 605 proved, the other 10 the six known gaps and the four of the cells refused by design among them.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the trees
+  without their generated files, F62; step 51's files / these): `HWP_kernel` 2.51 / 2.52 s, `HWP_own` 1.91 / 1.91, `HWP_irqnow` 1.60 / 1.60 — the same.
+- The C: 64 of 64 byte-identical.  The construct table (on `99d5a45`): **1116 of 1132 through the verified compiler**, 9 by
+  design, 6 gaps, 1 not Rocq (was 1079 of 1093: the 37 new cells read, the two pins refused).  The gate on `99d5a45`, the walk
+  switched off: `make.sh` `core-ok`; examples 28 / 28; corpus 36 / 36; the five kernels (11 / 11 / 11 / 13 / 12 s); **72 programs
+  through the verified compiler, 0 refused**; the trusted base unchanged.  Next: a second memory parameter; the function's own
+  call in a let of a pair used bare; a mutual part of two types.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4736,11 +4755,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `0b929ef` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `99d5a45` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 52's design (a memory made in place and read inside an expression: bound by a let) |
+| (this commit) | §12.V: step 52 (a memory made in place and read inside an expression: the construct table 1116 of 1132, 9 by design), the C, the gate |
+| `3b60930` | §12.V: step 52's design, what narrowing it found (the function's own call on the memory a let made) |
+| `99d5a45` | `proved/KQRReify.v` + `matrix/gen.py` + `classify.py` step 52: a memory made in place and read inside an expression, bound by a let; the function's own call on the memory a let made, bound; 39 cells |
+| `d0f1875` | §12.V: step 52's design (a memory made in place and read inside an expression: bound by a let) |
 | `001b5e2` | §11 F65, §0.5, §3.7: the changes `959967b` names, which that commit left out (its edit script stopped on a mismatch and the record went ahead) |
 | `959967b` | §11 F65, §0.5, §3.7, §12.V: step 51 (programs across modules and files: the construct table 1079 of 1093, 7 by design), the C, the gate |
 | `0b929ef` | `proved/KQRReify.v` + `kitc.py` + `matrix/gen.py` + `classify.py` + `examples/modules` step 51: programs across modules and files: `in_prog`, full names, nothing guessed from names or text, files, a section's let; 107 cells |
