@@ -17,6 +17,8 @@ From MetaRocq.Utils Require Import utils bytestring.
 From MetaRocq.Template Require Import All.
 From KQC Require Import KQL KQLAuto KQMSem KQR.
 Require KQ.KQRun KQ.hw.Runtime KQ.hw.User.
+From Corelib Require Program.Wf.
+From Stdlib Require Sint63.
 Import MonadNotation ListNotations.
 
 Definition kn_of (t : term) : kername := match t with tConst kn _ => kn | _ => (MPfile [], ""%bs) end.
@@ -3222,8 +3224,23 @@ Fixpoint has_pm_let (fuel : nat) (t : term) {struct fuel} : bool :=
       | _ => false
       end
   end.
+(** whether a text is one call of a budget function ([G], step 56) *)
+Fixpoint ends_wg (s : string) : bool :=
+  match s with
+  | String.String a (String.String b (String.String c (String.String d String.EmptyString))) =>
+      if Byte.eqb a "_"%byte then if Byte.eqb b "_"%byte then if Byte.eqb c "w"%byte then Byte.eqb d "g"%byte else false else false else false
+  | String.String _ r => ends_wg r
+  | String.EmptyString => false
+  end.
+Fixpoint is_w (t : term) : bool :=
+  match t with
+  | tLambda _ _ b => is_w b
+  | tApp (tConst k _) _ => if eq_mp (fst k) copy_mp then ends_wg (snd k) else false
+  | _ => false
+  end.
 Definition is_fn (Σ : global_env) (mp : modpath) (root kn : kername) : bool :=
   Kername.eqb kn root || eq_mp (fst kn) copy_mp
+  || (match body_of Σ kn with Some b => is_w b | None => false end)
   || (in_prog mp (fst kn) && (match body_of Σ kn with Some (tFix _ _) => true | _ => false end || big_def Σ kn
                             || (if in_prog mp (fst kn) then match body_of Σ kn with Some b => has_pm_let 1000 b | None => false end else false))).
 
@@ -4411,14 +4428,252 @@ Fixpoint real_copies (fuel : nat) (dp : modpath) (t : term) : term :=
       | _ => t
       end
   end.
+(* ---------------------------------------------------------------- Rocq's own measure recursion (step 56) *)
+Definition kn_fix_sub := kn_of <% @Corelib.Program.Wf.Fix_sub %>.
+Definition kn_mr := kn_of <% @Corelib.Program.Wf.MR %>.
+Definition kn_z_to_nat := kn_of <% Z.to_nat %>.
+Definition kn_s_to_z := kn_of <% Sint63.to_Z %>.
+Definition ind_sigT := ind_of <% @sigT %>.
+Definition fix_sub_app (t : term) : option (term * term) :=
+  match t with
+  | tApp (tConst kn _) [_; tApp (tConst mr _) [_; _; _; m]; _; _; fs] =>
+      if Kername.eqb kn kn_fix_sub then if Kername.eqb mr kn_mr then Some (m, fs) else None else None
+  | _ => None
+  end.
+(** the parameters' types, the measure, the elaborated functional, the constant holding the [Fix_sub] when it is not the function *)
+Definition pf_parts (Σ : global_env) (kn : kername) : option (list term * term * term * term * option kername) :=
+  match lookup_env Σ kn with
+  | Some (ConstantDecl cb) =>
+      match cst_body cb with
+      | Some b =>
+          let T := ret_ty (cst_type cb) in
+          match fix_sub_app b with
+          | Some (m, fs) =>
+              (* one parameter: several are packed in a sigma, and that constant is the one the function calls *)
+              match prod_tys (cst_type cb) with
+              | tApp (tInd i _) _ :: _ => if Kername.eqb (inductive_mind i) (inductive_mind ind_sigT) then None else None
+              | t :: _ => Some ([t], T, m, fs, None)
+              | [] => None
+              end
+          | None =>
+              let '(tys, r) := lams b in
+              match r with
+              | tApp (tConst fk _) [_] =>
+                  match body_of Σ fk with
+                  | Some fb => match fix_sub_app fb with Some (m, fs) => Some (tys, T, m, fs, Some fk) | None => None end
+                  | None => None
+                  end
+              | _ => None
+              end
+          end
+      | None => None
+      end
+  | _ => None
+  end.
+Definition kn_dec := kn_of <% @Corelib.Init.Sumbool.sumbool_of_bool %>.
+Definition pf_case_bool := <% fun b : bool => if b then O else O %>.
+Definition pf_prog_let (na : aname) : bool :=
+  match binder_name na with
+  | nNamed s => if String.prefix "filtered_var"%bs s then true else String.prefix "program_branch"%bs s
+  | nAnon => false
+  end.
+(** a branch as [Program] writes it: its pattern's variables given, the proof of the test dropped *)
+Fixpoint pf_strip (fuel : nat) (u : term) : term :=
+  match fuel with
+  | O => u
+  | S fuel =>
+      match u with
+      | tApp (tLambda _ _ b) (a :: r) => pf_strip fuel (match r with [] => subst10 a b | _ => tApp (subst10 a b) r end)
+      | tLambda _ _ a => subst10 (tVar "kqproof"%bs) a
+      | _ => u
+      end
+  end.
+(** the functional's body with its proofs dropped: [d] the place of the local function that gives the proof *)
+Fixpoint pf_plain (fuel d : nat) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      match t with
+      | tApp (tRel i) args =>
+          if Nat.eqb i d then tApp (tVar "kqself"%bs) (map (pf_plain fuel d) (removelast args))
+          else tApp (tRel i) (map (pf_plain fuel d) args)
+      | tApp (tCase ci p c brs) [_] =>
+          match preturn p with
+          | tProd _ _ R =>
+              tCase ci {| pparams := pparams p; puinst := puinst p; pcontext := pcontext p; preturn := subst10 (tVar "kqproof"%bs) R |}
+                    (pf_plain fuel d c)
+                    (map (fun br => {| bcontext := bcontext br; bbody := pf_plain fuel (d + length (bcontext br)) (pf_strip 100 (bbody br)) |}) brs)
+          | _ => t
+          end
+      | tApp f args => tApp (pf_plain fuel d f) (map (pf_plain fuel d) args)
+      (* [if dec c then a else b]: the test itself, the proof each branch binds never used but in a proof dropped *)
+      | tCase ci p (tApp (tConst k _) [c]) [b0; b1] =>
+          if Kername.eqb k kn_dec then
+            match pf_case_bool with
+            | tLambda _ _ (tCase ci' p' _ [br0; br1]) =>
+                tCase ci' {| pparams := pparams p'; puinst := puinst p'; pcontext := pcontext p'; preturn := lift0 1 (subst10 (tVar "kqproof"%bs) (preturn p)) |} (pf_plain fuel d c)
+                      [{| bcontext := bcontext br0; bbody := pf_plain fuel d (subst10 (tVar "kqproof"%bs) (bbody b0)) |};
+                       {| bcontext := bcontext br1; bbody := pf_plain fuel d (subst10 (tVar "kqproof"%bs) (bbody b1)) |}]
+            | _ => t
+            end
+          else tCase ci p (tApp (tConst k []) [pf_plain fuel d c]) [{| bcontext := bcontext b0; bbody := pf_plain fuel (d + length (bcontext b0)) (bbody b0) |};
+                                                                     {| bcontext := bcontext b1; bbody := pf_plain fuel (d + length (bcontext b1)) (bbody b1) |}]
+      | tLetIn na b ty body =>
+          if pf_prog_let na then pf_plain fuel d (subst10 b body)
+          else tLetIn na (pf_plain fuel d b) ty (pf_plain fuel (S d) body)
+      | tLambda na ty b => tLambda na ty (pf_plain fuel (S d) b)
+      | tCase ci p c brs =>
+          tCase ci p (pf_plain fuel d c) (map (fun br => {| bcontext := bcontext br; bbody := pf_plain fuel (d + length (bcontext br)) (bbody br) |}) brs)
+      | _ => t
+      end
+  end.
+(** the recursive calls, by what [mk] makes of them at the depth they stand at *)
+Fixpoint pf_calls (fuel : nat) (mk : nat -> list term -> term) (d : nat) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      match t with
+      | tApp (tVar v) args =>
+          if String.eqb v "kqself"%bs then mk d (map (pf_calls fuel mk d) args) else t
+      | tApp f args => tApp (pf_calls fuel mk d f) (map (pf_calls fuel mk d) args)
+      | tLetIn na b ty body => tLetIn na (pf_calls fuel mk d b) ty (pf_calls fuel mk (S d) body)
+      | tLambda na ty b => tLambda na ty (pf_calls fuel mk (S d) b)
+      | tCase ci p c brs =>
+          tCase ci p (pf_calls fuel mk d c) (map (fun br => {| bcontext := bcontext br; bbody := pf_calls fuel mk (d + length (bcontext br)) (bbody br) |}) brs)
+      | _ => t
+      end
+  end.
+(** a value of a type: what a recursive call at budget 0 stands for; it never runs, a call there being below no measure *)
+Fixpoint pf_zero (fuel : nat) (Σ : global_env) (T lastm : term) : term :=
+  match fuel with
+  | O => unread_t
+  | S fuel =>
+      if is_ty kn_int T then tInt (Uint63.of_Z 0) else if is_bool T then tConstruct ind_bool 1 [] else if is_nat T then tConstruct ind_nat 0 []
+      else if is_ty kn_mem T then lastm
+      else
+        let ind_ps := match T with tInd i _ => Some (i, []) | tApp (tInd i _) ps => Some (i, ps) | _ => None end in
+        match ind_ps with
+        | Some (i, ps) =>
+            let c := tConstruct i 0 [] in
+            let ft := fold_left (fun t p => match t with tProd _ _ b => subst10 p b | _ => t end) ps (head_ty Σ c) in
+            let l := ps ++ map (fun ty => pf_zero fuel Σ ty lastm) (removelast (prod_tys ft)) in
+            match l with [] => c | _ => tApp c l end
+        | None => unread_t
+        end
+  end.
+(** a measure the budget stands above whatever the arguments: [Z.to_nat (Sint63.to_Z e)], through definitions of the program *)
+Fixpoint pf_machine (fuel : nat) (Σ : global_env) (m : term) : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      match m with
+      | tApp (tConst k _) [tApp (tConst z _) [_]] =>
+          if Kername.eqb k kn_z_to_nat then Kername.eqb z kn_s_to_z
+          else match body_of Σ k with Some b => pf_machine fuel Σ (snd (lams b)) | None => false end
+      | tApp (tConst k _) _ => match body_of Σ k with Some b => pf_machine fuel Σ (snd (lams b)) | None => false end
+      | _ => false
+      end
+  end.
+(** a measure that is a counter expression: a counter parameter, [S], a sum, [kq_nat] *)
+Fixpoint pf_counter (fuel : nat) (m : term) : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      match m with
+      | tRel _ => true
+      | tApp (tConst k _) _ => if Kername.eqb k kn_kq_nat then true else if Kername.eqb k kn_nat_add then true else false
+      | tApp (tConstruct _ 1 _) [c] => pf_counter fuel c
+      | _ => false
+      end
+  end.
+Definition pf_budget : term :=
+  let b60 := tApp (tConst kn_kq_nat []) [tInt (Uint63.of_Z 1152921504606846976)] in
+  let b61 := tApp (tConst kn_kq_nat []) [tInt (Uint63.of_Z 1152921504606846975)] in
+  tApp (tConst kn_nat_add []) [b60; tApp (tConst kn_nat_add []) [b60; tApp (tConst kn_nat_add []) [b60; b61]]].
+Definition pf_case_nat := <% fun n : nat => match n with O => O | S m => m end %>.
+(** the budget function and the rest, for a [Program Fixpoint] of [n] parameters *)
+Definition pf_make (Σ : global_env) (kn : kername) : option (term * term * term * term * term) :=
+  match pf_parts Σ kn, pf_case_nat with
+  | Some (tys, T, tLambda _ _ m0, tLambda _ _ (tLambda _ _ b0), _), tLambda _ _ (tCase ci pr _ [br0; br1]) =>
+      let n := length tys in
+      let fix peel (k : nat) (t : term) {struct k} : option term :=
+        match k, t with
+        | O, _ => Some t
+        | S k', tLetIn _ _ _ body => peel k' body
+        | _, _ => None
+        end in
+      match peel n m0, peel (S n) b0 with
+      | Some M, Some body =>
+          let plain := pf_plain 100000 0 body in
+          let sg (base : nat) := tVar "kqf"%bs :: map (fun i => tRel (base + i)) (seq 0 n) ++ [tVar "kqr"%bs; tVar "kqr"%bs] in
+          let lastm (d : nat) (args : list term) := last args (tRel 0) in
+          let b1 := pf_calls 100000 (fun d args => tApp (tRel (d + n + 2)) (tRel d :: args)) 0 (subst (sg 1) 0 plain) in
+          let b_0 := pf_calls 100000 (fun d args => pf_zero 100 Σ T (lastm d args)) 0 (subst (sg 0) 0 plain) in
+          let gty := tProd anon_b (tInd ind_nat []) (pis_of tys T) in
+          let gk := (copy_mp, mangle kn ^ "__wg"%bs) in
+          let pr' := {| pparams := pparams pr; puinst := puinst pr; pcontext := pcontext pr; preturn := lift0 (S (n + 1)) T |} in
+          let cs := tCase ci {| pparams := pparams pr; puinst := puinst pr; pcontext := pcontext pr; preturn := lift0 1 T |} (tRel n)
+                      [{| bcontext := bcontext br0; bbody := b_0 |}; {| bcontext := bcontext br1; bbody := b1 |}] in
+          let g := tFix [{| dname := {| binder_name := nNamed (snd gk); binder_relevance := Relevant |}; dtype := gty;
+                            dbody := tLambda anon_b (tInd ind_nat []) (lams_of tys cs); rarg := 0 |}] 0 in
+          let rels := map (fun i => tRel (n - 1 - i)) (seq 0 n) in
+          let budget := if pf_machine 10 Σ M then Some pf_budget else if pf_counter 10 M then Some M else None in
+          match budget with
+          | Some bud =>
+              let w := lams_of tys (tApp (tConst gk []) (bud :: rels)) in
+              let dd := lams_of tys (pf_zero 100 Σ T (tRel 0)) in
+              Some (g, gty, w, dd, T)
+          | None => None
+          end
+      | _, _ => None
+      end
+  | _, _ => None
+  end.
+(** the program with each [Program Fixpoint] its budget function, and the function one call of it *)
+Definition pf_all (Σ : global_env) (mp : modpath) (root : kername) : global_env * copytab :=
+  match lookup_env Σ kn_fix_sub with
+  | None => (Σ, [])
+  | Some _ =>
+      fold_left (fun st kn =>
+        let '(S1, tb) := st in
+        if in_prog mp (fst kn) then
+          match pf_make S1 kn, lookup_env S1 kn with
+          | Some (g, gty, w, dd, T), Some (ConstantDecl cb) =>
+              let m := mangle kn in
+              let gk := (copy_mp, m ^ "__wg"%bs) in
+              let wk := (copy_mp, m ^ "__w"%bs) in
+              let dk := (copy_mp, m ^ "__wd"%bs) in
+              (add_decl (add_decl S1 gk gty g) kn (cst_type cb) w,
+               tb ++ [(gk, ([], []), gk, g); (wk, ([], []), wk, w); (dk, ([], []), dk, dd)])
+          | _, _ => st
+          end
+        else st) (snd (reach_go 1000 Σ mp root root ([], []))) (Σ, [])
+  end.
+(** for kitc.py: each such function: its name, the constant holding its [Fix_sub], its number of parameters, its three made functions, and whether its measure is on a machine number *)
+Definition pf_info (p : program) : list (string * string * nat * string * bool) :=
+  match p with
+  | (Σ, tConst root _) =>
+      match lookup_env Σ kn_fix_sub with None => [] | Some _ =>
+      flat_map (fun kn =>
+        match pf_parts Σ kn, pf_make Σ kn with
+        | Some (tys, _, tLambda _ _ m0, _, fk), Some _ =>
+            let fix peel (k : nat) (t : term) {struct k} : term :=
+              match k, t with O, _ => t | S k', tLetIn _ _ _ body => peel k' body | _, _ => t end in
+            [(string_of_kername kn, match fk with Some f => string_of_kername f | None => ""%bs end, length tys, mangle kn, pf_machine 10 Σ (peel (length tys) m0))]
+        | _, _ => []
+        end) (filter (fun kn => in_prog (fst root) (fst kn)) (snd (reach_go 1000 Σ (fst root) root root ([], []))))
+      end
+  | _ => []
+  end.
 Definition reify_prog2c (lo : bool) (bt : kername -> option Z) (chk : bool) (p : program) : option (list (kername * sig * fbody) * list (string * term)) :=
   match p with
-  | (Σ00, tConst root _) =>
+  | (Σ000, tConst root _) =>
       let mp := fst root in
+      let '(Σ00, ltp) := pf_all Σ000 mp root in
       let '(Σ0, lt0) := if lo then lift_ops Σ00 mp root else (Σ00, []) in
       let kns0 := reach 1000 Σ0 mp root root [] in
       let '(Σ, kns, lts1) := lift_all (float_all Σ0 kns0) mp kns0 in
-      let lts := lt0 ++ lts1 in
+      let lts := ltp ++ lt0 ++ lts1 in
       let hb := helper_of Σ mp kns in
       let rt := rtab_of Σ hb kns in
       (* a local fixpoint in a definition of the program's file: its copies are looked for as a template's are (step 31) *)
@@ -4495,7 +4750,7 @@ Definition reify_prog2 (p : program) : option (list (kername * sig * fbody) * li
   | None =>
       match p with
       | (Σ, tConst root _) =>
-          match snd (lift_ops Σ (fst root) root) with
+          match snd (lift_ops (fst (pf_all Σ (fst root) root)) (fst root) root) with
           | [] => None
           | _ => reify_prog2m true p
           end
@@ -4515,11 +4770,14 @@ Fixpoint has_kq (s : string) : bool :=
   end.
 (** the record types of the program as it was read *)
 Definition rec_info2 (p : program) (r : option (list (kername * sig * fbody) * list (string * term))) : list (string * string * nat * string) :=
-  if (match r with Some (_, mts) => existsb (fun q => has_kq (fst q)) mts | None => false end) then
+  let lo := match r with Some (_, mts) => existsb (fun q => has_kq (fst q)) mts | None => false end in
+  let wf := match p with (Σ, _) => match lookup_env Σ kn_fix_sub with Some _ => true | None => false end end in
+  if (if lo then true else wf) then
     match p with
-    | (Σ00, tConst root _) =>
+    | (Σ000, tConst root _) =>
         let mp := fst root in
-        let Σ0 := fst (lift_ops Σ00 mp root) in
+        let Σ00 := fst (pf_all Σ000 mp root) in
+        let Σ0 := if lo then fst (lift_ops Σ00 mp root) else Σ00 in
         let kns0 := reach 1000 Σ0 mp root root [] in
         let '(Σ, kns, _) := lift_all (float_all Σ0 kns0) mp kns0 in
         let rt := rtab_of Σ (helper_of Σ mp kns) kns in map (rec_text Σ rt) rt

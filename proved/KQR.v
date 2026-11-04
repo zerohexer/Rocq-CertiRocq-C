@@ -10972,6 +10972,38 @@ Proof.
   { cbn [callf]. rewrite appc_deadC. apply appnT_deadN. }
   unfold calln, callm, callmw in *. cbn [sw sr sq sn sk] in *. destruct w; [destruct H as [M' H]; exists M'|]; rewrite !E; exact H.
 Qed.
+(** (step 56) a function's theorem holds of any function equal to it at every argument *)
+Fixpoint eqN (ks : list kind) (m : bool) (T : Type) {struct ks} : ntypeT ks m T -> ntypeT ks m T -> Prop :=
+  match ks as k0 return ntypeT k0 m T -> ntypeT k0 m T -> Prop with
+  | [] => if m as m0 return ntypeT [] m0 T -> ntypeT [] m0 T -> Prop then (fun h h' => forall s, h s = h' s) else (fun h h' => h = h')
+  | KNum :: ks => fun h h' => forall a, eqN ks m T (h a) (h' a)
+  | KBool :: ks => fun h h' => forall a, eqN ks m T (h a) (h' a)
+  | KRec ri :: ks => fun h h' => forall a, eqN ks m T (h a) (h' a)
+  end.
+Fixpoint eqC (x : nat) (A : Type) (R : A -> A -> Prop) {struct x} : ctype x A -> ctype x A -> Prop :=
+  match x as x0 return ctype x0 A -> ctype x0 A -> Prop with
+  | O => R
+  | S x => fun h h' => forall c, eqC x A R (h c) (h' c)
+  end.
+Lemma appc_eqC : forall x A (R : A -> A -> Prop) h h' cvs, eqC x A R h h' -> R (appc x A h cvs) (appc x A h' cvs).
+Proof. induction x as [|x IH]; intros A R h h' cvs H; [exact H | destruct cvs as [|c cvs]; cbn [appc]; apply IH; apply H]. Qed.
+Lemma appnT_eqN : forall ks m T h h' vs s, eqN ks m T h h' -> appnT ks m T h vs s = appnT ks m T h' vs s.
+Proof.
+  induction ks as [|[| |ri] ks IH]; intros m T h h' vs s H; cbn [appnT].
+  - destruct m; cbn in *; [apply H | exact H].
+  - destruct vs as [|[x|b|ri x] vs]; apply IH; apply H.
+  - destruct vs as [|[x|b|ri x] vs]; apply IH; apply H.
+  - destruct vs as [|v vs]; apply IH; apply H.
+Qed.
+Lemma callee_ok_eq : forall P id B x k m r w q b v (h h' : ftype (mksig9 x k m r w q b v false)),
+  eqC x _ (eqN k m _) h h' ->
+  callee_ok P id B (mksig9 x k m r w q b v false) h -> callee_ok P id B (mksig9 x k m r w q b v false) h'.
+Proof.
+  intros P id B x k m r w q b v h h' Eh H. unfold callee_ok in *. intros Hsl cvs vs M L K C. specialize (H Hsl cvs vs M L K C).
+  assert (E : forall s, callf (mksig9 x k m r w q b v false) h' cvs vs s = callf (mksig9 x k m r w q b v false) h cvs vs s).
+  { intros s. cbn [callf]. symmetry. apply appnT_eqN. apply (appc_eqC x _ (eqN k m _) h h' cvs Eh). }
+  unfold calln, callm, callmw in *. cbn [sw sr sq sn sk] in *. destruct w; [destruct H as [M' H]; exists M'|]; rewrite !E; exact H.
+Qed.
 Theorem compile_f_ok : forall P cs gidf j gs b,
   find P (gidf j) = Some (compile_f gidf j gs b) -> wf_f (map (@projT1 _ _) cs) gs b = true -> callees_ok P gidf cs ->
   Nat.leb (length cs) j = true -> (Z.of_nat j <? 1099511627776)%Z = true ->

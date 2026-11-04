@@ -42,6 +42,7 @@ DESIGN_CELLS = {
 }
 # gaps whose refusal message is shared with another category: classified by name
 BY_NAME = {
+  "A_pf_wf_rel": "a Program Fixpoint on a relation of the user's, {wf R x}: no measure to put a budget above",
   **{c: "the function's own call under a choice in an operand, in a body that writes or a boolean's or a record's: its value joined after the choice" for c in (
      "Y_fill_branch2_bool",
      "Y_fill_branch2_record",

@@ -1,0 +1,56 @@
+(* the same program as wfix.body, in Rocq's own spelling: recursion with a measure as Program Fixpoint; the answer is the same *)
+From Stdlib Require Import ZArith Lia Bool Program.Wf.
+Definition mu (x : int) : nat := Z.to_nat (Sint63.to_Z x).
+Lemma mu_pred : forall x, (0 <? x) = true -> (mu (x - 1) < mu x)%nat.
+Proof.
+  intros x H. unfold mu. apply Sint63.ltb_spec in H. change (Sint63.to_Z 0) with 0%Z in H. change (0 < Sint63.to_Z x)%Z in H.
+  pose proof (Sint63.to_Z_bounded x) as [Bl Bh].
+  assert (Mi : Sint63.to_Z Sint63.max_int = 4611686018427387903%Z) by reflexivity. rewrite Mi in Bh.
+  assert (W2 : (Uint63.wB / 2 = 4611686018427387904)%Z) by reflexivity.
+  assert (E : Sint63.to_Z (x - 1) = (Sint63.to_Z x - 1)%Z).
+  { rewrite Sint63.sub_spec. change (Sint63.to_Z 1) with 1%Z. apply Sint63.cmod_small. rewrite W2. lia. }
+  rewrite E. lia.
+Qed.
+Lemma to_Z_phi : forall x, (0 <= Sint63.to_Z x)%Z -> Uint63.to_Z x = Sint63.to_Z x.
+Proof.
+  intros x H. rewrite <- Sint63.to_Z_mod_Uint63to_Z. apply Z.mod_small. pose proof (Sint63.to_Z_bounded x) as [_ B].
+  assert (M : Sint63.to_Z Sint63.max_int = 4611686018427387903%Z) by reflexivity. rewrite M in B. change Uint63.wB with 9223372036854775808%Z. lia.
+Qed.
+Lemma phi_to_Z : forall x, (Uint63.to_Z x < 4611686018427387904)%Z -> Sint63.to_Z x = Uint63.to_Z x.
+Proof.
+  intros x H. rewrite Sint63.to_Z_cmodwB. apply Sint63.cmod_small. change (Uint63.wB / 2)%Z with 4611686018427387904%Z. pose proof (Uint63.to_Z_bounded x). lia.
+Qed.
+Lemma mu_mod : forall a b, (0 <? b) = true -> (mu (a mod b) < mu b)%nat.
+Proof.
+  intros a b H. unfold mu, zmod. cbv zeta. rewrite H. apply Sint63.ltb_spec in H. change (Sint63.to_Z 0) with 0%Z in H. change (0 < Sint63.to_Z b)%Z in H.
+  pose proof (Sint63.to_Z_bounded b) as [_ Bb]. assert (M : Sint63.to_Z Sint63.max_int = 4611686018427387903%Z) by reflexivity. rewrite M in Bb.
+  destruct (0 <=? a)%sint63 eqn:Ea; cbn [andb].
+  - apply Sint63.leb_spec in Ea. change (Sint63.to_Z 0) with 0%Z in Ea. change (0 <= Sint63.to_Z a)%Z in Ea.
+    assert (Lt : (Uint63.to_Z (PrimInt63.mod a b) < Sint63.to_Z b)%Z).
+    { rewrite Uint63.mod_spec, (to_Z_phi a), (to_Z_phi b) by lia. apply Z.mod_pos_bound. lia. }
+    rewrite phi_to_Z by lia. pose proof (Uint63.to_Z_bounded (PrimInt63.mod a b)). lia.
+  - pose proof (Sint63Axioms.mod_spec a b) as R. pose proof (Z.rem_bound_abs (Sint63.to_Z a) (Sint63.to_Z b) ltac:(lia)) as A. rewrite <- R in A.
+    destruct (PrimInt63.eqb (PrimInt63.mods a b) 0) eqn:Er; [| destruct (PrimInt63.ltsb (PrimInt63.mods a b) 0) eqn:Es]; cbn iota.
+    + lia.
+    + apply Sint63.ltb_spec in Es. change (Sint63.to_Z 0) with 0%Z in Es. change (Sint63.to_Z (PrimInt63.mods a b) < 0)%Z in Es.
+      assert (E : Sint63.to_Z (PrimInt63.mods a b + b) = (Sint63.to_Z (PrimInt63.mods a b) + Sint63.to_Z b)%Z).
+      { rewrite Sint63.add_spec. apply Sint63.cmod_small. change (Uint63.wB / 2)%Z with 4611686018427387904%Z. lia. }
+      rewrite E. lia.
+    + assert (Nb : PrimInt63.ltsb b 0 = false).
+      { apply Bool.not_true_is_false. intros Hb. apply Sint63.ltb_spec in Hb. change (Sint63.to_Z 0) with 0%Z in Hb. change (Sint63.to_Z b < 0)%Z in Hb. lia. }
+      rewrite Nb. lia.
+Qed.
+Program Fixpoint gcd (a b : int) {measure (mu b)} : int :=
+  match 0 <? b with true => gcd b (a mod b) | false => a end.
+Next Obligation. apply mu_mod. auto. Qed.
+Program Fixpoint tri (x : int) {measure (mu x)} : int :=
+  match 0 <? x with true => x + tri (x - 1) | false => 0 end.
+Next Obligation. apply mu_pred. auto. Qed.
+Fixpoint total (n : nat) (i acc : int) (s : mem) : int :=
+  match n with
+  | O => acc
+  | S m => total m (i + 1) (acc + gcd (rd 0 (2 * i) s) (rd 0 (2 * i + 1) s) + tri i) s
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  total (kq_nat (kq_arg 0)) 0 0 (kq_input 0).

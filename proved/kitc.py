@@ -452,14 +452,15 @@ def reflect(name, entry, prog, no_proof):
     f0 = os.path.join(GEN, f"{name}_r.v")
     open(f0, "w").write(HDR + "From KQC Require KQR KQRReify.\n" + prog
         + f"\nDefinition {name}_res := ltac:(run_template_program (tmQuoteRec {entry})\n"
-        + "  (fun q => let r := eval vm_compute in (let r0 := KQRReify.reify_prog2 q in (r0, KQRReify.reify_why q, KQRReify.rec_info2 q r0, KQRReify.entry_perm q, KQRReify.fix1_info q)) in exact r)).\n"
-        + f"Definition {name}_src := option_map fst (fst (fst (fst (fst {name}_res)))).\n"
-        + f"Definition {name}_mts := match fst (fst (fst (fst {name}_res))) with Some x => snd x | None => [] end.\n"
+        + "  (fun q => let r := eval vm_compute in (let r0 := KQRReify.reify_prog2 q in (r0, KQRReify.reify_why q, KQRReify.rec_info2 q r0, KQRReify.entry_perm q, KQRReify.fix1_info q, KQRReify.pf_info q)) in exact r)).\n"
+        + f"Definition {name}_src := option_map fst (fst (fst (fst (fst (fst {name}_res))))).\n"
+        + f"Definition {name}_mts := match fst (fst (fst (fst (fst {name}_res)))) with Some x => snd x | None => [] end.\n"
         + f'Redirect "{name}_rinfo" Eval vm_compute in (option_map KQRReify.info_of {name}_src).\n'
-        + f'Redirect "{name}_rwhy" Eval vm_compute in (snd (fst (fst (fst {name}_res)))).\n'
-        + f'Redirect "{name}_rrec" Eval vm_compute in (snd (fst (fst {name}_res))).\n'
-        + f'Redirect "{name}_rperm" Eval vm_compute in (snd (fst {name}_res)).\n'
-        + f'Redirect "{name}_rfix" Eval vm_compute in (snd {name}_res).\n'
+        + f'Redirect "{name}_rwhy" Eval vm_compute in (snd (fst (fst (fst (fst {name}_res))))).\n'
+        + f'Redirect "{name}_rrec" Eval vm_compute in (snd (fst (fst (fst {name}_res)))).\n'
+        + f'Redirect "{name}_rperm" Eval vm_compute in (snd (fst (fst {name}_res))).\n'
+        + f'Redirect "{name}_rfix" Eval vm_compute in (snd (fst {name}_res)).\n'
+        + f'Redirect "{name}_rpf" Eval vm_compute in (snd {name}_res).\n'
         + f'Redirect "{name}_rmts" Eval vm_compute in (KQRReify.mts_info {name}_mts).\n'
         + (f'Redirect "{name}_rsh" Eval vm_compute in (match {name}_src with Some l => map (fun f => (snd (fst (fst f)), '
            f'KQR.sh_ok {shared} (snd f))) l | None => [] end).\n' if shared else "")
@@ -517,7 +518,10 @@ def reflect(name, entry, prog, no_proof):
                      else f"(KQR.mksig {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)})" if not f[7]
                      else f"(KQR.mksig7 {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} (Some {f[7]}%Z))")
     bnd = lambda f, j: f"(KQR.cbz {j})" if not f[7] else f"{f[7]}%Z"
-    t = HDR + "From KQC Require KQR KQRReify.\nImport ListNotations.\n" + f"From KQG Require Import {name}_r.\n"
+    # (step 56) a Program Fixpoint: its name, the constant holding its Fix_sub, its parameters, its made functions' stem, a measure on a machine number
+    fp = os.path.join(GEN, f"{name}_rpf.out")
+    pfs = {m[0]: m for m in re.findall(r'\("([^"]*)"(?:%bs)?,\s*"([^"]*)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([^"]*)"(?:%bs)?,\s*(true|false)\)', open(fp).read())} if os.path.exists(fp) else {}
+    t = HDR + "From KQC Require KQR KQRReify" + (" KQRWf" if pfs else "") + ".\nImport ListNotations.\n" + f"From KQG Require Import {name}_r.\n"
     # the program's record types (step 12): each its type, its constructor and match, a value of it; the laws by a fixed script
     rp = os.path.join(GEN, f"{name}_rrec.out")
     # each entry: its type, its constructor (a data type's: its constructors), its number of fields, a data type's widths
@@ -660,11 +664,39 @@ def reflect(name, entry, prog, no_proof):
     # the functions that are one fixpoint, not a member of a block (step 51)
     xp = os.path.join(GEN, f"{name}_rfix.out")
     fix1 = set(re.findall(r'"([^"]*)"', open(xp).read())) if os.path.exists(xp) else set()
+    # (step 56) a Program Fixpoint equal to its budget function's call at every argument (KQRWf.fix_sub_budget), before anything is made opaque
+    for j, f in enumerate(fs):
+        if f[0] in pfs:
+            _, func, np, stem, machine = pfs[f[0]]
+            np = int(np); W, G, D = stem + "__w", stem + "__wg", stem + "__wd"
+            ps = [f"kqp{q}" for q in range(np)]
+            def proj(r, q):
+                u = r
+                for _ in range(q): u = f"(projT2 {u})"
+                return u if np == 1 else (f"(projT1 {u})" if q < np - 1 else u)
+            unp = lambda r: " ".join(proj(r, q) for q in range(np))
+            pack = ps[-1]
+            for q in reversed(ps[:-1]): pack = f"(existT _ {q} {pack})"
+            xs = [f"kqx{q}" for q in range(np)]
+            pat = xs[-1]
+            for q in reversed(xs[:-1]): pat = f"[{q} {pat}]"
+            t += (f"Lemma {name}_req{j} : forall {' '.join(ps)}, {W} {' '.join(ps)} = {f[0]} {' '.join(ps)}.\n"
+                  f"Proof.\n  intros {' '.join(ps)}. symmetry. unfold {W}, {f[0]}{', ' + func if func else ''}.\n"
+                  f"  refine (@KQRWf.fix_sub_budget _ _ _ _ _ (fun k r => {G} k {unp('r')}) (fun r => {D} {unp('r')}) _ _ {pack} _).\n"
+                  f"  - intros [|k'] {pat} h H; cbv beta zeta; cbn [projT1 projT2 {G} {D}] in *; KQRWf.wf_step.\n"
+                  f"  - cbv beta zeta; cbn [projT1 projT2]; " + ("exact (KQRWf.to_nat_le_budget _)" if machine == "true" else "exact (le_n _)") + ".\nQed.\n")
     t += "Strategy opaque [" + " ".join([f[0] for f in fs if not iswr(f[0])] + tmpls) + "].\n"   # a copy is unfolded first
     if not no_proof:
         for j, f in enumerate(fs):
             cs = "[" + "; ".join(f"existT (@KQR.ftype {inst}) {sig(g)} {g[0]}" for g in fs[:j]) + "]"
             oks = "".join(f"(conj {name}_rok{i} " for i in range(j)) + "Logic.I" + ")" * j
+            if f[0] in pfs:
+                # (step 56) the theorem of its budget function's call, then equal to it at every argument
+                W = pfs[f[0]][3] + "__w"
+                t += f"Lemma {name}_rok{j} : @KQR.callee_ok {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {sig(f)} {f[0]}.\n"
+                t += (f"Proof. exact_no_check (@KQR.callee_ok_eq {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)} {wsl(f)} {W} {f[0]} {name}_req{j}"
+                      f" (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j}) eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl)). Qed.\n")
+                continue
             t += f"Lemma {name}_rok{j} : @KQR.callee_ok {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {sig(f)} {f[0]}.\n"
             # (step 45) a member of a mutual block is one call of its block: not a fix over its counter
             # (step 46) a copy is a fix over its counter too
