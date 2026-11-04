@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **963 of 972, 6 gaps, 2 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **977 of 986, 6 gaps, 2 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4451,6 +4451,32 @@ the memory at run time.  Step 47 does this for the operands of one expression; a
 - *Cells*: those forms; a read in a test after the write; a read-only call after the write; two reads; that place.
 *Expected*: those, but the place left.
 
+**Step 50 done (2026-11-04): a read of the memory before a write, standing after the write.**  Built as designed, in the reifier alone
+(`KQR.v` and `kitc.py` unchanged):
+- *The reader*: `hoist_read`: a body with a first binding that writes (a let of a memory or of a pair, a pair taken apart, a call of a
+  function that writes) which is not read: the first read of the newest memory in what follows (`rd`, `rd32`, `rd8`, or a call of a
+  function that reads and does not write it, giving a number or a boolean), its arguments naming nothing bound after that binding, is
+  bound before it, and the body read again; in `reify_x`, `reify_m`, `reify_pv`, as a fallback.  The same term up to zeta.  The lift of a
+  pair (step 48 continued) does it too for a memory it would have to take (`A_par_pm_let_old`).
+- *A correction*: the reifier's own test pinned `let s2 := upd 0 0 1 s in upd 0 1 (rd 0 0 s) s2` as refused, for linearity.  It only reads
+  the old memory, so there is no second version at run time: that refusal was an over-rejection.  It is now read (`dup2`); the pin
+  is the program that writes the old memory after reading the new (`dup`).
+- *Cells*: 14 more (986): the read after a call that writes, a let of a memory, a pair taken apart, a pair bound, in a test; in the body
+  of a memory, a pair, a boolean; a call that reads; two reads; a pair a let holds read through `fst` and `snd` in the body of a pair
+  and of a memory (both refused before); and the place left: a read whose index comes from what the write gives
+  (`A_par_old_read_index`, a gap of the fixed side of §0.5's third refusal).  Run alone: 13 proved, and with them `A_par_pm_let_old`;
+  that place refused.  Run as a check beside them, 543 cells (booleans, pairs, writes, records, templates, functions given, mutual
+  blocks, memories, and every eleventh cell of the table): 535 proved, the other 8 the known gaps and the two cells refused by design.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the
+  trees without their generated files, F62; step 48 continued's files / these): `HWP_kernel` 2.43 / 2.45 s, `HWP_own` 1.84 / 1.86,
+  `HWP_irqnow` 1.54 / 1.53 — the same.
+- The C: 63 of 63 byte-identical.  The construct table (on `ddfc85b`): **977 of 986 through the verified compiler**, 2 by design,
+  6 gaps, 1 not Rocq (was 963 of 972: the thirteen new cells read and `A_par_pm_let_old`, the one place left added as a gap).  The
+  gate on `ddfc85b`, the walk switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (11 / 11 / 11
+  / 13 / 13 s); **71 programs through the verified compiler, 0 refused**; the trusted base unchanged.  Next: programs across
+  modules and files (§12.L), then a second memory parameter of a recursive function, the function's own call in a let of a pair
+  used bare, a mutual part of two types.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4626,11 +4652,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `ffd7312` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `ddfc85b` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 50's design (a read of the memory before a write, standing after it: bound before it, in the reader) |
+| (this commit) | §12.V: step 50 (a read of the memory before a write, standing after it: the construct table 977 of 986, 2 by design), the C, the gate |
+| `ddfc85b` | `proved/KQRReify.v` + `matrix/gen.py` + `classify.py` step 50: a read of the memory before a write, standing after it, bound before it (`hoist_read`); the pin of linearity moved; 14 cells |
+| `e4188df` | §12.V: step 50's design (a read of the memory before a write, standing after it: bound before it, in the reader) |
 | `381e3fa` | §11 F64, §12.V: step 48 continued (a call given the pair a let holds, by lifting the let: the construct table 963 of 972, 2 by design), the C, the gate |
 | `ffd7312` | `proved/KQRReify.v` + `matrix/gen.py` step 48 continued: a let of a pair used bare lifted to a function of the pair (`lift_pm`, `lift_all`); `KQR.v` unchanged; 10 cells |
 | `c632d1e` | §12.V: step 48 continued, a call given the pair a let holds, the design (the let lifted to a function of the pair, no new construct of `S`) |
