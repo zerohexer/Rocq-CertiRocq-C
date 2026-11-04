@@ -4713,6 +4713,15 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   corpus 36 / 36; the five kernels (12 / 12 / 13 / 14 / 14 s); **74 programs through the verified compiler, 0 refused**; the
   trusted base unchanged.  Next: `Function`, then `Equations`.
 
+**Step 57, `Function` (§12.P, §4.5) — the design (2026-11-04).**  `Function f (ps) {measure m x} : T := body` elaborates to `f_F`, a functional with no proof in it, `f_tcc`, stating for each recursive call that the measure falls, `f_terminate`, a `sig` (opaque under `Qed`), and `f := fun ps => let (a, _) := f_terminate ps in a`, with `f_ind`.  Measured on the real elaborated terms:
+- *`G`*: `f_F`'s body with its parameter `f` as the budget function: no proof to drop, so simpler than step 56's `pf_plain`.  The same `G`, the same reading, the same `callee_ok_eq`.
+- *The equation*: `f_ind` gives every branch, its tests known and each call's result by induction; `f_tcc` gives each call's measure below.  One tactic in `KQRWf.v`, `fn_branch`, over those branches; no `Fix_sub`, no axiom, and it holds under `Defined` and `Qed` alike, since neither opens `f_terminate`.
+- *The measure*: `Function` keeps it nowhere but in `f_tcc`, and there a pattern has replaced the parameter: `m < S m` under `n = S m`, `mu (fst (x, y))` under `p = (x, y)`.  Read from the `<`, each pattern's equation turned back.  What is then not in the parameters: refused.
+- *The quote*: `tmQuoteRec` quotes the bodies of opaque constants, which the kernel can never open: 32 s on a `Function`'s reifier file, 43 s on a `Program Fixpoint`'s, every proof's closure of `lia`.  `tmQuoteRecTransp .. false` leaves them out.  A program with a `Function` is then asked for what a `Qed` hides of it (`f_F`, `f_tcc`, by name, and what they name) in a second step, from `kitc.py`'s tactic: a bind in the monad on the whole quote costs a tenth of a second on a kernel's program (measured), so only such a program pays.  No program's C changes: what is left out could not have been read.
+- *The spellings around it*: `{struct n}` and a mutual `Function` are plain fixpoints, a `Function` with no recursion a plain definition: cells, nothing to do.
+- *Left, each with its cells*: a function as a parameter (`A_fn_fun_param`, `A_pf_fun_param`: `pq` is read as a function with a function parameter; it wants a copy per function given, equal to the user's at every argument); a sum of machine numbers as the measure (`A_fn_sum`, `A_pf_sum_machine`: up to 2^63, beyond a counter's 2^62); `{wf R x}` (`A_fn_wf_rel`, as `A_pf_wf_rel`: no measure); `Equations` (`A_eq_num`, `A_eq_mem`, next).
+- *The acceptance*: `proved/examples/function_fix`, `wfix.body` with `gcd` and `tri` as `Function`, proofs closed by `Qed`, the answer worked out apart: 76.  26 cells of `Function`, 2 more of `Program Fixpoint`, 2 of `Equations`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4892,7 +4901,8 @@ Pushed to the public repository up to `cbae7b2` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 56 (`Program Fixpoint`, the owner's "level 2": the construct table 1957 of 2020, 11 by design, 51 gaps), the C, the gate; §4.5, §12.P, D12, READ THIS FIRST |
+| (this commit) | §12.V: step 57's design -- Function: its plain functional, one tactic over its induction principle, the measure read back through its patterns; a lighter quote; a function as a parameter and a sum of machine numbers left, with their cells |
+| `c69897e` | §12.V: step 56 (`Program Fixpoint`, the owner's "level 2": the construct table 1957 of 2020, 11 by design, 51 gaps), the C, the gate; §4.5, §12.P, D12, READ THIS FIRST |
 | `cbae7b2` | `proved/KQR.v` + `KQRWf.v` + `KQRReify.v` + `kitc.py` + `make.sh` + `matrix/gen.py` + `classify.py` + `examples/program_fix` step 56: Rocq's own measure recursion: `Program Fixpoint` read as a budget function, equal to it at every argument by one lemma with no axiom; `callee_ok_eq`; 25 cells |
 | `8b302ad` | §12.V: step 56's design (Rocq's own measure recursion, `Program Fixpoint`: one lemma from `Fix_sub` to a budget function, no extensionality; no cap in the theorem) |
 | `56d7dd3` | §12.V: step 55 (the function's own call in every place: the construct table 1933 of 1995, 11 by design, 50 gaps, 36 of them one class), the C, the gate |
