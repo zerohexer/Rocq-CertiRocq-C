@@ -62,14 +62,14 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **1933 of 1995, 50 gaps, 11 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **1957 of 2020, 51 gaps, 11 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
 3. **The translator's own side conditions** (§3.7): all closed or with their cells: the counter at any position and the memory at any position since
    step 41, functions of any module and file since step 51, a second memory parameter since step 53.
 4. **Rocq's own measure recursion** (`Program Fixpoint {measure ..}`, `Function`, `Equations`): what the owner asked for as
-   loops "level 2".  `wfix` is the step built so far; the owner's form is owed (§4.5, §12.P).
+   loops "level 2".  `Program Fixpoint` is read since step 56; `Function` and `Equations` are owed (§4.5, §12.P).
 5. **The operations of freestanding C not yet in KQL** (§2.1): `uint64_t` division and remainder, signed 64-bit arithmetic, the
    high half of a product, 8/16/32-bit arithmetic with C's wrap-around.
 6. Compiling from an ordinary `.v` file with one command (`Kq Compile`), entry arguments read from the signature, C printed at
@@ -1142,9 +1142,14 @@ Theorem gcd_correct : forall x y, gcd_P x y -> Z_ (wfix2 gcd_meas gcd_F x y) = Z
 **Limits, stated.**  The measure and the budget are below `2^60` (the cap of `kq_nat`); `gcd`'s domain therefore says the
 second number is below `2^60`.  The user supplies the measure and the domain.  A loop with no measure (Collatz) still needs a
 budget (Rocq itself asks for a measure or fuel there, so that is Rocq's rule, not ours).  **Rocq's own `Program Fixpoint
-{measure ..}` (the `Acc`/`Fix_F` form) is not read yet — it is owed (§4.5).**
+{measure ..}` (the `Acc`/`Fix_F` form) is read since step 56 (§4.5).**
 
-### 4.5 Reading Rocq's own measure recursion — owed (the owner's "level 2")
+### 4.5 Reading Rocq's own measure recursion (the owner's "level 2")
+
+**State (2026-11-04).**  `Program Fixpoint {measure ..}` is read (§12.V, step 56), by a simpler way than the plan below: no
+`fix_sub_eq`, no measure computed at run time, no cap in the domain of the theorem: one lemma, `fix_sub_budget`, from `Fix_sub` to a
+fuel function, closed under `Print Assumptions`.  `{wf R x}` on a relation of the user's has a cell and is a gap.  `Function` and
+`Equations` are owed.
 
 **What the owner asked for.**  Asked for loops "natively, without workaround", two levels were offered (2026-10-29): level 1, a
 loop whose budget is a measure; level 2, Rocq's own `Program Fixpoint {measure ..}` / `Function`.  The owner answered "make it
@@ -1154,7 +1159,7 @@ as if the owner's form were optional (F36).  Under D22 the spelling is the point
 `Function` or `Equations`, and that text must compile.  `wfix` stays (it is ordinary Rocq, it is proved, and it is the engine
 below); reading Rocq's own forms is open work (§12.P), not an option.
 
-**How (a plan, not yet tested).**  `Program Fixpoint f (x : A) {measure (m x)} : B := body` is elaborated to `Fix_sub` over the
+**How (the plan as it was written before step 56, kept for its reasoning; §12.V step 56 has what was built).**  `Program Fixpoint f (x : A) {measure (m x)} : B := body` is elaborated to `Fix_sub` over the
 relation `MR lt m`; each recursive call receives a `sig` value `exist _ y proof` (the argument and a proof that the measure
 falls).  The route:
 - **translator:** recognize the elaborated `Fix_sub` / `Fix_F_sub` head in the quoted term (MetaRocq reads it as it reads
@@ -1528,7 +1533,7 @@ Each with its reason.  Re-opening one needs a new fact, not a new preference.
 | D9 | **Rocq, not Lean, for this project** | MetaRocq gives Rocq's evaluation and erasure as formal objects, which the cost-shape work and this route's statements rely on; Lean's kernel formalization (Lean4Lean) is in progress and covers the kernel, not evaluation and erasure (§5.7) |
 | D10 | **Proof speed: per-function files, a content cache, parallel runs and general tactic changes; segmenting long functions and reflection only when proof time becomes the bottleneck** | the cheap general wins are taken; the rest is a project with risk for a few functions (2026-10-26) |
 | D11 | **The cache is not release evidence: `KQ_MONO=1` is** | a missing key ingredient could skip a check; the single-file run cannot |
-| D12 | **Loops: the measure is the exact budget, never a guessed fuel; the equation and the induction principle are proved.**  `wfix` is the library form (built); Rocq's own `Program Fixpoint` / `Function` / `Equations` are read as well (owed: §4.5, §12.P) | a guessed fuel gives silent wrong answers; the owner asked for Rocq's own form ("level 2", 2026-10-29), and D22 makes its spelling the point.  Corrected 2026-10-30: this row first called reading `Program Fixpoint` optional, which recorded the substitute as the decision (F36) |
+| D12 | **Loops: the measure is the exact budget, never a guessed fuel; the equation and the induction principle are proved.**  `wfix` is the library form (built); Rocq's own `Program Fixpoint` is read (step 56), `Function` / `Equations` as well (owed: §4.5, §12.P) | a guessed fuel gives silent wrong answers; the owner asked for Rocq's own form ("level 2", 2026-10-29), and D22 makes its spelling the point.  Corrected 2026-10-30: this row first called reading `Program Fixpoint` optional, which recorded the substitute as the decision (F36) |
 | D13 | **The only acceptance rules are §0.5.  The flat style of `WRITING-FAST-ROCQ.md` is performance advice, like keeping a C loop variable in a register** | a rule nobody can discover is an over-rejection; costs are the user's to choose |
 | D14 | **One memory per function, linear** | lets a pure function be compiled to in-place updates and is what C programs do anyway |
 | D15 | **Records and pairs are never built; they are their fields** | no allocation, and the C is what a programmer writes for a struct passed by value |
@@ -1739,9 +1744,8 @@ and 300 steps: on the fork, `make.sh` `core-ok`, each `denote = f` 0.000–0.002
 s to elaborate and 0.002–0.006 s at `Qed`; `Print Assumptions` the same base.  **§12.R is done: the fork is the route's kernel**
 (images.sh's third image; `KQRChain.v` needs it — on the stock kernel it is exponential).
 
-**P. Rocq's own measure recursion (§4.5) — the owner's "level 2".**  Read `Program Fixpoint {measure ..}` (then `Function`,
-`Equations`) as `wfix` is read: the same KQL, the walk unfolding with `Corelib.Program.Wf.fix_sub_eq` and inducting on the
-measure, no new assumption.  Accepted when the `wfix` examples written as `Program Fixpoint` compile, prove and give the same
+**P. Rocq's own measure recursion (§4.5) — the owner's "level 2".**  `Program Fixpoint {measure ..}` is read (§12.V, step 56, by `fix_sub_budget`, the
+plan through `fix_sub_eq` dropped), no new assumption; `{wf R x}` a gap with its cell.  Left: `Function`, `Equations`.  Accepted when the `wfix` examples written as `Program Fixpoint` compile, prove and give the same
 answers, and the construct table has cells for each spelling.
 
 **V, how `S` grows — the design (2026-10-30), so each step extends the proof instead of redoing it.**
@@ -4692,6 +4696,23 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The theorem about `f`*: `callee_ok` of `fun x => G K x` by the compiler's theorem, then `callee_ok_eq`, proved once: a function's theorem holds of any function equal to it at every argument.  Nothing added to the trust.
 - *Cells*: the sorts of function and of result, one parameter and several, a memory, a test, nested tests, a match on a counter, a non-tail call, a caller; a proof of a real obligation in an example, `proved/examples/program_fix`, answers worked out apart.  Left for what follows: `Function`, `Equations`, `{wf R x}`, `dec`.
 
+**Step 56 done (2026-11-04): Rocq's own measure recursion, `Program Fixpoint`, the owner's "level 2".**  Built as designed, simpler than §4.5's plan:
+- *`proved/KQRWf.v`, written once*: `fix_sub_budget`: a budget function equal to the `Fix_sub` at every budget above the measure, by induction on the `Acc` proof; `Print Assumptions`: closed.  `fix_sub_eq`'s extensionality premise is not used, so neither functional
+  extensionality nor proof irrelevance is.  `convoy_b`, `convoy_n`, `convoy_p`, `convoy_d`: a test as `Program` writes it, its branches taking the test's proof (`destruct` is ill-typed there).  `wf_step`: the premise, per function, in no measurable time.  `to_nat_le_budget`: a measure on a machine number is below the budget whatever the number.
+- *`KQR.v`*: `eqN`, `eqC`, `callee_ok_eq`: a function's theorem holds of any function equal to it at every argument.  Added, nothing else touched.
+- *The reader*: `pf_all`, as a pass before everything: each `Program Fixpoint`'s functional taken apart, its proofs dropped (`pf_plain`), a fixpoint on a budget made of it, the function one call of that with a constant budget: `kq_nat 2^60 + kq_nat 2^60 + kq_nat 2^60 + kq_nat (2^60 - 1)`, or, a
+  measure that is a counter expression, that expression.  Read as any function: no case for it past that.  No cost to a program without a `Fix_sub`.
+- *`kitc.py`*: the equation for each such function before anything is made opaque, then `callee_ok_eq` over the compiler's theorem.  A caller's text names the user's function and is compiled as it stands.
+- *The acceptance (§4.5)*: `proved/examples/program_fix` is `wfix.body` with `gcd` and `tri` as `Program Fixpoint`, every obligation proved, `gcd`'s through the kit's `mod`: proved, built, and the same answer, 76.  `Print Assumptions` of its top theorem: the kit's and Rocq's integers' only; no obligation, no extensionality.
+- *Left*: `{wf R x}` on a relation of the user's (`A_pf_wf_rel`, a gap: no measure to put a budget above); `Function` and `Equations`, next.  A binary search over machine numbers cannot be written so: `lo + hi` can wrap, and its obligation is then false; `wfix_mem` stays in `wfix`'s spelling, whose budget is its own.
+- *Cells*: 25 more (2020), `A_pf_*`: each sort of function and result, several parameters, a memory, nested tests, `if dec`, a let, a record, a pair, a caller, a function given, a module, two functions, a measure on a counter and on a sum.  Run alone: 24 proved, `A_pf_wf_rel` refused.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the trees without their generated files, F62; step 55's files / these): `HWP_kernel` 2.57 / 2.57 s, `HWP_own` 1.95 / 1.95, `HWP_irqnow` 1.64 / 1.65 — the same.
+- The C: the 65 programs before byte-identical, the new example through the verified compiler.  The construct table (on
+  `cbae7b2`): **1957 of 2020 through the verified compiler**, 11 by design, 51 gaps, 1 not Rocq (was 1933 of 1995: the 24 `A_pf_*`
+  cells read, `A_pf_wf_rel` added as a gap).  The gate on `cbae7b2`, the walk switched off: `make.sh` `core-ok`; examples 30 / 30;
+  corpus 36 / 36; the five kernels (12 / 12 / 13 / 14 / 14 s); **74 programs through the verified compiler, 0 refused**; the
+  trusted base unchanged.  Next: `Function`, then `Equations`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4867,11 +4888,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `417fcc1` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `cbae7b2` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 56's design (Rocq's own measure recursion, `Program Fixpoint`: one lemma from `Fix_sub` to a budget function, no extensionality; no cap in the theorem) |
+| (this commit) | §12.V: step 56 (`Program Fixpoint`, the owner's "level 2": the construct table 1957 of 2020, 11 by design, 51 gaps), the C, the gate; §4.5, §12.P, D12, READ THIS FIRST |
+| `cbae7b2` | `proved/KQR.v` + `KQRWf.v` + `KQRReify.v` + `kitc.py` + `make.sh` + `matrix/gen.py` + `classify.py` + `examples/program_fix` step 56: Rocq's own measure recursion: `Program Fixpoint` read as a budget function, equal to it at every argument by one lemma with no axiom; `callee_ok_eq`; 25 cells |
+| `8b302ad` | §12.V: step 56's design (Rocq's own measure recursion, `Program Fixpoint`: one lemma from `Fix_sub` to a budget function, no extensionality; no cap in the theorem) |
 | `56d7dd3` | §12.V: step 55 (the function's own call in every place: the construct table 1933 of 1995, 11 by design, 50 gaps, 36 of them one class), the C, the gate |
 | `417fcc1` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` + `classify.py` step 55: the function's own call in every place: a family of the table, 225 programs; `BbLetRec`; bound where it stands in a body with no memory; `float_op` |
 | `f7ae8f7` | §12.V: step 55's design (the function's own call in every place: a family of the table; `BbLetRec`; bound where it stands in a body with no memory; the own call under a choice in an operand left, 36 cells) |
