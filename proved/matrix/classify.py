@@ -13,6 +13,10 @@ import re, sys, collections
 # differs only in the cause.  The cells once listed here (option, sum, a list cell, a function in a pair, a function returned,
 # a dead memory let) build and take apart their value in place, so they are gaps.
 DESIGN_CELLS = {
+  # a function built anew at each round of a measure recursion: a copy per function given, with no last copy (Rocq-C-solution.md
+  # §0.5, the first reason); control: A_fn_fun_param, A_pf_fun_param, the function handed on as it is (step 59)
+  "A_fn_f_grows",
+  "A_pf_f_grows",
   # a counter grown by the recursion's predecessor, from the data (kq_nat, up to 2^60): it reaches about n^2/2, beyond a machine
   # number -- an unbounded number (Rocq-C-solution.md §0.5, second reason); control: A_par_nat_rec_add_pred_lit, the same
   # function from a written budget, translated and proved (step 39)
@@ -44,8 +48,6 @@ DESIGN_CELLS = {
 BY_NAME = {
   "A_pf_wf_rel": "a Program Fixpoint or a Function on a relation of the user's, {wf R x}: no measure to put a budget above",
   "A_fn_wf_rel": "a Program Fixpoint or a Function on a relation of the user's, {wf R x}: no measure to put a budget above",
-  "A_pf_fun_param": "a Program Fixpoint or a Function with a function as a parameter: a copy per function given, equal to the user's function at every argument",
-  "A_fn_fun_param": "a Program Fixpoint or a Function with a function as a parameter: a copy per function given, equal to the user's function at every argument",
   "A_eq_num": "Equations: its functional and its own form of a test",
   "A_eq_mem": "Equations: its functional and its own form of a test",
   **{c: "the function's own call under a choice in an operand, in a body that writes or a boolean's or a record's: its value joined after the choice" for c in (

@@ -1,0 +1,26 @@
+(* a function as a parameter of a measure recursion, in both of Rocq's spellings: a copy per function given, a function naming the caller's variable, one reading the memory, one giving a boolean.
+   Block 0 holds 1 3 5 7 ..: 3 * (4 + 3 + 2 + 1) = 30; rd 0 3 + rd 0 2 + rd 0 1 = 7 + 5 + 3 = 15; of 5, 4, 3, 2, 1 below 3 are 2.  30 + 15 + 2 = 47. *)
+From Stdlib Require Import ZArith Lia Bool Recdef Program.Wf Program.Utils.
+Definition mu (x : int) : nat := Z.to_nat (Sint63.to_Z x).
+Lemma mu_pred : forall x, (0 <? x) = true -> (mu (x - 1) < mu x)%nat.
+Proof.
+  intros x H. unfold mu. apply Sint63.ltb_spec in H. change (Sint63.to_Z 0) with 0%Z in H. change (0 < Sint63.to_Z x)%Z in H.
+  pose proof (Sint63.to_Z_bounded x) as [Bl Bh].
+  assert (Mi : Sint63.to_Z Sint63.max_int = 4611686018427387903%Z) by reflexivity. rewrite Mi in Bh.
+  assert (W2 : (Uint63.wB / 2 = 4611686018427387904)%Z) by reflexivity.
+  assert (E : Sint63.to_Z (x - 1) = (Sint63.to_Z x - 1)%Z).
+  { rewrite Sint63.sub_spec. change (Sint63.to_Z 1) with 1%Z. apply Sint63.cmod_small. rewrite W2. lia. }
+  rewrite E. lia.
+Qed.
+Function sum_f (f : int -> int) (x : int) {measure mu x} : int :=
+  if 0 <? x then f x + sum_f f (x - 1) else 0.
+Proof. intros; apply mu_pred; auto. Qed.
+Program Fixpoint count_f (f : int -> bool) (x : int) {measure (mu x)} : int :=
+  if dec (0 <? x) then (if dec (f x) then 1 + count_f f (x - 1) else count_f f (x - 1)) else 0.
+Next Obligation. apply mu_pred; auto. Qed.
+Next Obligation. apply mu_pred; auto. Qed.
+Definition solve (b : int) (s : mem) : int :=
+  sum_f (fun i => i * b) 4 + sum_f (fun i => rd 0 i s) 3 + count_f (fun i => i <? 3) 5.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve 3 (kq_input 0).

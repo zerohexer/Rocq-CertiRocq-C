@@ -670,8 +670,13 @@ def reflect(name, entry, prog, no_proof):
     xp = os.path.join(GEN, f"{name}_rfix.out")
     fix1 = set(re.findall(r'"([^"]*)"', open(xp).read())) if os.path.exists(xp) else set()
     # (step 56) a Program Fixpoint equal to its budget function's call at every argument (KQRWf.fix_sub_budget), before anything is made opaque
-    for j, f in enumerate(fs):
-        if f[0] in pfs:
+    # (step 59) a copy, for the functions it is given, of a function that is one call of a budget function
+    pfc = {m: h for m, h in mts if h in pfs and iscp(m)}
+    reqs = {}
+    for j, pf0 in enumerate(pfs):
+        if True:
+            f = (pf0,)
+            reqs[pf0] = f"{name}_rq{j}"
             _, func, np, stem, tag, isfn, ph = pfs[f[0]]
             np, ph = int(np), int(ph)
             W, D, WM, WN = stem + "__w", stem + "__wd", stem + "__wm", stem + "__wn"
@@ -697,7 +702,7 @@ def reflect(name, entry, prog, no_proof):
             for q in range(1, ph): Kp.append(f"({K} + S {Kp[-1]})")
             if isfn == "true":
                 # (step 57) a Function: by its own induction principle, each call's measure below by its tcc lemma
-                t += (f"Lemma {name}_req{j} : forall {ss}, {W} {ss} = {f[0]} {ss}.\n"
+                t += (f"Lemma {reqs[pf0]} : forall {ss}, {W} {ss} = {f[0]} {ss}.\n"
                       f"Proof.\n  assert (kqA0 : forall {ss} kqk (kqh : {WM} {ss} <= kqk), {Gs[0]} kqk {ss} = {f[0]} {ss}).\n"
                       f"  {{ intros {ss}. functional induction ({f[0]} {ss}); intros kqk kqh;\n"
                       f"    destruct kqk as [|kqk]; cbn [{Gs[0]}]; unfold {WM} in *; KQRWf.fn_branch {f[0]}_tcc. }}\n")
@@ -710,14 +715,14 @@ def reflect(name, entry, prog, no_proof):
                       (f"{bound}.\nQed.\n" if ph == 1 else f"change ({WN} {ss} <= {K} + S {Kp[ph - 2]}); unfold {WN}; KQRWf.bound_le.\nQed.\n"))
                 continue
             if ph == 1:
-                t += (f"Lemma {name}_req{j} : forall {ss}, {W} {ss} = {f[0]} {ss}.\n"
+                t += (f"Lemma {reqs[pf0]} : forall {ss}, {W} {ss} = {f[0]} {ss}.\n"
                       f"Proof.\n  intros {ss}. symmetry. unfold {W}, {f[0]}{', ' + func if func else ''}.\n"
                       f"  refine (@KQRWf.fix_sub_budget _ _ _ _ _ (fun k r => {G} k {unp('r')}) (fun r => {D} {unp('r')}) _ _ {pack} _).\n"
                       f"  - intros [|k'] {pat} h H; cbv beta zeta; cbn [projT1 projT2 {G} {D}] in *; KQRWf.wf_step.\n"
                       f"  - cbv beta zeta; cbn [projT1 projT2]; {bound}.\nQed.\n")
                 continue
             # (step 58) a budget in phases: each phase's lemma from the one before
-            t += (f"Lemma {name}_req{j} : forall {ss}, {W} {ss} = {f[0]} {ss}.\n"
+            t += (f"Lemma {reqs[pf0]} : forall {ss}, {W} {ss} = {f[0]} {ss}.\n"
                   f"Proof.\n  intros {ss}. symmetry. unfold {W}, {f[0]}{', ' + func if func else ''}.\n"
                   f"  match goal with |- Corelib.Program.Wf.Fix_sub ?A (Corelib.Program.Wf.MR lt ?m) _ (fun _ => ?B) ?Fs _ = _ =>\n")
             for q in range(ph):
@@ -735,11 +740,17 @@ def reflect(name, entry, prog, no_proof):
         for j, f in enumerate(fs):
             cs = "[" + "; ".join(f"existT (@KQR.ftype {inst}) {sig(g)} {g[0]}" for g in fs[:j]) + "]"
             oks = "".join(f"(conj {name}_rok{i} " for i in range(j)) + "Logic.I" + ")" * j
-            if f[0] in pfs:
+            if f[0] in pfs or f[0] in pfc:
                 # (step 56) the theorem of its budget function's call, then equal to it at every argument
-                W = pfs[f[0]][3] + "__w"
+                # (step 59) a copy: the same, its equation the function's at the functions given
+                if f[0] in pfs:
+                    W, rq0 = pfs[f[0]][3] + "__w", reqs[f[0]]
+                else:
+                    W, rq0 = f[0] + "__w", f"{name}_rqc{j}"
+                    t += (f"Lemma {rq0} : KQR.eqC {f[1]} _ (KQR.eqN {kl(f)} {f[3]} _) {W} {f[0]}.\n"
+                          f"Proof. cbn [KQR.eqC KQR.eqN]; intros; unfold {W}, {f[0]}; apply {reqs[pfc[f[0]]]}. Qed.\n")
                 t += f"Lemma {name}_rok{j} : @KQR.callee_ok {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {sig(f)} {f[0]}.\n"
-                t += (f"Proof. exact_no_check (@KQR.callee_ok_eq {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)} {wsl(f)} {W} {f[0]} {name}_req{j}"
+                t += (f"Proof. exact_no_check (@KQR.callee_ok_eq {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)} {wsl(f)} {W} {f[0]} {rq0}"
                       f" (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j}) eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl)). Qed.\n")
                 continue
             t += f"Lemma {name}_rok{j} : @KQR.callee_ok {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {sig(f)} {f[0]}.\n"

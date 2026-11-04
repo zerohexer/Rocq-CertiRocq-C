@@ -3294,7 +3294,9 @@ Definition tmpl_tys (Σ : global_env) (kn : kername) : option (list term) :=
   | Some (ConstantDecl cb) =>
       match cst_body cb with
       | Some (tFix [d] 0) => let tys := fst (lams (dbody d)) in if existsb is_prod tys then Some tys else None
-      | _ => None
+      (* (step 59) the function one call of a budget function, a function among its parameters *)
+      | Some b => if is_w b then (let tys := fst (lams b) in if existsb is_prod tys then Some tys else None) else None
+      | None => None
       end
   | _ => None
   end.
@@ -3674,6 +3676,31 @@ Definition read_add (Σ : global_env) (hb : kername -> option term) (tc : kernam
       else None
   end.
 
+(** (step 59) a copy of the function one call of a budget function: its text there, the leaf of [copy_meaning_h] the wrapper applied, written out *)
+Fixpoint wrap_beta (b : term) (args : list term) : term :=
+  match b, args with
+  | tLambda _ _ c, a :: r => wrap_beta (subst10 a c) r
+  | _, [] => b
+  | _, _ => tApp b args
+  end.
+Fixpoint wrap_read (t : term) : term :=
+  match t with
+  | tLambda na ty c => tLambda na ty (wrap_read c)
+  | tApp (tLambda _ _ _ as f) args => wrap_beta f args
+  | _ => t
+  end.
+Fixpoint wrap_head (t : term) : option kername :=
+  match t with
+  | tLambda _ _ c => wrap_head c
+  | tApp (tConst k _) _ => Some k
+  | _ => None
+  end.
+Definition add_decl0 (Σ : global_env) (kn : kername) (ty b : term) : global_env :=
+  {| universes := universes Σ;
+     declarations := (kn, ConstantDecl {| cst_type := ty; cst_body := Some b; cst_universes := Monomorphic_ctx; cst_relevance := Relevant |})
+                     :: declarations Σ;
+     retroknowledge := retroknowledge Σ |}.
+Definition anon_b0 := {| binder_name := nAnon; binder_relevance := Relevant |}.
 (** the copy for a call site, made (with the copies its functions need) if it is not yet, before the functions that call it *)
 Fixpoint ensure (fuel : nat) (Σ : global_env) (mp : modpath) (hb : kername -> option term) (rt : list rentry) (th tms : list kername)
   (bt : kername -> option Z) (chk : bool) (site : kername * list term * list cent)
@@ -3717,19 +3744,37 @@ Fixpoint ensure (fuel : nat) (Σ : global_env) (mp : modpath) (hb : kername -> o
                                 | Some (tFix [d] 0) =>
                                     let body := snd (lams (dbody d)) in
                                     sites 1000 Σ tms hb th (map Some (rev (tkinds rt tys fargs 0) ++ [CSelf] ++ rev capk)) body nested
-                                | _ => nested
+                                (* (step 59) the budget function's copy for the same functions *)
+                                | Some b => match wrap_head b with Some g => (g, fargs, capk) :: nested | None => nested end
+                                | None => nested
                                 end
                             | _ => nested
                             end in
               match fold_left (fun st s => ensure fuel Σ mp hb rt th tms bt chk s st) (rev nested) st with
               | Some (es, tbl) =>
                   let ckn := (MPfile ["kqcopy"%bs], snd T ^ "__c" ^ string_of_nat (length tbl)) in
+                  match body_of Σ T with
+                  | Some ((tLambda _ _ _) as wb) =>
+                      (* (step 59) read as the wrapper written out at the functions given; its theorem from the wrapper's, equal to the user's at every argument (kitc.py) *)
+                      let pn := nonfn_perm tys (tmpl_rarg Σ T) in
+                      let trm := wrap_read (copy_meaning_h (fun _ => wb) tys fargs capk pn) in
+                      let wkn := (MPfile ["kqcopy"%bs], snd ckn ^ "__w"%bs) in
+                      let ty := fold_right (fun t b => tProd anon_b0 t b) (ret_ty (match lookup_env Σ T with Some (ConstantDecl cb) => cst_type cb | _ => tRel 0 end)) (fst (lams trm)) in
+                      match reify_fun (add_decl0 Σ ckn ty trm) hb (tc_of Σ mp tbl) rt (callees_of es) ckn bt chk with
+                      | Some (g, b) =>
+                          Some (es ++ [(ckn, g, b)],
+                                tbl ++ [(T, (fargs, capk), ckn, copy_meaning T tys fargs capk pn);
+                                        (wkn, ([], []), wkn, copy_meaning_h (fun _ => tConst (MPfile ["kqcopy"%bs], mangle T ^ "__w"%bs) []) tys fargs capk pn)])
+                      | None => None
+                      end
+                  | _ =>
                   match read_tmpl Σ hb (tc_of Σ mp tbl) rt (callees_of es) T fargs capk with
                   | Some (gs, b) => match option_map (with_sp (sp gs)) (if chk then wf_sig (fun g => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt) (rjs rt)) (map snd (callees_of es)) (with_sp false g) b) gs b (bt ckn) else Some gs) with
                                     | Some g => Some (es ++ [(ckn, g, b)], tbl ++ [(T, (fargs, capk), ckn, copy_meaning T tys fargs capk (nonfn_perm tys (tmpl_rarg Σ T)))])
                                     | None => None
                                     end
                   | None => None
+                  end
                   end
               | None => None
               end
