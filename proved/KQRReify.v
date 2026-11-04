@@ -904,19 +904,48 @@ Definition hoist_read (ctx : list cent) (t : term) : option term :=
                  | None => None
                  end) t
   else None.
-Definition bind_first (ot : option term) (ctx : list cent) (t : term) : option term :=
+Fixpoint lam_tys (t : term) : list term := match t with tLambda _ ty b => ty :: lam_tys b | _ => [] end.
+Definition bind_first (mk : bool) (ot : option term) (ctx : list cent) (t : term) : option term :=
   let res (u : term) : term := match u with tApp (tConst kn _) args => let '(kn1, args1) := tcall ctx kn args in tApp (tConst kn1 []) args1 | _ => u end in
   let bq (u : term) : option bool :=
     match u with
     | tApp (tRel fi) _ => if is_ent CSelf ctx fi then Some false else None
     | _ => match bcall_rec (res u) with Some _ => Some false | None => bcall_q (res u) end
     end in
+  (* (step 52, [mk]) the memory given to a read, or to a function taking a memory, when it is not a variable *)
+  let made (u : term) : option term :=
+    let lastm (args : list term) := match rev args with
+                                    | tRel _ :: _ | [] => None
+                                    | m :: _ => Some m
+                                    end in
+    match u with
+    | tApp (tConst kn _) args =>
+        if Kername.eqb kn kn_rd then lastm args
+        else if Kername.eqb kn kn_rd32 then lastm args
+        else if Kername.eqb kn kn_rd8 then lastm args
+        else if Kername.eqb kn kn_ksize then lastm args
+        else let '(kn1, args1) := tcall ctx kn args in
+             match find_callee kn1 callees 0 with
+             | Some (_, gs) => if sm gs then lastm args1 else None
+             | None =>
+                 (* a helper taking a memory: the memory given it, at its parameter's place *)
+                 match hb kn with
+                 | Some bd =>
+                     fold_left (fun acc p => match acc with
+                                             | Some _ => acc
+                                             | None => if is_ty kn_mem (fst p) then match snd p with tRel _ => None | m => Some m end else None
+                                             end) (combine (lam_tys bd) args) None
+                 | None => None
+                 end
+             end
+    | _ => None
+    end in
   let fix find (fu : nat) (u : term) {struct fu} : option term :=
     match fu with
     | O => None
     | S fu =>
-        match bq u with
-        | Some _ => Some u
+        match (if mk then match made u with Some m => Some true | None => None end else bq u) with
+        | Some _ => if mk then made u else Some u
         | None =>
             match u with
             | tApp _ args => fold_left (fun a x => match a with Some _ => a | None => find fu x end) args None
@@ -999,7 +1028,7 @@ Definition bind_first (ot : option term) (ctx : list cent) (t : term) : option t
       if (match ot with Some _ => negb own | None => false end) then None else
       let '(sk, hs) := skel 1000 c t [] in
       let k := length hs in
-      let tyv := match ot with Some ty => ty | None => match bcall_rec (res c) with Some ty => ty | None => match bq c with Some true => tInd ind_bool [] | _ => tConst kn_int [] end end end in
+      let tyv := if mk then tConst kn_mem [] else match ot with Some ty => ty | None => match bcall_rec (res c) with Some ty => ty | None => match bq c with Some true => tInd ind_bool [] | _ => tConst kn_int [] end end end in
       let anon := {| binder_name := nAnon; binder_relevance := Relevant |} in
       Some (fold_right (fun ih b => tLetIn anon (lift0 (fst ih) (snd ih)) (tConst kn_int []) b)
                        (tLetIn anon (lift0 k c) tyv (repl 1000 k (lift0 (S k) sk))) (combine (seq 0 k) hs))
@@ -1750,11 +1779,30 @@ with reify_pv (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option s
 (** a number made after memories: lets of memories, numbers and booleans, tests, and at the end a number from the newest
     memory.  A read or a call whose memory is made in place ([rd h i (f .. s)]) is read as [let s2 := f .. s in rd h i s2] --
     the same term up to [let]; its numbers are read with the older memories dead, so they may not name one *)
+(** whether a term calls the function being read *)
+Fixpoint has_self (fuel : nat) (ctx : list cent) (d : nat) (t : term) : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      match t with
+      | tApp (tRel i) args =>
+          if (if Nat.leb d i then is_ent CSelf ctx (i - d) else false) then true
+          else existsb (has_self fuel ctx d) args
+      | tApp f args => if has_self fuel ctx d f then true else existsb (has_self fuel ctx d) args
+      | tLetIn _ b _ body => if has_self fuel ctx d b then true else has_self fuel ctx (S d) body
+      | tLambda _ _ b => has_self fuel ctx (S d) b
+      | tCase _ _ c brs =>
+          if has_self fuel ctx d c then true
+          else existsb (fun br => has_self fuel ctx (d + length (bcontext br)) (bbody br)) brs
+      | _ => false
+      end
+  end.
 Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sx :=
   match fuel with
   | O => None
   | S fuel =>
-  let fallback := match reify fuel ctx t with Some e => Some (XRet e) | None =>
+  let fallback := if has_self 1000 ctx 0 t then None else
+                  match reify fuel ctx t with Some e => Some (XRet e) | None =>
                   match reify_b fuel ctx t with Some b => Some (XRetB b) | None => option_map (XRetR 0) (reify_r fuel ctx t) end end in
   let reify_args (c : list cent) (l : list term) : option sexps :=
     to_args (map (fun a => match reify fuel c a with Some e => Some (inl e) | None =>
@@ -1836,8 +1884,11 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
         | _, _ => None
         end
       else if is_ty kn_int ty then
+        (* the function's own call: bound; inside a number: bound first, by the fallback (step 52) *)
+        if has_self 1000 ctx 0 b then match b with tApp (tRel _) _ => bindc false b body | _ => None end else
         match reify fuel ctx b, reify_x fuel (CNum :: ctx) body with Some e, Some x => Some (XLet e x) | _, _ => bindc false b body end
       else if is_bool ty then
+        if has_self 1000 ctx 0 b then match b with tApp (tRel _) _ => bindc true b body | _ => None end else
         match reify_b fuel ctx b, reify_x fuel (CBool :: ctx) body with Some e, Some x => Some (XLetB e x) | _, _ => bindc true b body end
       else if is_nat ty then
         match reify_c fuel ctx b, reify_x fuel (CCnt :: ctx) body with Some c, Some x => Some (XLetC c x) | _, _ => None end
@@ -1939,6 +1990,7 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
   | tApp (tLambda _ _ _ as f) args => reify_x fuel ctx (wout f args)
   | tApp (tLetIn _ _ _ _ as f) args => reify_x fuel ctx (wout f args)
   | tCase ci p c0 [b0; b1] =>
+      if has_self 1000 ctx 0 c0 then None else
       let c := if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_bool) then bnorm fuel c0 else c0 in
       match lets_first ci p c [b0; b1] with Some t' => reify_x fuel ctx t' | None =>
       if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_bool) then
@@ -2043,7 +2095,7 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
   end) with
   | Some x => Some x
   | None =>
-      let tryb (ot : option term) := match bind_first ot ctx t with Some t' => reify_x fuel ctx t' | None => None end in
+      let tryb (ot : option term) := match bind_first false ot ctx t with Some t' => reify_x fuel ctx t' | None => None end in
       match tryb None with
       | Some x => Some x
       | None => match tryb (Some (tInd ind_bool [])) with
@@ -2051,7 +2103,12 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
                 | None =>
                     match tryb (Some (tVar "kq_rec"%bs)) with
                     | Some x => Some x
-                    | None => match hoist_read ctx t with Some t' => reify_x fuel ctx t' | None => None end
+                    | None =>
+                        match (match hoist_read ctx t with Some t' => reify_x fuel ctx t' | None => None end) with
+                        | Some x => Some x
+                        (* (step 52) a memory made in place and read inside an expression: bound by a let *)
+                        | None => match bind_first true None ctx t with Some t' => reify_x fuel ctx t' | None => None end
+                        end
                     end
                 end
       end

@@ -21,6 +21,10 @@ DESIGN_CELLS = {
   # over n cells, both given the memory before both -- keeping the old one takes a copy or a log as long as the data
   # (Rocq-C-solution.md §0.5, third reason); control: A_par_write_two_seq, the same two calls with the memory handed on (step 49)
   "A_par_write_two_data",
+  # the same, a memory made in place and read inside an expression: the two reads each from its own version, both from s; a read of
+  # one version written into the other (§0.5, third reason); control: A_par_made_seq, the memory handed on (step 52)
+  "A_par_made_two",
+  "A_par_made_old_write",
   # a constant with no body in Rocq's kernel: an Axiom, a Parameter, a function behind a module's ":".  Rocq cannot run it and nothing
   # says what it computes, so no theorem can say the C does (Rocq-C-solution.md §0.5, fourth reason); control: A_mod_ascribe, the
   # same function behind "<:", which keeps its body, and A_par_int, a Definition in the Parameter's place (step 51)
