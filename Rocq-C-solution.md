@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **2000 of 2068, 56 gaps, 11 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **2026 of 2094, 54 gaps, 13 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4765,6 +4765,18 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Cells*: 26: for both spellings, two functions given, one named, one reading the memory, one giving a boolean, the function not the first parameter, two functions as parameters, a memory given back, a writing number function, a record, inside a function given to a template, a helper handing it on, a measure on a counter, and the two pins.
 - *The acceptance*: `proved/examples/fun_fix`, both spellings, a function naming the caller's variable, one reading the memory, one giving a boolean; the answer worked out apart, 47.
 
+**Step 59 done (2026-11-04): a function as a parameter of a measure recursion.**  Built as designed:
+- *The reader*: `tmpl_tys` takes the function one call of a budget function; `ensure` makes the budget function's copy, then reads `pq__cK` as the wrapper written out (`wrap_read`), with its `__w` text.  `KQR.v` and `KQRWf.v` unchanged.
+- *`kitc.py`*: each function's equation by its name (`reqs`), since a template is not in the program's list; a copy's: that equation at the functions given (`pfc`), then `callee_ok_eq`.
+- *The acceptance*: `proved/examples/fun_fix`: proved, built, 47.
+- *Cells*: 26 more (2094): 24 proved, the two pins refused, by design (13 now); `A_fn_fun_param`, `A_pf_fun_param`, gaps before, read.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the trees without their generated files, F62; step 58's files / these): `HWP_kernel` 2.57 / 2.60 s, `HWP_own` 1.94 / 1.95, `HWP_irqnow` 1.63 / 1.63 — the same.
+- The C: the 68 programs before byte-identical, the new example through the verified compiler.  The construct table (on
+  `2ba5d30`): **2026 of 2094 through the verified compiler**, 13 by design, 54 gaps, 1 not Rocq (was 2000 of 2068: 24 of the 26
+  new cells read, the 2 pins by design, `A_fn_fun_param` and `A_pf_fun_param` read).  The gate on `2ba5d30`, the walk switched
+  off: `make.sh` `core-ok`; examples 33 / 33; corpus 36 / 36; the five kernels (12 / 12 / 12 / 14 / 13 s); **77 programs through
+  the verified compiler, 0 refused**; the trusted base unchanged.  Next: `Equations`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4940,11 +4952,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `6add419` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `2ba5d30` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 59's design -- a function as a parameter of a measure recursion: a copy per function given, read as the wrapper written out, its theorem the function's equation at the function given |
+| (this commit) | §12.V: step 59 (a function as a parameter of a measure recursion: the construct table 2026 of 2094, 13 by design, 54 gaps), the C, the gate |
+| `2ba5d30` | `proved/KQRReify.v` + `kitc.py` + `matrix/gen.py` + `classify.py` + `examples/fun_fix` step 59: a function as a parameter of a measure recursion: a copy per function given, read as the wrapper written out, its theorem the function's equation at the function given; 26 cells; `KQR.v` and `KQRWf.v` unchanged |
+| `140148d` | §12.V: step 59's design -- a function as a parameter of a measure recursion: a copy per function given, read as the wrapper written out, its theorem the function's equation at the function given |
 | `909e731` | §12.V: step 58 (any measure with a bound: the construct table 2000 of 2068, 11 by design, 56 gaps), the C, the gate; §4.5, D18 |
 | `6add419` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix/gen.py` + `classify.py` + `examples/program_fix_mem` step 58: any measure with a bound: the bound read from the measure, one tactic proves it; a budget in phases above a counter's range; `functional induction` for a `Function`; 18 cells; `KQR.v` unchanged |
 | `10f00e2` | §12.V: step 58's design -- any measure with a bound: the bound read from the measure and proved by one tactic; a budget in phases above a counter's range; the binary search as Program Fixpoint |
