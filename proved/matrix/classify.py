@@ -27,6 +27,7 @@ BY_NAME = {
   "A_par_write_two": "two versions of the memory both used, differing in cells fixed by the text (their old values saved and put back)",
   "A_par_write_in_mem": "two versions of the memory both used, differing in cells fixed by the text (their old values saved and put back)",
   "P_mem_both": "two versions of the memory both used, differing in cells fixed by the text (their old values saved and put back)",
+  "A_par_old_read_index": "two versions of the memory both used, differing in cells fixed by the text (their old values saved and put back)",
   "A_par_option": "a value built and taken apart in place (option, sum, a list cell, a function in a pair)",
   "A_par_sum": "a value built and taken apart in place (option, sum, a list cell, a function in a pair)",
   "A_par_list": "a value built and taken apart in place (option, sum, a list cell, a function in a pair)",

@@ -773,6 +773,99 @@ Definition bcall_rec (u : term) : option term :=
       end
   | _ => None
   end.
+(** (step 50) a read of the memory [ism] names, or a call of a function that reads it ([isc]: its result's type), in what follows the first
+    binding of [t], its arguments naming nothing bound after that binding: bound before it.  In Rocq it reads the memory before
+    whatever that binding writes, so it may go first; up to zeta the same term *)
+Definition hoist_core (ism : nat -> bool) (isc : kername -> option term) (t : term) : option term :=
+  let is_read (d : nat) (u : term) : option term :=
+    match u with
+    | tApp (tConst kn _) args =>
+        match rev args with
+        | tRel m :: _ =>
+            if Nat.leb d m then
+              if ism (m - d) then
+                if forallb (Nat.leb d) (fold_left (fun a x => fvs 1000 0 x a) args []) then
+                  if Kername.eqb kn kn_rd then Some (tConst kn_int [])
+                  else if Kername.eqb kn kn_rd32 then Some (tConst kn_int [])
+                  else if Kername.eqb kn kn_rd8 then Some (tConst kn_int [])
+                  else isc kn
+                else None
+              else None
+            else None
+        | _ => None
+        end
+    | _ => None
+    end in
+  let fix find (fu d : nat) (u : term) {struct fu} : option (term * term) :=
+    match fu with
+    | O => None
+    | S fu =>
+        match is_read d u with
+        | Some ty => Some (subst (repeat (tRel 0) d) 0 u, ty)
+        | None =>
+            match u with
+            | tApp _ args => fold_left (fun a x => match a with Some _ => a | None => find fu d x end) args None
+            | tLetIn _ b _ body => match find fu d b with Some r => Some r | None => find fu (S d) body end
+            | tCase _ _ c brs =>
+                match find fu d c with
+                | Some r => Some r
+                | None => fold_left (fun a br => match a with Some _ => a | None => find fu (d + length (bcontext br)) (bbody br) end) brs None
+                end
+            | _ => None
+            end
+        end
+    end in
+  let fix repl (fu d : nat) (c u : term) {struct fu} : term :=
+    match fu with
+    | O => u
+    | S fu =>
+        if teq 1000 u (lift0 (S d) c) then tRel d else
+        match u with
+        | tApp f args => tApp f (map (repl fu d c) args)
+        | tLetIn na b ty body => tLetIn na (repl fu d c b) ty (repl fu (S d) c body)
+        | tCase ci p c0 brs =>
+            tCase ci p (repl fu d c c0) (map (fun br => {| bcontext := bcontext br; bbody := repl fu (d + length (bcontext br)) c (bbody br) |}) brs)
+        | _ => u
+        end
+    end in
+  let anon := {| binder_name := nAnon; binder_relevance := Relevant |} in
+  let first := match t with
+               | tLetIn _ _ _ body => find 1000 1 body
+               | tCase _ _ _ [br] => find 1000 (length (bcontext br)) (bbody br)
+               | _ => None
+               end in
+  match first with
+  | Some (c, ty) => Some (tLetIn anon c ty (repl 1000 0 c (lift0 1 t)))
+  | None => None
+  end.
+(** whether the first binding of [t] writes the memory, as far as its form says *)
+Definition writes_first (ctx : list cent) (t : term) : bool :=
+  let wc (b : term) :=
+    match b with
+    | tApp (tConst kn _) args =>
+        let '(kn1, _) := tcall ctx kn args in
+        match find_callee kn1 callees 0 with Some (_, gs) => sw gs | None => false end
+    | _ => false
+    end in
+  match t with
+  | tLetIn _ b ty _ => if is_ty kn_mem ty then true else if is_pm ty then true else wc b
+  | tCase ci p c [br] => if is_pm_case ci p br then true else wc c
+  | _ => false
+  end.
+Definition hoist_read (ctx : list cent) (t : term) : option term :=
+  if writes_first ctx t then
+    hoist_core (is_ent CMem ctx)
+      (fun kn => match find_callee kn callees 0 with
+                 | Some (_, gs) =>
+                     if sr gs then None else if sw gs then None else
+                     match sq gs with
+                     | None => Some (tConst kn_int [])
+                     | Some KBool => Some (tInd ind_bool [])
+                     | _ => None
+                     end
+                 | None => None
+                 end) t
+  else None.
 Definition bind_first (ot : option term) (ctx : list cent) (t : term) : option term :=
   let res (u : term) : term := match u with tApp (tConst kn _) args => let '(kn1, args1) := tcall ctx kn args in tApp (tConst kn1 []) args1 | _ => u end in
   let bq (u : term) : option bool :=
@@ -1329,7 +1422,7 @@ Fixpoint reify_m (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
     to_args (map (fun a => match reify fuel ctx a with Some e => Some (inl e) | None =>
                             match reify_b fuel ctx a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel ctx a) end end) l) in
   let reify_cs (l : list term) : option scnts := option_map to_scnts (opt_all (map (reify_c fuel ctx) l)) in
-  match head_r t with Some t' => reify_m fuel ctx t' | None =>
+  match (match head_r t with Some t' => reify_m fuel ctx t' | None =>
   match tag_parts t with
   | Some (ri, ws, c, bs) =>
       match reify_r fuel ctx c, opt_all (map (reify_m fuel (repeat CNum (S (tag_w ws)) ++ ctx)) bs) with
@@ -1472,6 +1565,9 @@ Fixpoint reify_m (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
   | _ => None
   end
   end
+  end) with
+  | Some x => Some x
+  | None => match hoist_read ctx t with Some t' => reify_m fuel ctx t' | None => None end
   end
   end
 (* a number and a memory (step 26): built, given back by a function of the program or by the function itself, chosen by a
@@ -1484,7 +1580,7 @@ with reify_pv (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option s
     to_args (map (fun a => match reify fuel c a with Some e => Some (inl e) | None =>
                             match reify_b fuel c a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel c a) end end) l) in
   let reify_cs (c : list cent) (l : list term) : option scnts := option_map to_scnts (opt_all (map (reify_c fuel c) l)) in
-  match head_r t with Some t' => reify_pv fuel ctx t' | None =>
+  match (match head_r t with Some t' => reify_pv fuel ctx t' | None =>
   match tag_parts t with
   | Some (ri, ws, c, bs) =>
       match reify_r fuel ctx c, opt_all (map (reify_pv fuel (repeat CNum (S (tag_w ws)) ++ ctx)) bs) with
@@ -1601,6 +1697,9 @@ with reify_pv (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option s
   | _ => None
   end
   end
+  end) with
+  | Some x => Some x
+  | None => match hoist_read ctx t with Some t' => reify_pv fuel ctx t' | None => None end
   end
   end.
 
@@ -1904,7 +2003,11 @@ Fixpoint reify_x (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : optio
       | Some x => Some x
       | None => match tryb (Some (tInd ind_bool [])) with
                 | Some x => Some x
-                | None => tryb (Some (tVar "kq_rec"%bs))
+                | None =>
+                    match tryb (Some (tVar "kq_rec"%bs)) with
+                    | Some x => Some x
+                    | None => match hoist_read ctx t with Some t' => reify_x fuel ctx t' | None => None end
+                    end
                 end
       end
   end
@@ -3779,6 +3882,9 @@ Fixpoint lift_pm (fuel : nat) (mp : modpath) (base : string) (rq : option term) 
           match rq with
           | Some T =>
               if is_pm ty && pm_bare 100000 0 body' then
+                match hoist_core (fun j => match nth_error ctx j with Some (Some y) => is_ty kn_mem y | _ => false end) (fun _ => None) t' with
+                | Some t2 => lift_pm fuel mp base rq ctx acc2 t2
+                | None =>
                 let fv := fvs 1000 1 body' [] in
                 let tyof j := match nth_error ctx j with Some (Some y) => if lift_param y then Some y else None | _ => None end in
                 match opt_all (map tyof fv) with
@@ -3792,6 +3898,7 @@ Fixpoint lift_pm (fuel : nat) (mp : modpath) (base : string) (rq : option term) 
                     let nm := base ^ "__l"%bs ^ string_of_nat (length acc2) in
                     (tApp (tConst (mp, nm) []) (map tRel P ++ [b']), acc2 ++ [(nm, pis_of tys T, lams_of tys (subst sg 1 body'))])
                 | None => (t', acc2)
+                end
                 end
               else (t', acc2)
           | None => (t', acc2)
@@ -4849,11 +4956,15 @@ Proof.
 Time Qed.
 End RRret.
 
-(* linearity: a memory used after a newer one was made has no tree *)
-Definition dup (s : mem) : mem := let s2 := KQ.KQRun.upd 0 0 1 s in KQ.KQRun.upd 0 1 (KQ.KQRun.rd 0 0 s) s2.
+(* linearity: a memory written after a newer one was made and read has no tree (a read of it goes first, step 50) *)
+Definition dup (s : mem) : mem := let s2 := KQ.KQRun.upd 0 0 1 s in KQ.KQRun.upd 0 1 (KQ.KQRun.rd 0 0 s2) s.
 Definition dup_src := ltac:(run_template_program (tmQuoteRec dup)
   (fun q => let r := eval vm_compute in (reify_top q) in exact r)).
 Check (eq_refl : dup_src = None).
+Definition dup2 (s : mem) : mem := let s2 := KQ.KQRun.upd 0 0 1 s in KQ.KQRun.upd 0 1 (KQ.KQRun.rd 0 0 s) s2.
+Definition dup2_src := ltac:(run_template_program (tmQuoteRec dup2)
+  (fun q => let r := eval vm_compute in (reify_top q) in exact r)).
+Check (eq_refl : match dup2_src with Some _ => true | None => false end = true).
 
 (* why a program is not read: [loop_while]'s shape (a helper over loop_two, a closure, a test that is a boolean value) *)
 Definition lw_gcd (a b : int) : int := if PrimInt63.ltb 0 b then b else a.

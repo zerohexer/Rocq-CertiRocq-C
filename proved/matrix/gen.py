@@ -584,6 +584,37 @@ addA("par_pm_let_own", "", "kx n a s",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\nFixpoint kx (m : nat) (x : int) (t : mem) : int := match m with O => rd 0 0 t | S q => let p := g 2 x t in k 2 p + kx q (fst p) (snd p) end.\n")
 addA("par_pm_let_old", "", "kx n a s",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nFixpoint k (n : nat) (p : int * mem) : int := match n with O => fst p | S m => k m (fst p + rd 0 0 (snd p), snd p) end.\nDefinition kx (n : nat) (x : int) (t : mem) : int := let p := g n x t in k n p + rd 0 0 t.\n")
+# a read of the memory before a write, standing after the write (step 50): after a call that writes, a let of a memory, a pair
+# taken apart and bound, in a memory's, a pair's, a boolean's body, in a test, a call that reads, two reads; the place left: its
+# index from what the write gives.  And a pair a let holds read through fst and snd in the body of a pair, of a memory
+addA("par_old_read_call", "", "let v := wr n s in v * 2 + rd 1 0 s",
+     "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\n")
+addA("par_old_read_mem", "", "let t := upd 0 a b s in rd 0 b t + rd 1 0 s",
+     "")
+addA("par_old_read_match", "", "let '(x, t) := g n a s in x + rd 1 0 s + rd 0 0 t",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\n")
+addA("par_old_read_pair", "", "let p := g n a s in fst p + rd 1 0 s",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\n")
+addA("par_old_read_in_mem", "", "rd 0 0 (let t := upd 0 a b s in upd 1 (rd 1 0 s) 0 t)",
+     "")
+addA("par_old_read_mem_rec", "", "rd 1 a (kmf n a s)",
+     "Fixpoint kmf (n : nat) (x : int) (t : mem) : mem := match n with O => t | S m => kmf m (x + 1) (let u := upd 0 x x t in upd 1 (rd 1 0 t) x u) end.\n")
+addA("par_old_read_pv", "", "let '(v, w) := kv n a s in v + rd 0 0 w",
+     "Fixpoint kv (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => let u := upd 0 x x t in (rd 1 0 t + x, u) end.\n")
+addA("par_old_read_bool", "", "if (let t := upd 0 a b s in rd 0 b t <? rd 1 0 s) then a else b",
+     "")
+addA("par_old_read_test", "", "let p := g n a s in if fst p <? rd 1 a s then rd 0 0 (snd p) else 0",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\n")
+addA("par_old_read_fn", "", "let v := wr n s in v + sm n s",
+     "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\nFixpoint sm (n : nat) (t : mem) : int := match n with O => 0 | S m => rd 1 0 t + sm m t end.\n")
+addA("par_old_read_two", "", "let t := upd 0 a b s in rd 1 0 s + rd 1 1 s + rd 0 0 t",
+     "")
+addA("par_old_read_index", "", "let v := wr n s in rd 1 v s",
+     "Fixpoint wr (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wr m (upd 0 0 (rd 0 0 t + 1) t) end.\n")
+addA("par_pm_let_fst_pv", "", "let '(x, t) := kz n a s in x + rd 0 0 t",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : int * mem := let p := g n x t in (fst p + 1, snd p).\n")
+addA("par_pm_let_fst_mem", "", "rd 0 0 (kz n a s)",
+     "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : mem := let p := g n x t in upd 0 (fst p) 1 (snd p).\n")
 # a function giving back a boolean whose body writes the memory (step 48 continued): through a call that writes, its recursion
 # given a memory it writes
 addA("par_bool_write_call", "", "if kbr n a s then a else b",
