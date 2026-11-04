@@ -4757,6 +4757,14 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   examples 32 / 32; corpus 36 / 36; the five kernels (12 / 12 / 12 / 13 / 13 s); **76 programs through the verified compiler, 0
   refused**; the trusted base unchanged.  Next: a function as a parameter, then `Equations`.
 
+**Step 59, a function as a parameter of a measure recursion (§5.1, §12.P) — the design (2026-11-04).**  `A_fn_fun_param`, `A_pf_fun_param`: `pq (fun i => i + b) a` with `pq (f : int -> int) (x : int)`.  Both spellings make `pq` one call of a budget function `pq__wg k f x`, a fixpoint with a function among its parameters, which is a template (§5.1).  But a caller's text names `pq`, the user's, which no conversion opens, so `pq`'s copy cannot be `pq__wg`'s:
+- *The copy*: `pq__cK := fun c x => pq (fun i => i + c) x`, the user's function at the function given, the form every copy has, so a caller's text converts with it in one step, as any template's.
+- *Its reading*: the wrapper written out at the function given, `fun c x => pq__wg K (fun i => i + c) x`, read as any function, its call a call of `pq__wg`'s own copy, made first (`ensure`).
+- *Its theorem*: by `callee_ok_eq` as `pq`'s own in step 56, from the theorem of that reading: `pq__w F x = pq F x` is `pq`'s equation at the function given, proved once for every `f`.  So the lemma is by the function's name, not by its place in the program's list, which a template is not in.
+- *A function built anew at each round* (`pq (fun i => f i + 1) (x - 1)`): by design, §0.5's first refusal, as for a `Fixpoint`: its copies would have no last one.  `A_fn_f_grows`, `A_pf_f_grows`; the control is `A_fn_fun_param`.
+- *Cells*: 26: for both spellings, two functions given, one named, one reading the memory, one giving a boolean, the function not the first parameter, two functions as parameters, a memory given back, a writing number function, a record, inside a function given to a template, a helper handing it on, a measure on a counter, and the two pins.
+- *The acceptance*: `proved/examples/fun_fix`, both spellings, a function naming the caller's variable, one reading the memory, one giving a boolean; the answer worked out apart, 47.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4936,7 +4944,8 @@ Pushed to the public repository up to `6add419` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 58 (any measure with a bound: the construct table 2000 of 2068, 11 by design, 56 gaps), the C, the gate; §4.5, D18 |
+| (this commit) | §12.V: step 59's design -- a function as a parameter of a measure recursion: a copy per function given, read as the wrapper written out, its theorem the function's equation at the function given |
+| `909e731` | §12.V: step 58 (any measure with a bound: the construct table 2000 of 2068, 11 by design, 56 gaps), the C, the gate; §4.5, D18 |
 | `6add419` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix/gen.py` + `classify.py` + `examples/program_fix_mem` step 58: any measure with a bound: the bound read from the measure, one tactic proves it; a budget in phases above a counter's range; `functional induction` for a `Function`; 18 cells; `KQR.v` unchanged |
 | `10f00e2` | §12.V: step 58's design -- any measure with a bound: the bound read from the measure and proved by one tactic; a budget in phases above a counter's range; the binary search as Program Fixpoint |
 | `42d96e3` | §12.V: step 57 (`Function`: the construct table 1980 of 2050, 11 by design, 58 gaps), the C, the gate; §4.5, §12.P, D12, READ THIS FIRST |
