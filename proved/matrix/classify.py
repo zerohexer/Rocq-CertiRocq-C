@@ -46,10 +46,11 @@ DESIGN_CELLS = {
 }
 # gaps whose refusal message is shared with another category: classified by name
 BY_NAME = {
-  "A_pf_wf_rel": "a Program Fixpoint or a Function on a relation of the user's, {wf R x}: no measure to put a budget above",
-  "A_fn_wf_rel": "a Program Fixpoint or a Function on a relation of the user's, {wf R x}: no measure to put a budget above",
-  "A_eq_num": "Equations: its functional and its own form of a test",
-  "A_eq_mem": "Equations: its functional and its own form of a test",
+  "A_pf_wf_rel": "a Program Fixpoint, a Function or Equations on a relation of the user's, {wf R x}: no measure to put a budget above",
+  "A_fn_wf_rel": "a Program Fixpoint, a Function or Equations on a relation of the user's, {wf R x}: no measure to put a budget above",
+  "A_eq_wf_rel": "a Program Fixpoint, a Function or Equations on a relation of the user's, {wf R x}: no measure to put a budget above",
+  "A_eq_mutual": "a mutual block whose match on the counter gives a function, Equations' spelling of one",
+  "A_par_match_fun_mutual": "a mutual block whose match on the counter gives a function, Equations' spelling of one",
   **{c: "the function's own call under a choice in an operand, in a body that writes or a boolean's or a record's: its value joined after the choice" for c in (
      "Y_fill_branch2_bool",
      "Y_fill_branch2_record",

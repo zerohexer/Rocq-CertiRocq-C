@@ -43,6 +43,39 @@ Proof.
 Qed.
 End P.
 
+(** [Equations]' well-founded recursion (step 60): [FixWf] is [Fix] on the relation of the measure.  The same, on [Fix_F] *)
+Section E.
+Variables (A : Type) (B : Type) (R : A -> A -> Prop) (m : A -> nat).
+Hypothesis Hm : forall a b, R a b -> (m a < m b)%nat.
+Variable F : forall x : A, (forall y : A, R y x -> B) -> B.
+Variable G : nat -> A -> B.
+Variable d : A -> B.
+Hypothesis Hstep : forall k x h, (forall y r, h y r = (match k with O => d | S k' => G k' end) y) -> F x h = G k x.
+Lemma fix_wf_budget_F : forall x (r : Acc R x) k, (m x <= k)%nat -> Fix_F (fun _ => B) F r = G k x.
+Proof.
+  fix IH 2. intros x r k Hk. destruct r as [a]. cbn [Fix_F Acc_inv].
+  apply Hstep. intros y r. destruct k as [|k'].
+  - exfalso. pose proof (Hm _ _ r). lia.
+  - apply IH. pose proof (Hm _ _ r). lia.
+Qed.
+End E.
+Section EP.
+Variables (A : Type) (B : Type) (R : A -> A -> Prop) (m : A -> nat).
+Hypothesis Hm : forall a b, R a b -> (m a < m b)%nat.
+Variable F : forall x : A, (forall y : A, R y x -> B) -> B.
+Variables (Gp : A -> B) (Kp : nat).
+Hypothesis Hp : forall x (r : Acc R x), (m x <= Kp)%nat -> Fix_F (fun _ => B) F r = Gp x.
+Variable G : nat -> A -> B.
+Hypothesis Hstep : forall k x h, (forall y r, h y r = (match k with O => Gp | S k' => G k' end) y) -> F x h = G k x.
+Lemma fix_wf_phase_F : forall x (r : Acc R x) k, (m x <= k + S Kp)%nat -> Fix_F (fun _ => B) F r = G k x.
+Proof.
+  fix IH 2. intros x r k Hk. destruct r as [a]. cbn [Fix_F Acc_inv].
+  apply Hstep. intros y r. destruct k as [|k'].
+  - apply Hp. pose proof (Hm _ _ r). lia.
+  - apply IH. pose proof (Hm _ _ r). lia.
+Qed.
+End EP.
+
 (** a test as [Program] writes it: its branches take the proof of the test *)
 Lemma convoy_b : forall (c : bool) (R : Type) (t : true = c -> R) (f : false = c -> R) (p q : R),
   (forall H : true = c, t H = p) -> (forall H : false = c, f H = q) ->
@@ -181,3 +214,17 @@ Ltac fn_branch_ph T WM A0 :=
   repeat (rewrite A0 by (unfold WM, kq_budget in *; cbn beta in *; lia));
   try reflexivity.
 
+
+(** a step of [Equations]' functional: a test through [inspect] or [dec], its equation written into the budget function's own test *)
+Ltac eq_step pr :=
+  repeat (cbv beta iota zeta; pr;
+          first [ match goal with H : forall y r, ?h y r = _ |- context [?h ?y0 ?r0] => rewrite (H y0 r0); cbv beta iota zeta end
+                | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
+                | match goal with |- context [match ?i with exist _ _ _ => _ end] =>
+                    let b := fresh "kqb" in let e := fresh "kqe" in destruct i as [b e]; revert e; destruct b; intro e end
+                | match goal with |- context [match sumbool_of_bool ?c with left _ => _ | right _ => _ end] =>
+                    let e := fresh "kqe" in destruct (sumbool_of_bool c) as [e|e] end
+                | match goal with |- context [if ?c then _ else _] => destruct c end
+                | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
+                | match goal with |- context [match ?c with pair _ _ => _ end] => destruct c end
+                | reflexivity ]).

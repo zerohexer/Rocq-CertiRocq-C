@@ -525,8 +525,11 @@ def reflect(name, entry, prog, no_proof):
     bnd = lambda f, j: f"(KQR.cbz {j})" if not f[7] else f"{f[7]}%Z"
     # (step 56) a Program Fixpoint: its name, the constant holding its Fix_sub, its parameters, its made functions' stem, a measure on a machine number
     fp = os.path.join(GEN, f"{name}_rpf.out")
-    pfs = {m[0]: m for m in re.findall(r'\("([^"]*)"(?:%bs)?,\s*"([^"]*)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([^"]*)"(?:%bs)?,\s*"([^"]*)"(?:%bs)?,\s*(true|false),\s*(\d+)(?:%nat)?\)', open(fp).read())} if os.path.exists(fp) else {}
-    t = HDR + "From KQC Require KQR KQRReify" + (" KQRWf" if pfs else "") + ".\nImport ListNotations.\n" + ("From Stdlib Require Import FunInd.\n" if any(m[5] == "true" for m in pfs.values()) else "") + f"From KQG Require Import {name}_r.\n"
+    pfs = {m[0]: m for m in re.findall(r'\("([^"]*)"(?:%bs)?,\s*"([^"]*)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([^"]*)"(?:%bs)?,\s*"([^"]*)"(?:%bs)?,\s*"([^"]*)"(?:%bs)?,\s*(\d+)(?:%nat)?\)', open(fp).read())} if os.path.exists(fp) else {}
+    # (step 60) a fixpoint whose match on its counter gives a function: not a measure's, its theorem a copy's
+    cv = {k for k, m in pfs.items() if m[5] == "c"}
+    pfs = {k: m for k, m in pfs.items() if m[5] != "c"}
+    t = HDR + "From KQC Require KQR KQRReify" + (" KQRWf" if pfs else "") + ".\nImport ListNotations.\n" + ("From Stdlib Require Import FunInd.\n" if any(m[5] == "f" for m in pfs.values()) else "") + f"From KQG Require Import {name}_r.\n"
     # the program's record types (step 12): each its type, its constructor and match, a value of it; the laws by a fixed script
     rp = os.path.join(GEN, f"{name}_rrec.out")
     # each entry: its type, its constructor (a data type's: its constructors), its number of fields, a data type's widths
@@ -677,7 +680,7 @@ def reflect(name, entry, prog, no_proof):
         if True:
             f = (pf0,)
             reqs[pf0] = f"{name}_rq{j}"
-            _, func, np, stem, tag, isfn, ph = pfs[f[0]]
+            _, func, np, stem, tag, sp, ph = pfs[f[0]]
             np, ph = int(np), int(ph)
             W, D, WM, WN = stem + "__w", stem + "__wd", stem + "__wm", stem + "__wn"
             Gs = [stem + ("" if q == 0 else f"_{q}") + "__wg" for q in range(ph)]
@@ -700,7 +703,35 @@ def reflect(name, entry, prog, no_proof):
             # the budget a phase's lemma holds above: the budgets of those before, and one more each
             Kp = [K]
             for q in range(1, ph): Kp.append(f"({K} + S {Kp[-1]})")
-            if isfn == "true":
+            if sp == "e":
+                # (step 60) Equations: FixWf, its functional's clauses unfolded
+                def unpe(r):
+                    parts, u = [], r
+                    for q in range(np - 1):
+                        parts.append(f"(Equations.Init.pr1 {u})"); u = f"(Equations.Init.pr2 {u})"
+                    return " ".join(parts + [u])
+                cl = " ".join(func.split())
+                stp = lambda g: f"intros [|k'] {pat} h H; cbv beta zeta; cbn [{g} {D}] in *; cbv delta [{cl}] beta iota zeta; KQRWf.eq_step ltac:(cbn [Equations.Init.pr1 Equations.Init.pr2])"
+                t += (f"Transparent {f[0]} {cl}.\nLemma {reqs[pf0]} : forall {ss}, {W} {ss} = {f[0]} {ss}.\n"
+                      f"Proof.\n  intros {ss}. symmetry. unfold {W}, {f[0]}, Equations.Prop.Subterm.FixWf, Corelib.Init.Wf.Fix.\n")
+                if ph == 1:
+                    t += (f"  refine (@KQRWf.fix_wf_budget_F _ _ _ (fun r => {WM} {unpe('r')}) (fun _ _ H => H) _ (fun k r => {G} k {unpe('r')}) (fun r => {D} {unpe('r')}) _ _ _ _ _).\n"
+                          f"  - {stp(G)}.\n"
+                          f"  - cbv beta; cbn beta iota; {bound}.\nQed.\n")
+                else:
+                    t += "  match goal with |- @Corelib.Init.Wf.Fix_F ?A ?R (fun _ => ?B) ?F _ _ = _ =>\n"
+                    for q in range(ph):
+                        prev = f"(fun r => {D} {unpe('r')})" if q == 0 else f"(fun r => {Gs[q - 1]} {K} {unpe('r')})"
+                        t += (f"    assert (kqS{q} : forall (k : nat) (x : A) (h : forall y : A, R y x -> B), (forall y r, h y r = (match k with O => {prev} | S k' => (fun k r => {Gs[q]} k {unpe('r')}) k' end) y) -> F x h = (fun k r => {Gs[q]} k {unpe('r')}) k x)\n"
+                              f"      by ({stp(Gs[q])});\n")
+                        if q == 0:
+                            t += f"    pose proof (@KQRWf.fix_wf_budget_F A B R (fun r => {WM} {unpe('r')}) (fun _ _ H => H) F _ _ kqS0) as kqP0;\n"
+                        else:
+                            t += f"    pose proof (@KQRWf.fix_wf_phase_F A B R (fun r => {WM} {unpe('r')}) (fun _ _ H => H) F _ {Kp[q - 1]} (fun x r H => kqP{q - 1} x r {K} H) _ kqS{q}) as kqP{q};\n"
+                    t += (f"    refine (kqP{ph - 1} _ _ {K} _); cbv beta; cbn beta iota; change ({WN} {ss} <= {K} + S {Kp[ph - 2]}); unfold {WN}; KQRWf.bound_le\n"
+                          f"  end.\nQed.\n")
+                continue
+            if sp == "f":
                 # (step 57) a Function: by its own induction principle, each call's measure below by its tcc lemma
                 t += (f"Lemma {reqs[pf0]} : forall {ss}, {W} {ss} = {f[0]} {ss}.\n"
                       f"Proof.\n  assert (kqA0 : forall {ss} kqk (kqh : {WM} {ss} <= kqk), {Gs[0]} kqk {ss} = {f[0]} {ss}).\n"
@@ -757,7 +788,7 @@ def reflect(name, entry, prog, no_proof):
             # (step 45) a member of a mutual block is one call of its block: not a fix over its counter
             # (step 46) a copy is a fix over its counter too
             prec = isp(f) and (iscp(f[0]) or f[0] in fix1)
-            if iscp(f[0]) or isw(f[0]) or prec:
+            if iscp(f[0]) or isw(f[0]) or prec or f[0] in cv:
                 # a copy: not a fix over its counter, so its statement comes from its two equations, each by conversion
                 # (a copy that writes the memory and gives back a number has a memory: no memory argument)
                 # (step 41) a boolean, a number and a memory, a record given back: their own copies' theorems

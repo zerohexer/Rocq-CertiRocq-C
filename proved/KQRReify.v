@@ -35,6 +35,7 @@ Definition lib_file (d : dirpath) : bool :=
       if String.eqb r "Corelib" then true else if String.eqb r "Stdlib" then true
       else if String.eqb r "MetaRocq" then true else if String.eqb r "Ltac2" then true
       else if String.eqb r "KQC" then true
+      else if String.eqb r "Equations" then true
       else if String.eqb r "KQ" then match rest with x :: _ => negb (String.eqb x "lib") | [] => true end
       else false
   | [] => false
@@ -4813,11 +4814,11 @@ Definition pf_bound (Σ : global_env) (mp : modpath) (M : term) : option (string
     | None => None
     end.
 (** what is made of a measure recursion: the budget functions, a phase each, and their type; the function one call of the last; the default of a call at budget 0; the result's type; the measure as a function and written out; the bound's proof and the phases *)
-Record pfg := { pg_gs : list (kername * term); pg_gty : term; pg_w : term; pg_d : term; pg_t : term; pg_m : term; pg_n : term; pg_tag : string; pg_ph : nat }.
+Record pfg := { pg_gs : list (kername * term); pg_gty : term; pg_w : term; pg_d : term; pg_t : term; pg_m : term; pg_n : term; pg_tag : string; pg_ph : nat; pg_sp : string; pg_cs : string }.
 Definition pg_name (kn : kername) (i : nat) : kername :=
   (copy_mp, mangle kn ^ match i with O => ""%bs | S _ => "_"%bs ^ string_of_nat i end ^ "__wg"%bs).
 (** the budget function, the function one call of it, the default of a call at budget 0, the measure as a function: [plain] with [sg base] for its free variables *)
-Definition pf_gen (Σ : global_env) (kn : kername) (tys : list term) (T M plain : term) (sg : nat -> list term) : option pfg :=
+Definition pf_gen (Σ : global_env) (kn : kername) (tys : list term) (T M plain : term) (sg : nat -> list term) (sp cs : string) : option pfg :=
   match pf_case_nat with
   | tLambda _ _ (tCase ci pr _ [br0; br1]) =>
       let n := length tys in
@@ -4840,7 +4841,7 @@ Definition pf_gen (Σ : global_env) (kn : kername) (tys : list term) (T M plain 
           Some {| pg_gs := map mkg (seq 0 ph); pg_gty := gty;
                   pg_w := lams_of tys (tApp (tConst (pg_name kn (Nat.pred ph)) []) (bud :: rels));
                   pg_d := lams_of tys (pf_zero 100 Σ T (tRel 0)); pg_t := T; pg_m := lams_of tys M; pg_n := lams_of tys Mn;
-                  pg_tag := tag; pg_ph := ph |}
+                  pg_tag := tag; pg_ph := ph; pg_sp := sp; pg_cs := cs |}
       | None => None
       end
   | _ => None
@@ -4860,6 +4861,7 @@ Definition pf_make_p (Σ : global_env) (kn : kername) : option pfg :=
       | Some M, Some body =>
           pf_gen Σ kn tys T M (pf_plain 100000 0 body)
                  (fun base => tVar "kqf"%bs :: map (fun i => tRel (base + i)) (seq 0 n) ++ [tVar "kqr"%bs; tVar "kqr"%bs])
+                 "p"%bs ""%bs
       | _, _ => None
       end
   | _ => None
@@ -4962,6 +4964,7 @@ Definition fn_make (Σ : global_env) (kn : kername) : option pfg :=
                     | Some body, Some M =>
                         pf_gen Σ kn tys (ret_ty (cst_type cb)) M (fn_self 100000 n 0 body)
                                (fun base => map (fun i => tRel (base + i)) (seq 0 n) ++ [tVar "kqf"%bs])
+                               "f"%bs ""%bs
                     | _, _ => None
                     end
                 | _, _ => None
@@ -4973,13 +4976,194 @@ Definition fn_make (Σ : global_env) (kn : kername) : option pfg :=
       end
   | _ => None
   end.
+(** [Equations] (step 60): [f := fun ps => FixWf P (fun x H => f_functional .. (fun .. => H ..)) ..], [f_functional] with the function last among its parameters and the proof last among a call's arguments, its tests in clause constants: written out into a body with no proof, as [Program]'s and [Function]'s *)
+Definition kn_fixwf : kername := (MPfile ["Subterm"%bs; "Prop"%bs; "Equations"%bs], "FixWf"%bs).
+Definition kn_nat_lt := kn_of <% lt %>.
+Fixpoint tm_has_rel (fuel d : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => true
+  | S fuel =>
+      match t with
+      | tRel i => Nat.eqb i d
+      | tApp f args => if tm_has_rel fuel d f then true else existsb (tm_has_rel fuel d) args
+      | tLambda _ _ c => tm_has_rel fuel (S d) c
+      | tLetIn _ v _ c => if tm_has_rel fuel d v then true else tm_has_rel fuel (S d) c
+      | tCase _ _ c brs => if tm_has_rel fuel d c then true else existsb (fun br => tm_has_rel fuel (d + length (bcontext br)) (bbody br)) brs
+      | _ => false
+      end
+  end.
+Fixpoint eq_strip (n : nat) (pr : term) : term :=
+  match n, pr with
+  | S n', tProd _ _ r => eq_strip n' (subst10 (tVar "kqproof"%bs) r)
+  | _, _ => pr
+  end.
+(** the scrutinee: a program's definition giving a constructor at once, [inspect] *)
+Definition eq_scrut (Σ : global_env) (mp : modpath) (c : term) : term :=
+  match c with
+  | tApp (tConst k _) args =>
+      if in_prog mp (fst k) then
+        match body_of Σ k with
+        | Some b => match pf_beta b args with (tApp (tConstruct _ _ _) _) as v => v | _ => c end
+        | None => c
+        end
+      else c
+  | _ => c
+  end.
+Fixpoint eq_norm (fuel : nat) (Σ : global_env) (mp : modpath) (d : nat) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      match t with
+      | tApp (tApp f a) b => eq_norm fuel Σ mp d (tApp f (a ++ b))
+      | tApp (tLambda _ _ _ as f) args => eq_norm fuel Σ mp d (pf_beta f args)
+      | tApp (tRel i) args =>
+          if Nat.eqb i d then tApp (tVar "kqself"%bs) (map (eq_norm fuel Σ mp d) (removelast args))
+          else tApp (tRel i) (map (eq_norm fuel Σ mp d) args)
+      | tApp (tCase ci p c brs) args =>
+          eq_norm fuel Σ mp d
+            (tCase ci {| pparams := pparams p; puinst := puinst p; pcontext := pcontext p; preturn := eq_strip (length args) (preturn p) |} c
+                   (map (fun br => {| bcontext := bcontext br;
+                                      bbody := pf_beta (bbody br) (map (lift0 (length (bcontext br))) args) |}) brs))
+      | tApp (tConst k u) args =>
+          if in_prog mp (fst k) && existsb (tm_has_rel 1000 d) args then
+            match body_of Σ k with
+            | Some b => eq_norm fuel Σ mp d (pf_beta b args)
+            | None => t
+            end
+          else tApp (tConst k u) (map (eq_norm fuel Σ mp d) args)
+      | tApp f args => tApp f (map (eq_norm fuel Σ mp d) args)
+      | tCase ci p c brs =>
+          match eq_scrut Σ mp c with
+          | tApp (tConstruct _ i _) cargs =>
+              match nth_error brs i with
+              | Some br => eq_norm fuel Σ mp d (subst (rev (skipn (ci_npar ci) cargs)) 0 (bbody br))
+              | None => t
+              end
+          | c' =>
+              tCase ci p (eq_norm fuel Σ mp d c')
+                    (map (fun br => {| bcontext := bcontext br; bbody := eq_norm fuel Σ mp (d + length (bcontext br)) (bbody br) |}) brs)
+          end
+      | tLambda na ty b => tLambda na ty (eq_norm fuel Σ mp (S d) b)
+      | tLetIn na b ty body => tLetIn na (eq_norm fuel Σ mp d b) ty (eq_norm fuel Σ mp (S d) body)
+      | _ => t
+      end
+  end.
+(** the clause constants, each once, for [kitc.py] to unfold: the program's definitions in the body with a function among their parameters *)
+Fixpoint eq_clauses (fuel : nat) (Σ : global_env) (mp : modpath) (t : term) (acc : list kername) {struct fuel} : list kername :=
+  match fuel with
+  | O => acc
+  | S fuel =>
+      match t with
+      | tConst k _ =>
+          if in_prog mp (fst k) then
+            if existsb (Kername.eqb k) acc then acc else
+            match body_of Σ k with
+            | Some b =>
+                let '(tys, bd) := lams b in
+                if existsb is_prod tys then eq_clauses fuel Σ mp bd (k :: acc) else acc
+            | None => acc
+            end
+          else acc
+      | tApp f args => fold_left (fun a x => eq_clauses fuel Σ mp x a) args (eq_clauses fuel Σ mp f acc)
+      | tLambda _ _ b => eq_clauses fuel Σ mp b acc
+      | tLetIn _ v _ c => eq_clauses fuel Σ mp c (eq_clauses fuel Σ mp v acc)
+      | tCase _ _ c brs => fold_left (fun a br => eq_clauses fuel Σ mp (bbody br) a) brs (eq_clauses fuel Σ mp c acc)
+      | _ => acc
+      end
+  end.
+Definition eq_make (Σ : global_env) (kn : kername) : option pfg :=
+  match lookup_env Σ kn with
+  | Some (ConstantDecl cb) =>
+      match cst_body cb with
+      | Some b =>
+          match snd (lams b) with
+          | tApp (tConst fw _) (_ :: _ :: tApp (tConst _ _) [_; _; mf; tConst rl _; _] :: _ :: tLambda _ _ (tLambda _ _ (tApp (tConst fk _) _)) :: _) =>
+              if Kername.eqb fw kn_fixwf && Kername.eqb rl kn_nat_lt then
+                let tys := removelast (prod_tys (cst_type cb)) in
+                let n := length tys in
+                match body_of Σ fk, fn_lams n mf with
+                | Some fb, Some M =>
+                    match fn_lams (S n) fb with
+                    | Some body =>
+                        let mp := fst kn in
+                        let plain := pf_plain 100000 1000000 (eq_norm 100000 Σ mp 0 body) in
+                        let cs := fk :: eq_clauses 100000 Σ mp body [] in
+                        pf_gen Σ kn tys (ret_ty (cst_type cb)) M plain
+                               (fun base => tVar "kqf"%bs :: map (fun i => tRel (base + i)) (seq 0 n))
+                               "e"%bs (fold_right (fun k a => string_of_kername k ^ " "%bs ^ a) ""%bs cs)
+                    | None => None
+                    end
+                | _, _ => None
+                end
+              else None
+          | _ => None
+          end
+      | None => None
+      end
+  | _ => None
+  end.
 Definition pf_make (Σ : global_env) (kn : kername) : option pfg :=
-  match pf_make_p Σ kn with Some r => Some r | None => fn_make Σ kn end.
+  match pf_make_p Σ kn with
+  | Some r => Some r
+  | None => match fn_make Σ kn with Some r => Some r | None => eq_make Σ kn end
+  end.
 (** whether the program holds a [Function]: Recdef's [iter] is in what it names *)
 Definition kn_iter : kername := (MPfile ["Recdef"%bs; "funind"%bs; "Stdlib"%bs], "iter"%bs).
-Definition pf_has_iter (Σ : global_env) : bool := match lookup_env Σ kn_iter with Some _ => true | None => false end.
+Definition pf_has_iter (Σ : global_env) : bool :=
+  match lookup_env Σ kn_iter with Some _ => true | None => match lookup_env Σ kn_fixwf with Some _ => true | None => false end end.
 (** the program with each [Program Fixpoint] or [Function] its budget function, and the function one call of it *)
-Definition pf_all (Σ : global_env) (mp : modpath) (root : kername) : global_env * copytab :=
+(** (step 60) a fixpoint whose match on its counter gives a function (Equations writes its clauses so, and a user may): the application pushed into the branches, read as any fixpoint.  No conversion opens a match on a variable, so it is not [denote s = f]; its two equations, at [O] and [S _], hold by conversion: the theorem a copy takes (kitc.py) *)
+Definition conv_def (Σ : global_env) (mp : modpath) (d : def term) : option (def term) :=
+  let '(tys, body0) := lams (dbody d) in
+  let body := body0 in
+  let extra := skipn (length tys) (removelast (prod_tys (dtype d))) in
+  let k := length extra in
+  let n := length tys in
+  let rels := map (fun i => tRel (k - 1 - i)) (seq 0 k) in
+  let mk (ci : case_info) (p : predicate term) (c : nat) (brs : list (branch term)) (args : list term) :=
+      if Nat.eqb c (n + k - 1 - rarg d) then
+        Some {| dname := dname d; dtype := dtype d; rarg := rarg d;
+                dbody := lams_of (tys ++ extra)
+                  (tCase ci {| pparams := pparams p; puinst := puinst p; pcontext := pcontext p; preturn := eq_strip (length args) (preturn p) |} (tRel c)
+                         (map (fun br => {| bcontext := bcontext br; bbody := pf_beta (bbody br) (map (lift0 (length (bcontext br))) args) |}) brs)) |}
+      else None in
+  match lift0 k body with
+  | tApp (tCase ci p (tRel c) brs) args => mk ci p c brs (args ++ rels)
+  | tCase ci p (tRel c) brs => match k with O => None | S _ => mk ci p c brs rels end
+  | _ => None
+  end.
+Definition conv_fix (Σ : global_env) (mp : modpath) (b : term) : option term :=
+  match b with
+  (* a block's members are one call of the block: a member so written is a gap, with its cells *)
+  | tFix [d] i => match conv_def Σ mp d with Some e => Some (tFix [e] i) | None => None end
+  | _ => None
+  end.
+Definition conv_kns (Σ : global_env) (mp : modpath) : list kername :=
+  flat_map (fun e => if in_prog mp (fst (fst e)) then
+                       match snd e with
+                       | ConstantDecl cb => match cst_body cb with
+                                            | Some b => match conv_fix Σ mp b with Some _ => [fst e] | None => [] end
+                                            | None => []
+                                            end
+                       | _ => []
+                       end
+                     else []) (declarations Σ).
+Definition conv_all (Σ : global_env) (mp : modpath) : global_env :=
+  match conv_kns Σ mp with
+  | [] => Σ
+  | ks =>
+      fold_left (fun S kn =>
+        match lookup_env S kn with
+        | Some (ConstantDecl cb) =>
+            match cst_body cb with
+            | Some b => match conv_fix Σ mp b with Some b' => add_decl S kn (cst_type cb) b' | None => S end
+            | None => S
+            end
+        | _ => S
+        end) ks Σ
+  end.
+Definition pf_all (Σ0 : global_env) (mp : modpath) (root : kername) : global_env * copytab :=
+  let Σ := conv_all Σ0 mp in
   match (match lookup_env Σ kn_fix_sub with Some _ => true | None => pf_has_iter Σ end) with
   | false => (Σ, [])
   | true =>
@@ -5001,17 +5185,18 @@ Definition pf_all (Σ : global_env) (mp : modpath) (root : kername) : global_env
         else st) (snd (reach_go 1000 Σ mp root root ([], []))) (Σ, [])
   end.
 (** for kitc.py: each such function: its name, the constant holding its [Fix_sub], its number of parameters, its three made functions, and whether its measure is on a machine number *)
-Definition pf_info (p : program) : list (string * string * nat * string * string * bool * nat) :=
+Definition pf_info (p : program) : list (string * string * nat * string * string * string * nat) :=
   match p with
   | (Σ, tConst root _) =>
+      map (fun kn => (string_of_kername kn, ""%bs, O, ""%bs, ""%bs, "c"%bs, O)) (conv_kns Σ (fst root)) ++
       match (match lookup_env Σ kn_fix_sub with Some _ => true | None => pf_has_iter Σ end) with false => [] | true =>
       flat_map (fun kn =>
         match pf_make Σ kn with
         | Some r =>
             match pf_parts Σ kn with
             | Some (tys, _, _, _, fk) =>
-                [(string_of_kername kn, match fk with Some f => string_of_kername f | None => ""%bs end, length tys, mangle kn, pg_tag r, false, pg_ph r)]
-            | None => [(string_of_kername kn, ""%bs, length (fst (lams (pg_m r))), mangle kn, pg_tag r, true, pg_ph r)]
+                [(string_of_kername kn, match fk with Some f => string_of_kername f | None => ""%bs end, length tys, mangle kn, pg_tag r, pg_sp r, pg_ph r)]
+            | None => [(string_of_kername kn, pg_cs r, length (fst (lams (pg_m r))), mangle kn, pg_tag r, pg_sp r, pg_ph r)]
             end
         | None => []
         end) (filter (fun kn => in_prog (fst root) (fst kn)) (snd (reach_go 1000 Σ (fst root) root root ([], []))))
