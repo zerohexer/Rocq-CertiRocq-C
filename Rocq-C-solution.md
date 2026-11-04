@@ -4800,6 +4800,13 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   examples 34 / 34; corpus 36 / 36; the five kernels (12 / 12 / 13 / 14 / 13 s); **78 programs through the verified compiler, 0
   refused**; the trusted base unchanged.  Next: the own call under a choice and on a deeper counter.
 
+**Step 61, the function's own call under a choice and on a deeper counter (§3.1, §12.A) — the design (2026-11-04).**  The class of 37 cells step 55 left, `(if c then f m .. else a) + b` in a body that writes, a boolean's, a record's; and a class with no cell until now, found by writing this step's cells: `match n with S (S q) => f q ..`, as ordinary as Fibonacci, refused in every sort.  Both are the same difficulty: the form Rocq's text has is not the form the compiler's theorem takes, and no conversion goes from one to the other, a match on a stuck test or counter not commuting.  Both are closed by what steps 56 to 60 built, a function read in a form of the reader's and equal to the user's at every argument (`callee_ok_eq`), with `KQR.v` unchanged:
+- *Under a choice*: §12.V step 55 wanted the X body's code to take a continuation, a large change to `KQR.v`.  Not needed: the choice is floated out by the reader, `if c then f m .. + b else a + b`, which it reads already.  Into an operand of anything, a let, a test (`y_pull`, `y_tail`), the rest of the expression written in each branch, which is what the continuation would have done.  Only for a program not read as it stands, so no program's C changes.  The equation: at each counter, test by test, the call by induction (`own_step`); the fixpoint named `f__wy`.
+- *On a deeper counter*: `FRec` has the function at the predecessor only.  A budget function above it, as for a measure: `G k n .. := match k with O => .. | S k' => (the body, each own call G k' ..)`, the counter `n` its ordinary parameter and also the budget, `G n n ..`.  Step 56's `pf_gen`, no phase, the measure the counter.  The equation by induction on the budget, the counters taken apart as the body takes them (`deep_step`).  It costs one more counter in the C.
+- *By design*: two calls of a function that writes at each round from the same memory, under two choices: §0.5's third refusal, as without the choices.  `A_own_two_choices`; the control, `A_own_two_choices_read`.
+- *Cells*: 19: two choices, one inside the own call's argument, a let of the choice, in a test, in a helper's argument, nested, a read after; the deeper counter at the end and in an operand, reading, writing, giving back a memory, a boolean, a record, Fibonacci.
+- *The acceptance*: `proved/examples/own_fix`: Fibonacci, two steps at a time over a memory, the own call under a choice with a write; the answer worked out apart: 65.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4979,7 +4986,8 @@ Pushed to the public repository up to `0efd280` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 60 (`Equations`: the construct table 2053 of 2122, 13 by design, 55 gaps), the C, the gate; §4.5, §12.P, D12, READ THIS FIRST |
+| (this commit) | §12.V: step 61's design -- the function's own call under a choice, floated out; on a deeper counter, a budget function; each equal to the user's at every argument |
+| `bb8dbc8` | §12.V: step 60 (`Equations`: the construct table 2053 of 2122, 13 by design, 55 gaps), the C, the gate; §4.5, §12.P, D12, READ THIS FIRST |
 | `0efd280` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix/gen.py` + `classify.py` + `examples/equations_fix` step 60: `Equations`: `FixWf` over its functional, its clauses written out, one lemma and one tactic, no axiom; a match on the counter that gives a function; 28 cells; `KQR.v` unchanged |
 | `91d188b` | §12.V: step 60's design -- Equations: FixWf over its functional, its clauses written out, one lemma and one tactic; a match on the counter that gives a function |
 | `8850a47` | §12.V: step 59 (a function as a parameter of a measure recursion: the construct table 2026 of 2094, 13 by design, 54 gaps), the C, the gate |
