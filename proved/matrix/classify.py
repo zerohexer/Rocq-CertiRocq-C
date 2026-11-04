@@ -25,6 +25,10 @@ DESIGN_CELLS = {
   # one version written into the other (§0.5, third reason); control: A_par_made_seq, the memory handed on (step 52)
   "A_par_made_two",
   "A_par_made_old_write",
+  # the same, two memory parameters: read from one, written in the other, handed apart at each round; given two versions by the call;
+  # control: A_par_mem2_live_control, one memory (step 53)
+  "A_par_mem2_live",
+  "A_par_mem2_live_given",
   # a constant with no body in Rocq's kernel: an Axiom, a Parameter, a function behind a module's ":".  Rocq cannot run it and nothing
   # says what it computes, so no theorem can say the C does (Rocq-C-solution.md §0.5, fourth reason); control: A_mod_ascribe, the
   # same function behind "<:", which keeps its body, and A_par_int, a Definition in the Parameter's place (step 51)
@@ -38,6 +42,9 @@ DESIGN_CELLS = {
 }
 # gaps whose refusal message is shared with another category: classified by name
 BY_NAME = {
+  **{c: "a second memory parameter: never read, but given another memory by the call or by the recursion; beside a pair parameter; never read, in a copy or a mutual block"
+     for c in ("A_par_mem2_dead_other", "A_par_mem2_dead_moved", "A_par_mem2_dead_pair_param", "A_par_mem2_hand_on_pair_param",
+               "A_par_mem2_tmpl_dead", "A_par_mem2_lfix_dead", "A_par_mem2_mutual_moved")},
   "A_par_write_two": "two versions of the memory both used, differing in cells fixed by the text (their old values saved and put back)",
   "A_par_write_in_mem": "two versions of the memory both used, differing in cells fixed by the text (their old values saved and put back)",
   "P_mem_both": "two versions of the memory both used, differing in cells fixed by the text (their old values saved and put back)",

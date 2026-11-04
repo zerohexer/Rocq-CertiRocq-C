@@ -1,0 +1,10 @@
+(* two memory parameters: the same memory, handed crosswise; one never read while the other moves *)
+Fixpoint swap_sum (n : nat) (u t : mem) (x acc : int) : int :=
+  match n with O => acc + rd 0 x t | S m => swap_sum m t u (x + 1) (acc + rd 0 x u) end.
+Fixpoint fill2 (n : nat) (u : mem) (x : int) (t : mem) : mem :=
+  match n with O => t | S m => fill2 m u (x + 1) (upd 0 x (x * 3) t) end.
+Definition go (n : nat) (a b : int) (s : mem) : int :=
+  let t := fill2 n s a s in swap_sum n t t b 0.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  go (kq_nat (kq_arg 0)) (kq_arg 1) (kq_arg 2) (kq_input 0).

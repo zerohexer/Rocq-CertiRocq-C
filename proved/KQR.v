@@ -10903,6 +10903,40 @@ Proof.
   { intros s. cbn [callf]. rewrite appc_cmapT. apply appnTP_unpair. }
   unfold calln, callm, callmw in *. cbn [sw sr sq sn sk] in *. destruct w; [destruct H as [M' H]; exists M'|]; rewrite !E; exact H.
 Qed.
+(** a memory parameter the function never reads, that its recursion hands on as it is (step 53): the function of the others, [G u]
+    for any value [u] of it; the theorem of each gives the theorem of the function given its own memory there too *)
+Fixpoint deadN (ks : list kind) (T : Type) {struct ks} : (mem -> ntypeT ks true T) -> ntypeT ks true T :=
+  match ks as k0 return (mem -> ntypeT k0 true T) -> ntypeT k0 true T with
+  | [] => fun G s => G s s
+  | KNum :: ks => fun G a => deadN ks T (fun u => G u a)
+  | KBool :: ks => fun G a => deadN ks T (fun u => G u a)
+  | KRec ri :: ks => fun G a => deadN ks T (fun u => G u a)
+  end.
+Fixpoint deadC (x : nat) (A : Type) (d : (mem -> A) -> A) {struct x} : (mem -> ctype x A) -> ctype x A :=
+  match x as x0 return (mem -> ctype x0 A) -> ctype x0 A with
+  | O => d
+  | S x => fun G c => deadC x A d (fun u => G u c)
+  end.
+Lemma appc_deadC : forall x A d G cvs, appc x A (deadC x A d G) cvs = d (fun u => appc x A (G u) cvs).
+Proof. induction x as [|x IH]; intros A d G cvs; [reflexivity | destruct cvs as [|c cvs]; cbn [appc deadC]; apply IH]. Qed.
+Lemma appnT_deadN : forall ks T G vs s, appnT ks true T (deadN ks T G) vs s = appnT ks true T (G s) vs s.
+Proof.
+  induction ks as [|[| |ri] ks IH]; intros T G vs s; cbn [appnT deadN].
+  - reflexivity.
+  - destruct vs as [|[x|b|ri x] vs]; apply IH.
+  - destruct vs as [|[x|b|ri x] vs]; apply IH.
+  - destruct vs as [|v vs]; apply IH.
+Qed.
+Lemma callee_ok_dead : forall P id B x k r w q b v (G : mem -> ftype (mksig9 x k true r w q b v false)),
+  (forall u, callee_ok P id B (mksig9 x k true r w q b v false) (G u)) ->
+  callee_ok P id B (mksig9 x k true r w q b v false) (deadC x _ (deadN k _) G).
+Proof.
+  intros P id B x k r w q b v G H. unfold callee_ok in *. intros Hsl cvs vs M L K C. specialize (H M Hsl cvs vs M L K C).
+  assert (E : callf (mksig9 x k true r w q b v false) (deadC x _ (deadN k _) G) cvs vs M
+              = callf (mksig9 x k true r w q b v false) (G M) cvs vs M).
+  { cbn [callf]. rewrite appc_deadC. apply appnT_deadN. }
+  unfold calln, callm, callmw in *. cbn [sw sr sq sn sk] in *. destruct w; [destruct H as [M' H]; exists M'|]; rewrite !E; exact H.
+Qed.
 Theorem compile_f_ok : forall P cs gidf j gs b,
   find P (gidf j) = Some (compile_f gidf j gs b) -> wf_f (map (@projT1 _ _) cs) gs b = true -> callees_ok P gidf cs ->
   Nat.leb (length cs) j = true -> (Z.of_nat j <? 1099511627776)%Z = true ->

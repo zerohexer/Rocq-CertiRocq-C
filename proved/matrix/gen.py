@@ -616,6 +616,80 @@ addA("par_pm_let_fst_pv", "", "let '(x, t) := kz n a s in x + rd 0 0 t",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : int * mem := let p := g n x t in (fst p + 1, snd p).\n")
 addA("par_pm_let_fst_mem", "", "rd 0 0 (kz n a s)",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : mem := let p := g n x t in upd 0 (fst p) 1 (snd p).\n")
+# a second memory parameter (step 53): the same memory, a memory never read, both live (the pin), where the call gives another memory
+addA("par_mem2_hand_on", "", "k4 n s a s",
+     "Fixpoint k4 (n : nat) (u : mem) (x : int) (t : mem) : int := match n with O => rd 0 x t | S m => k4 m u (x + 1) t end.\n")
+addA("par_mem2_swap", "", "k5 n s s a",
+     "Fixpoint k5 (n : nat) (u t : mem) (x : int) : int := match n with O => rd 0 x t | S m => k5 m t u (x + 1) end.\n")
+addA("par_mem2_read_both", "", "k7 n s a s",
+     "Fixpoint k7 (n : nat) (u : mem) (x : int) (t : mem) : int := match n with O => rd 0 x u + rd 1 x t | S m => k7 m u (x + 1) t end.\n")
+addA("par_mem2_write_both", "", "rd 0 0 (k6 n s a s)",
+     "Fixpoint k6 (n : nat) (u : mem) (x : int) (t : mem) : mem := match n with O => t | S m => let v := upd 0 x x t in k6 m v (x + 1) v end.\n")
+addA("par_mem2_write_num", "", "k9 n s a s",
+     "Fixpoint k9 (n : nat) (u : mem) (x : int) (t : mem) : int := match n with O => rd 0 x u | S m => let v := upd 0 x x t in k9 m v (x + 1) v end.\n")
+addA("par_mem2_three", "", "k8 n s s a s",
+     "Fixpoint k8 (n : nat) (u w : mem) (x : int) (t : mem) : int := match n with O => rd 0 x t + rd 1 x w | S m => k8 m t u (x + 1) w end.\n")
+addA("par_mem2_bool", "", "if kb n s a s then a else b",
+     "Fixpoint kb (n : nat) (u : mem) (x : int) (t : mem) : bool := match n with O => rd 0 x u <? rd 0 x t | S m => kb m u (x + 1) t end.\n")
+addA("par_mem2_record", "", "f1 (kr n s a s)",
+     "Fixpoint kr (n : nat) (u : mem) (x : int) (t : mem) : r3 := match n with O => mk3 (rd 0 x u) x (rd 0 x t) | S m => kr m u (x + 1) t end.\n")
+addA("par_mem2_pair", "", "let '(v, w) := kp n s a s in v + rd 0 0 w",
+     "Fixpoint kp (n : nat) (u : mem) (x : int) (t : mem) : int * mem := match n with O => (rd 0 x u, t) | S m => let v := upd 0 x x t in kp m v (x + 1) v end.\n")
+addA("par_mem2_order", "", "kq s n a s",
+     "Fixpoint kq (u : mem) (n : nat) (x : int) (t : mem) {struct n} : int := match n with O => rd 0 x u | S m => kq t m (x + 1) u end.\n")
+addA("par_mem2_mem_first", "", "rd 0 0 (kq s s n a)",
+     "Fixpoint kq (u t : mem) (n : nat) (x : int) {struct n} : mem := match n with O => t | S m => let v := upd 0 x x t in kq v v m (x + 1) end.\n")
+addA("par_mem2_call_made", "", "k4 n (upd 0 a b s) a (upd 0 a b s)",
+     "Fixpoint k4 (n : nat) (u : mem) (x : int) (t : mem) : int := match n with O => rd 0 x t | S m => k4 m u (x + 1) t end.\n")
+addA("par_mem2_caller_two", "", "kc s n a s",
+     "Fixpoint k4 (n : nat) (u : mem) (x : int) (t : mem) : int := match n with O => rd 0 x t | S m => k4 m u (x + 1) t end.\nFixpoint kc (u : mem) (n : nat) (x : int) (t : mem) {struct n} : int := match n with O => k4 n u x t | S m => kc u m (x + 1) t + k4 m t x u end.\n")
+addA("par_mem2_big", "", "kg s a s",
+     "Definition kg (u : mem) (x : int) (t : mem) : int :=\n  let v1 := rd 0 x u * 1 + rd 1 x t in\n  let v2 := rd 0 x u * 2 + rd 1 x t in\n  let v3 := rd 0 x u * 3 + rd 1 x t in\n  let v4 := rd 0 x u * 4 + rd 1 x t in\n  let v5 := rd 0 x u * 5 + rd 1 x t in\n  let v6 := rd 0 x u * 6 + rd 1 x t in\n  let v7 := rd 0 x u * 7 + rd 1 x t in\n  let v8 := rd 0 x u * 8 + rd 1 x t in\n  let v9 := rd 0 x u * 9 + rd 1 x t in\n  let v10 := rd 0 x u * 10 + rd 1 x t in\n  let v11 := rd 0 x u * 11 + rd 1 x t in\n  let v12 := rd 0 x u * 12 + rd 1 x t in\n  let v13 := rd 0 x u * 13 + rd 1 x t in\n  let v14 := rd 0 x u * 14 + rd 1 x t in\n  let v15 := rd 0 x u * 15 + rd 1 x t in\n  v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13 + v14 + v15.\n")
+addA("par_mem2_tmpl", "", "kf n s a h s",
+     "Fixpoint kf (n : nat) (u : mem) (x : int) (f : int -> int -> int) (t : mem) : int := match n with O => rd 0 x u + rd 1 x t | S m => kf m u (f x x) f t end.\n")
+addA("par_mem2_tmpl_cap", "", "kf n s a (fun y z => y + z + b) s",
+     "Fixpoint kf (n : nat) (u : mem) (x : int) (f : int -> int -> int) (t : mem) : int := match n with O => rd 0 x u + rd 1 x t | S m => kf m u (f x x) f t end.\n")
+addA("par_mem2_mutual", "", "ka n s a s",
+     "Fixpoint ka (n : nat) (u : mem) (x : int) (t : mem) : int := match n with O => rd 0 x u | S m => kd m t (x + 1) u end\nwith kd (n : nat) (u : mem) (x : int) (t : mem) : int := match n with O => rd 1 x t | S m => ka m u (x + 2) t end.\n")
+addA("par_mem2_mutual_write", "", "rd 0 0 (ka n s a s)",
+     "Fixpoint ka (n : nat) (u : mem) (x : int) (t : mem) : mem := match n with O => t | S m => let v := upd 0 x x t in kd m v (x + 1) v end\nwith kd (n : nat) (u : mem) (x : int) (t : mem) : mem := match n with O => t | S m => let v := upd 1 x x u in ka m v (x + 2) v end.\n")
+addA("par_mem2_mutual_moved", "", "rd 0 0 (ka n s a s)",
+     "Fixpoint ka (n : nat) (u : mem) (x : int) (t : mem) : mem := match n with O => t | S m => kd m u (x + 1) (upd 0 x x t) end\nwith kd (n : nat) (u : mem) (x : int) (t : mem) : mem := match n with O => t | S m => ka m u (x + 2) (upd 1 x x t) end.\n")
+addA("par_mem2_tmpl_dead", "", "rd 0 0 (kf n s a h s)",
+     "Fixpoint kf (n : nat) (u : mem) (x : int) (f : int -> int -> int) (t : mem) : mem := match n with O => t | S m => kf m u (f x x) f (upd 0 x x t) end.\n")
+addA("par_mem2_lfix_dead", "", "rd 0 0 (ll n s a s)",
+     "Definition ll (n : nat) (u : mem) (x : int) (t : mem) : mem := (fix go (k : nat) (v : mem) (y : int) (w : mem) : mem := match k with O => w | S j => go j v (y + 1) (upd 0 y y w) end) n u x t.\n")
+addA("par_mem2_dead_pair", "", "let '(v, w) := kw n s a s in v + rd 0 0 w",
+     "Fixpoint kw (n : nat) (u : mem) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => kw m u (x + 1) (upd 0 x x t) end.\n")
+addA("par_mem2_dead_pair_param", "", "kw n s (a, s)",
+     "Fixpoint kw (n : nat) (u : mem) (p : int * mem) : int := match n with O => fst p + rd 0 0 (snd p) | S m => kw m u (fst p + 1, upd 0 (fst p) 1 (snd p)) end.\n")
+addA("par_mem2_hand_on_pair_param", "", "kw n s (a, s)",
+     "Fixpoint kw (n : nat) (u : mem) (p : int * mem) : int := match n with O => fst p + rd 0 0 (snd p) | S m => kw m u (fst p + 1, snd p) end.\n")
+addA("par_mem2_lfix", "", "ll n s a s",
+     "Definition ll (n : nat) (u : mem) (x : int) (t : mem) : int := (fix go (k : nat) (v : mem) (y : int) (w : mem) : int := match k with O => rd 0 y v + rd 1 y w | S j => go j w (y + 1) v end) n u x t.\n")
+addA("par_mem2_dead_write", "", "rd 0 0 (kw n s a s)",
+     "Fixpoint kw (n : nat) (u : mem) (x : int) (t : mem) : mem := match n with O => t | S m => kw m u (x + 1) (upd 0 x x t) end.\n")
+addA("par_mem2_dead_num", "", "kw n s a s",
+     "Fixpoint kw (n : nat) (u : mem) (x : int) (t : mem) : int := match n with O => rd 0 x t | S m => kw m u (x + 1) (upd 0 x x t) end.\n")
+addA("par_mem2_dead_bool", "", "if kw n s a s then a else b",
+     "Fixpoint kw (n : nat) (u : mem) (x : int) (t : mem) : bool := match n with O => rd 0 x t <? 3 | S m => kw m u (x + 1) (upd 0 x x t) end.\n")
+addA("par_mem2_dead_record", "", "f1 (kw n s a s)",
+     "Fixpoint kw (n : nat) (u : mem) (x : int) (t : mem) : r3 := match n with O => mk3 (rd 0 x t) x x | S m => kw m u (x + 1) (upd 0 x x t) end.\n")
+addA("par_mem2_dead_two", "", "rd 0 0 (kw n s s a s)",
+     "Fixpoint kw (n : nat) (u v : mem) (x : int) (t : mem) : mem := match n with O => t | S m => kw m u v (x + 1) (upd 0 x x t) end.\n")
+addA("par_mem2_dead_order", "", "rd 0 0 (kw s n a s)",
+     "Fixpoint kw (u : mem) (n : nat) (x : int) (t : mem) {struct n} : mem := match n with O => t | S m => kw u m (x + 1) (upd 0 x x t) end.\n")
+addA("par_mem2_dead_other", "", "k4 n (upd 0 a b s) a s",
+     "Fixpoint k4 (n : nat) (u : mem) (x : int) (t : mem) : int := match n with O => rd 0 x t | S m => k4 m u (x + 1) t end.\n")
+addA("par_mem2_dead_moved", "", "rd 0 0 (kw n s a s)",
+     "Fixpoint kw (n : nat) (u : mem) (x : int) (t : mem) : mem := match n with O => t | S m => kw m t (x + 1) (upd 0 x x t) end.\n")
+addA("par_mem2_live", "", "rd 0 0 (cp n s s a)",
+     "Fixpoint cp (n : nat) (u t : mem) (x : int) : mem := match n with O => t | S m => cp m u (upd 0 x (rd 1 x u) t) (x + 1) end.\n")
+addA("par_mem2_live_control", "", "rd 0 0 (cp n s a)",
+     "Fixpoint cp (n : nat) (t : mem) (x : int) : mem := match n with O => t | S m => cp m (upd 0 x (rd 1 x t) t) (x + 1) end.\n")
+addA("par_mem2_live_given", "", "kr n s (fill n 0 s) a",
+     "Fixpoint fill (n : nat) (i : int) (t : mem) : mem := match n with O => t | S m => fill m (i + 1) (upd 0 i (i * 2) t) end.\nFixpoint kr (n : nat) (u t : mem) (x : int) : int := match n with O => rd 0 x u + rd 0 x t | S m => kr m u t (x + 1) end.\n")
+A.append(("par_mem2_root", "Definition go2 (n : nat) (u : mem) (a b : int) (s : mem) : int := rd 0 a u + rd 1 b s.\nDefinition main : int :=\n  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in\n  go2 (kq_nat (kq_arg 0)) (kq_input 0) (kq_arg 1) (kq_arg 2) (kq_input 0).\n"))
 # a memory made in place and read inside an expression (step 52): bound by a let
 addA("par_made_left", "", "rd 0 2 (fill n 0 s) + a",
      "Fixpoint fill (n : nat) (i : int) (t : mem) : mem := match n with O => t | S m => fill m (i + 1) (upd 0 i (i * 2) t) end.\n")

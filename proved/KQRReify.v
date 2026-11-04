@@ -138,7 +138,7 @@ Definition cmp_v (s : ident) : option cmpop :=
     the predecessor of the first counter that the match a recursive function starts with binds (a counter too, and the one
     its recursive call is given first), the function itself, a boolean *)
 Inductive cent := CNum | CMem | CDead | CCnt | CPred | CSelf | CBool | CFn (p : nat) (t : term) | CRec | CSib (j : nat)
-  | CCntP (j : nat) | CSelfP (perm : list nat) | CRecT (t : term).
+  | CCntP (j : nat) | CSelfP (perm : list nat) | CRecT (t : term) | CDeadM.
 (* CFn p t: the function parameter number p of a template's copy, bound to the function t given (its captured variables
    numbered 0 .. in the order they first appear: the context's entries after the copy's own, CSelf, step 13).  CSib j: member
    j of a mutual block (step 17) *)
@@ -198,8 +198,6 @@ Definition is_ent (e : cent) (ctx : list cent) (i : nat) : bool :=
   end.
 
 (** the arguments of a recursive call in the order the syntax takes (step 41): the user's, put in that order *)
-Definition self_perm (ctx : list cent) (fi : nat) (args : list term) : list term :=
-  match nth_error ctx fi with Some (CSelfP perm) => map (fun i => nth i args (tRel 0)) perm | _ => args end.
 Fixpoint to_sexps (l : list sexp) : sexps := match l with [] => SNil | e :: l => SCons e (to_sexps l) end.
 Fixpoint to_sexps_r (l : list srec) : sexps := match l with [] => SNil | x :: l => SConsR x (to_sexps_r l) end.
 Fixpoint to_args (l : list (option (sexp + (sbool + srec)))) : option sexps :=
@@ -399,8 +397,42 @@ Fixpoint teq (fuel : nat) (t u : term) : bool :=
       | _, _ => false
       end
   end.
+(** every variable that is the newest memory as one variable: two memory parameters that are the same memory (step 53) *)
+Fixpoint first_mem (ctx : list cent) (i : nat) : nat :=
+  match ctx with [] => i | CMem :: _ => i | _ :: r => first_mem r (S i) end.
+Fixpoint alias_norm (fuel : nat) (ctx : list cent) (m0 d : nat) (t : term) : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      match t with
+      | tRel i => if (if Nat.leb d i then is_ent CMem ctx (i - d) else false) then tRel (d + m0) else t
+      | tApp f args => tApp (alias_norm fuel ctx m0 d f) (map (alias_norm fuel ctx m0 d) args)
+      | tLetIn na b ty body => tLetIn na (alias_norm fuel ctx m0 d b) ty (alias_norm fuel ctx m0 (S d) body)
+      | tLambda na ty b => tLambda na ty (alias_norm fuel ctx m0 (S d) b)
+      | tCase ci p c brs =>
+          tCase ci p (alias_norm fuel ctx m0 d c)
+                (map (fun br => {| bcontext := bcontext br; bbody := alias_norm fuel ctx m0 (d + length (bcontext br)) (bbody br) |}) brs)
+      | _ => t
+      end
+  end.
 Definition teqs (l l' : list term) : bool :=
   Nat.eqb (length l) (length l') && forallb (fun q => teq 1000 (fst q) (snd q)) (combine l l').
+(** the arguments of a recursive call in the syntax's order, read with its parameters so (step 41).  A memory parameter left out of that
+    order (step 53): given the same memory as the one kept, or, one never read, itself *)
+Definition self_perm (ctx : list cent) (fi : nat) (args : list term) : list term :=
+  match nth_error ctx fi with
+  | Some (CSelfP perm) =>
+      let l := map (fun i => nth i args (tRel 0)) perm in
+      if Nat.eqb (length perm) (length args) then l else
+      let norm := alias_norm 1000 ctx (first_mem ctx 0) 0 in
+      let m := norm (last l (tRel 0)) in
+      if forallb (fun p => if existsb (Nat.eqb p) perm then true else
+                           match nth_error ctx (fi - 1 - p) with
+                           | Some CDeadM => match nth p args (tRel 0) with tRel i => Nat.eqb i (fi - 1 - p) | _ => false end
+                           | _ => teq 1000 (norm (nth p args (tRel 0))) m
+                           end) (seq 0 (length args)) then l else []
+  | _ => args
+  end.
 
 
 (** a record type of numbers (§12.V step 12): an inductive with one constructor, whose fields are numbers or parameters that
@@ -666,7 +698,19 @@ Definition with_caps (ctx : list cent) (rest : list term) : list term :=
 
 Definition tcall (ctx : list cent) (kn : kername) (args : list term) : kername * list term :=
   let args := map (fsub ctx) args in
-  match tc kn args with Some p => p | None => (kn, args) end.
+  match tc kn args with
+  | Some p => p
+  | None =>
+      (* (step 53) the caller's own memory parameters, the same memory, in the places of a callee's *)
+      match filter (fun c => match c with CMem => true | _ => false end) ctx with
+      | _ :: _ :: _ =>
+          match tc kn (map (alias_norm 1000 ctx (first_mem ctx 0) 0) args) with
+          | Some p => p
+          | None => (kn, args)
+          end
+      | _ => (kn, args)
+      end
+  end.
 
 (** the subject of a test: helpers and functions applied to their arguments written out, and the lets the first operand of
     [&&], [||] or [negb] starts with brought to the front -- a match on a let is put inside it (the same term up to zeta), so
@@ -2402,14 +2446,15 @@ Definition canon_perm (tys : list term) (r : option nat) : list nat :=
   let idx := seq 0 (length tys) in
   let isr i := match r with Some r0 => Nat.eqb i r0 | None => false end in
   (match r with Some r0 => [r0] | None => [] end) ++ filter (fun i => is_nat (ty i) && negb (isr i)) idx
-  ++ filter (fun i => negb (is_nat (ty i)) && negb (is_ty kn_mem (ty i))) idx ++ filter (fun i => is_ty kn_mem (ty i)) idx.
+  ++ filter (fun i => negb (is_nat (ty i)) && negb (is_ty kn_mem (ty i))) idx
+  ++ (match rev (filter (fun i => is_ty kn_mem (ty i)) idx) with m :: _ => [m] | [] => [] end).
 Fixpoint pos_in (u : nat) (l : list nat) : nat := match l with [] => O | x :: r => if Nat.eqb x u then O else S (pos_in u r) end.
 (** the context of such a body: each binder as the syntax takes it, a counter its index among the counters *)
-Definition perm_ctx (rt : list rentry) (tys : list term) (perm : list nat) : list cent :=
+Definition perm_ctx_m (dm : bool) (rt : list rentry) (tys : list term) (perm : list nat) : list cent :=
   let k := length (filter (fun i => is_nat (nth i tys (tRel 0))) perm) in
   map (fun u => let ty := nth u tys (tRel 0) in
                 if is_nat ty then CCntP (Nat.sub (Nat.sub k 1) (pos_in u perm))
-                else if is_ty kn_mem ty then CMem
+                else if is_ty kn_mem ty then (if dm && negb (existsb (Nat.eqb u) perm) then CDeadM else CMem)
                 else match kind_ty rt ty with Some kd => cent_of kd | None => CDead end)
       (rev (seq 0 (length tys))).
 (** whether a function's parameters stand in another order, and the order: none when the syntax's *)
@@ -2609,7 +2654,7 @@ Definition read_fun_c (Σ : global_env) (hb : kername -> option term) (tc : kern
 
 (** the same, the parameters in another order (step 41): the body read with each binder at its place in the order the syntax
     takes, a recursive call's arguments put in that order ([CSelfP]) *)
-Definition read_fun_p (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
+Definition read_fun_p (dm : bool) (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
   (callees : list (kername * sig)) (kn : kername) : option (sig * fbody) :=
   match lookup_env Σ kn with
   | Some (ConstantDecl cb) =>
@@ -2623,7 +2668,7 @@ Definition read_fun_p (Σ : global_env) (hb : kername -> option term) (tc : kern
                 let nx := Nat.pred (sn gs) in
                 if negb (Nat.eqb (sn gs) 0) && Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_nat)
                    && Nat.eqb cnt (Nat.sub (Nat.sub (length tys) 1) (rarg d)) then
-                  let ctx := perm_ctx rt tys perm ++ [CSelfP perm] in
+                  let ctx := perm_ctx_m dm rt tys perm ++ [CSelfP perm] in
                   if ispq gs then
                     match reify_pv callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_pv callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
                     | Some p0, Some p1 => Some (gs, FRecP p0 p1)
@@ -2681,23 +2726,23 @@ Definition read_fun_p (Σ : global_env) (hb : kername -> option term) (tc : kern
           match read_sig rt (map (fun i => nth i tys (tRel 0)) perm) (ret_ty (cst_type cb)) with
           | Some gs =>
               let nx := Nat.pred (sn gs) in
-              if ispq gs then option_map (fun r => (gs, FPlainP r)) (reify_pv callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body)
+              if ispq gs then option_map (fun r => (gs, FPlainP r)) (reify_pv callees (sm gs) nx hb tc [] rt 100000 (perm_ctx_m dm rt tys perm) body)
               else if isbq gs then
-                match reify_bb callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body with
+                match reify_bb callees (sm gs) nx hb tc [] rt 100000 (perm_ctx_m dm rt tys perm) body with
                 | Some r => Some (gs, FPlainB r)
-                | None => if sm gs then option_map (fun x => (wsig gs, FPlainX x)) (reify_x callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body) else None
+                | None => if sm gs then option_map (fun x => (wsig gs, FPlainX x)) (reify_x callees (sm gs) nx hb tc [] rt 100000 (perm_ctx_m dm rt tys perm) body) else None
                 end
               else if isq gs then
-                match reify_br callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body with
+                match reify_br callees (sm gs) nx hb tc [] rt 100000 (perm_ctx_m dm rt tys perm) body with
                 | Some r => Some (gs, FPlainR r)
-                | None => if sm gs then option_map (fun x => (wsig gs, FPlainX (xset_ri (sqi gs) x))) (reify_x callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body) else None
+                | None => if sm gs then option_map (fun x => (wsig gs, FPlainX (xset_ri (sqi gs) x))) (reify_x callees (sm gs) nx hb tc [] rt 100000 (perm_ctx_m dm rt tys perm) body) else None
                 end
-              else if sr gs then option_map (fun m => (gs, FPlainM m)) (reify_m callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body)
-              else match reify callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body with
+              else if sr gs then option_map (fun m => (gs, FPlainM m)) (reify_m callees (sm gs) nx hb tc [] rt 100000 (perm_ctx_m dm rt tys perm) body)
+              else match reify callees (sm gs) nx hb tc [] rt 100000 (perm_ctx_m dm rt tys perm) body with
                    | Some e => Some (gs, FPlain e)
                    | None => if sm gs then
                                option_map (fun x => (mksig (sn gs) (sk gs) true false true None, FPlainX x))
-                                          (reify_x callees (sm gs) nx hb tc [] rt 100000 (perm_ctx rt tys perm) body)
+                                          (reify_x callees (sm gs) nx hb tc [] rt 100000 (perm_ctx_m dm rt tys perm) body)
                              else None
                    end
           | None => None
@@ -2710,7 +2755,7 @@ Definition read_fun_p (Σ : global_env) (hb : kername -> option term) (tc : kern
 (** one function of the program: as its text reads, its parameters in the syntax's order or not (step 41) *)
 Definition read_fun (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
   (callees : list (kername * sig)) (kn : kername) : option (sig * fbody) :=
-  match fun_perm Σ kn with None => read_fun_c Σ hb tc rt callees kn | Some _ => read_fun_p Σ hb tc rt callees kn end.
+  match fun_perm Σ kn with None => read_fun_c Σ hb tc rt callees kn | Some _ => read_fun_p false Σ hb tc rt callees kn end.
 
 (** record types with these numbers of fields and nothing else: well-formedness reads only a record type's number of fields *)
 (** the types of a record's record fields (step 43), by their indices in the table *)
@@ -2978,9 +3023,9 @@ Definition wf_sig (wfok : sig -> bool) (gs : sig) (b : fbody) (bd : option Z) : 
 
 
 (** ... kept when it is well formed, the condition of [compile_f_ok]: a program read is a program compiled *)
-Definition reify_fun (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
+Definition reify_fun_d (dm : bool) (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
   (callees : list (kername * sig)) (kn : kername) (bt : kername -> option Z) (chk : bool) : option (sig * fbody) :=
-  match read_fun Σ hb tc rt callees kn with
+  match (if dm then read_fun_p true Σ hb tc rt callees kn else read_fun Σ hb tc rt callees kn) with
   | Some (gs, b) =>
       let wfok := fun gs => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt) (rjs rt)) (map snd callees) (with_sp false gs) b in
       if negb chk then Some (gs, b) else
@@ -2988,6 +3033,10 @@ Definition reify_fun (Σ : global_env) (hb : kername -> option term) (tc : kerna
       option_map (fun g => (with_sp (sp gs) g, b)) (wf_sig wfok gs b (bt kn))
   | None => None
   end.
+Definition reify_fun := reify_fun_d false.
+(** whether a function has two memory parameters *)
+Definition two_mems (tys : list term) : bool :=
+  match filter (is_ty kn_mem) tys with _ :: _ :: _ => true | _ => false end.
 
 Definition ind_kind := ind_of <% KQR.kind %>.
 Definition ind_list := ind_of <% list %>.
@@ -3159,10 +3208,17 @@ Definition copytab := list (kername * (list term * list cent) * kername * term).
 (** the wrapper of a function whose parameters stand in another order (step 41): its parameters in the syntax's order, the
     function given them in its own -- a caller's text converts with it by one beta step *)
 Definition perm_meaning (kn : kername) (tys : list term) (perm : list nat) : term :=
-  let N := length tys in
+  let N := length perm in
   fold_right (fun ty b => tLambda {| binder_name := nAnon; binder_relevance := Relevant |} ty b)
-             (tApp (tConst kn []) (map (fun u => tRel (Nat.sub (Nat.sub N 1) (pos_in u perm))) (seq 0 N)))
+             (tApp (tConst kn []) (map (fun u => if existsb (Nat.eqb u) perm then tRel (Nat.sub (Nat.sub N 1) (pos_in u perm)) else tRel 0) (seq 0 (length tys))))
              (map (fun i => nth i tys (tRel 0)) perm).
+(** a memory parameter never read, for the theorem of each of its values (step 53): those parameters [u], the others as above *)
+Definition dead_meaning (kn : kername) (tys : list term) (perm : list nat) : term :=
+  let N := length perm in
+  tLambda {| binder_name := nAnon; binder_relevance := Relevant |} (tConst kn_mem [])
+    (fold_right (fun ty b => tLambda {| binder_name := nAnon; binder_relevance := Relevant |} (lift0 1 ty) b)
+                (tApp (tConst kn []) (map (fun u => if existsb (Nat.eqb u) perm then tRel (Nat.sub (Nat.sub N 1) (pos_in u perm)) else tRel N) (seq 0 (length tys))))
+                (map (fun i => nth i tys (tRel 0)) perm)).
 Definition fun_tys (Σ : global_env) (kn : kername) : list term * bool :=
   match lookup_env Σ kn with
   | Some (ConstantDecl cb) => match cst_body cb with Some (tFix [d] 0) => (fst (lams (dbody d)), true) | Some b => (fst (lams b), false) | None => ([], false) end
@@ -3171,14 +3227,17 @@ Definition fun_tys (Σ : global_env) (kn : kername) : list term * bool :=
 (** a function read: under its own name, or (step 41) as its wrapper -- [kn__o] when it recurses, [kn__on] when not *)
 (** the entry's parameter order when it is not the syntax's: [main]'s arguments put in that order *)
 Definition entry_perm (p : program) : option (list nat) := match p with (Σ, tConst root _) => fun_perm Σ root | _ => None end.
-Definition add_fun (Σ : global_env) (kn : kername) (gs : sig) (b : fbody) (es : list (kername * sig * fbody)) (tbl : copytab) :
+Definition add_fun_d (dm : bool) (Σ : global_env) (kn : kername) (gs : sig) (b : fbody) (es : list (kername * sig * fbody)) (tbl : copytab) :
   list (kername * sig * fbody) * copytab :=
   match fun_perm Σ kn with
   | None => (es ++ [(kn, gs, b)], tbl)
   | Some pm => let '(tys, isfix) := fun_tys Σ kn in
                let ckn := (copy_mp, mangle kn ^ (if isfix then "__o" else "__on")) in
-               (es ++ [(ckn, gs, b)], tbl ++ [(kn, ([], [CSelfP pm]), ckn, perm_meaning kn tys pm)])
+               let gkn := (copy_mp, snd ckn ^ "__g") in
+               (es ++ [(ckn, gs, b)], tbl ++ [(kn, ([], [CSelfP pm]), ckn, perm_meaning kn tys pm)]
+                                          ++ (if dm then [(gkn, ([], []), gkn, dead_meaning kn tys pm)] else []))
   end.
+Definition add_fun := add_fun_d false.
 Definition find_copy (T : kername) (fargs : list term) (capk : list cent) (tbl : copytab) : option kername :=
   option_map (fun e => snd (fst e)) (List.find (fun e => Kername.eqb T (fst (fst (fst e))) && teqs fargs (fst (snd (fst (fst e))))
                                                          && capk_eqb capk (snd (snd (fst (fst e))))) tbl).
@@ -3234,9 +3293,19 @@ Definition tc_of_t (Σ : global_env) (mp : modpath) (tbl : copytab) (kn : kernam
 
 (** a call of a function whose parameters stand in another order (step 41): a call of its wrapper, the arguments in the
     syntax's order *)
+(** how many arguments the function has that a wrapper stands for *)
+Fixpoint wrap_arity (t : term) : nat :=
+  match t with tLambda _ _ b => wrap_arity b | tApp _ l => length l | _ => O end.
 Definition tc_of (Σ : global_env) (mp : modpath) (tbl : copytab) (kn : kername) (args : list term) : option (kername * list term) :=
   match List.find (fun e => Kername.eqb kn (fst (fst (fst e))) && match snd (snd (fst (fst e))) with [CSelfP _] => true | _ => false end) tbl with
-  | Some (_, (_, [CSelfP pm]), ckn, _) => if Nat.eqb (length args) (length pm) then Some (ckn, map (fun i => nth i args (tRel 0)) pm) else None
+  | Some (_, (_, [CSelfP pm]), ckn, mn) =>
+      if Nat.eqb (length args) (length pm) then Some (ckn, map (fun i => nth i args (tRel 0)) pm)
+      else if Nat.eqb (length args) (wrap_arity mn) then
+        let l := map (fun i => nth i args (tRel 0)) pm in
+        let m := last l (tRel 0) in
+        if forallb (fun p => if existsb (Nat.eqb p) pm then true else teq 1000 (nth p args (tRel 0)) m) (seq 0 (length args))
+        then Some (ckn, l) else None
+      else None
   | _ => tc_of_t Σ mp tbl kn args
   end.
 
@@ -3489,6 +3558,19 @@ Definition read_tmpl (Σ : global_env) (hb : kername -> option term) (tc : kerna
   end.
 
 Definition callees_of (es : list (kername * sig * fbody)) : list (kername * sig) := map (fun x => (fst (fst x), snd (fst x))) es.
+(** a function read and added: with every other memory parameter the same memory; failing that, with those it never reads as such (step 53) *)
+Definition read_add (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
+  (kn : kername) (bt : kername -> option Z) (chk : bool) (es : list (kername * sig * fbody)) (tbl : copytab) : option (list (kername * sig * fbody) * copytab) :=
+  match reify_fun Σ hb tc rt (callees_of es) kn bt chk with
+  | Some (gs, b) => Some (add_fun Σ kn gs b es tbl)
+  | None =>
+      if two_mems (fst (fun_tys Σ kn)) then
+        match reify_fun_d true Σ hb tc rt (callees_of es) kn bt chk with
+        | Some (gs, b) => Some (add_fun_d true Σ kn gs b es tbl)
+        | None => None
+        end
+      else None
+  end.
 
 (** the copy for a call site, made (with the copies its functions need) if it is not yet, before the functions that call it *)
 Fixpoint ensure (fuel : nat) (Σ : global_env) (mp : modpath) (hb : kername -> option term) (rt : list rentry) (th tms : list kername)
@@ -3763,6 +3845,15 @@ Definition slot_arg (pss : list (list nat)) (p : nat) (args : list term) (dflt :
   | Some (u, _) => psnd_t (nth u args unread_t)
   | None => dflt
   end.
+(** two parameters of a member in one slot (step 53, two memory parameters): a call gives them the same *)
+Definition slots_agree (pss : list (list nat)) (args : list term) : bool :=
+  forallb (fun u => match nth u pss [] with
+                    | [p] => match find_pos p pss 0 with
+                             | Some (u0, 0) => if Nat.eqb u0 u then true else teq 1000 (nth u args unread_t) (nth u0 args unread_t)
+                             | _ => true
+                             end
+                    | _ => true
+                    end) (seq 0 (length pss)).
 (** the calls of the members: of the part, its own recursive call; of another part, a call of that member *)
 Fixpoint sibr (fuel : nat) (L NB X : nat) (pin : nat -> option (nat * list (list nat))) (nargs : nat -> nat) (outk : nat -> kername)
   (d : nat) (t : term) {struct fuel} : term :=
@@ -3779,8 +3870,10 @@ Fixpoint sibr (fuel : nat) (L NB X : nat) (pin : nat -> option (nat * list (list
             if Nat.eqb (length args') (nargs jj) then
               match pin jj with
               | Some (sel, pss) =>
+                  if slots_agree pss args' then
                   tApp (tRel (d + NB)) (map (fun p => if Nat.eqb p (S X) then sel_lit sel else slot_arg pss p args' (tRel (d + NB - 1 - p)))
                                             (seq 0 NB))
+                  else unread_t
               | None => tApp (tConst (outk jj) []) args'
               end
             else unread_t
@@ -4116,14 +4209,8 @@ Definition reify_prog2b (bt : kername -> option Z) (chk : bool) (p : program) : 
                                 (* a member of a mutual block (step 45): its part, after the parts it calls, each read once *)
                                 let g := map (mcalls (length mfix)) mfix in
                                 add_member Σ (fst kn) hb rt bt chk mfix (part_of g (length mfix) k) k (ensure_part 100 Σ (fst kn) hb rt bt chk mfix g k (Some (es, tbl)))
-                              else match reify_fun Σ hb (tc_of Σ mp tbl) rt (callees_of es) kn bt chk with
-                                   | Some (gs, b) => Some (add_fun Σ kn gs b es tbl)
-                                   | None => None
-                                   end
-                          | _ => match reify_fun Σ hb (tc_of Σ mp tbl) rt (callees_of es) kn bt chk with
-                                 | Some (gs, b) => Some (add_fun Σ kn gs b es tbl)
-                                 | None => None
-                                 end
+                              else read_add Σ hb (tc_of Σ mp tbl) rt kn bt chk es tbl
+                          | _ => read_add Σ hb (tc_of Σ mp tbl) rt kn bt chk es tbl
                           end
                       | None => None
                       end
@@ -4357,6 +4444,7 @@ Definition why_fun (Σ : global_env) (hb : kername -> option term) (tc : kername
                       | None, x :: r => ["a parameter or result of type " ^ fold_left (fun a y => a ^ ", " ^ y) r x]
                       end in
           let r0 := if rec == "" then sigr else rec :: sigr in
+          let r0 := if two_mems tys then add_s "two memories as parameters, not handed the same memory and one not left unread (two versions of the memory both used)" r0 else r0 in
           let r1 := fold_left (fun a t => blockers 100000 (fns ++ hs) nohb t a) texts r0 in
           let numfn := negb (is_ty kn_mem (ret_ty ty)) in
           let mfns := filter (fun k => match lookup_env Σ k with
@@ -4410,8 +4498,8 @@ Definition reify_why (p : program) : list (string * list string) :=
                                                (why_fun Σ hb (tc_of Σ mp tbl) rt kns bad (callees_of es) (fst (fst s)))) ss in
               (es, tbl, bad ++ [kn], out ++ [(snd kn, "gives functions to a recursive function whose copy for them is not read" :: tr)])
           | Some (es', tbl') =>
-              match reify_fun Σ hb (tc_of Σ mp tbl') rt (callees_of es') kn (fun _ => None) true with
-              | Some (gs, b) => let '(es2, tbl2) := add_fun Σ kn gs b es' tbl' in (es2, tbl2, bad, out)
+              match read_add Σ hb (tc_of Σ mp tbl') rt kn (fun _ => None) true es' tbl' with
+              | Some (es2, tbl2) => (es2, tbl2, bad, out)
               | None => (es', tbl', bad ++ [kn], out ++ [(snd kn, why_fun Σ hb (tc_of Σ mp tbl') rt kns bad (callees_of es') kn)])
               end
           end) kns ([], [], [], []) in

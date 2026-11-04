@@ -684,14 +684,19 @@ def reflect(name, entry, prog, no_proof):
                                    ("compile_f_okrx", "KQR.fx0", "KQR.fx1", "") if f[5] == "true" else
                                    ("compile_f_okr", "KQR.fr0", "KQR.fr1", f" {f[3]}"))
                 b = f"(KQRReify.body_at {name}_funs {j})"
+                # (step 53) a memory parameter never read: the theorem for each of its values
+                dead = f[0] + "__g" in made
                 hh = (f"(KQR.cmapT {f[1]} (KQR.ntypeTP {kl(f)} (KQR.rtq {f[4]} {rq(f)})) (KQR.ntypeT {kl(f)} true (KQR.rtq {f[4]} {rq(f)}))"
-                      f" (KQR.unpairT {kl(f)} (KQR.rtq {f[4]} {rq(f)})) {f[0]})") if prec else f[0]
+                      f" (KQR.unpairT {kl(f)} (KQR.rtq {f[4]} {rq(f)})) {f[0]})") if prec else f"({f[0]}__g u)" if dead else f[0]
                 core = (f"(@KQR.{thm} {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {int(f[1]) - 1} {kl(f)}{mm} ({p0} {b}) ({p1} {b})"
                         f" {bo(f)} {ws(f)}{ri} {hh} eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl eq_refl"
                         f" (fun n => {'ltac:(reflexivity)' if prec else 'eq_refl'}))")
                 if prec:
                     core = (f"(@KQR.callee_ok_unpair {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {f[1]} {kl(f)} {f[4]} {f[5]}"
                             f" {rq(f)} {bo(f)} {wsl(f)} {f[0]} {core})")
+                if dead:
+                    core = (f"(@KQR.callee_ok_dead {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {f[1]} {kl(f)} {f[4]} {f[5]}"
+                            f" {rq(f)} {bo(f)} {wsl(f)} {f[0]}__g (fun u => {core}))")
                 t += f"Proof. exact_no_check {core}. Qed.\n" 
             elif isp(f):
                 # the pair (step 44): the theorem of the function on the two components, then the function's own
@@ -794,6 +799,11 @@ def main():
             if r:
                 eid, kinds, res, n, slots, perm = r
                 if perm:
+                    # (step 53) an entry of two memory parameters: main gives it one memory
+                    if any(args[i] != args[perm[-1]] for i in range(len(args)) if i not in perm):
+                        print(name, "reflect: not read by the verified compiler's reifier (main gives the entry two memories)" + FOLLOW, flush=True)
+                        print(name, "REFUSED: not compiled by the verified compiler (the reasons above)", flush=True)
+                        continue
                     args = [args[i] for i in perm]
                 print(name, ("NOT PROVED (proofs skipped)" if no_proof else "PROVED"), n, "functions by the verified compiler; entry",
                       entry, "id", eid, kinds, "->", res, flush=True)
