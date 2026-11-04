@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **2115 of 2147, 16 gaps, 15 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **2169 of 2221, 36 gaps, 15 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4851,6 +4851,17 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Cells*: 74, `A_n_*`.
 - *The acceptance*: `proved/examples/lib_fix`: `Nat.iter`, `xorb`, `Sint63.abs`, a cast, `nat_rect`; the answer worked out apart: 34.
 
+**Step 63 done (2026-11-05): natural forms the table had no cell for.**  Built as designed, in the reifier alone (`KQR.v`, `KQRWf.v`, `kitc.py` unchanged):
+- *The reader*: `lib_open` in `helper_of` and where a local fixpoint is looked for; `ret_ty` through a redex; `ty_beta`, `ty_has`, last resort in `y_all`; a sig's proof no value in `iota_go`; `unit` and `sig` in `head_r`.
+- *The acceptance*: `proved/examples/lib_fix`: proved, built, 34.
+- *Cells*: 74 more (2222): 54 proved, 20 gaps, four classes.  A probe finds what the families do not: its programs are written with no thought of the reader, so it should be done again as the language grows.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the trees without their generated files, F62; step 62's files / these): `HWP_kernel` 2.61 / 2.59 s, `HWP_own` 1.97 / 1.96, `HWP_irqnow` 1.65 / 1.65 — the same.
+- The C: the 71 programs before byte-identical, the new example through the verified compiler.  The construct table (on
+  `f1d978e`): **2169 of 2221 through the verified compiler**, 15 by design, 36 gaps, 1 not Rocq (was 2115 of 2147: 54 of the 74
+  new cells read, 20 gaps, each with its category).  The gate on `f1d978e`, the walk switched off: `make.sh` `core-ok`; examples
+  36 / 36; corpus 36 / 36; the five kernels (13 / 12 / 12 / 14 / 14 s); **80 programs through the verified compiler, 0 refused**;
+  the trusted base unchanged.  Next: the operations of Rocq's machine numbers that its own axioms define by others.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5026,11 +5037,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `4ed9b94` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `f1d978e` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 63's design -- natural forms the table had no cell for: a probe, what Rocq's libraries define, a motive, a cast, a value holding a proof |
+| (this commit) | §12.V: step 63 (natural forms from a probe: the construct table 2169 of 2221, 15 by design, 36 gaps), the C, the gate |
+| `f1d978e` | `proved/KQRReify.v` + `matrix/gen.py` + `classify.py` + `examples/lib_fix` step 63: natural forms the table had no cell for, from a probe: what Rocq's libraries define, a motive, a cast, a value holding a proof, `unit`; 74 cells; `KQR.v` unchanged |
+| `139fc4d` | §12.V: step 63's design -- natural forms the table had no cell for: a probe, what Rocq's libraries define, a motive, a cast, a value holding a proof |
 | `c0f9a51` | §12.V: step 62 (a mutual block of different result types: the construct table 2115 of 2147, 15 by design, 16 gaps), the C, the gate |
 | `4ed9b94` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix/gen.py` + `classify.py` step 62: a mutual block of different result types, the others written out in a hub; a member's match that gives a function; 6 cells; `KQR.v` unchanged |
 | `8cd569a` | §12.V: step 62's design -- a mutual block of different result types, the other members read through a hub |
