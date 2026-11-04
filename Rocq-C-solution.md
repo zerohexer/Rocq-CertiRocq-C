@@ -4854,13 +4854,21 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 **Step 63 done (2026-11-05): natural forms the table had no cell for.**  Built as designed, in the reifier alone (`KQR.v`, `KQRWf.v`, `kitc.py` unchanged):
 - *The reader*: `lib_open` in `helper_of` and where a local fixpoint is looked for; `ret_ty` through a redex; `ty_beta`, `ty_has`, last resort in `y_all`; a sig's proof no value in `iota_go`; `unit` and `sig` in `head_r`.
 - *The acceptance*: `proved/examples/lib_fix`: proved, built, 34.
-- *Cells*: 74 more (2222): 54 proved, 20 gaps, four classes.  A probe finds what the families do not: its programs are written with no thought of the reader, so it should be done again as the language grows.
+- *Cells*: 74 more (2221): 54 proved, 20 gaps, four classes.  A probe finds what the families do not: its programs are written with no thought of the reader, so it should be done again as the language grows.
 - *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the trees without their generated files, F62; step 62's files / these): `HWP_kernel` 2.61 / 2.59 s, `HWP_own` 1.97 / 1.96, `HWP_irqnow` 1.65 / 1.65 — the same.
 - The C: the 71 programs before byte-identical, the new example through the verified compiler.  The construct table (on
   `f1d978e`): **2169 of 2221 through the verified compiler**, 15 by design, 36 gaps, 1 not Rocq (was 2115 of 2147: 54 of the 74
   new cells read, 20 gaps, each with its category).  The gate on `f1d978e`, the walk switched off: `make.sh` `core-ok`; examples
   36 / 36; corpus 36 / 36; the five kernels (13 / 12 / 12 / 14 / 14 s); **80 programs through the verified compiler, 0 refused**;
   the trusted base unchanged.  Next: the operations of Rocq's machine numbers that its own axioms define by others.
+
+**Step 64, the operations of Rocq's machine numbers that its own axioms define by others (§2.1, §12.O) — the design (2026-11-05).**  `compare`, `compares`, `addc`, `addcarryc`, `subc`, `subcarryc`, `diveucl`, `addmuldiv` have no instruction in KQL, and they need none: `Uint63Axioms` says what each is, `compare_def_spec : compare x y = compare_def x y`, `compare_def` written with `ltb` and `eqb`, and so on (`compares` from `compare_spec`, a lemma of ours).  These are Rocq's own axioms about its integers, which every theorem here rests on already; nothing is added.
+- *The form read*: each such primitive replaced by its definition (`pm_table`, `pm_sub`), then step 61's floating: a match on `if c then C1 r else C0 r` is a choice over known constructors, floated out of the match, the match then gone (`y_conb`).  A primitive is stuck on a variable, so this is not a conversion: step 61's route, a function read in a form of the reader's and equal to the user's at every argument (`callee_ok_eq`).
+- *The equation*: step 61's tactic, the axioms rewritten first (`prim_rw`); for a function with no fixpoint, `own_step0`.
+- *A definition holding one*: a function of its own instead of written out, since a caller's conversion could not see through it (`is_fn`).
+- *Left*: `head0`, `tail0`, `mulc`, `diveucl_21`: their axioms only relate them, they need instructions (machine operations, next).
+- *Cells*: 12, `A_pm_*`, in a fixpoint, under an operand, writing, in a let, a helper giving `comparison` back.
+- *The acceptance*: `proved/examples/prim_fix`: the answer worked out apart: 1062.
 
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
@@ -5041,7 +5049,8 @@ Pushed to the public repository up to `f1d978e` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 63 (natural forms from a probe: the construct table 2169 of 2221, 15 by design, 36 gaps), the C, the gate |
+| (this commit) | §12.V: step 64's design -- the operations of Rocq's machine numbers that its own axioms define by others |
+| `2649859` | §12.V: step 63 (natural forms from a probe: the construct table 2169 of 2221, 15 by design, 36 gaps), the C, the gate |
 | `f1d978e` | `proved/KQRReify.v` + `matrix/gen.py` + `classify.py` + `examples/lib_fix` step 63: natural forms the table had no cell for, from a probe: what Rocq's libraries define, a motive, a cast, a value holding a proof, `unit`; 74 cells; `KQR.v` unchanged |
 | `139fc4d` | §12.V: step 63's design -- natural forms the table had no cell for: a probe, what Rocq's libraries define, a motive, a cast, a value holding a proof |
 | `c0f9a51` | §12.V: step 62 (a mutual block of different result types: the construct table 2115 of 2147, 15 by design, 16 gaps), the C, the gate |
