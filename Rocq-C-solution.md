@@ -4580,6 +4580,23 @@ is the same case: up to zeta the term is `let t := .. in .. rd 0 2 t ..`, every 
   through the verified compiler, 0 refused**; the trusted base unchanged.  Next: a second memory parameter; the function's own
   call in a let of a pair used bare; a mutual part of two types.
 
+**Step 53, a second memory parameter (§3.7) — the design (2026-11-04).**  Measured refused: `k4 n u x t` with `u` never read, `k5 n u t x` swapping its two;
+non-recursive functions are written out, so they read already.  In the meaning there is one memory only if the two parameters hold the same one, so a
+function of two is read as a function of one, by a wrapper, as parameter order is (step 41):
+- *The same memory*: `fun n x t => k n t x t`.  Every memory variable that is the newest memory is that one memory.  A recursive call must hand them
+  the same memory, up to which of those variables it names; a call of the function likewise.  With conversion alone: nothing in `KQR.v`.
+- *A memory never read, handed on as it is*: `k m u (x + 1) (upd 0 x x t)`: the first form does not convert, `k m t ..` against `k m t' ..` at a stuck counter.
+  But for any value `u` of it, `fun n x t => k n u x t` is an ordinary function of one memory, and its theorem holds for each `u`; at the memory the call gives
+  it, that is the theorem of the wrapper.  One lemma, proved once: `callee_ok_dead` (and `deadN`, `deadC`, which take the function of `u` to the wrapper).
+  No assumption, and the C is the C of the function of one memory.
+- *By design*: both live, `cp m u (upd 0 x (rd 1 x u) t) (x + 1)`: at each round read from the one and written in the other, two versions differing in cells
+  whose number comes from the data (§0.5, third reason).  Control: the same with one memory.  The call giving two versions likewise.
+- *Left, gaps*: a memory never read but given another memory by the call or moved by the recursion (no conversion and no fixed value to quantify over); the
+  never-read form inside a copy, a local fixpoint and a mutual block; beside a pair parameter.  Each with its cell, the next step's.
+- *Cells*: 37: the forms above in every result sort, in any order of parameters, three memories, a mutual block, a copy, a local fixpoint, a big function, the
+  entry, a caller of two memories itself.  An example runs it: `proved/examples/two_mems`.
+*Expected*: 1144 of 1169, 11 by design, 13 gaps.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4759,7 +4776,8 @@ Pushed to the public repository up to `99d5a45` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 52 (a memory made in place and read inside an expression: the construct table 1116 of 1132, 9 by design), the C, the gate |
+| (this commit) | §12.V: step 53's design (a second memory parameter: the same memory by a wrapper, a memory never read by `callee_ok_dead`, both live by design) |
+| `864e0be` | §12.V: step 52 (a memory made in place and read inside an expression: the construct table 1116 of 1132, 9 by design), the C, the gate |
 | `3b60930` | §12.V: step 52's design, what narrowing it found (the function's own call on the memory a let made) |
 | `99d5a45` | `proved/KQRReify.v` + `matrix/gen.py` + `classify.py` step 52: a memory made in place and read inside an expression, bound by a let; the function's own call on the memory a let made, bound; 39 cells |
 | `d0f1875` | §12.V: step 52's design (a memory made in place and read inside an expression: bound by a let) |
