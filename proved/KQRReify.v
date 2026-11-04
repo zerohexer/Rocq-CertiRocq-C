@@ -5102,10 +5102,80 @@ Definition eq_make (Σ : global_env) (kn : kername) : option pfg :=
       end
   | _ => None
   end.
+(** (step 61) a fixpoint with its own call on a counter deeper than the predecessor (the two-step [match n with S (S q) => f q ..]): [FRec] has the function at the predecessor only.  A budget function above it: the counter its own parameter, the budget the counter's value *)
+Fixpoint deep_call (fuel self m : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      match t with
+      | tApp (tRel i) args =>
+          if Nat.eqb i self then
+            match args with
+            | tRel j :: _ => if Nat.eqb j m then existsb (deep_call fuel self m) args else true
+            | _ => true
+            end
+          else existsb (deep_call fuel self m) args
+      | tApp f args => if deep_call fuel self m f then true else existsb (deep_call fuel self m) args
+      | tLambda _ _ c => deep_call fuel (S self) (S m) c
+      | tLetIn _ v _ c => if deep_call fuel self m v then true else deep_call fuel (S self) (S m) c
+      | tCase _ _ c brs =>
+          if deep_call fuel self m c then true
+          else existsb (fun br => let k := length (bcontext br) in deep_call fuel (self + k) (m + k) (bbody br)) brs
+      | _ => false
+      end
+  end.
+Definition deep_body (b : term) : option (def term) :=
+  match b with
+  | tFix [d] 0 =>
+      if Nat.eqb (rarg d) 0 then
+        let '(tys, body) := lams (dbody d) in
+        match tys, body with
+        | _ :: _, tCase _ _ (tRel c) [_; b1] =>
+            let n := length tys in
+            if Nat.eqb c (n - 1) then
+              if deep_call 3000 (n + length (bcontext b1)) 0 (bbody b1) then Some d else None
+            else None
+        | _, _ => None
+        end
+      else None
+  | _ => None
+  end.
+Definition deep_make (Σ : global_env) (kn : kername) : option pfg :=
+  match lookup_env Σ kn with
+  | Some (ConstantDecl cb) =>
+      match cst_body cb with
+      | Some b =>
+          match deep_body b with
+          | Some d =>
+              let '(tys, body) := lams (dbody d) in
+              let n := length tys in
+              pf_gen Σ kn tys (ret_ty (dtype d)) (tRel (n - 1)) (fn_self 100000 n 0 body)
+                     (fun base => map (fun i => tRel (base + i)) (seq 0 n) ++ [tVar "kqf"%bs])
+                     "d"%bs ""%bs
+          | None => None
+          end
+      | None => None
+      end
+  | _ => None
+  end.
+Definition deep_kns (Σ : global_env) (mp : modpath) : list kername :=
+  flat_map (fun e => if in_prog mp (fst (fst e)) then
+                       match snd e with
+                       | ConstantDecl cb => match cst_body cb with
+                                            | Some b => match deep_body b with Some _ => [fst e] | None => [] end
+                                            | None => []
+                                            end
+                       | _ => []
+                       end
+                     else []) (declarations Σ).
 Definition pf_make (Σ : global_env) (kn : kername) : option pfg :=
   match pf_make_p Σ kn with
   | Some r => Some r
-  | None => match fn_make Σ kn with Some r => Some r | None => eq_make Σ kn end
+  | None =>
+      match fn_make Σ kn with
+      | Some r => Some r
+      | None => match eq_make Σ kn with Some r => Some r | None => deep_make Σ kn end
+      end
   end.
 (** whether the program holds a [Function]: Recdef's [iter] is in what it names *)
 Definition kn_iter : kername := (MPfile ["Recdef"%bs; "funind"%bs; "Stdlib"%bs], "iter"%bs).
@@ -5164,7 +5234,7 @@ Definition conv_all (Σ : global_env) (mp : modpath) : global_env :=
   end.
 Definition pf_all (Σ0 : global_env) (mp : modpath) (root : kername) : global_env * copytab :=
   let Σ := conv_all Σ0 mp in
-  match (match lookup_env Σ kn_fix_sub with Some _ => true | None => pf_has_iter Σ end) with
+  match (match lookup_env Σ kn_fix_sub with Some _ => true | None => if pf_has_iter Σ then true else match deep_kns Σ mp with [] => false | _ => true end end) with
   | false => (Σ, [])
   | true =>
       fold_left (fun st kn =>
@@ -5189,7 +5259,7 @@ Definition pf_info (p : program) : list (string * string * nat * string * string
   match p with
   | (Σ, tConst root _) =>
       map (fun kn => (string_of_kername kn, ""%bs, O, ""%bs, ""%bs, "c"%bs, O)) (conv_kns Σ (fst root)) ++
-      match (match lookup_env Σ kn_fix_sub with Some _ => true | None => pf_has_iter Σ end) with false => [] | true =>
+      match (match lookup_env Σ kn_fix_sub with Some _ => true | None => if pf_has_iter Σ then true else match deep_kns Σ (fst root) with [] => false | _ => true end end) with false => [] | true =>
       flat_map (fun kn =>
         match pf_make Σ kn with
         | Some r =>
@@ -5203,11 +5273,142 @@ Definition pf_info (p : program) : list (string * string * nat * string * string
       end
   | _ => []
   end.
+(** (step 61) the function's own call under a choice in an operand: [(if c then f m x else a) + b].  It cannot be bound (it would run when the test is false), nor lifted (it names the fixpoint), and a match on a stuck test does not commute by conversion.  So the choice is floated out, [if c then f m x + b else a + b]: the fixpoint read is that one, equal to the user's at each counter by [KQRWf.own_step], and [callee_ok_eq] as for a measure.  Only for a program not read as it stands, whose C is then not changed *)
+Fixpoint y_pull (fuel self : nat) (t : term) {struct fuel} : option (case_info * predicate term * term * list (branch term)) :=
+  match fuel with
+  | O => None
+  | S fuel =>
+      match t with
+      | tCase ci p c brs =>
+          if existsb (fun br => tm_has_rel 1000 (self + length (bcontext br)) (bbody br)) brs then Some (ci, p, c, brs)
+          else
+            match y_pull fuel self c with
+            | Some (ci', p', c', brs') =>
+                Some (ci', p', c', map (fun br' =>
+                  let k := length (bcontext br') in
+                  {| bcontext := bcontext br';
+                     bbody := match lift0 k t with
+                              | tCase ci2 p2 _ brs2 => tCase ci2 p2 (bbody br') brs2
+                              | u => u
+                              end |}) brs')
+            | None => None
+            end
+      | tApp f args =>
+          let fix go (pre post : list term) {struct post} :=
+            match post with
+            | [] => None
+            | a :: r =>
+                match y_pull fuel self a with
+                | Some (ci, p, c, brs) =>
+                    Some (ci, p, c, map (fun br =>
+                      let k := length (bcontext br) in
+                      {| bcontext := bcontext br;
+                         bbody := tApp (lift0 k f) (map (lift0 k) (rev pre) ++ bbody br :: map (lift0 k) r) |}) brs)
+                | None => go (a :: pre) r
+                end
+            end in
+          go [] args
+      | tLetIn na b ty body =>
+          match y_pull fuel self b with
+          | Some (ci, p, c, brs) =>
+              Some (ci, p, c, map (fun br =>
+                let k := length (bcontext br) in
+                {| bcontext := bcontext br; bbody := tLetIn na (bbody br) (lift0 k ty) (lift k 1 body) |}) brs)
+          | None => None
+          end
+      | _ => None
+      end
+  end.
+Definition y_ret (p : predicate term) (T : term) : predicate term :=
+  {| pparams := pparams p; puinst := puinst p; pcontext := pcontext p; preturn := lift0 (length (pcontext p)) T |}.
+Fixpoint y_tail (fuel self : nat) (T t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      match t with
+      | tCase ci p c brs =>
+          match y_pull fuel self c with
+          | Some (ci', p', c', brs') =>
+              y_tail fuel self T (tCase ci' (y_ret p' T) c'
+                (map (fun br' =>
+                   let k := length (bcontext br') in
+                   {| bcontext := bcontext br';
+                      bbody := match lift0 k t with
+                               | tCase ci2 p2 _ brs2 => tCase ci2 p2 (bbody br') brs2
+                               | u => u
+                               end |}) brs'))
+          | None =>
+              tCase ci p c (map (fun br =>
+                let k := length (bcontext br) in
+                {| bcontext := bcontext br; bbody := y_tail fuel (self + k) (lift0 k T) (bbody br) |}) brs)
+          end
+      | tLetIn na b ty body =>
+          match y_pull fuel self b with
+          | Some (ci, p, c, brs) =>
+              y_tail fuel self T (tCase ci (y_ret p T) c (map (fun br =>
+                let k := length (bcontext br) in
+                {| bcontext := bcontext br; bbody := tLetIn na (bbody br) (lift0 k ty) (lift k 1 body) |}) brs))
+          | None => tLetIn na b ty (y_tail fuel (S self) (lift0 1 T) body)
+          end
+      | tApp _ _ =>
+          match y_pull fuel self t with
+          | Some (ci, p, c, brs) => y_tail fuel self T (tCase ci (y_ret p T) c brs)
+          | None => t
+          end
+      | _ => t
+      end
+  end.
+Definition y_fix (d : def term) : option term :=
+  let '(tys, body) := lams (dbody d) in
+  match body with
+  | tCase ci p (tRel c) [b0; b1] =>
+      let n := length tys in
+      let T := ret_ty (dtype d) in
+      if Nat.eqb (rarg d) 0 then
+        let b1' := y_tail 1000 (n + length (bcontext b1)) T (bbody b1) in
+        if teq 100000 b1' (bbody b1) then None
+        else Some (tFix [{| dname := dname d; dtype := dtype d; rarg := rarg d;
+                            dbody := lams_of tys (tCase ci p (tRel c) [b0; {| bcontext := bcontext b1; bbody := b1' |}]) |}] 0)
+      else None
+  | _ => None
+  end.
+Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env * bool :=
+  fold_left (fun st kn =>
+    let '(S1, ch) := st in
+    if in_prog mp (fst kn) then
+      match lookup_env S1 kn with
+      | Some (ConstantDecl cb) =>
+          match cst_body cb with
+          | Some (tFix [d] 0) =>
+              match y_fix d with
+              | Some f' => (add_decl (add_decl S1 (copy_mp, snd kn ^ "__wy"%bs) (cst_type cb) f') kn (cst_type cb) f', true)
+              | None => st
+              end
+          | _ => st
+          end
+      | _ => st
+      end
+    else st) (snd (reach_go 1000 Σ mp root root ([], []))) (Σ, false).
+(** the rows of those: the head of the environment, where [y_all] put them *)
+Fixpoint ends_wy (s : string) : bool :=
+  if String.eqb s "__wy"%bs then true else
+  match s with String.EmptyString => false | String.String _ r => ends_wy r end.
+Definition y_rows (Σ : global_env) : copytab :=
+  flat_map (fun e =>
+    if eq_mp (fst (fst e)) copy_mp then
+      if ends_wy (snd (fst e)) then
+        match snd e with
+        | ConstantDecl cb => match cst_body cb with Some b => [(fst e, ([], []), fst e, b)] | None => [] end
+        | _ => []
+        end
+      else []
+    else []) (firstn 40 (declarations Σ)).
 Definition reify_prog2c (lo : bool) (bt : kername -> option Z) (chk : bool) (p : program) : option (list (kername * sig * fbody) * list (string * term)) :=
   match p with
   | (Σ000, tConst root _) =>
       let mp := fst root in
-      let '(Σ00, ltp) := pf_all Σ000 mp root in
+      let '(Σ00, ltp0) := pf_all Σ000 mp root in
+      let ltp := y_rows Σ000 ++ ltp0 in
       let '(Σ0, lt0) := if lo then lift_ops Σ00 mp root else (Σ00, []) in
       let kns0 := reach 1000 Σ0 mp root root [] in
       let '(Σ, kns, lts1) := lift_all (float_all Σ0 kns0) mp kns0 in
@@ -5288,9 +5489,21 @@ Definition reify_prog2 (p : program) : option (list (kername * sig * fbody) * li
   | None =>
       match p with
       | (Σ, tConst root _) =>
-          match snd (lift_ops (fst (pf_all Σ (fst root) root)) (fst root) root) with
-          | [] => None
-          | _ => reify_prog2m true p
+          match match snd (lift_ops (fst (pf_all Σ (fst root) root)) (fst root) root) with
+                | [] => None
+                | _ => reify_prog2m true p
+                end with
+          | Some r => Some r
+          | None =>
+              (* (step 61) *)
+              match y_all Σ (fst root) root with
+              | (Σy, true) =>
+                  match reify_prog2m false (Σy, tConst root []) with
+                  | Some r => Some r
+                  | None => reify_prog2m true (Σy, tConst root [])
+                  end
+              | _ => None
+              end
           end
       | _ => None
       end

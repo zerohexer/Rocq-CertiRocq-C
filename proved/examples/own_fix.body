@@ -1,0 +1,24 @@
+(* a function's own call under a choice in an operand, and on a counter deeper than the predecessor.
+   fib 10 = 55; two steps at a time over 8, writing cell 2 of block 1 on the third round: 2; ko 3 0 2: 2 + 2 + 2 + 2 = 8.  55 + 2 + 8 = 65. *)
+Fixpoint fib (n : nat) : int :=
+  match n with
+  | O => 0
+  | S O => 1
+  | S (S q as m) => fib m + fib q
+  end.
+Fixpoint sk (n : nat) (a : int) (t : mem) : mem :=
+  match n with
+  | S (S q) => sk q (a + 1) (upd 1 a a t)
+  | _ => t
+  end.
+Fixpoint ko (n : nat) (a b : int) (t : mem) : int :=
+  match n with
+  | O => a
+  | S m => (if a <? b then ko m (a + 1) b (upd 0 a b t) else a) + b
+  end.
+Definition solve (s : mem) : int :=
+  let t := sk (kq_nat 8) 0 s in
+  fib (kq_nat 10) + rd 1 2 t + ko (kq_nat 3) 0 2 t.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_input 0).

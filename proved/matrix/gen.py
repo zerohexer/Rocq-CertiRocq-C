@@ -616,6 +616,45 @@ addA("par_pm_let_fst_pv", "", "let '(x, t) := kz n a s in x + rd 0 0 t",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : int * mem := let p := g n x t in (fst p + 1, snd p).\n")
 addA("par_pm_let_fst_mem", "", "rd 0 0 (kz n a s)",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : mem := let p := g n x t in upd 0 (fst p) 1 (snd p).\n")
+# the function's own call under a choice, the places around it (step 61)
+addA("own_two_choices", "", "ko n a b s",
+     "Fixpoint ko (n : nat) (a b : int) (t : mem) : int := match n with O => a | S m => (if a <? b then ko m (a + 1) b (upd 0 a b t) else a) + (if b <? a then ko m a (b + 1) t else b) end.\n")
+addA("own_match_counter", "", "ko n a b s",
+     "Fixpoint ko (n : nat) (a b : int) (t : mem) : int := match n with O => a | S m => (match m with O => a | S q => ko q (a + 1) b (upd 0 a b t) end) + b end.\n")
+addA("own_in_own_arg", "", "ko n a b s",
+     "Fixpoint ko (n : nat) (a b : int) (t : mem) : int := match n with O => a | S m => ko m (if a <? b then ko m (a + 1) b t else a) b t end.\n")
+addA("own_deep_fib", "", "ko n a",
+     "Fixpoint ko (n : nat) (a : int) : int := match n with O => a | S m => match m with O => a + 1 | S q => ko m (a + 1) + ko q (a + 2) end end.\n")
+addA("own_deep_fib_mem", "", "ko n a s",
+     "Fixpoint ko (n : nat) (a : int) (t : mem) : int := match n with O => a | S m => match m with O => a + rd 0 a t | S q => ko m (a + 1) t + ko q (a + 2) t end end.\n")
+addA("own_deep_tail_read", "", "ko n a s",
+     "Fixpoint ko (n : nat) (a : int) (t : mem) : int := match n with O => a | S m => match m with O => a + rd 0 a t | S q => ko q (a + 2) t end end.\n")
+addA("own_deep_write_mem", "", "rd 0 0 (ko n a s)",
+     "Fixpoint ko (n : nat) (a : int) (t : mem) : mem := match n with O => t | S m => match m with O => upd 0 a a t | S q => ko q (a + 2) (upd 0 a a t) end end.\n")
+addA("own_deep_write_mem2", "", "rd 0 0 (ko n a s)",
+     "Fixpoint ko (n : nat) (a : int) (t : mem) : mem := match n with O => t | S m => match m with O => ko m a t | S q => ko q (a + 2) (upd 0 a a t) end end.\n")
+addA("own_deep_bool", "", "if ko n a then a else b",
+     "Fixpoint ko (n : nat) (a : int) : bool := match n with O => true | S m => match m with O => false | S q => ko q (a + 2) end end.\n")
+addA("own_deep_record", "", "f1 (ko n a)",
+     "Fixpoint ko (n : nat) (a : int) : r3 := match n with O => mk3 a 0 0 | S m => match m with O => mk3 0 a 0 | S q => ko q (a + 2) end end.\n")
+addA("own_match_deep_tail", "", "ko n a b s",
+     "Fixpoint ko (n : nat) (a b : int) (t : mem) : int := match n with O => a | S m => match m with O => a | S q => ko q (a + 1) b (upd 0 a b t) end end.\n")
+addA("own_match_deep_op", "", "ko n a b s",
+     "Fixpoint ko (n : nat) (a b : int) (t : mem) : int := match n with O => a | S m => match m with O => a | S q => ko q (a + 1) b (upd 0 a b t) + b end end.\n")
+addA("own_match_deep_read", "", "ko n a b s",
+     "Fixpoint ko (n : nat) (a b : int) (t : mem) : int := match n with O => a | S m => (match m with O => a | S q => ko q (a + 1) b t end) + b end.\n")
+addA("own_two_choices_read", "", "ko n a b s",
+     "Fixpoint ko (n : nat) (a b : int) (t : mem) : int := match n with O => a | S m => (if a <? b then ko m (a + 1) b t else a) + (if b <? a then ko m a (b + 1) t else b) end.\n")
+addA("own_let_used", "", "ko n a b s",
+     "Fixpoint ko (n : nat) (a b : int) (t : mem) : int := match n with O => a | S m => let v := (if a <? b then ko m (a + 1) b (upd 0 a b t) else a) in v * v + b end.\n")
+addA("own_in_test", "", "ko n a b s",
+     "Fixpoint ko (n : nat) (a b : int) (t : mem) : int := match n with O => a | S m => if (if a <? b then ko m (a + 1) b (upd 0 a b t) else a) <? b then a else b end.\n")
+addA("own_in_helper_arg", "", "ko n a b s",
+     "Definition hh (x y : int) : int := x * 2 + y.\nFixpoint ko (n : nat) (a b : int) (t : mem) : int := match n with O => a | S m => hh (if a <? b then ko m (a + 1) b (upd 0 a b t) else a) b end.\n")
+addA("own_deep", "", "ko n a b s",
+     "Fixpoint ko (n : nat) (a b : int) (t : mem) : int := match n with O => a | S m => ((if a <? b then (if b <? 9 then ko m (a + 1) b (upd 0 a b t) else b) else a) + 1) * 2 end.\n")
+addA("own_read_after", "", "ko n a b s",
+     "Fixpoint ko (n : nat) (a b : int) (t : mem) : int := match n with O => a | S m => (if a <? b then ko m (a + 1) b (upd 0 a b t) else rd 0 a t) + rd 0 b t end.\n")
 # Equations (step 60): each sort, tests through inspect and dec, nested, a measure on a counter and in phases, a function as a parameter, no recursion, structural, mutual
 addA("eq_tail", "", "pq a b",
      "From Stdlib Require Import ZArith Lia.\nDefinition mu (x : int) : nat := Z.to_nat (Sint63.to_Z x).\nLemma mu_pred : forall x, (0 <? x) = true -> (mu (x - 1) < mu x)%nat.\nProof.\n  intros x H. unfold mu. apply Sint63.ltb_spec in H. change (Sint63.to_Z 0) with 0%Z in H. change (0 < Sint63.to_Z x)%Z in H.\n  pose proof (Sint63.to_Z_bounded x) as [Bl Bh].\n  assert (Mi : Sint63.to_Z Sint63.max_int = 4611686018427387903%Z) by reflexivity. rewrite Mi in Bh.\n  assert (W2 : (Uint63.wB / 2 = 4611686018427387904)%Z) by reflexivity.\n  assert (E : Sint63.to_Z (x - 1) = (Sint63.to_Z x - 1)%Z).\n  { rewrite Sint63.sub_spec. change (Sint63.to_Z 1) with 1%Z. apply Sint63.cmod_small. rewrite W2. lia. }\n  rewrite E. lia.\nQed.\nFrom Equations Require Import Equations.\nDefinition inspect {A} (a : A) : {b | a = b} := exist _ a eq_refl.\nNotation \"x 'eqn:' p\" := (exist _ x p) (only parsing, at level 20).\nEquations pq (x y : int) : int by wf (mu x) lt :=\n  pq x y with inspect (0 <? x) => {\n    | true eqn: H => pq (x - 1) (y + x)\n    | false eqn: _ => y }.\nNext Obligation. apply mu_pred. auto. Qed.\n")

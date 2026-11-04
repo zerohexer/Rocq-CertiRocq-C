@@ -228,3 +228,24 @@ Ltac eq_step pr :=
                 | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
                 | match goal with |- context [match ?c with pair _ _ => _ end] => destruct c end
                 | reflexivity ]).
+
+(** (step 61) a fixpoint with its own call under a choice in an operand, and the same with the choice floated out: equal at each counter, test by test *)
+Ltac own_step IH :=
+  repeat (cbn beta iota zeta;
+          first [ progress (rewrite ?IH)
+                | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
+                | match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
+                | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
+                | match goal with |- context [match ?c with pair _ _ => _ end] => destruct c end
+                | reflexivity ]).
+
+(** (step 61) a fixpoint with its own call on a counter deeper than the predecessor, and a budget function above it: equal at every budget above the counter *)
+Ltac deep_step IH :=
+  repeat (cbn beta iota zeta;
+          first [ exfalso; lia
+                | progress (rewrite ?IH by lia)
+                | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
+                | match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
+                | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
+                | match goal with |- context [match ?c with pair _ _ => _ end] => destruct c end
+                | reflexivity ]).

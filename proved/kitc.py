@@ -529,7 +529,7 @@ def reflect(name, entry, prog, no_proof):
     # (step 60) a fixpoint whose match on its counter gives a function: not a measure's, its theorem a copy's
     cv = {k for k, m in pfs.items() if m[5] == "c"}
     pfs = {k: m for k, m in pfs.items() if m[5] != "c"}
-    t = HDR + "From KQC Require KQR KQRReify" + (" KQRWf" if pfs else "") + ".\nImport ListNotations.\n" + ("From Stdlib Require Import FunInd.\n" if any(m[5] == "f" for m in pfs.values()) else "") + f"From KQG Require Import {name}_r.\n"
+    t = HDR + "From KQC Require KQR KQRReify" + (" KQRWf" if pfs or (os.path.exists(os.path.join(GEN, f"{name}_rmts.out")) and "__wy" in open(os.path.join(GEN, f"{name}_rmts.out")).read()) else "") + ".\nImport ListNotations.\n" + ("From Stdlib Require Import FunInd.\n" if any(m[5] == "f" for m in pfs.values()) else "") + f"From KQG Require Import {name}_r.\n"
     # the program's record types (step 12): each its type, its constructor and match, a value of it; the laws by a fixed script
     rp = os.path.join(GEN, f"{name}_rrec.out")
     # each entry: its type, its constructor (a data type's: its constructors), its number of fields, a data type's widths
@@ -703,6 +703,13 @@ def reflect(name, entry, prog, no_proof):
             # the budget a phase's lemma holds above: the budgets of those before, and one more each
             Kp = [K]
             for q in range(1, ph): Kp.append(f"({K} + S {Kp[-1]})")
+            if sp == "d":
+                # (step 61) a budget function above a fixpoint with its own call on a deeper counter
+                t += (f"Lemma {reqs[pf0]} : forall {ss}, {W} {ss} = {f[0]} {ss}.\n"
+                      f"Proof.\n  assert (kqA : forall kqk {ss} (kqh : {WM} {ss} <= kqk), {G} kqk {ss} = {f[0]} {ss}).\n"
+                      f"  {{ induction kqk as [|kqk IH]; intros {ss} kqh; unfold {WM} in *; cbn [{G}]; destruct {ps[0]}; cbn [{f[0]}]; KQRWf.deep_step IH. }}\n"
+                      f"  intros {ss}. unfold {W}. apply kqA. unfold {WM}. exact (le_n _).\nQed.\n")
+                continue
             if sp == "e":
                 # (step 60) Equations: FixWf, its functional's clauses unfolded
                 def unpe(r):
@@ -766,16 +773,25 @@ def reflect(name, entry, prog, no_proof):
                     t += f"    pose proof (@KQRWf.fix_sub_phase_F A B m Fs _ {Kp[q - 1]} (fun x r H => kqP{q - 1} x r {K} H) _ kqS{q}) as kqP{q};\n"
             t += (f"    unfold Corelib.Program.Wf.Fix_sub; refine (kqP{ph - 1} _ _ {K} _); cbv beta zeta; cbn [projT1 projT2]; change ({WN} {ss} <= {K} + S {Kp[ph - 2]}); unfold {WN}; KQRWf.bound_le\n"
                   f"  end.\nQed.\n")
+    # (step 61) a fixpoint read with a choice floated out of an operand: equal to the user's at each counter
+    yf = {f[0]: f[0].rsplit(".", 1)[-1] + "__wy" for f in fs if f[0].rsplit(".", 1)[-1] + "__wy" in made}
+    for j, f in enumerate(fs):
+        if f[0] in yf:
+            W = yf[f[0]]
+            t += (f"Lemma {name}_rqy{j} : KQR.eqC {f[1]} _ (KQR.eqN {kl(f)} {f[3]} _) {W} {f[0]}.\n"
+                  f"Proof. cbn [KQR.eqC KQR.eqN]. fix IH 1. intros kqn; destruct kqn as [|kqn]; intros; cbn [{W} {f[0]}]; KQRWf.own_step IH. Qed.\n")
     t += "Strategy opaque [" + " ".join([f[0] for f in fs if not iswr(f[0])] + tmpls) + "].\n"   # a copy is unfolded first
     if not no_proof:
         for j, f in enumerate(fs):
             cs = "[" + "; ".join(f"existT (@KQR.ftype {inst}) {sig(g)} {g[0]}" for g in fs[:j]) + "]"
             oks = "".join(f"(conj {name}_rok{i} " for i in range(j)) + "Logic.I" + ")" * j
-            if f[0] in pfs or f[0] in pfc:
+            if f[0] in pfs or f[0] in pfc or f[0] in yf:
                 # (step 56) the theorem of its budget function's call, then equal to it at every argument
                 # (step 59) a copy: the same, its equation the function's at the functions given
                 if f[0] in pfs:
                     W, rq0 = pfs[f[0]][3] + "__w", reqs[f[0]]
+                elif f[0] in yf:
+                    W, rq0 = yf[f[0]], f"{name}_rqy{j}"
                 else:
                     W, rq0 = f[0] + "__w", f"{name}_rqc{j}"
                     t += (f"Lemma {rq0} : KQR.eqC {f[1]} _ (KQR.eqN {kl(f)} {f[3]} _) {W} {f[0]}.\n"

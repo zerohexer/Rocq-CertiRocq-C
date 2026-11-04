@@ -13,6 +13,9 @@ import re, sys, collections
 # differs only in the cause.  The cells once listed here (option, sum, a list cell, a function in a pair, a function returned,
 # a dead memory let) build and take apart their value in place, so they are gaps.
 DESIGN_CELLS = {
+  # two calls of a function that writes at each round, each from the same memory, under two choices: two versions differing in cells
+  # whose number comes from the data (Rocq-C-solution.md §0.5, third reason); control: A_own_two_choices_read, the same with no write (step 61)
+  "A_own_two_choices",
   # a function built anew at each round of a measure recursion: a copy per function given, with no last copy (Rocq-C-solution.md
   # §0.5, the first reason); control: A_fn_fun_param, A_pf_fun_param, the function handed on as it is (step 59)
   "A_fn_f_grows",
