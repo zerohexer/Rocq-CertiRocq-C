@@ -4821,6 +4821,14 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   off: `make.sh` `core-ok`; examples 35 / 35; corpus 36 / 36; the five kernels (12 / 13 / 13 / 13 / 13 s); **79 programs through
   the verified compiler, 0 refused**; the trusted base unchanged.  Next: a mutual block of different result types.
 
+**Step 62, a mutual block of different result types; a member's match that gives a function (§3.5, §12.A) — the design (2026-11-04).**  `A_par_mutual_mixed` stood alone in the table, and it turns out to be by design: its member giving a memory writes on what the other's call, writing too, was given.  But a block that only reads, a number and a boolean, a number and a record, was refused as well, and had no cell.  A block's one function has one result.  The members of different types need not share one:
+- *A hub*: when one member `h` is the only one the others call, and none of them calls itself (even and odd, of any types), the others are written out in `h`: its own calls are then on deeper counters and may stand in a test, which step 61 reads: a budget function, the test floated.  The others are ordinary functions calling `h`.  Each equal to the user's member at every argument, by step 61's `deep_step`, the members unfolded as the tests take the counters apart.
+- *A member's match that gives a function*: `Equations`' mutual, `f_functional f g n x`, and a block written so by hand: step 60 left them; each is such a block after its functional is written out, so the same route, whatever its types.
+- *Own calls under a choice in what a budget function was made from*: floated as it is made, no equation being owed for the reader's own function.  `y_post`.
+- *`{wf lt n}`*: `Program Fixpoint` elaborates it to `MR lt`, `Function` to `lt` with `well_founded lt` beside its `tcc`: read by steps 56 and 57 already; cells, so the table says so.
+- *Left*: both members calling themselves, with different types (`A_par_mutual_both_self`): no member to write the others into.  `{wf R x}` on the user's relation.
+- *Cells*: `A_par_mutual_int_bool`, `_int_bool_mem`, `_int_record`, `_three`, `_both_self`, `A_pf_wf_lt`, `A_fn_wf_lt`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5000,7 +5008,8 @@ Pushed to the public repository up to `d3999c8` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 61 (the own call under a choice and on a deeper counter: the construct table 2108 of 2141, 14 by design, 18 gaps), the C, the gate; READ THIS FIRST |
+| (this commit) | §12.V: step 62's design -- a mutual block of different result types, the other members read through a hub |
+| `4bace15` | §12.V: step 61 (the own call under a choice and on a deeper counter: the construct table 2108 of 2141, 14 by design, 18 gaps), the C, the gate; READ THIS FIRST |
 | `d3999c8` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix/gen.py` + `classify.py` + `examples/own_fix` step 61: the function's own call under a choice, the choice floated out; on a deeper counter, a budget of its own; 19 cells; `KQR.v` unchanged |
 | `a207dda` | §12.V: step 61's design -- the function's own call under a choice, floated out; on a deeper counter, a budget function; each equal to the user's at every argument |
 | `bb8dbc8` | §12.V: step 60 (`Equations`: the construct table 2053 of 2122, 13 by design, 55 gaps), the C, the gate; §4.5, §12.P, D12, READ THIS FIRST |
