@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **953 of 962, 6 gaps, 2 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **963 of 972, 6 gaps, 2 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1613,6 +1613,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F61 | A written budget's largest value was `kq_nat`'s bound, 2^60, whatever was written: a mutual block's selector (given as a written number) counted 2^60 in a weighted sum, and the block's bound passed 2^62 (2026-11-03) | `cnat_max`: a written number in `kq_nat`'s range is its own largest value, in `cmax`, `cmaxv` and `clinf` |
 | F62 | The reifier's step was timed in two trees whose directories differ in size: `coqc` scans every directory `-R` and `-Q` give it, and the working tree holds every cell's generated files and the cells themselves (234 MB against 101 MB), so a file that loads only MetaRocq takes 0.80 s there against 0.73 s.  The 0.04–0.08 s the records of steps 44 continued to 48 put on the libraries' loading (and on the reifier's tests) was this.  Timed in copies of both trees without those directories, step 44 continued's files against step 48's: `HWP_kernel` 2.50 / 2.52 s, `HWP_own` 1.93 / 1.95, `HWP_irqnow` 1.63 / 1.64 — the same.  The timing now makes those copies. |
 | F63 | §0.5's third refusal took its example from a fixed difference: `let t := upd .. s in .. t .. s ..` differs from `s` in one cell, whose old value a variable keeps and puts back, as a C programmer does; `A_par_write_two` (step 47, one cell named in the callee's text) is the same.  Only two versions differing in cells whose number comes from the data need a copy (found by step 49's design, 2026-11-03) | §0.5's third refusal worded by the size of the difference, as values are (F35); the fixed side gets cells (gaps), a pin and a control show the side from the data (step 49) |
+| F64 | `&&` and `||` are functions: under `vm_compute` both sides are evaluated, and a scan written `is_pm ty && pm_bare 100000 0 body` walked the whole body at every let, a fuel literal of 100000 built each time, quadratic on a long chain of lets.  The first version of step 48 continued's `has_pm_let` cost 27% on the kernels' reifier step (`HWP_kernel` 2.36 to 3.00 s), found by the timing before its commit (2026-11-04) | the test written with `if`, the cheap one first: back to 2.38 s.  The same as F58: a test the reifier runs often goes cheapest first, and only `if` makes that an order |
 | F38 | MetaRocq's formal evaluation (`EWcbvEval.eval`, `PCUICWcbvEval`) has rules for primitive values only, none for primitive operations: `PrimInt63.add` has no body, `eval_delta` cannot fire, every program here is stuck in it | the verified compiler is built by reflection over our own syntax instead (D26, §1.12) (read in the image's MetaRocq sources, 2026-10-30) |
 | F37 | CakeML's architecture is ours: a proof-producing translator from the logic's functions on top, one verified compiler below; Pancake is verified through a proof-producing decompiler.  The difference is that CakeML builds each proof by construction while ours searches | D25, §1.11 (read in the CakeML repository, 2026-10-30) |
 
@@ -4410,6 +4411,31 @@ the price.  There is no need for one: `let p := e in BODY` is, up to zeta and be
   the body; the old memory in the body.
 *Expected*: those, but the last two.
 
+**Step 48 continued (2026-11-04): a call given the pair a let holds; the step is done but for the two places below.**  Built as designed,
+in the reifier alone (`KQR.v` and `kitc.py` unchanged):
+- *The reader*: a let of a number and a memory whose body uses the pair bare (`pm_bare`: other than through `fst`, `snd` or a match)
+  is lifted before the function holding it is read (`lift_pm`, `lift_all`): a function of its own, `NAME__lK`, its parameters the
+  free variables of the body (the counters first), the pair the last; the let a call of it given the pair's expression.  The function's
+  definition goes out as a copy's does (the table of `mts`), its theorem as any function's with a pair parameter (step 44), and the
+  function holding the let reduces to the user's text by beta and zeta.  A definition holding such a let counts as a function, not a
+  helper written out (`is_fn`: written out, the let would come back).  The lift is for a let in tail position or an operand of the
+  machine's operations.
+- *Cells*: 10 more (972): the pair given to two calls; in the body of a number, a boolean, a record; given in a test; given back; in a
+  recursive function; as an operand; and the two places left: the function's own call in the let's body (`A_par_pm_let_own`: it cannot
+  leave the fixpoint) and the memory before the pair read in the body (`A_par_pm_let_old`).  Run alone: 8 proved, and with them
+  `A_par_pm_call_in_pv`, `A_par_pm_call_in_mem`; the two places refused.  Run as a check beside them, 522 cells (booleans, pairs,
+  writes, records, templates, functions given, mutual blocks, memories, and every eleventh cell of the table): 514 proved, the other
+  8 the known gaps and the two cells refused by design (on the first version of the scan, F64, which gives the same answers).
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the
+  trees without their generated files, F62; the own call's files / these): `HWP_kernel` 2.35 / 2.38 s, `HWP_own` 1.78 / 1.80,
+  `HWP_irqnow` 1.48 / 1.48 — the same.  The first version of the scan cost 27% (3.00 / 2.27 / 1.87 s), caught here before its commit:
+  F64.
+- The C: 63 of 63 byte-identical.  The construct table (on `ffd7312`): **963 of 972 through the verified compiler**, 2 by design,
+  6 gaps, 1 not Rocq (was 953 of 962: the eight new cells read and the two pinned; the two places left added as gaps).  The gate
+  on `ffd7312`, the walk switched off: `make.sh` `core-ok`; examples 27 / 27; corpus 36 / 36; the five kernels (11 / 11 / 12 / 14
+  / 13 s); **71 programs through the verified compiler, 0 refused**; the trusted base unchanged.  What is left of step 48: the two
+  places of these cells.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4585,11 +4611,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `9d5ee76` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `ffd7312` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 48 continued, a call given the pair a let holds, the design (the let lifted to a function of the pair, no new construct of `S`) |
+| (this commit) | §11 F64, §12.V: step 48 continued (a call given the pair a let holds, by lifting the let: the construct table 963 of 972, 2 by design), the C, the gate |
+| `ffd7312` | `proved/KQRReify.v` + `matrix/gen.py` step 48 continued: a let of a pair used bare lifted to a function of the pair (`lift_pm`, `lift_all`); `KQR.v` unchanged; 10 cells |
+| `c632d1e` | §12.V: step 48 continued, a call given the pair a let holds, the design (the let lifted to a function of the pair, no new construct of `S`) |
 | `dd55ebd` | §12.V: step 48 continued (the own call not at the end of a boolean or a record that writes, mutual blocks of them: the construct table 953 of 962, 2 by design; the pair a let holds goes on), the C, the gate |
 | `9d5ee76` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` step 48 continued: `XBindRB`, `XBindRR`, `xnum`, `ctailxb_ok`; the reifier binds an own call of a boolean or a record, a boolean or a record that writes called at the end read as a bound call; 8 cells |
 | `ba62ec6` | §12.V: step 48 continued, the own call not at the end of a boolean or a record that writes, the design (`XBindRB`, `XBindRR`, `xnum`, `ctailxb_ok`) |
