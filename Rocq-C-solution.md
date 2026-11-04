@@ -62,12 +62,12 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **1116 of 1132, 6 gaps, 9 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **1144 of 1169, 13 gaps, 11 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
-3. **The translator's own side conditions** (§3.7): at most one memory per recursive function (the counter at any position and the
-   memory at any position since step 41, functions of any module and file since step 51).  An over-rejection until a theorem needs it.
+3. **The translator's own side conditions** (§3.7): all closed or with their cells: the counter at any position and the memory at any position since
+   step 41, functions of any module and file since step 51, a second memory parameter since step 53.
 4. **Rocq's own measure recursion** (`Program Fixpoint {measure ..}`, `Function`, `Equations`): what the owner asked for as
    loops "level 2".  `wfix` is the step built so far; the owner's form is owed (§4.5, §12.P).
 5. **The operations of freestanding C not yet in KQL** (§2.1): `uint64_t` division and remainder, signed 64-bit arithmetic, the
@@ -1018,7 +1018,7 @@ is a rule a user must learn today, and each is an over-rejection unless a theore
 |---|---|---|---|
 | the counter a function recurses on is its **first** parameter | `fparts`: `rarg d = 0` | no: the statement's induction can be on any `nat` parameter | read `rarg d = k` for any `k`; induct on parameter `k` |
 | the memory is the **last** parameter | `tr_call` (`[KMem], [m]` last), `mk_info` | no: the memory is one KQL argument wherever it stands | accept the memory at any position |
-| at most **one memory** per function | `mk_info` (`restmem && capmem` refused), the walk | partly: one memory is the linearity that makes in-place update correct; two *different* memory parameters both live would alias the one global memory | refuse only two memories used at once (by design, with pin and control); accept two parameters of which one is dead or one is the other (`A_par_mem_two`, two memory parameters of which one is unused, is already accepted) |
+| at most **one memory** per function | `mk_info` (`restmem && capmem` refused), the walk | partly: one memory is the linearity that makes in-place update correct; two *different* memory parameters both live would alias the one global memory | done (step 53): two parameters holding the same memory read as one by a wrapper, a parameter never read and handed on as it is by a theorem for each of its values, both live by design with pin and control; the forms left are gaps with cells (`A_par_mem2_*`) |
 | a function to translate is in the **program's own file** (or the kit) | `is_fn`, `reach`: `in_prog` since step 51 | no: a function of another file is quoted the same way | done (step 51): a constant of any file that is not a library's, of a nested module, of a functor's instance; a file the program requires beside it is compiled first |
 | a captured variable is a number, a counter or a memory | `cap_ok` | no: a captured boolean, pair or record is a parameter like any other | accept every kind `kind_of` accepts |
 | a helper larger than 40 nodes becomes a function of its own | `big_fun` | none (a proof-size choice, not a refusal) | keep; it is not visible to the user |
@@ -4597,6 +4597,32 @@ function of two is read as a function of one, by a wrapper, as parameter order i
   entry, a caller of two memories itself.  An example runs it: `proved/examples/two_mems`.
 *Expected*: 1144 of 1169, 11 by design, 13 gaps.
 
+**Step 53 done (2026-11-04): a second memory parameter.**  Built as designed:
+- *The reader*: the order the syntax takes has one memory, the last (`canon_perm`).  Every memory variable that is the newest memory is that memory: a recursive call
+  and a call of the function must give the others the same one, up to which of those variables they name (`alias_norm`).  The wrapper's meaning gives every memory
+  parameter the one memory.  A mutual block's members have one memory slot already; a call of a member giving two memories is refused where the block is written
+  (`slots_agree`), not left to the kernel's check.
+- *A memory never read, handed on as it is*: read with it marked (`CDeadM`), when the first reading fails.  `dead_meaning`: the function of it, `__g`.  `kitc.py` wraps the
+  copy theorem in `callee_ok_dead`.
+- *`KQR.v`*: `deadN`, `deadC`, `appc_deadC`, `appnT_deadN`, `callee_ok_dead`: added, nothing else touched; no new assumption.  At each value of the parameter the
+  function of the others is an ordinary function of one memory, its theorem proved as any other's, and at the memory the call gives there the wrapper is that function.
+- *`kitc.py`*: main giving an entry of two memory parameters two different memories is refused (it cannot today: main names one memory).
+- *An example runs it*: `proved/examples/two_mems`, two memories handed crosswise and one never read while the other moves, built and giving the answer worked out apart from
+  Rocq (18).
+- *Left, gaps with cells*: a memory never read but given another memory by the call (`A_par_mem2_dead_other`) or moved by the recursion (`A_par_mem2_dead_moved`); never read inside
+  a copy, a local fixpoint, a mutual block (`A_par_mem2_tmpl_dead`, `_lfix_dead`, `_mutual_moved`); beside a pair parameter (`A_par_mem2_hand_on_pair_param`, `_dead_pair_param`).
+- *Cells*: 37 more (1169).  Run alone: 28 proved, the two pins and the seven gaps refused with their reasons.  Run as a check beside them, 653 cells: 634 proved, the others the
+  known gaps and the cells refused by design among them.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the trees without their generated files,
+  F62; step 52's files / these): `HWP_kernel` 2.49 / 2.50 s, `HWP_own` 1.90 / 1.91, `HWP_irqnow` 1.59 / 1.60 — the same.
+- The C: the 64 programs before byte-identical, the new example through the verified compiler.  The construct table (on
+  `3fc8bcf`): **1144 of 1169 through the verified compiler**, 11 by design, 13 gaps, 1 not Rocq (was 1116 of 1132: the 28 new
+  cells read, the two pins refused, the seven places left added as gaps).  The gate on `3fc8bcf`, the walk switched off: `make.sh`
+  `core-ok`; examples 29 / 29; corpus 36 / 36; the five kernels (11 / 11 / 11 / 13 / 12 s); **73 programs through the verified
+  compiler, 0 refused**; the trusted base unchanged.  Next: a family of the table crossing memories made in place, what reads
+  them, where the expression stands and the sort of the function, which step 52's accident showed was missing; then the gaps,
+  §12.P.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4772,11 +4798,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `99d5a45` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `3fc8bcf` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 53's design (a second memory parameter: the same memory by a wrapper, a memory never read by `callee_ok_dead`, both live by design) |
+| (this commit) | §3.7, §12.V: step 53 (a second memory parameter: the construct table 1144 of 1169, 11 by design, 13 gaps), the C, the gate |
+| `3fc8bcf` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix/gen.py` + `classify.py` + `examples/two_mems` step 53: a second memory parameter: the same memory by a wrapper; a memory never read by `callee_ok_dead`; 37 cells |
+| `5dd81f5` | §12.V: step 53's design (a second memory parameter: the same memory by a wrapper, a memory never read by `callee_ok_dead`, both live by design) |
 | `864e0be` | §12.V: step 52 (a memory made in place and read inside an expression: the construct table 1116 of 1132, 9 by design), the C, the gate |
 | `3b60930` | §12.V: step 52's design, what narrowing it found (the function's own call on the memory a let made) |
 | `99d5a45` | `proved/KQRReify.v` + `matrix/gen.py` + `classify.py` step 52: a memory made in place and read inside an expression, bound by a let; the function's own call on the memory a let made, bound; 39 cells |
