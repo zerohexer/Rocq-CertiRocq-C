@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **1736 of 1762, 14 gaps, 11 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **1933 of 1995, 50 gaps, 11 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4664,6 +4664,23 @@ of a write, a call, a let of a call, none) × fourteen places × three sorts.  M
   X body's has none.  36 cells of one class.
 *Expected*: 1933 of 1995, 11 by design, 50 gaps.
 
+**Step 55 done (2026-11-04): the function's own call in every place.**  Built as designed:
+- *The family*: `Y_*`, 225 programs: six ways of giving the own call its memory × fourteen places × three sorts.  On step 54's reader 163 were read.
+- *`KQR.v`*: `BbLetRec`: let c := the function itself in a boolean's body; its meaning, code, well-formedness, three proof cases, as `BLetRec` for records.  No new assumption.
+- *The reader*: in a body with no memory the own call is bound where it stands (`reify_bb`, `reify_br`, as a fallback); a let around an operand floated (`float_op`), the same up to zeta; a let of a record
+  holding the own call, at the end of a body that writes, bound first instead of being read as a value of the body.  `A_par_own_nomem_*`: eight programs of a function with no memory using its own result.
+- *Left, gaps with their cells*: the own call under a choice in an operand, in a body that writes or a boolean's or a record's: 36 cells of one class.
+- *Cells*: 233 more (1995).  Run as a check beside them, 922 cells: 866 proved, the others the 36, the known gaps and the cells refused by design among them.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the trees without their generated files, F62; step 54's files / these):
+  `HWP_kernel` 2.53 / 2.55 s, `HWP_own` 1.93 / 1.94, `HWP_irqnow` 1.62 / 1.63 — the same.
+- *The check itself, faster (owner, 2026-11-04)*: nothing dropped.  The table six cells at a time instead of three, inside the same memory cap; the C check's old side taken from the last check's new side when the code is byte for
+  byte the one it ran on (the check compares them first).  From 65 minutes on 1762 cells to 47 on 1995: the C 7 minutes (18), the gate 12 (11), the table 28 (36).
+- The C: 65 of 65 byte-identical.  The construct table (on `417fcc1`): **1933 of 1995 through the verified compiler**, 11 by
+  design, 50 gaps, 1 not Rocq (was 1736 of 1762: the 189 `Y_*` cells and the eight `A_par_own_nomem_*` read, the 36 of one class
+  added as gaps).  The gate on `417fcc1`, the walk switched off: `make.sh` `core-ok`; examples 29 / 29; corpus 36 / 36; the five
+  kernels (12 / 12 / 12 / 13 / 13 s); **73 programs through the verified compiler, 0 refused**; the trusted base unchanged.  Next:
+  §12.P, Rocq's own measure recursion; the own call under a choice wants the X body's code to take a continuation.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4839,11 +4856,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `e86d7c8` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `417fcc1` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 55's design (the function's own call in every place: a family of the table; `BbLetRec`; bound where it stands in a body with no memory; the own call under a choice in an operand left, 36 cells) |
+| (this commit) | §12.V: step 55 (the function's own call in every place: the construct table 1933 of 1995, 11 by design, 50 gaps, 36 of them one class), the C, the gate |
+| `417fcc1` | `proved/KQR.v` + `KQRReify.v` + `matrix/gen.py` + `classify.py` step 55: the function's own call in every place: a family of the table, 225 programs; `BbLetRec`; bound where it stands in a body with no memory; `float_op` |
+| `f7ae8f7` | §12.V: step 55's design (the function's own call in every place: a family of the table; `BbLetRec`; bound where it stands in a body with no memory; the own call under a choice in an operand left, 36 cells) |
 | `2d315a4` | §12.V: step 54 (a family of the table crossing what writes with what is around it: the construct table 1736 of 1762, 11 by design, 14 gaps), the C, the gate |
 | `e86d7c8` | `proved/KQRReify.v` + `kitc.py` + `matrix/gen.py` + `classify.py` step 54: a family of the table crossing what writes with what is around it, 591 programs; `unroll`, `lift_ops` |
 | `01d17c6` | §12.V: step 54's design (a family of the table crossing what writes with what is around it; an operand that writes under a let or a match, a function of its own) |
