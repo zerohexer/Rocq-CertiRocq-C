@@ -452,7 +452,7 @@ def reflect(name, entry, prog, no_proof):
     f0 = os.path.join(GEN, f"{name}_r.v")
     open(f0, "w").write(HDR + "From KQC Require KQR KQRReify.\n" + prog
         + f"\nDefinition {name}_res := ltac:(run_template_program (tmQuoteRec {entry})\n"
-        + "  (fun q => let r := eval vm_compute in (KQRReify.reify_prog2 q, KQRReify.reify_why q, KQRReify.rec_info q, KQRReify.entry_perm q, KQRReify.fix1_info q) in exact r)).\n"
+        + "  (fun q => let r := eval vm_compute in (let r0 := KQRReify.reify_prog2 q in (r0, KQRReify.reify_why q, KQRReify.rec_info2 q r0, KQRReify.entry_perm q, KQRReify.fix1_info q)) in exact r)).\n"
         + f"Definition {name}_src := option_map fst (fst (fst (fst (fst {name}_res)))).\n"
         + f"Definition {name}_mts := match fst (fst (fst (fst {name}_res))) with Some x => snd x | None => [] end.\n"
         + f'Redirect "{name}_rinfo" Eval vm_compute in (option_map KQRReify.info_of {name}_src).\n'

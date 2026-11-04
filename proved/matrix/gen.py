@@ -616,6 +616,10 @@ addA("par_pm_let_fst_pv", "", "let '(x, t) := kz n a s in x + rd 0 0 t",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : int * mem := let p := g n x t in (fst p + 1, snd p).\n")
 addA("par_pm_let_fst_mem", "", "rd 0 0 (kz n a s)",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : mem := let p := g n x t in upd 0 (fst p) 1 (snd p).\n")
+addA("par_pm_let_nested", "", "kn2 n a s",
+     "Fixpoint gg (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => gg m (x + 1) (upd 0 x x t) end.\nDefinition kp (p : int * mem) : int := fst p + rd 0 0 (snd p).\nDefinition gg2 (p : int * mem) : int * mem := (fst p + 1, upd 1 0 (fst p) (snd p)).\nDefinition kn2 (n : nat) (x : int) (t : mem) : int := let p := gg n x t in let q := gg2 p in kp q + 1.\n")
+addA("par_own_opnd_choice", "", "ko n a s",
+     "Fixpoint ko (n : nat) (x : int) (t : mem) : int := match n with O => x | S m => (if x <? 3 then ko m (x + 1) (upd 0 x x t) else x) + 1 end.\n")
 # a second memory parameter (step 53): the same memory, a memory never read, both live (the pin), where the call gives another memory
 addA("par_mem2_hand_on", "", "k4 n s a s",
      "Fixpoint k4 (n : nat) (u : mem) (x : int) (t : mem) : int := match n with O => rd 0 x t | S m => k4 m u (x + 1) t end.\n")
@@ -1125,6 +1129,43 @@ for depth in (1, 2, 3):
     for combo in itertools.product(names, repeat=depth):
         N.append(("nest_" + "_".join(combo), fdef("int", nest(combo))))
 
+# ---------------------------------------------------------------- a memory made in place x what reads it x where it stands x the sort of the function (step 54)
+XH = """Fixpoint fill (n : nat) (i : int) (t : mem) : mem := match n with O => t | S m => fill m (i + 1) (upd 0 i (i * 2) t) end.
+Definition hw (x y : int) (t : mem) : mem := upd 0 x y t.
+Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.
+Fixpoint sm (n : nat) (x : int) (t : mem) : int := match n with O => x | S m => sm m (x + rd 1 x t) t end.
+Fixpoint wn (n : nat) (t : mem) : int := match n with O => rd 0 0 t | S m => wn m (upd 0 0 (rd 0 0 t + 1) t) end.
+Definition rdh (i : int) (t : mem) : int := rd 0 i t + 1.
+Fixpoint kr (n : nat) (x : int) (t : mem) : r3 := match n with O => mk3 (rd 0 x t) x 0 | S m => kr m (x + 1) t end.
+Fixpoint kb (n : nat) (x : int) (t : mem) : bool := match n with O => rd 0 x t <? x | S m => kb m (x + 1) t end.
+Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.
+"""
+XM = {"upd": "upd 0 a b s", "upd32": "upd32 0 a b s", "two": "upd 1 a b (upd 0 a b s)", "let": "let t := upd 0 a b s in upd 1 a b t",
+      "fix": "fill n a s", "helper": "hw a b s", "if": "if a <? b then upd 0 a b s else s", "match": "match n with O => s | S m => upd 0 a b s end",
+      "fixfix": "fill n a (fill n b s)", "snd": "snd (g n a s)"}
+XC = {"rd": "rd 0 b (M)", "rd32": "rd32 0 b (M)", "size": "kq_size 0 (M)", "reader": "sm n b (M)", "writer": "wn n (M)", "helper": "rdh b (M)",
+      "fst": "fst (g n b (M))", "field": "f1 (kr n b (M))", "bool": "if kb n b (M) then 1 else 2", "pairboth": "let p := g n b (M) in fst p + rd 0 0 (snd p)",
+      "sndrd": "rd 0 0 (snd (g n b (M)))", "matchpair": "match g n b (M) with (v, w) => v + rd 0 0 w end"}
+XE = {"whole": "X", "left": "(X) + a", "right": "a + (X)", "test": "if (X) <? a then a else b", "let": "let y := X in y + a", "helper": "h (X) a",
+      "call": "ff n (X)", "tmpl": "fold n a (X) (fun i acc => acc + i)", "field": "f1 (mk3 (X) a b)", "pair": "fst (X, a)", "twice": "((X) + a) * 2", "nested": "h ((X) + 1) (a + 2)",
+      "inlet": "(let y := a + 1 in (X) + y) + a", "ifop": "(if a <? b then X else a) + b", "matchop": "(match n with O => X | S _ => a end) + b",
+      "recfield": "(let w := mk3 (X) a b in f1 w) + 1", "pairfst": "let p := (X, a) in fst p + snd p", "ifboth": "if a <? b then (X) + 1 else (X) + 2"}
+XF = {"int": lambda e: ("", e),
+      "fix": lambda e: (f"Fixpoint kf {SIG} : int := match n with O => {e} | S m => kf m a b s end.\n", "kf n a b s"),
+      "bool": lambda e: (f"Definition kf {SIG} : bool := ({e}) <? a.\n", "if kf n a b s then a else b"),
+      "record": lambda e: (f"Definition kf {SIG} : r3 := mk3 ({e}) a b.\n", "f1 (kf n a b s)")}
+X = {}
+def addX(m, c, e, f):
+    ex = XE[e].replace("X", XC[c].replace("M", XM[m]))
+    d, call = XF[f](ex)
+    X[f"{m}_{c}_{e}_{f}"] = XH + d + f"Definition go {SIG} : int :=\n  {call}.\n"
+for m, c in itertools.product(XM, XC): addX(m, c, "left", "int")
+for c, e in itertools.product(XC, XE): addX("fix", c, e, "int")
+for m, e in itertools.product(XM, XE): addX(m, "rd", e, "int")
+for e, f in itertools.product(XE, XF): addX("fix", "rd", e, f)
+for c, f in itertools.product(XC, XF): addX("fix", c, "left", f)
+for m, f in itertools.product(XM, XF): addX(m, "rd", "left", f)
+
 # ---------------------------------------------------------------- write
 def write(outdir):
     os.makedirs(outdir, exist_ok=True)
@@ -1141,6 +1182,9 @@ def write(outdir):
         body = PRE + text + f"Definition go {SIG} : int :=\n  f n a b s.\n" + MAIN
         open(os.path.join(outdir, f"N_{i}.body"), "w").write(body)
         rows.append((f"N_{i}", "nesting", i))
+    for (i, text) in X.items():
+        open(os.path.join(outdir, f"X_{i}.body"), "w").write(PRE + text + MAIN)
+        rows.append((f"X_{i}", "cross", i))
     for (f, text) in LIBS.items():
         p = os.path.join(outdir, f + ".v")
         os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -1148,7 +1192,7 @@ def write(outdir):
     with open(os.path.join(outdir, "cells.tsv"), "w") as fh:
         for r in rows:
             fh.write("\t".join(r) + "\n")
-    print(len(rows), "cells:", len(P), "producers,", len(A), "parameters,", len(N), "nestings")
+    print(len(rows), "cells:", len(P), "producers,", len(A), "parameters,", len(N), "nestings,", len(X), "crossings")
 
 if __name__ == "__main__":
     write(sys.argv[1] if len(sys.argv) > 1 else "cells")

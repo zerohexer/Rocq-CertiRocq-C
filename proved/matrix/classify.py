@@ -42,6 +42,8 @@ DESIGN_CELLS = {
 }
 # gaps whose refusal message is shared with another category: classified by name
 BY_NAME = {
+  "A_par_own_opnd_choice": "the function's own call where it cannot be lifted out of the fixpoint: in a let of a pair used bare, in an operand under a choice",
+  "A_par_pm_let_own": "the function's own call where it cannot be lifted out of the fixpoint: in a let of a pair used bare, in an operand under a choice",
   **{c: "a second memory parameter: never read, but given another memory by the call or by the recursion; beside a pair parameter; never read, in a copy or a mutual block"
      for c in ("A_par_mem2_dead_other", "A_par_mem2_dead_moved", "A_par_mem2_dead_pair_param", "A_par_mem2_hand_on_pair_param",
                "A_par_mem2_tmpl_dead", "A_par_mem2_lfix_dead", "A_par_mem2_mutual_moved")},
