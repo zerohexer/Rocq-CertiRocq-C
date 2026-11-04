@@ -4653,6 +4653,17 @@ on step 53's reader: 465 read.  The refusals are three classes, each general:
   kernels (12 / 12 / 12 / 14 / 13 s); **73 programs through the verified compiler, 0 refused**; the trusted base unchanged.  Next:
   the same for the function's own call; then the gaps, §12.P.
 
+**Step 55, the function's own call in every place (§3.1) — the design (2026-11-04).**  The family of step 54 for the function's own call: `Y_*`, 225 programs: six ways of giving it its memory (the same, a write, a let
+of a write, a call, a let of a call, none) × fourteen places × three sorts.  Measured on step 54's reader: 163 read.  Three classes:
+- *A boolean function that tests its own result, with no memory*: `if kf m (a + 1) b then a <? b else b <? a`, `let c := kf m .. in negb c`.  Refused: `sbb` has no let of the own call; a function with a memory goes through
+  an X body since step 48 continued, one without has none.  Records have had the node since step 12 (`BLetRec`).  So `BbLetRec`, in `KQR.v`: a node, its meaning, its code, its well-formedness, three proof cases.  No new assumption.
+- *The own call where it stands, in a body with no memory*: `mk3 (f1 (kf m ..) + a) b 0`: bound by a let (the same term up to zeta), read by `BLetRec` or `BbLetRec`.
+- *Inside a record, a let around an operand, at the end of a body that writes*: bound first, the let floated: `(let y := e in x) + a` is `let y := e in x + a` up to zeta.
+- *Left, gaps with their cells*: the own call under a choice in an operand, in a body that writes or a boolean's or a record's: `(if c then f m .. else a) + b`.  It cannot be bound (it would run when the test is false, and a
+  budget of 2^60 would then be run in full), it cannot be lifted (it names the fixpoint), and a match on a stuck test does not commute.  A number function that only reads does it already, the expression's code taking a continuation; the
+  X body's has none.  36 cells of one class.
+*Expected*: 1933 of 1995, 11 by design, 50 gaps.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4832,7 +4843,8 @@ Pushed to the public repository up to `e86d7c8` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 54 (a family of the table crossing what writes with what is around it: the construct table 1736 of 1762, 11 by design, 14 gaps), the C, the gate |
+| (this commit) | §12.V: step 55's design (the function's own call in every place: a family of the table; `BbLetRec`; bound where it stands in a body with no memory; the own call under a choice in an operand left, 36 cells) |
+| `2d315a4` | §12.V: step 54 (a family of the table crossing what writes with what is around it: the construct table 1736 of 1762, 11 by design, 14 gaps), the C, the gate |
 | `e86d7c8` | `proved/KQRReify.v` + `kitc.py` + `matrix/gen.py` + `classify.py` step 54: a family of the table crossing what writes with what is around it, 591 programs; `unroll`, `lift_ops` |
 | `01d17c6` | §12.V: step 54's design (a family of the table crossing what writes with what is around it; an operand that writes under a let or a match, a function of its own) |
 | `112ef49` | §3.7, §12.V: step 53 (a second memory parameter: the construct table 1144 of 1169, 11 by design, 13 gaps), the C, the gate |
