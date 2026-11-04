@@ -4583,7 +4583,9 @@ Fixpoint pf_counter (fuel : nat) (m : term) : bool :=
   | S fuel =>
       match m with
       | tRel _ => true
-      | tApp (tConst k _) _ => if Kername.eqb k kn_kq_nat then true else if Kername.eqb k kn_nat_add then true else false
+      | tApp (tConst k _) [a; b] => if Kername.eqb k kn_nat_add then (if pf_counter fuel a then pf_counter fuel b else false) else false
+      | tApp (tConst k _) _ => Kername.eqb k kn_kq_nat
+      | tConstruct _ 0 _ => true
       | tApp (tConstruct _ 1 _) [c] => pf_counter fuel c
       | _ => false
       end
@@ -4593,31 +4595,213 @@ Definition pf_budget : term :=
   let b61 := tApp (tConst kn_kq_nat []) [tInt (Uint63.of_Z 1152921504606846975)] in
   tApp (tConst kn_nat_add []) [b60; tApp (tConst kn_nat_add []) [b60; tApp (tConst kn_nat_add []) [b60; b61]]].
 Definition pf_case_nat := <% fun n : nat => match n with O => O | S m => m end %>.
+(** a bound of a measure (step 58): the measure with the program's definitions written out; a bound of a number of [Z] from the machine numbers in it; of a [nat], a number or a counter expression.  Nothing here is trusted: [KQRWf.bound_le] proves it *)
+Definition kn_u_to_z := kn_of <% Uint63.to_Z %>.
+Definition kn_z_add := kn_of <% Z.add %>.
+Definition kn_z_sub := kn_of <% Z.sub %>.
+Definition kn_z_mul := kn_of <% Z.mul %>.
+Definition kn_z_div := kn_of <% Z.div %>.
+Definition kn_z_mod := kn_of <% Z.modulo %>.
+Definition kn_z_min := kn_of <% Z.min %>.
+Definition kn_z_max := kn_of <% Z.max %>.
+Definition kn_n_sub := kn_of <% Nat.sub %>.
+Definition kn_n_mul := kn_of <% Nat.mul %>.
+Definition kn_n_div := kn_of <% Nat.div %>.
+Definition kn_n_mod := kn_of <% Nat.modulo %>.
+Definition kn_n_min := kn_of <% Nat.min %>.
+Definition kn_n_max := kn_of <% Nat.max %>.
+Definition kn_n_log2 := kn_of <% Nat.log2 %>.
+Definition kn_n_sqrt := kn_of <% Nat.sqrt %>.
+Definition kn_n_div2 := kn_of <% Nat.div2 %>.
+Fixpoint pf_beta (b : term) (args : list term) : term :=
+  match b, args with
+  | tLambda _ _ c, a :: r => pf_beta (subst10 a c) r
+  | _, [] => b
+  | _, _ => tApp b args
+  end.
+Fixpoint pf_unf (fuel : nat) (Σ : global_env) (mp : modpath) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      match t with
+      | tApp (tConst k u) args =>
+          let args' := map (pf_unf fuel Σ mp) args in
+          if in_prog mp (fst k) then
+            match body_of Σ k with
+            | Some b => pf_unf fuel Σ mp (pf_beta b args')
+            | None => tApp (tConst k u) args'
+            end
+          else tApp (tConst k u) args'
+      | tApp (tLambda _ _ _ as f) args => pf_unf fuel Σ mp (pf_beta f args)
+      | tApp f args => tApp f (map (pf_unf fuel Σ mp) args)
+      | tConst k _ =>
+          if in_prog mp (fst k) then
+            match body_of Σ k with Some b => pf_unf fuel Σ mp b | None => t end
+          else t
+      | _ => t
+      end
+  end.
+Fixpoint pos_val (fuel : nat) (t : term) {struct fuel} : option Z :=
+  match fuel with
+  | O => None
+  | S fuel =>
+      match t with
+      | tConstruct _ 2 _ => Some 1%Z
+      | tApp (tConstruct _ 0 _) [p] => option_map (fun v => (2 * v + 1)%Z) (pos_val fuel p)
+      | tApp (tConstruct _ 1 _) [p] => option_map (fun v => (2 * v)%Z) (pos_val fuel p)
+      | _ => None
+      end
+  end.
+Definition z_val (t : term) : option Z :=
+  match t with
+  | tConstruct _ 0 _ => Some 0%Z
+  | tApp (tConstruct _ 1 _) [p] => pos_val 100 p
+  | tApp (tConstruct _ 2 _) [p] => option_map Z.opp (pos_val 100 p)
+  | _ => None
+  end.
+Fixpoint zb (fuel : nat) (t : term) {struct fuel} : option (Z * Z) :=
+  match fuel with
+  | O => None
+  | S fuel =>
+      match z_val t with
+      | Some v => Some (v, v)
+      | None =>
+          match t with
+          | tApp (tConst k _) [_] =>
+              if Kername.eqb k kn_s_to_z then Some ((-4611686018427387904)%Z, 4611686018427387903%Z)
+              else if Kername.eqb k kn_u_to_z then Some (0%Z, 9223372036854775807%Z)
+              else None
+          | tApp (tConst k _) [a; b] =>
+              match zb fuel a, zb fuel b with
+              | Some (al, ah), Some (bl, bh) =>
+                  if Kername.eqb k kn_z_add then Some ((al + bl)%Z, (ah + bh)%Z)
+                  else if Kername.eqb k kn_z_sub then Some ((al - bh)%Z, (ah - bl)%Z)
+                  else if Kername.eqb k kn_z_min then Some (Z.min al bl, Z.min ah bh)
+                  else if Kername.eqb k kn_z_max then Some (Z.max al bl, Z.max ah bh)
+                  else if Kername.eqb k kn_z_mul then
+                    if Z.eqb bl bh then
+                      if Z.leb 0 bl then Some ((al * bl)%Z, (ah * bl)%Z) else Some ((ah * bl)%Z, (al * bl)%Z)
+                    else if Z.eqb al ah then
+                      if Z.leb 0 al then Some ((al * bl)%Z, (al * bh)%Z) else Some ((al * bh)%Z, (al * bl)%Z)
+                    else None
+                  else if Kername.eqb k kn_z_div then
+                    if Z.eqb bl bh then if Z.ltb 0 bl then Some ((al / bl)%Z, (ah / bl)%Z) else None else None
+                  else if Kername.eqb k kn_z_mod then
+                    if Z.eqb bl bh then if Z.ltb 0 bl then Some (0%Z, (bl - 1)%Z) else None else None
+                  else None
+              | _, _ => None
+              end
+          | _ => None
+          end
+      end
+  end.
+Inductive mbound := MNum (z : Z) | MCnt (t : term).
+Fixpoint s_times (n : nat) (t : term) : term :=
+  match n with O => t | S n' => tApp (tConstruct ind_nat 1 []) [s_times n' t] end.
+Definition mb_add (a b : mbound) : option mbound :=
+  match a, b with
+  | MNum x, MNum y => Some (MNum (x + y))
+  | MCnt t, MCnt u => Some (MCnt (tApp (tConst kn_nat_add []) [t; u]))
+  | MCnt t, MNum z | MNum z, MCnt t => if Z.leb z 8 then Some (MCnt (s_times (Z.to_nat z) t)) else None
+  end.
+Fixpoint nb (fuel : nat) (t : term) {struct fuel} : option mbound :=
+  match fuel with
+  | O => None
+  | S fuel =>
+      match t with
+      | tRel _ => Some (MCnt t)
+      | tConstruct _ 0 _ => Some (MNum 0%Z)
+      | tApp (tConstruct _ 1 _) [c] => match nb fuel c with Some u => mb_add u (MNum 1%Z) | None => None end
+      | tApp (tConst k _) [a] =>
+          if Kername.eqb k kn_z_to_nat then
+            match zb 100 a with Some (_, h) => Some (MNum (Z.max 0 h)) | None => None end
+          else if Kername.eqb k kn_kq_nat then Some (MCnt t)
+          else if Kername.eqb k kn_nat_pred then nb fuel a
+          else if Kername.eqb k kn_n_log2 then nb fuel a
+          else if Kername.eqb k kn_n_sqrt then nb fuel a
+          else if Kername.eqb k kn_n_div2 then nb fuel a
+          else None
+      | tApp (tConst k _) [a; b] =>
+          if Kername.eqb k kn_nat_add then
+            match nb fuel a, nb fuel b with
+            | Some x, Some y => mb_add x y
+            | _, _ => None
+            end
+          else if Kername.eqb k kn_n_sub then nb fuel a
+          else if Kername.eqb k kn_n_div then nb fuel a
+          else if Kername.eqb k kn_n_mod then nb fuel a
+          else if Kername.eqb k kn_n_min then
+            match nb fuel a, nb fuel b with
+            | Some (MNum x), Some (MNum y) => Some (MNum (Z.min x y))
+            | Some (MNum x), _ => Some (MNum x)
+            | _, Some (MNum y) => Some (MNum y)
+            | Some x, _ => Some x
+            | _, Some y => Some y
+            | _, _ => None
+            end
+          else if Kername.eqb k kn_n_max then
+            match nb fuel a, nb fuel b with
+            | Some (MNum x), Some (MNum y) => Some (MNum (Z.max x y))
+            | Some x, Some y => mb_add x y
+            | _, _ => None
+            end
+          else if Kername.eqb k kn_n_mul then
+            match nb fuel a, nb fuel b with
+            | Some (MNum x), Some (MNum y) => Some (MNum (x * y))
+            | _, _ => None
+            end
+          else None
+      | _ => None
+      end
+  end.
+(** what the proof of the bound takes: "m" a machine number, "c" the measure itself, "l" arithmetic; how many phases; the budget of the last; the measure written out *)
+Definition pf_bound (Σ : global_env) (mp : modpath) (M : term) : option (string * nat * term * term) :=
+  if pf_machine 10 Σ M then Some ("m"%bs, 1, pf_budget, M)
+  else if pf_counter 10 M then Some ("c"%bs, 1, M, M)
+  else
+    let M' := pf_unf 100 Σ mp M in
+    match nb 200 M' with
+    | Some (MNum z) =>
+        let ph := Z.to_nat ((z + 4611686018427387904) / 4611686018427387904) in
+        if Nat.leb ph 8 then Some ("l"%bs, Nat.max 1 ph, pf_budget, M') else None
+    | Some (MCnt u) => Some ("l"%bs, 1, u, M')
+    | None => None
+    end.
+(** what is made of a measure recursion: the budget functions, a phase each, and their type; the function one call of the last; the default of a call at budget 0; the result's type; the measure as a function and written out; the bound's proof and the phases *)
+Record pfg := { pg_gs : list (kername * term); pg_gty : term; pg_w : term; pg_d : term; pg_t : term; pg_m : term; pg_n : term; pg_tag : string; pg_ph : nat }.
+Definition pg_name (kn : kername) (i : nat) : kername :=
+  (copy_mp, mangle kn ^ match i with O => ""%bs | S _ => "_"%bs ^ string_of_nat i end ^ "__wg"%bs).
 (** the budget function, the function one call of it, the default of a call at budget 0, the measure as a function: [plain] with [sg base] for its free variables *)
-Definition pf_gen (Σ : global_env) (kn : kername) (tys : list term) (T M plain : term) (sg : nat -> list term) : option (term * term * term * term * term * term) :=
+Definition pf_gen (Σ : global_env) (kn : kername) (tys : list term) (T M plain : term) (sg : nat -> list term) : option pfg :=
   match pf_case_nat with
   | tLambda _ _ (tCase ci pr _ [br0; br1]) =>
       let n := length tys in
       let lastm (d : nat) (args : list term) := last args (tRel 0) in
       let b1 := pf_calls 100000 (fun d args => tApp (tRel (d + n + 2)) (tRel d :: args)) 0 (subst (sg 1) 0 plain) in
-      let b_0 := pf_calls 100000 (fun d args => pf_zero 100 Σ T (lastm d args)) 0 (subst (sg 0) 0 plain) in
       let gty := tProd anon_b (tInd ind_nat []) (pis_of tys T) in
-      let gk := (copy_mp, mangle kn ^ "__wg"%bs) in
-      let cs := tCase ci {| pparams := pparams pr; puinst := puinst pr; pcontext := pcontext pr; preturn := lift0 1 T |} (tRel n)
-                  [{| bcontext := bcontext br0; bbody := b_0 |}; {| bcontext := bcontext br1; bbody := b1 |}] in
-      let g := tFix [{| dname := {| binder_name := nNamed (snd gk); binder_relevance := Relevant |}; dtype := gty;
-                        dbody := tLambda anon_b (tInd ind_nat []) (lams_of tys cs); rarg := 0 |}] 0 in
+      let mkg (i : nat) : kername * term :=
+        let b_0 := pf_calls 100000 (fun d args => match i with
+                                                  | O => pf_zero 100 Σ T (lastm d args)
+                                                  | S i' => tApp (tConst (pg_name kn i') []) (pf_budget :: args)
+                                                  end) 0 (subst (sg 0) 0 plain) in
+        let gk := pg_name kn i in
+        let cs := tCase ci {| pparams := pparams pr; puinst := puinst pr; pcontext := pcontext pr; preturn := lift0 1 T |} (tRel n)
+                    [{| bcontext := bcontext br0; bbody := b_0 |}; {| bcontext := bcontext br1; bbody := b1 |}] in
+        (gk, tFix [{| dname := {| binder_name := nNamed (snd gk); binder_relevance := Relevant |}; dtype := gty;
+                      dbody := tLambda anon_b (tInd ind_nat []) (lams_of tys cs); rarg := 0 |}] 0) in
       let rels := map (fun i => tRel (n - 1 - i)) (seq 0 n) in
-      let budget := if pf_machine 10 Σ M then Some pf_budget else if pf_counter 10 M then Some M else None in
-      match budget with
-      | Some bud =>
-          Some (g, gty, lams_of tys (tApp (tConst gk []) (bud :: rels)), lams_of tys (pf_zero 100 Σ T (tRel 0)), T, lams_of tys M)
+      match pf_bound Σ (fst kn) M with
+      | Some (tag, ph, bud, Mn) =>
+          Some {| pg_gs := map mkg (seq 0 ph); pg_gty := gty;
+                  pg_w := lams_of tys (tApp (tConst (pg_name kn (Nat.pred ph)) []) (bud :: rels));
+                  pg_d := lams_of tys (pf_zero 100 Σ T (tRel 0)); pg_t := T; pg_m := lams_of tys M; pg_n := lams_of tys Mn;
+                  pg_tag := tag; pg_ph := ph |}
       | None => None
       end
   | _ => None
   end.
 (** for a [Program Fixpoint] of [n] parameters *)
-Definition pf_make_p (Σ : global_env) (kn : kername) : option (term * term * term * term * term * term) :=
+Definition pf_make_p (Σ : global_env) (kn : kername) : option pfg :=
   match pf_parts Σ kn with
   | Some (tys, T, tLambda _ _ m0, tLambda _ _ (tLambda _ _ b0), _) =>
       let n := length tys in
@@ -4717,7 +4901,7 @@ Fixpoint fn_lams (k : nat) (t : term) : option term :=
   | S k', tLambda _ _ b => fn_lams k' b
   | _, _ => None
   end.
-Definition fn_make (Σ : global_env) (kn : kername) : option (term * term * term * term * term * term) :=
+Definition fn_make (Σ : global_env) (kn : kername) : option pfg :=
   match lookup_env Σ kn with
   | Some (ConstantDecl cb) =>
       match cst_body cb with
@@ -4744,7 +4928,7 @@ Definition fn_make (Σ : global_env) (kn : kername) : option (term * term * term
       end
   | _ => None
   end.
-Definition pf_make (Σ : global_env) (kn : kername) : option (term * term * term * term * term * term) :=
+Definition pf_make (Σ : global_env) (kn : kername) : option pfg :=
   match pf_make_p Σ kn with Some r => Some r | None => fn_make Σ kn end.
 (** whether the program holds a [Function]: Recdef's [iter] is in what it names *)
 Definition kn_iter : kername := (MPfile ["Recdef"%bs; "funind"%bs; "Stdlib"%bs], "iter"%bs).
@@ -4758,33 +4942,33 @@ Definition pf_all (Σ : global_env) (mp : modpath) (root : kername) : global_env
         let '(S1, tb) := st in
         if in_prog mp (fst kn) then
           match pf_make S1 kn, lookup_env S1 kn with
-          | Some (g, gty, w, dd, T, wm), Some (ConstantDecl cb) =>
+          | Some r, Some (ConstantDecl cb) =>
               let m := mangle kn in
-              let gk := (copy_mp, m ^ "__wg"%bs) in
               let wk := (copy_mp, m ^ "__w"%bs) in
               let dk := (copy_mp, m ^ "__wd"%bs) in
               let mk := (copy_mp, m ^ "__wm"%bs) in
-              (add_decl (add_decl S1 gk gty g) kn (cst_type cb) w,
-               tb ++ [(gk, ([], []), gk, g); (wk, ([], []), wk, w); (dk, ([], []), dk, dd); (mk, ([], []), mk, wm)])
+              let nk := (copy_mp, m ^ "__wn"%bs) in
+              (add_decl (fold_left (fun S g => add_decl S (fst g) (pg_gty r) (snd g)) (pg_gs r) S1) kn (cst_type cb) (pg_w r),
+               tb ++ map (fun g => (fst g, ([], []), fst g, snd g)) (pg_gs r)
+                  ++ [(wk, ([], []), wk, pg_w r); (dk, ([], []), dk, pg_d r); (mk, ([], []), mk, pg_m r); (nk, ([], []), nk, pg_n r)])
           | _, _ => st
           end
         else st) (snd (reach_go 1000 Σ mp root root ([], []))) (Σ, [])
   end.
 (** for kitc.py: each such function: its name, the constant holding its [Fix_sub], its number of parameters, its three made functions, and whether its measure is on a machine number *)
-Definition pf_info (p : program) : list (string * string * nat * string * bool * bool) :=
+Definition pf_info (p : program) : list (string * string * nat * string * string * bool * nat) :=
   match p with
   | (Σ, tConst root _) =>
       match (match lookup_env Σ kn_fix_sub with Some _ => true | None => pf_has_iter Σ end) with false => [] | true =>
       flat_map (fun kn =>
-        match pf_parts Σ kn, pf_make Σ kn with
-        | Some (tys, _, tLambda _ _ m0, _, fk), Some _ =>
-            let fix peel (k : nat) (t : term) {struct k} : term :=
-              match k, t with O, _ => t | S k', tLetIn _ _ _ body => peel k' body | _, _ => t end in
-            [(string_of_kername kn, match fk with Some f => string_of_kername f | None => ""%bs end, length tys, mangle kn, pf_machine 10 Σ (peel (length tys) m0), false)]
-        | None, Some (_, _, _, _, _, tm) =>
-            let '(tys, mb) := lams tm in
-            [(string_of_kername kn, ""%bs, length tys, mangle kn, pf_machine 10 Σ mb, true)]
-        | _, _ => []
+        match pf_make Σ kn with
+        | Some r =>
+            match pf_parts Σ kn with
+            | Some (tys, _, _, _, fk) =>
+                [(string_of_kername kn, match fk with Some f => string_of_kername f | None => ""%bs end, length tys, mangle kn, pg_tag r, false, pg_ph r)]
+            | None => [(string_of_kername kn, ""%bs, length (fst (lams (pg_m r))), mangle kn, pg_tag r, true, pg_ph r)]
+            end
+        | None => []
         end) (filter (fun kn => in_prog (fst root) (fst kn)) (snd (reach_go 1000 Σ (fst root) root root ([], []))))
       end
   | _ => []

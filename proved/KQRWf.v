@@ -25,6 +25,24 @@ Lemma fix_sub_budget : forall k x, (m x <= k)%nat -> Fix_sub A (MR lt m) wf (fun
 Proof. intros k x Hk. unfold Fix_sub. apply fix_sub_budget_F. exact Hk. Qed.
 End W.
 
+(** a budget in phases (step 58): a measure above a counter's range, the budget run out handing on to the phase before *)
+Section P.
+Variables (A : Type) (B : Type) (m : A -> nat).
+Variable Fs : forall x : A, (forall y : {y : A | MR lt m y x}, B) -> B.
+Variables (Gp : A -> B) (Kp : nat).
+Hypothesis Hp : forall x (r : Acc (MR lt m) x), (m x <= Kp)%nat -> Fix_F_sub A (MR lt m) (fun _ => B) Fs x r = Gp x.
+Variable G : nat -> A -> B.
+Hypothesis Hstep : forall k x h, (forall y, h y = (match k with O => Gp | S k' => G k' end) (proj1_sig y)) -> Fs x h = G k x.
+Lemma fix_sub_phase_F : forall x (r : Acc (MR lt m) x) k, (m x <= k + S Kp)%nat ->
+  Fix_F_sub A (MR lt m) (fun _ => B) Fs x r = G k x.
+Proof.
+  fix IH 2. intros x r k Hk. destruct r as [a]. cbn [Fix_F_sub].
+  apply Hstep. intros [y Hy]. cbn [proj1_sig]. destruct k as [|k'].
+  - apply Hp. unfold MR in Hy. lia.
+  - apply IH. unfold MR in Hy. lia.
+Qed.
+End P.
+
 (** a test as [Program] writes it: its branches take the proof of the test *)
 Lemma convoy_b : forall (c : bool) (R : Type) (t : true = c -> R) (f : false = c -> R) (p q : R),
   (forall H : true = c, t H = p) -> (forall H : false = c, f H = q) ->
@@ -97,3 +115,69 @@ Proof.
   assert (M : (Sint63.to_Z Sint63.max_int = 4611686018427387903)%Z) by reflexivity. rewrite M in H.
   apply Nat2Z.inj_le. rewrite !Nat2Z.inj_add, A1, A2. lia.
 Qed.
+
+(** a bound of a measure (step 58): the bounds of the machine numbers in it, then arithmetic *)
+Lemma kq_a1 : Z.of_nat (kq_nat 1152921504606846976) = 1152921504606846976%Z.
+Proof. apply KQMAuto.kq_nat_val; cbv; split; discriminate. Qed.
+Lemma kq_a2 : Z.of_nat (kq_nat 1152921504606846975) = 1152921504606846975%Z.
+Proof. apply KQMAuto.kq_nat_val; cbv; split; discriminate. Qed.
+Lemma kq_budget_val : Z.of_nat kq_budget = 4611686018427387903%Z.
+Proof. unfold kq_budget. rewrite !Nat2Z.inj_add, kq_a1, kq_a2. reflexivity. Qed.
+Lemma sint_bounds : forall e : int, (-4611686018427387904 <= Sint63.to_Z e <= 4611686018427387903)%Z.
+Proof.
+  intros e. pose proof (Sint63.to_Z_bounded e) as [L H].
+  assert (M : (Sint63.to_Z Sint63.max_int = 4611686018427387903)%Z) by reflexivity.
+  assert (N : (Sint63.to_Z Sint63.min_int = -4611686018427387904)%Z) by reflexivity. lia.
+Qed.
+Lemma uint_bounds : forall e : int, (0 <= Uint63.to_Z e <= 9223372036854775807)%Z.
+Proof. intros e. pose proof (Uint63.to_Z_bounded e) as [L H]. rewrite KQMAuto.wB_num in H. lia. Qed.
+Lemma nat_div_le : forall a b : nat, (a / b <= a)%nat.
+Proof. intros a [|b]; [simpl; lia | apply Nat.div_le_upper_bound; lia]. Qed.
+Lemma nat_mod_le : forall a b : nat, (a mod b <= a)%nat.
+Proof. intros a [|b]; [simpl; lia | apply Nat.mod_le; lia]. Qed.
+Ltac bound_of W := match goal with |- _ <= ?b => change (W <= b) end.
+Ltac bound_le :=
+  pose proof kq_budget_val; pose proof kq_a1; pose proof kq_a2;
+  repeat match goal with
+         | |- context [Sint63.to_Z ?e] =>
+             lazymatch goal with _ : (_ <= Sint63.to_Z e <= _)%Z |- _ => fail | _ => pose proof (sint_bounds e) end
+         | |- context [Uint63.to_Z ?e] =>
+             lazymatch goal with _ : (_ <= Uint63.to_Z e <= _)%Z |- _ => fail | _ => pose proof (uint_bounds e) end
+         | |- context [Nat.log2 ?a] =>
+             lazymatch goal with _ : (Nat.log2 a <= a)%nat |- _ => fail | _ => pose proof (Nat.log2_le_lin a (Nat.le_0_l a)) end
+         | |- context [Nat.sqrt ?a] =>
+             lazymatch goal with _ : (Nat.sqrt a <= a)%nat |- _ => fail | _ => pose proof (Nat.sqrt_le_lin a) end
+         | |- context [Nat.div2 ?a] =>
+             lazymatch goal with _ : (Nat.div2 a <= a)%nat |- _ => fail | _ => pose proof (Nat.div2_decr a a (le_n a)) end
+         | |- context [Nat.div ?a ?b] =>
+             lazymatch goal with _ : (Nat.div a b <= a)%nat |- _ => fail | _ => pose proof (nat_div_le a b) end
+         | |- context [Nat.modulo ?a ?b] =>
+             lazymatch goal with _ : (Nat.modulo a b <= a)%nat |- _ => fail | _ => pose proof (nat_mod_le a b) end
+         end;
+  lia.
+
+(** the same, the budget in phases (step 58): the budget run out, the call of the phase before, its lemma [A0] *)
+Ltac fn_branch_ph T WM A0 :=
+  repeat match goal with
+         | z := _ |- _ => subst z
+         | H : ?n = S _ |- _ => subst n
+         | H : ?n = O |- _ => subst n
+         | H : ?c = true |- context [?c] => rewrite H
+         | H : ?c = false |- context [?c] => rewrite H
+         end;
+  cbn beta iota zeta;
+  repeat match goal with
+         | IH : forall kqk : nat, ?w <= kqk + _ -> _ |- _ =>
+             match goal with
+             | kqh : ?m <= ?K + _ |- _ =>
+                 let L := fresh "kqL" in
+                 assert (L : w < m) by (pose proof T as kqT; decompose [and] kqT; eauto);
+                 match K with
+                 | O => clear IH
+                 | S ?k => rewrite (IH k) by lia; clear IH L
+                 end
+             end
+         end;
+  repeat (rewrite A0 by (unfold WM, kq_budget in *; cbn beta in *; lia));
+  try reflexivity.
+

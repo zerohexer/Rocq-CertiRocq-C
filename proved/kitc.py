@@ -525,8 +525,8 @@ def reflect(name, entry, prog, no_proof):
     bnd = lambda f, j: f"(KQR.cbz {j})" if not f[7] else f"{f[7]}%Z"
     # (step 56) a Program Fixpoint: its name, the constant holding its Fix_sub, its parameters, its made functions' stem, a measure on a machine number
     fp = os.path.join(GEN, f"{name}_rpf.out")
-    pfs = {m[0]: m for m in re.findall(r'\("([^"]*)"(?:%bs)?,\s*"([^"]*)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([^"]*)"(?:%bs)?,\s*(true|false),\s*(true|false)\)', open(fp).read())} if os.path.exists(fp) else {}
-    t = HDR + "From KQC Require KQR KQRReify" + (" KQRWf" if pfs else "") + ".\nImport ListNotations.\n" + f"From KQG Require Import {name}_r.\n"
+    pfs = {m[0]: m for m in re.findall(r'\("([^"]*)"(?:%bs)?,\s*"([^"]*)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([^"]*)"(?:%bs)?,\s*"([^"]*)"(?:%bs)?,\s*(true|false),\s*(\d+)(?:%nat)?\)', open(fp).read())} if os.path.exists(fp) else {}
+    t = HDR + "From KQC Require KQR KQRReify" + (" KQRWf" if pfs else "") + ".\nImport ListNotations.\n" + ("From Stdlib Require Import FunInd.\n" if any(m[5] == "true" for m in pfs.values()) else "") + f"From KQG Require Import {name}_r.\n"
     # the program's record types (step 12): each its type, its constructor and match, a value of it; the laws by a fixed script
     rp = os.path.join(GEN, f"{name}_rrec.out")
     # each entry: its type, its constructor (a data type's: its constructors), its number of fields, a data type's widths
@@ -672,9 +672,13 @@ def reflect(name, entry, prog, no_proof):
     # (step 56) a Program Fixpoint equal to its budget function's call at every argument (KQRWf.fix_sub_budget), before anything is made opaque
     for j, f in enumerate(fs):
         if f[0] in pfs:
-            _, func, np, stem, machine, isfn = pfs[f[0]]
-            np = int(np); W, G, D, WM = stem + "__w", stem + "__wg", stem + "__wd", stem + "__wm"
+            _, func, np, stem, tag, isfn, ph = pfs[f[0]]
+            np, ph = int(np), int(ph)
+            W, D, WM, WN = stem + "__w", stem + "__wd", stem + "__wm", stem + "__wn"
+            Gs = [stem + ("" if q == 0 else f"_{q}") + "__wg" for q in range(ph)]
+            G = Gs[-1]
             ps = [f"kqp{q}" for q in range(np)]
+            ss = " ".join(ps)
             def proj(r, q):
                 u = r
                 for _ in range(q): u = f"(projT2 {u})"
@@ -685,20 +689,47 @@ def reflect(name, entry, prog, no_proof):
             xs = [f"kqx{q}" for q in range(np)]
             pat = xs[-1]
             for q in reversed(xs[:-1]): pat = f"[{q} {pat}]"
+            # the bound of the measure: a machine number's, the measure itself, or arithmetic (step 58)
+            bound = {"m": "exact (KQRWf.to_nat_le_budget _)", "c": "exact (le_n _)", "l": f"KQRWf.bound_of ({WN} {ss}); unfold {WN}; KQRWf.bound_le"}[tag]
+            K = "KQRWf.kq_budget"
+            # the budget a phase's lemma holds above: the budgets of those before, and one more each
+            Kp = [K]
+            for q in range(1, ph): Kp.append(f"({K} + S {Kp[-1]})")
             if isfn == "true":
                 # (step 57) a Function: by its own induction principle, each call's measure below by its tcc lemma
-                ss = " ".join(ps)
                 t += (f"Lemma {name}_req{j} : forall {ss}, {W} {ss} = {f[0]} {ss}.\n"
-                      f"Proof.\n  assert (kqA : forall {ss} kqk (kqh : {WM} {ss} <= kqk), {G} kqk {ss} = {f[0]} {ss}).\n"
-                      f"  {{ intros {ss}. apply ({f[0]}_ind (fun {ss} kqv => forall kqk (kqh : {WM} {ss} <= kqk), {G} kqk {ss} = kqv));\n"
-                      f"    clear; intros; destruct kqk as [|kqk]; cbn [{G}]; unfold {WM} in *; KQRWf.fn_branch {f[0]}_tcc. }}\n"
-                      f"  intros {ss}. unfold {W}. apply kqA. unfold {WM}. " + ("exact (KQRWf.to_nat_le_budget _)" if machine == "true" else "exact (le_n _)") + ".\nQed.\n")
+                      f"Proof.\n  assert (kqA0 : forall {ss} kqk (kqh : {WM} {ss} <= kqk), {Gs[0]} kqk {ss} = {f[0]} {ss}).\n"
+                      f"  {{ intros {ss}. functional induction ({f[0]} {ss}); intros kqk kqh;\n"
+                      f"    destruct kqk as [|kqk]; cbn [{Gs[0]}]; unfold {WM} in *; KQRWf.fn_branch {f[0]}_tcc. }}\n")
+                for q in range(1, ph):
+                    t += (f"  assert (kqA{q} : forall {ss} kqk (kqh : {WM} {ss} <= kqk + S {Kp[q - 1]}), {Gs[q]} kqk {ss} = {f[0]} {ss}).\n"
+                          f"  {{ intros {ss}. functional induction ({f[0]} {ss}); intros kqk kqh;\n"
+                          f"    destruct kqk as [|kqk]; cbn [{Gs[q]}]; unfold {WM} in *; KQRWf.fn_branch_ph {f[0]}_tcc {WM} kqA{q - 1}. }}\n")
+                t += f"  intros {ss}. unfold {W}. apply kqA{ph - 1}. "
+                t += (f"unfold {WM}. {bound}.\nQed.\n" if tag != "l" else
+                      (f"{bound}.\nQed.\n" if ph == 1 else f"change ({WN} {ss} <= {K} + S {Kp[ph - 2]}); unfold {WN}; KQRWf.bound_le.\nQed.\n"))
                 continue
-            t += (f"Lemma {name}_req{j} : forall {' '.join(ps)}, {W} {' '.join(ps)} = {f[0]} {' '.join(ps)}.\n"
-                  f"Proof.\n  intros {' '.join(ps)}. symmetry. unfold {W}, {f[0]}{', ' + func if func else ''}.\n"
-                  f"  refine (@KQRWf.fix_sub_budget _ _ _ _ _ (fun k r => {G} k {unp('r')}) (fun r => {D} {unp('r')}) _ _ {pack} _).\n"
-                  f"  - intros [|k'] {pat} h H; cbv beta zeta; cbn [projT1 projT2 {G} {D}] in *; KQRWf.wf_step.\n"
-                  f"  - cbv beta zeta; cbn [projT1 projT2]; " + ("exact (KQRWf.to_nat_le_budget _)" if machine == "true" else "exact (le_n _)") + ".\nQed.\n")
+            if ph == 1:
+                t += (f"Lemma {name}_req{j} : forall {ss}, {W} {ss} = {f[0]} {ss}.\n"
+                      f"Proof.\n  intros {ss}. symmetry. unfold {W}, {f[0]}{', ' + func if func else ''}.\n"
+                      f"  refine (@KQRWf.fix_sub_budget _ _ _ _ _ (fun k r => {G} k {unp('r')}) (fun r => {D} {unp('r')}) _ _ {pack} _).\n"
+                      f"  - intros [|k'] {pat} h H; cbv beta zeta; cbn [projT1 projT2 {G} {D}] in *; KQRWf.wf_step.\n"
+                      f"  - cbv beta zeta; cbn [projT1 projT2]; {bound}.\nQed.\n")
+                continue
+            # (step 58) a budget in phases: each phase's lemma from the one before
+            t += (f"Lemma {name}_req{j} : forall {ss}, {W} {ss} = {f[0]} {ss}.\n"
+                  f"Proof.\n  intros {ss}. symmetry. unfold {W}, {f[0]}{', ' + func if func else ''}.\n"
+                  f"  match goal with |- Corelib.Program.Wf.Fix_sub ?A (Corelib.Program.Wf.MR lt ?m) _ (fun _ => ?B) ?Fs _ = _ =>\n")
+            for q in range(ph):
+                prev = f"(fun r => {D} {unp('r')})" if q == 0 else f"(fun r => {Gs[q - 1]} {K} {unp('r')})"
+                t += (f"    assert (kqS{q} : forall (k : nat) (x : A) (h : forall y : {{y : A | Corelib.Program.Wf.MR lt m y x}}, B), (forall y, h y = (match k with O => {prev} | S k' => (fun k r => {Gs[q]} k {unp('r')}) k' end) (proj1_sig y)) -> Fs x h = (fun k r => {Gs[q]} k {unp('r')}) k x)\n"
+                      f"      by (intros [|k'] {pat} h H; cbv beta zeta; cbn [projT1 projT2 {Gs[q]} {D}] in *; KQRWf.wf_step);\n")
+                if q == 0:
+                    t += f"    pose proof (@KQRWf.fix_sub_budget_F A B m Fs _ _ kqS0) as kqP0;\n"
+                else:
+                    t += f"    pose proof (@KQRWf.fix_sub_phase_F A B m Fs _ {Kp[q - 1]} (fun x r H => kqP{q - 1} x r {K} H) _ kqS{q}) as kqP{q};\n"
+            t += (f"    unfold Corelib.Program.Wf.Fix_sub; refine (kqP{ph - 1} _ _ {K} _); cbv beta zeta; cbn [projT1 projT2]; change ({WN} {ss} <= {K} + S {Kp[ph - 2]}); unfold {WN}; KQRWf.bound_le\n"
+                  f"  end.\nQed.\n")
     t += "Strategy opaque [" + " ".join([f[0] for f in fs if not iswr(f[0])] + tmpls) + "].\n"   # a copy is unfolded first
     if not no_proof:
         for j, f in enumerate(fs):

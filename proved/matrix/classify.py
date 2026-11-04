@@ -46,8 +46,6 @@ BY_NAME = {
   "A_fn_wf_rel": "a Program Fixpoint or a Function on a relation of the user's, {wf R x}: no measure to put a budget above",
   "A_pf_fun_param": "a Program Fixpoint or a Function with a function as a parameter: a copy per function given, equal to the user's function at every argument",
   "A_fn_fun_param": "a Program Fixpoint or a Function with a function as a parameter: a copy per function given, equal to the user's function at every argument",
-  "A_pf_sum_machine": "a measure that is a sum of machine numbers: a budget above it is beyond a counter's range",
-  "A_fn_sum": "a measure that is a sum of machine numbers: a budget above it is beyond a counter's range",
   "A_eq_num": "Equations: its functional and its own form of a test",
   "A_eq_mem": "Equations: its functional and its own form of a test",
   **{c: "the function's own call under a choice in an operand, in a body that writes or a boolean's or a record's: its value joined after the choice" for c in (

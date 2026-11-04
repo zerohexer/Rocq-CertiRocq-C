@@ -1,0 +1,97 @@
+(* wfix_mem.body in Rocq's own spelling: a binary search whose measure is the width of the range, a fill of block 1 whose measure counts
+   up to 12, a recursion that is not a tail call.  The width of a range of machine numbers reaches 2^63, above a counter's range: the
+   budget runs in phases, which this file does not see.  lo + (hi - lo) / 2 and not (lo + hi) / 2: the second can wrap, and then the
+   measure does not fall, so its obligation is false.  The answer is wfix_mem's, 544. *)
+From Stdlib Require Import ZArith Lia Program.Wf Program.Utils.
+Lemma ltb_z : forall a b : int, (a <? b) = true -> (Sint63.to_Z a < Sint63.to_Z b)%Z.
+Proof. intros a b H. apply Sint63.ltb_spec in H. exact H. Qed.
+Lemma leb_z : forall a b : int, (a <=? b) = true -> (Sint63.to_Z a <= Sint63.to_Z b)%Z.
+Proof. intros a b H. apply Sint63.leb_spec in H. exact H. Qed.
+Lemma bnd : forall x : int, (-4611686018427387904 <= Sint63.to_Z x <= 4611686018427387903)%Z.
+Proof.
+  intros x. pose proof (Sint63.to_Z_bounded x) as [L H].
+  assert (M : (Sint63.to_Z Sint63.max_int = 4611686018427387903)%Z) by reflexivity.
+  assert (N : (Sint63.to_Z Sint63.min_int = -4611686018427387904)%Z) by reflexivity. lia.
+Qed.
+Lemma wb2 : (Uint63.wB / 2 = 4611686018427387904)%Z.
+Proof. reflexivity. Qed.
+Lemma add_z : forall a b : int, (-4611686018427387904 <= Sint63.to_Z a + Sint63.to_Z b < 4611686018427387904)%Z ->
+  Sint63.to_Z (a + b) = (Sint63.to_Z a + Sint63.to_Z b)%Z.
+Proof. intros a b H. rewrite Sint63.add_spec. apply Sint63.cmod_small. rewrite wb2. lia. Qed.
+Lemma sub_z : forall a b : int, (-4611686018427387904 <= Sint63.to_Z a - Sint63.to_Z b < 4611686018427387904)%Z ->
+  Sint63.to_Z (a - b) = (Sint63.to_Z a - Sint63.to_Z b)%Z.
+Proof. intros a b H. rewrite Sint63.sub_spec. apply Sint63.cmod_small. rewrite wb2. lia. Qed.
+Lemma to_Z_phi : forall x, (0 <= Sint63.to_Z x)%Z -> Uint63.to_Z x = Sint63.to_Z x.
+Proof.
+  intros x H. rewrite <- Sint63.to_Z_mod_Uint63to_Z. apply Z.mod_small. pose proof (Sint63.to_Z_bounded x) as [_ B].
+  assert (M : Sint63.to_Z Sint63.max_int = 4611686018427387903%Z) by reflexivity. rewrite M in B. change Uint63.wB with 9223372036854775808%Z. lia.
+Qed.
+Lemma phi_to_Z : forall x, (Uint63.to_Z x < 4611686018427387904)%Z -> Sint63.to_Z x = Uint63.to_Z x.
+Proof.
+  intros x H. rewrite Sint63.to_Z_cmodwB. apply Sint63.cmod_small. change (Uint63.wB / 2)%Z with 4611686018427387904%Z. pose proof (Uint63.to_Z_bounded x). lia.
+Qed.
+Lemma zdiv_pos : forall a : int, (0 <= Sint63.to_Z a)%Z -> a / 2 = PrimInt63.div a 2.
+Proof.
+  intros a H. unfold zdiv. cbv zeta.
+  assert (E : (0 <=? a)%sint63 = true) by (apply Sint63.leb_spec; exact H).
+  rewrite E. reflexivity.
+Qed.
+Lemma mid_z : forall lo hi : int, (0 <= Sint63.to_Z lo)%Z -> (Sint63.to_Z lo < Sint63.to_Z hi)%Z ->
+  (Sint63.to_Z lo <= Sint63.to_Z (lo + (hi - lo) / 2) < Sint63.to_Z hi)%Z.
+Proof.
+  intros lo hi L H. pose proof (bnd hi). pose proof (bnd lo).
+  assert (E1 : Sint63.to_Z (hi - lo) = (Sint63.to_Z hi - Sint63.to_Z lo)%Z) by (apply sub_z; lia).
+  assert (Dz : (hi - lo) / 2 = PrimInt63.div (hi - lo) 2) by (apply zdiv_pos; rewrite E1; lia).
+  rewrite Dz.
+  assert (P : Uint63.to_Z (hi - lo) = (Sint63.to_Z hi - Sint63.to_Z lo)%Z) by (rewrite to_Z_phi; [exact E1 | lia]).
+  assert (D : Uint63.to_Z (PrimInt63.div (hi - lo) 2) = ((Sint63.to_Z hi - Sint63.to_Z lo) / 2)%Z).
+  { rewrite Uint63.div_spec, P. reflexivity. }
+  assert (E2 : Sint63.to_Z (PrimInt63.div (hi - lo) 2) = ((Sint63.to_Z hi - Sint63.to_Z lo) / 2)%Z).
+  { rewrite phi_to_Z; [exact D | rewrite D; lia]. }
+  rewrite add_z; rewrite E2; lia.
+Qed.
+Lemma succ_z : forall i : int, (Sint63.to_Z i < 12)%Z -> Sint63.to_Z (i + 1) = (Sint63.to_Z i + 1)%Z.
+Proof. intros i H. pose proof (bnd i). apply add_z. change (Sint63.to_Z 1) with 1%Z. lia. Qed.
+Program Fixpoint lower_go (k lo hi : int) (t : mem) {measure (Z.to_nat (Sint63.to_Z hi - Sint63.to_Z lo))} : int :=
+  if dec (0 <=? lo) then
+    if dec (lo <? hi) then
+      if dec (rd 0 (lo + (hi - lo) / 2) t <? k)
+      then lower_go k (lo + (hi - lo) / 2 + 1) hi t
+      else lower_go k lo (lo + (hi - lo) / 2) t
+    else lo
+  else lo.
+Next Obligation.
+  assert (H : (0 <=? lo) = true) by auto. assert (H0 : (lo <? hi) = true) by auto.
+  apply leb_z in H. apply ltb_z in H0. change (Sint63.to_Z 0) with 0%Z in H.
+  pose proof (mid_z lo hi H H0) as [A B]. pose proof (bnd hi).
+  rewrite add_z by (change (Sint63.to_Z 1) with 1%Z; lia). change (Sint63.to_Z 1) with 1%Z. lia.
+Qed.
+Next Obligation.
+  assert (H : (0 <=? lo) = true) by auto. assert (H0 : (lo <? hi) = true) by auto.
+  apply leb_z in H. apply ltb_z in H0. change (Sint63.to_Z 0) with 0%Z in H.
+  pose proof (mid_z lo hi H H0) as [A B]. lia.
+Qed.
+Definition lower_bound (key : int) (s : mem) : int := lower_go key 0 12 s.
+Definition left_to_fill (i : int) : nat := Z.to_nat (12 - Sint63.to_Z i).
+Program Fixpoint fill (i : int) (t : mem) {measure (left_to_fill i)} : mem :=
+  if dec (i <? 12) then fill (i + 1) (upd 1 i (i * i) t) else t.
+Next Obligation.
+  assert (H : (i <? 12) = true) by auto.
+  apply ltb_z in H. change (Sint63.to_Z 12) with 12%Z in H. unfold left_to_fill. rewrite succ_z by lia. lia.
+Qed.
+Fixpoint addup (n : nat) (i acc : int) (s : mem) : int :=
+  match n with O => acc | S m => addup m (i + 1) (acc + rd 1 i s) s end.
+Definition mu (x : int) : nat := Z.to_nat (Sint63.to_Z x).
+Program Fixpoint down (x y z : int) {measure (mu x)} : int :=
+  if dec (0 <? x) then x + down (x - 1) y z else y + z.
+Next Obligation.
+  assert (H : (0 <? x) = true) by auto.
+  apply ltb_z in H. change (Sint63.to_Z 0) with 0%Z in H. pose proof (bnd x). unfold mu.
+  rewrite sub_z by (change (Sint63.to_Z 1) with 1%Z; lia). change (Sint63.to_Z 1) with 1%Z. lia.
+Qed.
+Definition solve (s : mem) : int :=
+  let s := fill 0 s in
+  lower_bound 10 s + lower_bound 1 s + lower_bound 99 s + addup (kq_nat 12) 0 0 s + down 6 0 0.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_input 0).
