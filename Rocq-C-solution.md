@@ -4777,6 +4777,15 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   off: `make.sh` `core-ok`; examples 33 / 33; corpus 36 / 36; the five kernels (12 / 12 / 12 / 14 / 13 s); **77 programs through
   the verified compiler, 0 refused**; the trusted base unchanged.  Next: `Equations`.
 
+**Step 60, `Equations` (§12.P, §4.5) — the design (2026-11-04).**  `Equations f ps : T by wf (m ps) lt := ..` elaborates to `f := fun ps => FixWf P (fun x H => f_functional .. (fun .. => H ..)) ..`: `FixWf` is `Fix` on the relation of the measure, `f_functional` has the function last among its parameters and a proof last among a call's arguments, and its tests sit in clause constants `f_clause_1`, `f_clause_1_clause_1`, each taking the rest of the parameters and the function again, through `inspect` (a definition of the user's, as `Equations`' manual writes it) or `dec`.  Measured on the elaborated terms.  `f_unfold_eq` rests on functional extensionality, so it is not used:
+- *The one lemma*: `fix_wf_budget_F`, `fix_sub_budget_F`'s twin on `Fix_F`; `fix_wf_phase_F` the same for a phase.  `Print Assumptions`: closed.
+- *`G`*: `eq_norm` writes the clauses out at the function (each constant given it), a match on `inspect c` taken apart at its constructor, an application pushed into a match's branches, the proof of each call dropped.  Then step 56's `pf_gen`: budget, phases, bound, all of it.  The measure comes from `FixWf`'s instance `wf_tele_measure .. m lt ..`.  Not by conversion, as for the other two spellings: the equation carries it.
+- *The equation*: one tactic, `eq_step`: the clauses unfolded (the reader names them: `kitc.py` does not look at names), `inspect`'s pair taken apart with its equation, the equation written into `G`'s own test.
+- *A function as a parameter*: step 59's copy, by the same equation, nothing more to do.
+- *Structural `Equations`*: a plain `fix`, but `match n with O => fun x => .. | S m => fun x => .. end x`: the match on the counter gives a function.  No conversion opens that under a variable, so `denote s = f` cannot hold; its two equations at `O` and `S _` hold by conversion, the theorem a copy takes.  The reader pushes the application in (`conv_all`), for every fixpoint: a user may write it so as well, `Fixpoint f (n : nat) : int -> int := match n with ..`, which had no cell.  A member of a mutual block so written: left, `A_eq_mutual`, `A_par_match_fun_mutual`.
+- *Cells*: 28: each sort of function and result, `dec`, nested tests, a let, a caller, a module, a function given and as a parameter, a measure on a counter, on a pattern, in phases, no recursion, structural, mutual, `where`; `A_par_match_fun*`; `A_eq_wf_rel` a gap with `A_pf_wf_rel`.
+- *The acceptance*: `proved/examples/equations_fix`: `wfix_mem.body` once more, in `Equations`' spelling, the answer worked out apart: 544.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -4956,7 +4965,8 @@ Pushed to the public repository up to `2ba5d30` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 59 (a function as a parameter of a measure recursion: the construct table 2026 of 2094, 13 by design, 54 gaps), the C, the gate |
+| (this commit) | §12.V: step 60's design -- Equations: FixWf over its functional, its clauses written out, one lemma and one tactic; a match on the counter that gives a function |
+| `8850a47` | §12.V: step 59 (a function as a parameter of a measure recursion: the construct table 2026 of 2094, 13 by design, 54 gaps), the C, the gate |
 | `2ba5d30` | `proved/KQRReify.v` + `kitc.py` + `matrix/gen.py` + `classify.py` + `examples/fun_fix` step 59: a function as a parameter of a measure recursion: a copy per function given, read as the wrapper written out, its theorem the function's equation at the function given; 26 cells; `KQR.v` and `KQRWf.v` unchanged |
 | `140148d` | §12.V: step 59's design -- a function as a parameter of a measure recursion: a copy per function given, read as the wrapper written out, its theorem the function's equation at the function given |
 | `909e731` | §12.V: step 58 (any measure with a bound: the construct table 2000 of 2068, 11 by design, 56 gaps), the C, the gate; §4.5, D18 |
