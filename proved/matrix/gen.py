@@ -616,6 +616,181 @@ addA("par_pm_let_fst_pv", "", "let '(x, t) := kz n a s in x + rd 0 0 t",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : int * mem := let p := g n x t in (fst p + 1, snd p).\n")
 addA("par_pm_let_fst_mem", "", "rd 0 0 (kz n a s)",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : mem := let p := g n x t in upd 0 (fst p) 1 (snd p).\n")
+# what Rocq's libraries and ordinary text spell otherwise (step 68)
+addA('l_al_rec', "", 'f n a',
+     'Definition cell := int.\nDefinition M := mem.\nDefinition P := (int * int)%type.\nDefinition C := nat.\nDefinition B := bool.\nFixpoint f (m : C) (x : cell) : cell := match m with O => x | S q => f q (x + 1) end.\n')
+addA('l_al_mem', "", 'rd 0 0 (f n a s)',
+     'Definition cell := int.\nDefinition M := mem.\nDefinition P := (int * int)%type.\nDefinition C := nat.\nDefinition B := bool.\nFixpoint f (m : C) (x : cell) (t : M) : M := match m with O => t | S q => f q (x + 1) (upd 0 x x t) end.\n')
+addA('l_al_pair', "", 'fst (f n a) + b',
+     'Definition cell := int.\nDefinition M := mem.\nDefinition P := (int * int)%type.\nDefinition C := nat.\nDefinition B := bool.\nFixpoint f (m : nat) (x : int) : P := match m with O => (x, x) | S q => f q (x + 1) end.\n')
+addA('l_al_state', "", 'f n (a, b)',
+     'Definition cell := int.\nDefinition M := mem.\nDefinition P := (int * int)%type.\nDefinition C := nat.\nDefinition B := bool.\nFixpoint f (m : nat) (p : P) : int := match m with O => fst p | S q => f q (snd p, fst p) end.\n')
+addA('l_al_bool', "", 'if f n a then a else b',
+     'Definition cell := int.\nDefinition M := mem.\nDefinition P := (int * int)%type.\nDefinition C := nat.\nDefinition B := bool.\nFixpoint f (m : nat) (x : int) : B := match m with O => x <? 3 | S q => f q (x + 1) end.\n')
+addA('l_al_two', "", 'let q := (a, b, 1) in let p := (a, b) in f n p q',
+     'Definition P := (int * int)%type.\nDefinition Q := (int * int * int)%type.\nFixpoint f (m : nat) (p : P) (q : Q) : int := match m with O => fst p + snd q | S r => f r p q end.\n')
+addA('l_al_sig_only', "", 'f n (k a) + 1',
+     'Definition P := (int * int)%type.\nDefinition Q := (int * int * int)%type.\nDefinition k (x : int) : Q := (x, x, x).\nFixpoint f (m : nat) (q : Q) : int := match m with O => snd q | S r => f r q end.\nFixpoint e (m : nat) (p : P) : int := match m with O => snd p | S r => e r p end.\n')
+addA('l_al_al', "", 'f n a',
+     'Definition cell := int.\nDefinition cell2 := cell.\nFixpoint f (m : nat) (x : cell2) : cell := match m with O => x | S q => f q (x + 1) end.\n')
+addA('l_al_let', "", 'f n a',
+     'Definition cell := int.\nDefinition M := mem.\nDefinition P := (int * int)%type.\nDefinition C := nat.\nDefinition B := bool.\nFixpoint f (m : nat) (x : int) : int := let y : cell := x + 1 in match m with O => y | S q => f q y end.\n')
+addA('l_al_match', "", 'f n (a, b)',
+     'Definition cell := int.\nDefinition M := mem.\nDefinition P := (int * int)%type.\nDefinition C := nat.\nDefinition B := bool.\nFixpoint f (m : nat) (p : P) : cell := match m with O => match p return cell with (u, v) => u + v end | S q => f q p end.\n')
+addA('l_al_rec_of', "", 'fst (f n a) + b',
+     'Definition P2 := (int * bool)%type.\nFixpoint f (m : nat) (x : int) : P2 := match m with O => (x, x <? 3) | S q => f q (x + 1) end.\n')
+addA('l_al_opt', "", 'match f n a with Some w => w | None => b end',
+     'Definition O1 := option int.\nFixpoint f (m : nat) (x : int) : O1 := match m with O => None | S q => if x <? 0 then Some x else f q (x - 1) end.\n')
+addA('l_al_mutual', "", 'ev n a',
+     'Definition cell := int.\nDefinition M := mem.\nDefinition P := (int * int)%type.\nDefinition C := nat.\nDefinition B := bool.\nFixpoint ev (m : C) (x : cell) : cell := match m with O => x | S q => od q (x + 1) end with od (m : C) (x : cell) : cell := match m with O => x | S q => ev q (x * 2) end.\n')
+addA('l_al_tmpl', "", 'fo n (fun v => v + 1) a',
+     'Definition cell := int.\nDefinition M := mem.\nDefinition P := (int * int)%type.\nDefinition C := nat.\nDefinition B := bool.\nDefinition FF := int -> int.\nFixpoint fo (m : nat) (g : FF) (x : cell) : cell := match m with O => x | S q => fo q g (g x) end.\n')
+addA('l_al_fun_param', "", 'tw (fun v => v + 1) a',
+     'Definition FF := int -> int.\nDefinition tw (g : FF) (x : int) : int := g (g x).\n')
+addA('l_al_root', "", 'hc a',
+     'Definition cell := int.\nDefinition hc (x : cell) : cell := x + 1.\n')
+addA('l_let_first', "", 'f n a',
+     'Fixpoint f (m : nat) (x : int) : int := let y := x + 1 in match m with O => y | S q => f q y end.\n')
+addA('l_test_first', "", 'f n a',
+     'Fixpoint f (m : nat) (x : int) : int := if x <? 0 then x else match m with O => x | S q => f q (x - 1) end.\n')
+addA('l_read_first', "", 'f n a s',
+     'Fixpoint f (m : nat) (x : int) (t : mem) : int := let y := rd 0 x t in match m with O => y | S q => f q (x + 1) t + y end.\n')
+addA('l_al_pf', "", 'pq a',
+     'From Stdlib Require Import ZArith Lia Program.Wf.\nDefinition cell := int.\nDefinition mu (x : int) : nat := Z.to_nat (Sint63.to_Z x).\nLemma mu_pred : forall x, (0 <? x) = true -> (mu (x - 1) < mu x)%nat.\nProof.\n  intros x H. unfold mu. apply Sint63.ltb_spec in H. change (Sint63.to_Z 0) with 0%Z in H. change (0 < Sint63.to_Z x)%Z in H.\n  pose proof (Sint63.to_Z_bounded x) as [Bl Bh].\n  assert (Mi : Sint63.to_Z Sint63.max_int = 4611686018427387903%Z) by reflexivity. rewrite Mi in Bh.\n  assert (W2 : (Uint63.wB / 2 = 4611686018427387904)%Z) by reflexivity.\n  assert (E : Sint63.to_Z (x - 1) = (Sint63.to_Z x - 1)%Z).\n  { rewrite Sint63.sub_spec. change (Sint63.to_Z 1) with 1%Z. apply Sint63.cmod_small. rewrite W2. lia. }\n  rewrite E. lia.\nQed.\nProgram Fixpoint pq (x : cell) {measure (mu x)} : cell :=\n  match 0 <? x with true => x + pq (x - 1) | false => 0 end.\nNext Obligation. apply mu_pred. auto. Qed.\n')
+addA('l_fh_if', "", '(if a <? b then (fun v : int => v + 1) else (fun v : int => v * 2)) a',
+     '')
+addA('l_fh_named', "", '(if a <? b then g1 else g2) a',
+     'Definition g1 (x : int) : int := x + 1.\nDefinition g2 (x : int) : int := x * 2.\n')
+addA('l_fh_match', "", '(match n with O => (fun v : int => v + 1) | S _ => (fun v : int => v * 2) end) a',
+     '')
+addA('l_fh_two', "", '(if a <? b then (fun v w : int => v + w) else (fun v w : int => v * w)) a b',
+     '')
+addA('l_fh_opnd', "", '1 + (if a <? b then (fun v : int => v + 1) else (fun v : int => v * 2)) a',
+     '')
+addA('l_fh_let', "", 'let w := (if a <? b then (fun v : int => v + 1) else (fun v : int => v * 2)) a in w + w',
+     '')
+addA('l_fh_test', "", 'if (if a <? b then (fun v : int => v + 1) else (fun v : int => v * 2)) a <? 3 then a else b',
+     '')
+addA('l_fh_nest', "", '(if a <? b then (if b <? 3 then (fun v : int => v + 1) else (fun v : int => v + 2)) else (fun v : int => v * 2)) a',
+     '')
+addA('l_fh_rec', "", 'f n a',
+     'Fixpoint f (m : nat) (x : int) : int := match m with O => x | S q => (if x <? 3 then f q else (fun v : int => v + 1)) (x + 1) end.\n')
+addA('l_fh_mem', "", 'rd 0 0 ((if a <? b then (fun t : mem => upd 0 a b t) else (fun t : mem => t)) s)',
+     '')
+addA('l_fh_writes', "", '(if a <? b then (fun t : mem => rd 0 0 (upd 0 a b t)) else (fun t : mem => rd 0 0 t)) s',
+     '')
+addA('l_fh_bool', "", 'if (if a <? b then (fun v : int => v <? 1) else (fun v : int => v <? 2)) a then a else b',
+     '')
+addA('l_fh_pair', "", 'fst ((if a <? b then (fun v : int => (v, v)) else (fun v : int => (v, 1))) a) + b',
+     '')
+addA('l_fh_let_fun', "", '(let k := b + 1 in fun v : int => v + k) a',
+     '')
+addA('l_fh_pair_fun', "", '(match (a, b) with (u, w) => fun v : int => u + w + v end) 1',
+     '')
+addA('l_convoy', "", 'f n a',
+     'Definition f (m : nat) (x : int) : int := match m as k return m = k -> int with O => fun _ => x | S q => fun _ => x + 1 end eq_refl.\n')
+addA('l_convoy_b', "", 'f (a <? b) a',
+     'Definition f (c : bool) (x : int) : int := match c as k return c = k -> int with true => fun _ => x | false => fun _ => x + 1 end eq_refl.\n')
+addA('l_bool_rect', "", 'bool_rect (fun _ => int) a b (a <? b)',
+     '')
+addA('l_bool_rec', "", 'bool_rec (fun _ => int) a b (a <? b)',
+     '')
+addA('l_prod_rect', "", 'prod_rect (fun _ => int) (fun x y => x + y) (a, b)',
+     '')
+addA('l_prod_rec', "", 'prod_rec (fun _ => int) (fun x y => x + y) (a, b)',
+     '')
+addA('l_option_rect', "", 'option_rect (fun _ => int) (fun v => v + 1) b (Some a)',
+     '')
+addA('l_option_rec', "", 'option_rec (fun _ => int) (fun v => v + 1) b (if a <? b then Some a else None)',
+     '')
+addA('l_option_map', "", 'match option_map (fun v => v + 1) (Some a) with Some w => w | None => b end',
+     '')
+addA('l_sum_rect', "", 'sum_rect (fun _ => int) (fun v => v + 1) (fun v => v + 2) (inl a : int + int)',
+     '')
+addA('l_nat_rect_mem', "", 'rd 0 0 (nat_rect (fun _ => mem) s (fun _ t => upd 0 a b t) n)',
+     '')
+addA('l_eq_rect', "", 'eq_rect a (fun _ => int) b a eq_refl',
+     '')
+addA('l_dec_eq', "", 'if Nat.eq_dec n 3 then a else b',
+     '')
+addA('l_dec_lt', "", 'if Compare_dec.lt_dec n 3 then a else b',
+     '')
+addA('l_dec_le', "", 'if Compare_dec.le_dec n 3 then a else b',
+     '')
+addA('l_dec_gt', "", 'if Compare_dec.gt_dec n 3 then a else b',
+     '')
+addA('l_dec_ge', "", 'if Compare_dec.ge_dec n 3 then a else b',
+     '')
+addA('l_dec_le_lt', "", 'if Compare_dec.le_lt_dec n 3 then a else b',
+     '')
+addA('l_dec_le_gt', "", 'if Compare_dec.le_gt_dec n 3 then a else b',
+     '')
+addA('l_dec_eqs', "", 'if Uint63.eqs a b then a else b',
+     '')
+addA('l_dec_rec', "", 'f n 5 a',
+     'Fixpoint f (m k : nat) (x : int) : int := match m with O => x | S q => if Nat.eq_dec q k then x else f q k (x + 1) end.\n')
+addA('l_dec_let', "", 'let w := (if Nat.eq_dec n 3 then a else b) in w + 1',
+     '')
+addA('l_dec_opnd', "", '1 + (if Compare_dec.lt_dec n 3 then a else b)',
+     '')
+addA('l_dec_mem', "", 'rd 0 0 (if Nat.eq_dec n 3 then upd 0 a b s else s)',
+     '')
+addA('l_dec_bool', "", 'if (if Nat.eq_dec n 3 then a <? b else b <? a) then a else b',
+     '')
+addA('l_dec_proof_used', "", 'f n a',
+     'Definition f (m : nat) (x : int) : int := match Nat.eq_dec m 3 with left H => (match H with eq_refl => x end) | right _ => x + 1 end.\n')
+addA('l_dec_own', "", 'if d a b then a else b',
+     'Definition d (x y : int) : {x = y} + {x <> y} := Uint63.eqs x y.\n')
+addA('l_cmp_nat', "", 'match Nat.compare n 3 with Eq => a | Lt => b | Gt => 0 end',
+     '')
+addA('l_cmp_nat_rec', "", 'f n 5 a',
+     'Fixpoint f (m k : nat) (x : int) : int := match m with O => x | S q => match Nat.compare q k with Eq => x | _ => f q k (x + 1) end end.\n')
+addA('l_list_fold_left', "", 'List.fold_left (fun acc x => acc + x) (cons a (cons b nil)) 0',
+     '')
+addA('l_list_fold_right', "", 'List.fold_right (fun x acc => acc + x) 0 (cons a (cons b nil))',
+     '')
+addA('l_list_map', "", 'List.fold_left (fun acc x => acc + x) (List.map (fun x => x + 1) (cons a (cons b nil))) 0',
+     '')
+addA('l_list_nth', "", 'List.nth 1 (cons a (cons b nil)) 0',
+     '')
+addA('l_list_hd', "", 'List.hd 0 (cons a (cons b nil))',
+     '')
+addA('l_list_tl', "", 'List.hd 0 (List.tl (cons a (cons b nil)))',
+     '')
+addA('l_list_app', "", 'List.fold_left (fun acc x => acc + x) (List.app (cons a (cons b nil)) (cons a (cons b nil))) 0',
+     '')
+addA('l_list_rev', "", 'List.hd 0 (List.rev (cons a (cons b nil)))',
+     '')
+addA('l_list_mem', "", 'rd 0 0 (List.fold_left (fun t x => upd 0 x x t) (cons a (cons b nil)) s)',
+     '')
+addA('l_list_local', "", 'let l := cons a (cons b nil) in List.fold_left (fun acc x => acc + x) l 0',
+     '')
+addA('l_list_helper', "", 'List.fold_left (fun acc x => acc + x) (mk a) 0',
+     'Definition mk (x : int) : list int := cons x (cons 1 nil).\n')
+addA('l_list_data', "", 'f n a',
+     'Fixpoint mk (m : nat) : list int := match m with O => nil | S q => cons 1 (mk q) end.\nDefinition f (m : nat) (x : int) : int := List.fold_left (fun acc y => acc + y) (mk m) x.\n')
+addA('l_list_param', "", 'f (cons a nil)',
+     'Definition f (l : list int) : int := List.fold_left (fun acc y => acc + y) l 0.\n')
+addA('l_fix_mut', "", '(fix f (m : nat) (x : int) : int := match m with O => x | S q => g q (x + 1) end with g (m : nat) (x : int) : int := match m with O => x | S q => f q (x * 2) end for f) n a',
+     '')
+addA('l_poly_rec', "", 'pfold n (fun v => v + 1) a',
+     'Fixpoint pfold {T : Type} (m : nat) (g : T -> T) (x : T) : T := match m with O => x | S q => pfold q g (g x) end.\n')
+addA('l_poly_rec_nofun', "", 'pid n a',
+     'Fixpoint pid {T : Type} (m : nat) (x : T) : T := match m with O => x | S q => pid q x end.\n')
+addA('l_z_arith', "", 'Uint63.of_Z (Z.add (Uint63.to_Z a) (Uint63.to_Z b))',
+     '')
+addA('l_z_arith_ctrl', "", 'a + b',
+     '')
+addA('l_nat_ret_grow', "", 'match f n O with O => a | S _ => b end',
+     'Fixpoint f (m k : nat) : nat := match m with O => k | S q => f q (S k) end.\n')
+addA('l_nat_ret_ctrl', "", 'if f n 0 <? 1 then a else b',
+     'Fixpoint f (m : nat) (k : int) : int := match m with O => k | S q => f q (k + 1) end.\n')
+addA('l_nat_ret_same', "", 'match f n with O => a | S _ => b end',
+     'Fixpoint f (m : nat) : nat := match m with O => O | S q => f q end.\n')
+addA('l_ack', "", 'ack n 3 a',
+     'Fixpoint ack (m : nat) : nat -> int -> int := match m with O => fun _ x => x + 1 | S p => fix go (r : nat) (x : int) : int := match r with O => ack p 1 x | S q => ack p 5 (go q x) end end.\n')
+addA('l_pf_div2', "", 'pq n 5 a',
+     'From Stdlib Require Import Program.Wf Lia.\nProgram Fixpoint pq (m k : nat) (x : int) {measure (m + Nat.div2 k)} : int := match m with O => x | S q => pq q k (x + 1) end.\n')
 # values of a fixed size holding booleans, records and data types, crossed with the places a value stands in (step 67)
 addA('fx_pb_let', "", 'let v := mv a in (if snd v then fst v else 0)',
      'Definition mv (x : int) : (int * bool)%type := (x, x <? 3).\n')

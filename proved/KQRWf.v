@@ -7,6 +7,7 @@ From Stdlib Require Export Program.Utils.
 From KQ Require Import KQRun.
 From Corelib Require Import Numbers.Cyclic.Int63.CarryType.
 From Stdlib Require Sint63 Uint63.
+From Stdlib Require Arith.Compare_dec Arith.PeanoNat.
 From KQC Require KQMAuto.
 
 Section W.
@@ -172,7 +173,8 @@ Lemma nat_mod_le : forall a b : nat, (a mod b <= a)%nat.
 Proof. intros a [|b]; [simpl; lia | apply Nat.mod_le; lia]. Qed.
 Ltac bound_of W := match goal with |- _ <= ?b => change (W <= b) end.
 Ltac bound_le :=
-  pose proof kq_budget_val; pose proof kq_a1; pose proof kq_a2;
+  lazymatch goal with |- context [kq_budget] => pose proof kq_budget_val | _ => idtac end;
+  lazymatch goal with |- context [kq_nat _] => pose proof kq_a1; pose proof kq_a2 | _ => idtac end;
   repeat match goal with
          | |- context [Sint63.to_Z ?e] =>
              lazymatch goal with _ : (_ <= Sint63.to_Z e <= _)%Z |- _ => fail | _ => pose proof (sint_bounds e) end
@@ -182,8 +184,10 @@ Ltac bound_le :=
              lazymatch goal with _ : (Nat.log2 a <= a)%nat |- _ => fail | _ => pose proof (Nat.log2_le_lin a (Nat.le_0_l a)) end
          | |- context [Nat.sqrt ?a] =>
              lazymatch goal with _ : (Nat.sqrt a <= a)%nat |- _ => fail | _ => pose proof (Nat.sqrt_le_lin a) end
-         | |- context [Nat.div2 ?a] =>
-             lazymatch goal with _ : (Nat.div2 a <= a)%nat |- _ => fail | _ => pose proof (Nat.div2_decr a a (le_n a)) end
+         | |- context [Init.Nat.div2 ?a] =>
+             lazymatch goal with _ : (Init.Nat.div2 a <= a)%nat |- _ => fail | _ => pose proof (Nat.div2_decr a a (Nat.le_succ_diag_r a) : (Init.Nat.div2 a <= a)%nat) end
+         | |- context [PeanoNat.Nat.div2 ?a] =>
+             lazymatch goal with _ : (PeanoNat.Nat.div2 a <= a)%nat |- _ => fail | _ => pose proof (Nat.div2_decr a a (Nat.le_succ_diag_r a)) end
          | |- context [Nat.div ?a ?b] =>
              lazymatch goal with _ : (Nat.div a b <= a)%nat |- _ => fail | _ => pose proof (nat_div_le a b) end
          | |- context [Nat.modulo ?a ?b] =>
@@ -255,8 +259,31 @@ Proof.
 Qed.
 Lemma kq_div21_def : forall a b c : int, PrimInt63.diveucl_21 a b c = (kq_div21q a b c, kq_div21r a b c).
 Proof. intros a b c. unfold kq_div21q, kq_div21r. destruct (PrimInt63.diveucl_21 a b c); reflexivity. Qed.
+Lemma kq_d_eq : forall (T : Type) (n m : nat) (a b : T), (if PeanoNat.Nat.eq_dec n m then a else b) = (if Nat.eqb n m then a else b).
+Proof. intros. destruct (PeanoNat.Nat.eq_dec n m) as [e|e]; [subst m; rewrite PeanoNat.Nat.eqb_refl | apply PeanoNat.Nat.eqb_neq in e; rewrite e]; reflexivity. Qed.
+Lemma kq_d_lt : forall (T : Type) (n m : nat) (a b : T), (if Compare_dec.lt_dec n m then a else b) = (if Nat.ltb n m then a else b).
+Proof. intros. destruct (Compare_dec.lt_dec n m) as [e|e]; [apply PeanoNat.Nat.ltb_lt in e | apply PeanoNat.Nat.ltb_nlt in e]; rewrite e; reflexivity. Qed.
+Lemma kq_d_le : forall (T : Type) (n m : nat) (a b : T), (if Compare_dec.le_dec n m then a else b) = (if Nat.leb n m then a else b).
+Proof. intros. destruct (Compare_dec.le_dec n m) as [e|e]; [apply PeanoNat.Nat.leb_le in e | apply PeanoNat.Nat.leb_nle in e]; rewrite e; reflexivity. Qed.
+Lemma kq_d_gt : forall (T : Type) (n m : nat) (a b : T), (if Compare_dec.gt_dec n m then a else b) = (if Nat.ltb m n then a else b).
+Proof. intros. destruct (Compare_dec.gt_dec n m) as [e|e]; [apply PeanoNat.Nat.ltb_lt in e | apply PeanoNat.Nat.ltb_nlt in e]; rewrite e; reflexivity. Qed.
+Lemma kq_d_ge : forall (T : Type) (n m : nat) (a b : T), (if Compare_dec.ge_dec n m then a else b) = (if Nat.leb m n then a else b).
+Proof. intros. destruct (Compare_dec.ge_dec n m) as [e|e]; [apply PeanoNat.Nat.leb_le in e | apply PeanoNat.Nat.leb_nle in e]; rewrite e; reflexivity. Qed.
+Lemma kq_d_lel : forall (T : Type) (n m : nat) (a b : T), (if Compare_dec.le_lt_dec n m then a else b) = (if Nat.leb n m then a else b).
+Proof. intros. destruct (Compare_dec.le_lt_dec n m) as [e|e]; [apply PeanoNat.Nat.leb_le in e | apply PeanoNat.Nat.leb_gt in e]; rewrite e; reflexivity. Qed.
+Lemma kq_d_leg : forall (T : Type) (n m : nat) (a b : T), (if Compare_dec.le_gt_dec n m then a else b) = (if Nat.leb n m then a else b).
+Proof. intros. destruct (Compare_dec.le_gt_dec n m) as [e|e]; [apply PeanoNat.Nat.leb_le in e | apply PeanoNat.Nat.leb_gt in e]; rewrite e; reflexivity. Qed.
+Lemma kq_d_eqs : forall (T : Type) (i j : int) (a b : T), (if Uint63.eqs i j then a else b) = (if PrimInt63.eqb i j then a else b).
+Proof. intros. destruct (Uint63.eqs i j) as [e|e]; [subst j; rewrite Uint63.eqb_refl | apply Uint63.eqb_false_spec in e; rewrite e]; reflexivity. Qed.
+Lemma kq_compare_nat : forall n m : nat, Nat.compare n m = (if Nat.eqb n m then Eq else if Nat.ltb n m then Lt else Gt).
+Proof.
+  intros n m. destruct (Nat.eqb n m) eqn:E1; [apply PeanoNat.Nat.eqb_eq in E1; subst m; apply PeanoNat.Nat.compare_refl|].
+  apply PeanoNat.Nat.eqb_neq in E1. destruct (Nat.ltb n m) eqn:E2.
+  - apply PeanoNat.Nat.ltb_lt in E2. apply PeanoNat.Nat.compare_lt_iff. exact E2.
+  - apply PeanoNat.Nat.ltb_nlt in E2. apply PeanoNat.Nat.compare_gt_iff. lia.
+Qed.
 Ltac prim_rw :=
-  progress (rewrite ?kq_mulc_def, ?kq_div21_def, ?Uint63Axioms.compare_def_spec, ?kq_compares_def, ?Uint63Axioms.addc_def_spec, ?Uint63Axioms.addcarryc_def_spec,
+  progress (rewrite ?kq_d_eq, ?kq_d_lt, ?kq_d_le, ?kq_d_gt, ?kq_d_ge, ?kq_d_lel, ?kq_d_leg, ?kq_d_eqs, ?kq_compare_nat, ?kq_mulc_def, ?kq_div21_def, ?Uint63Axioms.compare_def_spec, ?kq_compares_def, ?Uint63Axioms.addc_def_spec, ?Uint63Axioms.addcarryc_def_spec,
                     ?Uint63Axioms.subc_def_spec, ?Uint63Axioms.subcarryc_def_spec, ?Uint63Axioms.diveucl_def_spec, ?Uint63Axioms.addmuldiv_def_spec;
             unfold Uint63Axioms.compare_def, Uint63Axioms.addc_def, Uint63Axioms.addcarryc_def, Uint63Axioms.subc_def, Uint63Axioms.subcarryc_def,
                    Uint63Axioms.diveucl_def, Uint63Axioms.addmuldiv_def, Uint63Axioms.addcarry).

@@ -13,6 +13,13 @@ import re, sys, collections
 # differs only in the cause.  The cells once listed here (option, sum, a list cell, a function in a pair, a function returned,
 # a dead memory let) build and take apart their value in place, so they are gaps.
 DESIGN_CELLS = {
+  # arithmetic on Z: an unbounded number as a value (Rocq-C-solution.md §0.5, second reason); control: A_l_z_arith_ctrl, the same on int (step 68)
+  "A_l_z_arith",
+  # a counter given back that the recursion grows, from the data: an unbounded number (§0.5, second reason); control: A_l_nat_ret_ctrl, the same on int (step 68)
+  "A_l_nat_ret_grow",
+  # a list whose length comes from the data, built by a recursion: its cells would be allocated behind the programmer's back (§0.5, first reason);
+  # control: A_l_list_fold_left, A_l_list_param, a list written in the text (step 68)
+  "A_l_list_data",
   # a mutual block of a memory and a number: the member giving a memory writes on what the other's call, writing too, was given: two versions
   # differing in cells whose number comes from the data (Rocq-C-solution.md §0.5, third reason); control: A_par_mutual_int_bool_mem, a block of
   # different types that reads (step 62)
@@ -56,6 +63,13 @@ BY_NAME = {
   "A_n_nat_even": "a library function on a counter beyond S, +, pred, min, max, sub, div2: even, mul",
   "A_n_nat_mul": "a library function on a counter beyond S, +, pred, min, max, sub, div2: even, mul",
   "A_n_sig_result": "a value holding a proof, given back by a function: a sig",
+  "A_l_ack": "a fixpoint inside a fixpoint that gives back a function",
+  "A_l_dec_own": "a function of the program giving a proof with its answer: a sumbool",
+  "A_l_dec_proof_used": "a proof a test gives, named by what follows",
+  "A_l_fix_mut": "a local mutual fixpoint",
+  "A_l_nat_ret_same": "a counter given back by a recursive function",
+  "A_l_poly_rec": "a recursive function polymorphic in a type",
+  "A_l_poly_rec_nofun": "a recursive function polymorphic in a type",
   "A_fx_nat_pair": "a counter as a field of a value given back by a recursive function",
   "A_fx_nat_field": "a counter as a field of a record or a data type",
   "A_fx_nat_opt": "a counter as a field of a record or a data type",

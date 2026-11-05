@@ -51,7 +51,10 @@ Definition lib_open (kn : kername) : bool :=
   let f := lib_file_of (fst kn) in
   (* a definition the readers do not know as an operation *)
   if existsb (String.eqb f) ["Bool"%bs; "Uint63"%bs; "Uint63Axioms"%bs; "Sint63"%bs; "Sint63Axioms"%bs] then true
-  else if String.eqb f "Datatypes"%bs then existsb (String.eqb (snd kn)) ["xorb"%bs; "implb"%bs; "nat_rect"%bs; "nat_rec"%bs; "nat_ind"%bs]
+  else if String.eqb f "Datatypes"%bs then existsb (String.eqb (snd kn)) ["xorb"%bs; "implb"%bs; "nat_rect"%bs; "nat_rec"%bs; "nat_ind"%bs;
+    "bool_rect"%bs; "bool_rec"%bs; "bool_ind"%bs; "prod_rect"%bs; "prod_rec"%bs; "prod_ind"%bs; "option_rect"%bs; "option_rec"%bs; "option_map"%bs;
+    "sum_rect"%bs; "sum_rec"%bs; "unit_rect"%bs; "unit_rec"%bs; "prod_curry"%bs; "prod_uncurry"%bs]
+  else if String.eqb f "Logic"%bs then existsb (String.eqb (snd kn)) ["eq_rect"%bs; "eq_rec"%bs; "eq_ind"%bs; "eq_rect_r"%bs; "eq_rec_r"%bs]
   else if String.eqb f "Nat"%bs then existsb (String.eqb (snd kn)) ["iter"%bs; "even"%bs; "odd"%bs]
   else if String.eqb f "Specif"%bs then existsb (String.eqb (snd kn)) ["proj1_sig"%bs; "sumbool_rect"%bs; "sumbool_rec"%bs]
   else false.
@@ -4037,6 +4040,7 @@ Fixpoint body_rtys (fuel : nat) (Σ : global_env) (hb : kername -> option term) 
       | tApp f args => fold_left (fun s x => body_rtys fuel Σ hb x s) args (body_rtys fuel Σ hb f st)
       | tLambda _ _ b => body_rtys fuel Σ hb b st
       | tLetIn _ b ty body => body_rtys fuel Σ hb body (body_rtys fuel Σ hb b (add ty st))
+      | tCast c _ _ => body_rtys fuel Σ hb c st
       | tCase ci p c brs => fold_left (fun s br => body_rtys fuel Σ hb (bbody br) s) brs
                               (body_rtys fuel Σ hb c (add (ind_app (ci_ind ci) (puinst p) (pparams p)) st))
       | tProj pr c => body_rtys fuel Σ hb c (add (tInd (proj_ind pr) []) st)
@@ -4046,7 +4050,37 @@ Fixpoint body_rtys (fuel : nat) (Σ : global_env) (hb : kername -> option term) 
       | _ => st
       end
   end.
+(** (step 68) a name of the program's for a type, [Definition cell := int]: its definition in its place, in every type and argument *)
+Fixpoint al_t (fuel : nat) (Σ : global_env) (mp : modpath) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := al_t fuel Σ mp in
+      match t with
+      | tConst kn _ =>
+          if in_prog mp (fst kn) then
+            match lookup_env Σ kn with
+            | Some (ConstantDecl cb) =>
+                match cst_type cb, cst_body cb with
+                | tSort _, Some b => go b
+                | _, _ => t
+                end
+            | _ => t
+            end
+          else t
+      | tProd na a b => tProd na (go a) (go b)
+      | tLambda na a b => tLambda na (go a) (go b)
+      | tLetIn na v a b => tLetIn na (go v) (go a) (go b)
+      | tApp f args => tApp (go f) (map go args)
+      | tCase ci p c brs =>
+          tCase ci {| pparams := map go (pparams p); puinst := puinst p; pcontext := pcontext p; preturn := go (preturn p) |} (go c)
+                (map (fun br => {| bcontext := bcontext br; bbody := go (bbody br) |}) brs)
+      | tFix mfix k => tFix (map (fun d => {| dname := dname d; dtype := go (dtype d); rarg := rarg d; dbody := go (dbody d) |}) mfix) k
+      | _ => t
+      end
+  end.
 Definition rtab_of (Σ : global_env) (hb : kername -> option term) (kns : list kername) : list rentry :=
+  let nrm := al_t 100 Σ (match kns with k :: _ => fst k | [] => MPfile [] end) in
   (* (step 67) the records holding records the bodies use, a value holding booleans or data types wherever it is used: each after what it holds *)
   let fix add_deep (fu : nat) (rt : list rentry) (t : term) {struct fu} : list rentry :=
     match fu with
@@ -4069,12 +4103,12 @@ Definition rtab_of (Σ : global_env) (hb : kername -> option term) (kns : list k
                             | None => rt end in
   let sig_rt := fold_left (fun rt kn =>
     match lookup_env Σ kn with
-    | Some (ConstantDecl cb) => fold_left add_ty (prod_tys (cst_type cb)) rt
+    | Some (ConstantDecl cb) => fold_left add_ty (map nrm (prod_tys (cst_type cb))) rt
     | _ => rt
     end) kns [] in
   (* the bodies' record types after the signatures': a program's record indices are those of before.  A record holding
      records only from a signature (step 32): built and taken apart in a body it needs nothing (step 25) *)
-  let btys := fst (fold_left (fun s kn => match body_of Σ kn with Some b => body_rtys 2000 Σ hb b s | None => s end) kns ([], [])) in
+  let btys := map nrm (fst (fold_left (fun s kn => match body_of Σ kn with Some b => body_rtys 2000 Σ hb b s | None => s end) kns ([], []))) in
   let rt1 := fold_left (fun rt t => match rec_shape Σ t with
                          | Some e => if (if isgen e then true else existsb (Nat.ltb 1) (snd e)) then rt
                                      else match rindex t rt 0 with Some _ => rt | None => rt ++ [e] end
@@ -5541,6 +5575,13 @@ Fixpoint y_conb (fuel : nat) (t : term) {struct fuel} : bool :=
       | _ => false
       end
   end.
+(** (step 68) a branch that is a function given its arguments, at once: a proof a match's convoy gives it is typed in the branch only if not named *)
+Fixpoint y_beta (args : list term) (t : term) {struct args} : term :=
+  match args, t with
+  | [], _ => t
+  | a :: r, tLambda _ _ b => y_beta r (subst10 a b)
+  | _, _ => mkApps t args
+  end.
 Fixpoint y_pull (fuel self : nat) (t : term) {struct fuel} : option (case_info * predicate term * term * list (branch term)) :=
   match fuel with
   | O => None
@@ -5563,6 +5604,10 @@ Fixpoint y_pull (fuel self : nat) (t : term) {struct fuel} : option (case_info *
                               end |}) brs')
             | None => None
             end
+      | tApp (tCase ci p c brs) args =>
+          Some (ci, p, c, map (fun br =>
+            let k := length (bcontext br) in
+            {| bcontext := bcontext br; bbody := y_beta (map (lift0 k) args) (bbody br) |}) brs)
       | tApp f args =>
           let fix go (pre post : list term) {struct post} :=
             match post with
@@ -5664,6 +5709,45 @@ Fixpoint y_tail (fuel self : nat) (T t : term) {struct fuel} : term :=
       | _ => t
       end
   end.
+Definition y_case_nat := <% fun n : nat => match n with O => O | S m => O end %>.
+(** a match on a counter whose constructor is written: its branch, Rocq's own iota: the guard of a fixpoint does not see through it *)
+Fixpoint y_rep (fuel c d : nat) (v t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := y_rep fuel c d v in
+      match t with
+      | tRel i => if Nat.eqb i (c + d) then lift0 d v else t
+      | tApp f args => tApp (go f) (map go args)
+      | tLambda na a b => tLambda na a (y_rep fuel c (S d) v b)
+      | tProd na a b => tProd na a (y_rep fuel c (S d) v b)
+      | tLetIn na w a b => tLetIn na (go w) a (y_rep fuel c (S d) v b)
+      | tCase ci p x brs =>
+          tCase ci p (go x) (map (fun br => {| bcontext := bcontext br; bbody := y_rep fuel c (d + length (bcontext br)) v (bbody br) |}) brs)
+      | tFix mfix k =>
+          let n := length mfix in
+          tFix (map (fun df => {| dname := dname df; dtype := dtype df; rarg := rarg df; dbody := y_rep fuel c (d + n) v (dbody df) |}) mfix) k
+      | _ => t
+      end
+  end.
+Fixpoint y_kn (fuel : nat) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      match t with
+      | tCase ci p (tConstruct i 0 _) [b0; b1] =>
+          if Kername.eqb (inductive_mind i) (inductive_mind ind_nat) then y_kn fuel (bbody b0)
+          else tCase ci p (tConstruct i 0 []) (map (fun br => {| bcontext := bcontext br; bbody := y_kn fuel (bbody br) |}) [b0; b1])
+      | tCase ci p (tApp (tConstruct i 1 u) [a] as c) [b0; b1] =>
+          if Kername.eqb (inductive_mind i) (inductive_mind ind_nat) then y_kn fuel (subst10 a (bbody b1))
+          else tCase ci p c (map (fun br => {| bcontext := bcontext br; bbody := y_kn fuel (bbody br) |}) [b0; b1])
+      | tCase ci p c brs => tCase ci p (y_kn fuel c) (map (fun br => {| bcontext := bcontext br; bbody := y_kn fuel (bbody br) |}) brs)
+      | tApp f args => tApp (y_kn fuel f) (map (y_kn fuel) args)
+      | tLambda na a b => tLambda na a (y_kn fuel b)
+      | tLetIn na v a b => tLetIn na (y_kn fuel v) a (y_kn fuel b)
+      | _ => t
+      end
+  end.
 Definition y_fix (d : def term) : option term :=
   let '(tys, body) := lams (dbody d) in
   match body with
@@ -5676,7 +5760,21 @@ Definition y_fix (d : def term) : option term :=
         else Some (tFix [{| dname := dname d; dtype := dtype d; rarg := rarg d;
                             dbody := lams_of tys (tCase ci p (tRel c) [b0; {| bcontext := bcontext b1; bbody := b1' |}]) |}] 0)
       else None
-  | _ => None
+  | _ =>
+      (* (step 68) lets or a test before the counter's match: the whole body in each branch of it, the same at each counter *)
+      let n := length tys in
+      let c := n - 1 - rarg d in
+      match y_case_nat with
+      | tLambda _ _ (tCase ci p _ [b0; b1]) =>
+          if Nat.eqb (rarg d) 0 then
+            Some (tFix [{| dname := dname d; dtype := dtype d; rarg := rarg d;
+                           dbody := lams_of tys (tCase ci (y_ret p (ret_ty (dtype d))) (tRel c)
+                                      [{| bcontext := bcontext b0; bbody := y_kn 100000 (subst [tConstruct ind_nat 0 []] c (lift 1 (S c) body)) |};
+                                       {| bcontext := bcontext b1;
+                                          bbody := y_kn 100000 (y_rep 100000 (S c) 0 (tApp (tConstruct ind_nat 1 []) [tRel 0]) (lift0 1 body)) |}]) |}] 0)
+          else None
+      | _ => None
+      end
   end.
 (** (step 60) a fixpoint whose match on its counter gives a function (Equations writes its clauses so, and a user may): the application pushed into the branches, read as any fixpoint.  No conversion opens a match on a variable, so it is not [denote s = f]; its two equations, at [O] and [S _], hold by conversion: the theorem a copy takes (kitc.py) *)
 Definition conv_fix (Σ : global_env) (mp : modpath) (b : term) : option term :=
@@ -5809,6 +5907,136 @@ Fixpoint ty_beta (fuel : nat) (t : term) {struct fuel} : term :=
       | _ => t
       end
   end.
+(** (step 68) a function of Rocq's lists on a list written in the text: worked out, the same up to Rocq's reduction; if it stays stuck on a variable, left as it is *)
+Definition lib_list (kn : kername) : bool :=
+  let f := lib_file_of (fst kn) in
+  if String.eqb f "ListDef"%bs then true else String.eqb f "List"%bs.
+(** a constant that takes or gives a list: a helper over lists *)
+Definition lu_is_list (t : term) : bool :=
+  match t with
+  | tInd i _ | tApp (tInd i _) _ => if String.eqb (snd (inductive_mind i)) "list"%bs then true else false
+  | _ => false
+  end.
+Fixpoint lu_prod (fuel : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => false
+  | S fuel => match t with
+              | tProd _ a b => if lu_is_list a then true else lu_prod fuel b
+              | _ => lu_is_list t
+              end
+  end.
+Definition lu_list_ty (kn : kername) (Σ : global_env) : bool :=
+  match lookup_env Σ kn with Some (ConstantDecl cb) => lu_prod 100 (cst_type cb) | _ => false end.
+Fixpoint lu_red (fuel : nat) (Σ : global_env) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      match t with
+      | tApp (tLambda _ _ b) (a :: r) => lu_red fuel Σ (match r with [] => subst10 a b | _ => mkApps (subst10 a b) r end)
+      | tApp (tApp f a1) a2 => lu_red fuel Σ (tApp f (a1 ++ a2))
+      | tApp (tConst kn _) args =>
+          (* a function of the lists, or a helper of the program with no fixpoint of its own *)
+          if lib_list kn then
+            match body_of Σ kn with
+            | Some b => lu_red fuel Σ (mkApps b args)
+            | None => t
+            end
+          else
+            match body_of Σ kn with
+            | Some (tFix _ _) | None => t
+            | Some b => if lu_list_ty kn Σ then lu_red fuel Σ (mkApps b args) else t
+            end
+      | tConst kn _ => if lib_list kn then match body_of Σ kn with Some b => lu_red fuel Σ b | None => t end else t
+      | tApp (tFix [d] 0 as fx) args =>
+          match nth_error args (rarg d) with
+          | Some a =>
+              let a' := lu_red fuel Σ a in
+              match a' with
+              | tConstruct _ _ _ | tApp (tConstruct _ _ _) _ =>
+                  lu_red fuel Σ (mkApps (subst10 fx (dbody d)) (firstn (rarg d) args ++ a' :: skipn (S (rarg d)) args))
+              | _ => t
+              end
+          | None => t
+          end
+      | tCase ci p c brs =>
+          match lu_red fuel Σ c with
+          | tConstruct _ k _ =>
+              match nth_error brs k with
+              | Some br => lu_red fuel Σ (bbody br)
+              | None => t
+              end
+          | tApp (tConstruct _ k _) cargs =>
+              match nth_error brs k with
+              | Some br => lu_red fuel Σ (subst (rev (skipn (ci_npar ci) cargs)) 0 (bbody br))
+              | None => t
+              end
+          | _ => t
+          end
+      | _ => t
+      end
+  end.
+(** every head worked out, under what is left *)
+Fixpoint lu_full (fuel : nat) (Σ : global_env) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := lu_full fuel Σ in
+      match lu_red 100000 Σ t with
+      | tApp f args => tApp f (map go args)
+      | tLambda na a b => tLambda na a (go b)
+      | tLetIn na v a b => tLetIn na (go v) a (go b)
+      | tCase ci p c brs => tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := go (bbody br) |}) brs)
+      | r => r
+      end
+  end.
+Fixpoint lu_stuck (fuel : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => true
+  | S fuel =>
+      match t with
+      | tConst kn _ => lib_list kn
+      | tFix _ _ => true
+      | tApp f args => if lu_stuck fuel f then true else existsb (lu_stuck fuel) args
+      | tLambda _ _ b => lu_stuck fuel b
+      | tLetIn _ v _ b => if lu_stuck fuel v then true else lu_stuck fuel b
+      | tCase _ _ c brs => if lu_stuck fuel c then true else existsb (fun br => lu_stuck fuel (bbody br)) brs
+      | _ => false
+      end
+  end.
+Fixpoint lu_t (fuel : nat) (Σ : global_env) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := lu_t fuel Σ in
+      match t with
+      | tApp (tConst kn u) args =>
+          if if lib_list kn then true else lu_list_ty kn Σ then
+            let r := lu_full 1000 Σ (tApp (tConst kn u) (map go args)) in
+            if lu_stuck 100000 r then tApp (tConst kn u) (map go args) else r
+          else tApp (tConst kn u) (map go args)
+      | tApp f args => tApp (go f) (map go args)
+      | tLambda na a b => tLambda na a (go b)
+      | tLetIn na v a b => if lu_is_list a then go (subst10 v b) else tLetIn na (go v) a (go b)
+      | tCase ci p c brs => tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := go (bbody br) |}) brs)
+      | tFix mfix k => tFix (map (fun d => {| dname := dname d; dtype := dtype d; rarg := rarg d; dbody := go (dbody d) |}) mfix) k
+      | _ => t
+      end
+  end.
+(** (step 68) a function chosen by a match, applied *)
+Fixpoint fc_has (fuel : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      match t with
+      | tApp (tCase _ _ _ _) _ => true
+      | tApp f args => if fc_has fuel f then true else existsb (fc_has fuel) args
+      | tLambda _ _ b => fc_has fuel b
+      | tLetIn _ v _ b => if fc_has fuel v then true else fc_has fuel b
+      | tCase _ _ c brs => if fc_has fuel c then true else existsb (fun br => fc_has fuel (bbody br)) brs
+      | tFix mfix _ => existsb (fun d => fc_has fuel (dbody d)) mfix
+      | _ => false
+      end
+  end.
 (** (step 64) an operation of Rocq's machine numbers that its axioms define by others ([compare_def_spec] ..): that definition in its place.  Not by conversion, a primitive being stuck on a variable; the equation of [y_all] carries it, by those axioms *)
 Definition pm_table : list (kername * term) :=
   [(kn_of <% PrimInt63.compare %>, <% fun x y : PrimInt63.int => if PrimInt63.ltb x y then Lt else if PrimInt63.eqb x y then Eq else Gt %>);
@@ -5820,9 +6048,30 @@ Definition pm_table : list (kername * term) :=
    (kn_of <% PrimInt63.diveucl %>, <% fun x y : PrimInt63.int => (PrimInt63.div x y, PrimInt63.mod x y) %>);
    (kn_of <% PrimInt63.addmuldiv %>, <% fun p x y : PrimInt63.int => PrimInt63.lor (PrimInt63.lsl x p) (PrimInt63.lsr y (PrimInt63.sub 63 p)) %>);
    (kn_of <% PrimInt63.mulc %>, <% fun x y : PrimInt63.int => (KQ.KQRun.kq_mulhi x y, PrimInt63.mul x y) %>);
-   (kn_of <% PrimInt63.diveucl_21 %>, <% fun a b c : PrimInt63.int => (KQ.KQRun.kq_div21q a b c, KQ.KQRun.kq_div21r a b c) %>)].
+   (kn_of <% PrimInt63.diveucl_21 %>, <% fun a b c : PrimInt63.int => (KQ.KQRun.kq_div21q a b c, KQ.KQRun.kq_div21r a b c) %>);
+   (kn_of <% Nat.compare %>, <% fun a b : nat => if Nat.eqb a b then Eq else if Nat.ltb a b then Lt else Gt %>)].
 Definition pm_of (k : kername) : option term :=
   option_map snd (List.find (fun e => Kername.eqb k (fst e)) pm_table).
+(** (step 68) a test that gives a proof with its answer: the boolean test it is, by its arguments; by name, a library the reader need not load *)
+Definition dec_of (k : kername) : option (term -> term -> term) :=
+  let f := lib_file_of (fst k) in
+  let nb := fun (g : kername) (swap : bool) => Some (fun a b : term => if swap then tApp (tConst g []) [b; a] else tApp (tConst g []) [a; b]) in
+  if String.eqb f "PeanoNat"%bs then
+    (if String.eqb (snd k) "eq_dec"%bs then nb kn_nat_eqb false else None)
+  else if String.eqb f "Peano_dec"%bs then
+    (if String.eqb (snd k) "eq_nat_dec"%bs then nb kn_nat_eqb false else None)
+  else if String.eqb f "Compare_dec"%bs then
+    (if String.eqb (snd k) "lt_dec"%bs then nb kn_nat_ltb false
+     else if String.eqb (snd k) "le_dec"%bs then nb kn_nat_leb false
+     else if String.eqb (snd k) "gt_dec"%bs then nb kn_nat_ltb true
+     else if String.eqb (snd k) "ge_dec"%bs then nb kn_nat_leb true
+     else if String.eqb (snd k) "le_lt_dec"%bs then nb kn_nat_leb false
+     else if String.eqb (snd k) "le_gt_dec"%bs then nb kn_nat_leb false
+     else None)
+  else if String.eqb f "Uint63"%bs then
+    (if String.eqb (snd k) "eqs"%bs then nb (kn_of <% PrimInt63.eqb %>) false else None)
+  else None.
+Definition y_case_bool := <% fun b : bool => if b then O else O %>.
 Fixpoint pm_sub (fuel : nat) (t : term) {struct fuel} : term :=
   match fuel with
   | O => t
@@ -5837,13 +6086,29 @@ Fixpoint pm_sub (fuel : nat) (t : term) {struct fuel} : term :=
       | tApp f args => tApp (pm_sub fuel f) (map (pm_sub fuel) args)
       | tLambda na ty b => tLambda na ty (pm_sub fuel b)
       | tLetIn na v ty b => tLetIn na (pm_sub fuel v) ty (pm_sub fuel b)
+      | tCase ci p (tApp (tConst k _) dargs) [b0; b1] =>
+          (* (step 68) the proofs not named by what follows *)
+          match dec_of k, y_case_bool with
+          | Some mk, tLambda _ _ (tCase cib pb _ _) =>
+              match rev dargs with
+              | y :: x :: _ =>
+                  if (if tm_has_rel 1000 0 (bbody b0) then true else tm_has_rel 1000 0 (bbody b1))
+                  then tCase ci p (tApp (tConst k []) (map (pm_sub fuel) dargs)) (map (fun br => {| bcontext := bcontext br; bbody := pm_sub fuel (bbody br) |}) [b0; b1])
+                  else
+                    tCase cib {| pparams := pparams pb; puinst := puinst pb; pcontext := pcontext pb; preturn := preturn p |} (mk (pm_sub fuel x) (pm_sub fuel y))
+                      [{| bcontext := []; bbody := pm_sub fuel (subst10 (tRel 0) (bbody b0)) |};
+                       {| bcontext := []; bbody := pm_sub fuel (subst10 (tRel 0) (bbody b1)) |}]
+              | _ => t
+              end
+          | _, _ => tCase ci p (pm_sub fuel (tApp (tConst k []) dargs)) (map (fun br => {| bcontext := bcontext br; bbody := pm_sub fuel (bbody br) |}) [b0; b1])
+          end
       | tCase ci p c brs => tCase ci p (pm_sub fuel c) (map (fun br => {| bcontext := bcontext br; bbody := pm_sub fuel (bbody br) |}) brs)
       | tFix mfix k => tFix (map (fun d => {| dname := dname d; dtype := dtype d; rarg := rarg d; dbody := pm_sub fuel (dbody d) |}) mfix) k
       | _ => t
       end
   end.
 Definition pm_has (t : term) : bool :=
-  existsb (fun k => match pm_of k with Some _ => true | None => false end) (consts 10000 t []).
+  existsb (fun k => match pm_of k with Some _ => true | None => match dec_of k with Some _ => true | None => false end end) (consts 10000 t []).
 (** a body's choices over known constructors floated out: for a function with no fixpoint *)
 Definition y_nf (T b : term) : term :=
   let '(tys, body) := lams b in lams_of tys (y_tail 1000 1000000 T body).
@@ -5854,22 +6119,29 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
       match lookup_env S1 kn with
       | Some (ConstantDecl cb) =>
           match cst_body cb with
-          | Some b0 =>
+          | Some b00 =>
+              (* (step 68) a program's name for a type, read as its definition, the same up to delta *)
+              let ty0 := al_t 1000 Σ mp (cst_type cb) in
+              let b0 := lu_t 100000 Σ (al_t 100000 Σ mp b00) in
+              let c1 := if teq 100000 ty0 (cst_type cb) then negb (teq 100000 b0 b00) else true in
               (* (step 63) a binder's type a redex, from a motive, a cast: the same up to beta *)
-              let c0 := ty_has 1000 b0 in
-              let b1 := if c0 then ty_beta 1000 b0 else b0 in
+              let c0 := if c1 then true else ty_has 1000 b0 in
+              let b1 := if ty_has 1000 b0 then ty_beta 1000 b0 else b0 in
               let p0 := pm_has b1 in
               let b := if p0 then pm_sub 100000 b1 else b1 in
-              let wy (f' : term) := (add_decl (add_decl S1 (copy_mp, snd kn ^ "__wy"%bs) (cst_type cb) f') kn (cst_type cb) f', true) in
+              (* (step 68) a function chosen by a match, applied *)
+              let f0 := if p0 then false else fc_has 100000 b in
+              let wy (f' : term) := (add_decl (add_decl S1 (copy_mp, snd kn ^ "__wy"%bs) ty0 f') kn ty0 f', true) in
               match b with
               | tFix [d] 0 =>
                   match y_fix d with
                   | Some f' => wy f'
-                  | None => if p0 then wy b else if c0 then (add_decl S1 kn (cst_type cb) b, true) else st
+                  | None => if p0 then wy b else if c0 then (add_decl S1 kn ty0 b, true) else st
                   end
               | _ =>
-                  if p0 then wy (y_nf (ret_ty (cst_type cb)) b)
-                  else if c0 then (add_decl S1 kn (cst_type cb) b, true) else st
+                  if p0 then wy (y_nf (ret_ty ty0) b)
+                  else if f0 then wy (y_nf (ret_ty ty0) b)
+                  else if c0 then (add_decl S1 kn ty0 b, true) else st
               end
           | None => st
           end
