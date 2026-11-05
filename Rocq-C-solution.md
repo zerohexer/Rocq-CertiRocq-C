@@ -4968,6 +4968,16 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   trusted base as step 65 left it.  Next: a function read in another form, its callers told by a lemma: a memory never read, a
   type parameter.
 
+**Step 69, a function read in another form, its callers told by a lemma: a memory never read, a type parameter (§3.7, §12.A) — the design (2026-11-05).**  Two classes with one difficulty.  `kw m t (x + 1) (upd 0 x x t)` with `u` never read but moved by the recursion, or a call giving it another memory: step 53's wrapper needs the same memory, its lemma a fixed one, and neither holds.  `pfold {T} m g x`, a recursive function polymorphic in a type: `pfold int m g x` is not, up to conversion, a fixpoint with `T` put in, since `T` comes before the counter and a fixpoint is stuck on it.  In both a function of its own stands in the first one's place, and it is equal to it at every argument: not a conversion, an induction.
+- *What is in its place*: the parameter dropped, from its binder and from every own call; or the type put in.  A row of the reader's holds the function and the statement `forall .., f .. = f' ..` (`rp_def`, `rp_stmt`).  `kitc.py` proves each statement by induction on the counter, `own_step`.
+- *Its callers*: their text calls `f'`, each an equation of step 61's kind (`rp_sub`), the lemmas among its rewrites through one hook, `kq_rw`, each program setting it.  So a caller may itself be a fixpoint, or a definition holding such a call.
+- *A local fixpoint*, closed, the same: the statement is about the `fix` as the text writes it.  *A definition* that hands a memory only to such a call has then that memory never read: a row of its own (`__n`), its proof no induction.  *A polymorphic definition* holding a polymorphic fixpoint's call: a row at its types.
+- *`rec_info2`*: where the program was read in another form, the record table is that form's: a type only `T` becomes has no entry otherwise.
+- *No proof search beyond these lemmas, and only for a program not read as it stands*: `KQR.v` is unchanged, and so is the C of every program read before.
+- *Left, each with its cells*: a memory never read in a mutual block (`A_par_mem2_mutual_moved`): the lemma is a mutual induction; a measure recursion polymorphic in a type (`A_rp_poly_measure`).
+- *Cells*: 26, `A_rp_*`: the parameter at each position, three memories, every result sort, the caller a fixpoint, what is called also read so; `T` a pair, a boolean, a memory, a record, an `option`, two instances, two type parameters, a helper; the pin, both memories live.  `A_par_mem2_dead_moved`, `_dead_other`, `_dead_pair_param`, `_hand_on_pair_param`, `_lfix_dead`, `_tmpl_dead`, `A_l_poly_rec`, `_nofun`, gaps before, read.
+- *The acceptance*: `proved/examples/poly_fix`: the answer worked out apart: 1072003.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5147,7 +5157,8 @@ Pushed to the public repository up to `304ee51` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 68 (what Rocq's libraries and ordinary text spell otherwise: the construct table 2502 of 2552, 18 by design, 31 gaps), the C, the gate |
+| (this commit) | §12.V: step 69's design -- a function read in another form, its callers told by a lemma |
+| `b45dfe3` | §12.V: step 68 (what Rocq's libraries and ordinary text spell otherwise: the construct table 2502 of 2552, 18 by design, 31 gaps), the C, the gate |
 | `304ee51` | `proved/KQRReify.v` + `KQRWf.v` + `matrix` + `examples/lib2_fix` step 68: what Rocq's libraries and ordinary text spell otherwise; 87 cells; `KQR.v` unchanged |
 | `a1f392f` | §12.V: step 68's design -- type aliases, the library's recursors, Rocq's lists written in the text, tests with a proof |
 | `7b23a45` | §12.V: step 67 (values of a fixed size holding booleans, records and data types: the construct table 2425 of 2465, 15 by design, 24 gaps), the C, the gate |
