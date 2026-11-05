@@ -245,8 +245,18 @@ Proof.
       assert (Heq : Sint63Axioms.to_Z x = Sint63Axioms.to_Z y) by lia.
       assert (x = y) by (apply Sint63.to_Z_inj; exact Heq). subst y. rewrite Uint63.eqb_refl in E2. discriminate.
 Qed.
+Lemma kq_mulc_def : forall x y : int, PrimInt63.mulc x y = (kq_mulhi x y, PrimInt63.mul x y).
+Proof.
+  intros x y. unfold kq_mulhi. destruct (PrimInt63.mulc x y) as [h l] eqn:E. cbn [fst]. f_equal.
+  apply Uint63.to_Z_inj. rewrite Uint63Axioms.mul_spec.
+  pose proof (Uint63Axioms.mulc_spec x y) as S. rewrite E in S. cbn [fst snd] in S. rewrite S.
+  pose proof (Uint63.to_Z_bounded l) as [L1 L2].
+  rewrite Z.add_comm, Z_mod_plus_full. rewrite Z.mod_small; [reflexivity | lia].
+Qed.
+Lemma kq_div21_def : forall a b c : int, PrimInt63.diveucl_21 a b c = (kq_div21q a b c, kq_div21r a b c).
+Proof. intros a b c. unfold kq_div21q, kq_div21r. destruct (PrimInt63.diveucl_21 a b c); reflexivity. Qed.
 Ltac prim_rw :=
-  progress (rewrite ?Uint63Axioms.compare_def_spec, ?kq_compares_def, ?Uint63Axioms.addc_def_spec, ?Uint63Axioms.addcarryc_def_spec,
+  progress (rewrite ?kq_mulc_def, ?kq_div21_def, ?Uint63Axioms.compare_def_spec, ?kq_compares_def, ?Uint63Axioms.addc_def_spec, ?Uint63Axioms.addcarryc_def_spec,
                     ?Uint63Axioms.subc_def_spec, ?Uint63Axioms.subcarryc_def_spec, ?Uint63Axioms.diveucl_def_spec, ?Uint63Axioms.addmuldiv_def_spec;
             unfold Uint63Axioms.compare_def, Uint63Axioms.addc_def, Uint63Axioms.addcarryc_def, Uint63Axioms.subc_def, Uint63Axioms.subcarryc_def,
                    Uint63Axioms.diveucl_def, Uint63Axioms.addmuldiv_def, Uint63Axioms.addcarry).

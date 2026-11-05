@@ -133,7 +133,9 @@ Definition hw_table : list (kername * hwop * nat) :=
 Definition hwf_table : list (kername * hwfop * nat) :=
   [ (kn_of <% KQ.KQRun.hw_addr %>, FAddr, 1); (kn_of <% KQ.hw.Runtime.hw_irq_info %>, FIrqInfo, 1);
     (kn_of <% KQ.hw.Runtime.hw_irq_entry %>, FIrqEntry, 1); (kn_of <% KQ.hw.Runtime.hw_cpu_code %>, FCpuCode, 1);
-    (kn_of <% KQ.hw.Runtime.hw_sym %>, FSym, 1); (kn_of <% KQ.hw.User.hw_userf %>, FUser, 5) ].
+    (kn_of <% KQ.hw.Runtime.hw_sym %>, FSym, 1); (kn_of <% KQ.hw.User.hw_userf %>, FUser, 5);
+    (kn_of <% PrimInt63.head0 %>, FHead0, 1); (kn_of <% PrimInt63.tail0 %>, FTail0, 1); (kn_of <% KQ.KQRun.kq_mulhi %>, FMulHi, 2);
+    (kn_of <% KQ.KQRun.kq_div21q %>, FDiv21Q, 3); (kn_of <% KQ.KQRun.kq_div21r %>, FDiv21R, 3) ].
 Definition hw_lookup (kn : kername) : option (hwop * nat) :=
   option_map (fun e => (snd (fst e), snd e)) (List.find (fun e => Kername.eqb (fst (fst e)) kn) hw_table).
 Definition hwf_lookup (kn : kername) : option (hwfop * nat) :=
@@ -1160,7 +1162,11 @@ Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option 
         match binop_v (snd kn), args with
         | Some o, [a; b] =>
             match reify fuel ctx a, reify fuel ctx b with Some x, Some y => Some (SOp o x y) | _, _ => None end
-        | _, _ => None
+        | _, _ =>
+            match hwf_lookup kn with
+            | Some (o, n) => if Nat.eqb (length args) n then option_map (fun l => SHwf o (to_sexps l)) (opt_all (map (reify fuel ctx) args)) else None
+            | None => None
+            end
         end
       else if Kername.eqb kn kn_ksize then
         match args with
@@ -3295,6 +3301,7 @@ Definition reach (fuel : nat) (Σ : global_env) (mp : modpath) (root kn : kernam
     ([KQRun.v]) or of [Uint63] that is not a function of the program and has no fixpoint.  Bytes and halfwords ([rd8],
     [upd8], and so [rd16], [upd16] over them) are left for one byte access each, as the translator makes them, not shifts of
     4-byte cells; a 64-bit operation is one instruction; a budget ([kq_nat]) is a counter of its own *)
+Definition kn_prim_ops : list kername := [kn_of <% KQ.KQRun.kq_mulhi %>; kn_of <% KQ.KQRun.kq_div21q %>; kn_of <% KQ.KQRun.kq_div21r %>].
 Definition helper_of (Σ : global_env) (mp : modpath) (fns : list kername) (kn : kername) : option term :=
   if Kername.eqb kn kn_fst || Kername.eqb kn kn_snd then body_of Σ kn else
   if Kername.eqb kn kn_rd8 || Kername.eqb kn kn_upd8 || Kername.eqb kn kn_w64_op || Kername.eqb kn kn_kq_nat
@@ -3308,6 +3315,7 @@ Definition helper_of (Σ : global_env) (mp : modpath) (fns : list kername) (kn :
     | None => None
     end
   else if eq_mp (fst kn) kit_mp || eq_mp (fst kn) uint63_mp then
+    if existsb (Kername.eqb kn) kn_prim_ops then None else
     match body_of Σ kn with Some b => if has_fix 1000 b then None else Some b | None => None end
   (* (step 63) what Rocq's libraries define over machine numbers, booleans and counters: a definition, written out as the program's are; a fixpoint inside it, a local one *)
   else if lib_open kn then
@@ -5596,7 +5604,9 @@ Definition pm_table : list (kername * term) :=
    (kn_of <% PrimInt63.subc %>, <% fun x y : PrimInt63.int => if PrimInt63.leb y x then CarryType.C0 (PrimInt63.sub x y) else CarryType.C1 (PrimInt63.sub x y) %>);
    (kn_of <% PrimInt63.subcarryc %>, <% fun x y : PrimInt63.int => if PrimInt63.ltb y x then CarryType.C0 (PrimInt63.sub (PrimInt63.sub x y) 1) else CarryType.C1 (PrimInt63.sub (PrimInt63.sub x y) 1) %>);
    (kn_of <% PrimInt63.diveucl %>, <% fun x y : PrimInt63.int => (PrimInt63.div x y, PrimInt63.mod x y) %>);
-   (kn_of <% PrimInt63.addmuldiv %>, <% fun p x y : PrimInt63.int => PrimInt63.lor (PrimInt63.lsl x p) (PrimInt63.lsr y (PrimInt63.sub 63 p)) %>)].
+   (kn_of <% PrimInt63.addmuldiv %>, <% fun p x y : PrimInt63.int => PrimInt63.lor (PrimInt63.lsl x p) (PrimInt63.lsr y (PrimInt63.sub 63 p)) %>);
+   (kn_of <% PrimInt63.mulc %>, <% fun x y : PrimInt63.int => (KQ.KQRun.kq_mulhi x y, PrimInt63.mul x y) %>);
+   (kn_of <% PrimInt63.diveucl_21 %>, <% fun a b c : PrimInt63.int => (KQ.KQRun.kq_div21q a b c, KQ.KQRun.kq_div21r a b c) %>)].
 Definition pm_of (k : kername) : option term :=
   option_map snd (List.find (fun e => Kername.eqb k (fst e)) pm_table).
 Fixpoint pm_sub (fuel : nat) (t : term) {struct fuel} : term :=

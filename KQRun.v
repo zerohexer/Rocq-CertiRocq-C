@@ -109,6 +109,10 @@ Fixpoint kq_nat_go (k : nat) (x : int) : nat :=
   end.
 (* a budget is at most 2^60 (more is more than any run can use): a counter always has room to count a few more *)
 Definition kq_nat (x : int) : nat := kq_nat_go 63 (if x <=? 1152921504606846976 then x else 1152921504606846976).
+(* the high half of a product and a division of two numbers by one (step 65): instructions of the machine, as hw_addr is *)
+Definition kq_mulhi (a b : int) : int := fst (PrimInt63.mulc a b).
+Definition kq_div21q (a b c : int) : int := fst (PrimInt63.diveucl_21 a b c).
+Definition kq_div21r (a b c : int) : int := snd (PrimInt63.diveucl_21 a b c).
 (* Rocq is told NOT to open `kq_nat` when it compares two programs (KQFast.v proves `main_kq = main` by having the
    kernel compare them).  A program's budget is `kq_nat (kq_arg 0)`: a number nobody knows before the run.  Opened,
    it is 63 nested tests each naming the next one twice, and comparing two of those never ends.  Computing with it

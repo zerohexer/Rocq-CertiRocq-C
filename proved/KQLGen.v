@@ -148,11 +148,12 @@ Definition hw_defs : list (ident * globdef fundef type) :=
   map (fun o => (hwid o, Gfun (External (hw_ef o) (tylist (hw_arity o)) tyl cc_default))) hw_all.
 
 Definition hwfid (o : hwfop) : ident :=
-  match o with FAddr => 91100 | FIrqInfo => 91101 | FIrqEntry => 91102 | FCpuCode => 91103 | FSym => 91104 | FUser => 91105 end%positive.
+  match o with FAddr => 91100 | FIrqInfo => 91101 | FIrqEntry => 91102 | FCpuCode => 91103 | FSym => 91104 | FUser => 91105 | FHead0 => 91106 | FTail0 => 91107 | FMulHi => 91108 | FDiv21Q => 91109 | FDiv21R => 91110 end%positive.
 Definition hwfname (o : hwfop) : String.string :=
   match o with FAddr => "kq_hw_addr" | FIrqInfo => "kq_hw_irq_info" | FIrqEntry => "kq_hw_irq_entry"
-             | FCpuCode => "kq_hw_cpu_code" | FSym => "kq_hw_sym" | FUser => "kq_hw_userf" end%string.
-Definition hwf_all : list hwfop := [FAddr; FIrqInfo; FIrqEntry; FCpuCode; FSym; FUser].
+             | FCpuCode => "kq_hw_cpu_code" | FSym => "kq_hw_sym" | FUser => "kq_hw_userf"
+             | FHead0 => "kq_hw_head0" | FTail0 => "kq_hw_tail0" | FMulHi => "kq_hw_mulhi" | FDiv21Q => "kq_hw_div21q" | FDiv21R => "kq_hw_div21r" end%string.
+Definition hwf_all : list hwfop := [FAddr; FIrqInfo; FIrqEntry; FCpuCode; FSym; FUser; FHead0; FTail0; FMulHi; FDiv21Q; FDiv21R].
 Definition hwf_ef (o : hwfop) : external_function :=
   EF_external (hwfname o) (mksignature (List.repeat Xlong (hwf_arity o)) Xlong cc_default).
 Definition hwf_defs : list (ident * globdef fundef type) :=
