@@ -5,6 +5,8 @@ From Stdlib Require Import ZArith Lia.
 From Corelib Require Export Program.Wf.
 From Stdlib Require Export Program.Utils.
 From KQ Require Import KQRun.
+From Corelib Require Import Numbers.Cyclic.Int63.CarryType.
+From Stdlib Require Sint63 Uint63.
 From KQC Require KQMAuto.
 
 Section W.
@@ -229,10 +231,30 @@ Ltac eq_step pr :=
                 | match goal with |- context [match ?c with pair _ _ => _ end] => destruct c end
                 | reflexivity ]).
 
+(** (step 64) the operations of Rocq's machine numbers that its own axioms define by others *)
+Lemma kq_compares_def : forall x y : int, PrimInt63.compares x y = if PrimInt63.ltsb x y then Lt else if PrimInt63.eqb x y then Eq else Gt.
+Proof.
+  intros x y. rewrite Sint63Axioms.compare_spec.
+  destruct (PrimInt63.ltsb x y) eqn:E1.
+  - apply Sint63Axioms.ltb_spec in E1. exact E1.
+  - destruct (PrimInt63.eqb x y) eqn:E2.
+    + apply Uint63Axioms.eqb_correct in E2. subst y. apply Z.compare_refl.
+    + apply Z.compare_gt_iff. apply Z.nle_gt. intros Hle.
+      assert (Hlt : ~ (Sint63Axioms.to_Z x < Sint63Axioms.to_Z y)%Z).
+      { intros H. apply Sint63Axioms.ltb_spec in H. rewrite H in E1. discriminate. }
+      assert (Heq : Sint63Axioms.to_Z x = Sint63Axioms.to_Z y) by lia.
+      assert (x = y) by (apply Sint63.to_Z_inj; exact Heq). subst y. rewrite Uint63.eqb_refl in E2. discriminate.
+Qed.
+Ltac prim_rw :=
+  progress (rewrite ?Uint63Axioms.compare_def_spec, ?kq_compares_def, ?Uint63Axioms.addc_def_spec, ?Uint63Axioms.addcarryc_def_spec,
+                    ?Uint63Axioms.subc_def_spec, ?Uint63Axioms.subcarryc_def_spec, ?Uint63Axioms.diveucl_def_spec, ?Uint63Axioms.addmuldiv_def_spec;
+            unfold Uint63Axioms.compare_def, Uint63Axioms.addc_def, Uint63Axioms.addcarryc_def, Uint63Axioms.subc_def, Uint63Axioms.subcarryc_def,
+                   Uint63Axioms.diveucl_def, Uint63Axioms.addmuldiv_def, Uint63Axioms.addcarry).
 (** (step 61) a fixpoint with its own call under a choice in an operand, and the same with the choice floated out: equal at each counter, test by test *)
 Ltac own_step IH :=
   repeat (cbn beta iota zeta;
-          first [ progress (rewrite ?IH)
+          first [ prim_rw
+                | progress (rewrite ?IH)
                 | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
                 | match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
                 | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
@@ -247,5 +269,15 @@ Ltac deep_step IH pr :=
                 | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
                 | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
                 | match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
+                | match goal with |- context [match ?c with pair _ _ => _ end] => destruct c end
+                | reflexivity ]).
+
+Definition kq_no_ih : True := I.
+Ltac own_step0 :=
+  repeat (cbn beta iota zeta;
+          first [ prim_rw
+                | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
+                | match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
+                | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
                 | match goal with |- context [match ?c with pair _ _ => _ end] => destruct c end
                 | reflexivity ]).

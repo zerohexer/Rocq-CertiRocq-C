@@ -616,6 +616,31 @@ addA("par_pm_let_fst_pv", "", "let '(x, t) := kz n a s in x + rd 0 0 t",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : int * mem := let p := g n x t in (fst p + 1, snd p).\n")
 addA("par_pm_let_fst_mem", "", "rd 0 0 (kz n a s)",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : mem := let p := g n x t in upd 0 (fst p) 1 (snd p).\n")
+# the operations of Rocq's machine numbers its axioms define by others (step 64), in more places
+addA("pm_addcarryc", "", "match PrimInt63.addcarryc a b with C0 v => v | C1 v => v + 1 end",
+     "From Corelib Require Import Numbers.Cyclic.Int63.CarryType.\n")
+addA("pm_subcarryc", "", "match PrimInt63.subcarryc a b with C0 v => v | C1 v => v + 1 end",
+     "From Corelib Require Import Numbers.Cyclic.Int63.CarryType.\n")
+addA("pm_compare_fix", "", "kc n a b",
+     "Fixpoint kc (n : nat) (x y : int) : int := match n with O => x | S m => match PrimInt63.compare x y with Eq => y | Lt => kc m (x + 1) y | Gt => kc m x (y + 1) end end.\n")
+addA("pm_compare_mem", "", "kc n a b s",
+     "Fixpoint kc (n : nat) (x y : int) (t : mem) : int := match n with O => rd 0 x t | S m => match PrimInt63.compare x y with Eq => y | Lt => kc m (x + 1) y (upd 0 x y t) | Gt => kc m x (y + 1) t end end.\n")
+addA("pm_compare_op", "", "kc n a b",
+     "Fixpoint kc (n : nat) (x y : int) : int := match n with O => x | S m => (match PrimInt63.compare x y with Eq => y | Lt => kc m (x + 1) y | Gt => 0 end) + 1 end.\n")
+addA("pm_compare_let", "", "kl a b",
+     "Definition kl (x y : int) : int := let c := PrimInt63.compare x y in match c with Eq => 1 | Lt => 2 | Gt => 3 end.\n")
+addA("pm_compare_res", "", "cn (cres a b)",
+     "Definition cres (x y : int) : comparison := PrimInt63.compare x y.\nDefinition cn (c : comparison) : int := match c with Eq => 1 | Lt => 2 | Gt => 3 end.\n")
+addA("pm_addc_fix", "", "kc n a b",
+     "From Corelib Require Import Numbers.Cyclic.Int63.CarryType.\nFixpoint kc (n : nat) (x y : int) : int := match n with O => x | S m => match PrimInt63.addc x y with C0 v => kc m v y | C1 v => v end end.\n")
+addA("pm_addc_mem", "", "rd 0 0 (kc n a b s)",
+     "From Corelib Require Import Numbers.Cyclic.Int63.CarryType.\nFixpoint kc (n : nat) (x y : int) (t : mem) : mem := match n with O => t | S m => match PrimInt63.addc x y with C0 v => kc m v y (upd 0 x v t) | C1 v => upd 0 x v t end end.\n")
+addA("pm_diveucl_fix", "", "kc n a b",
+     "Fixpoint kc (n : nat) (x y : int) : int := match n with O => x | S m => let (q, r) := PrimInt63.diveucl x y in kc m q r end.\n")
+addA("pm_addmuldiv_fix", "", "kc n a b",
+     "Fixpoint kc (n : nat) (x y : int) : int := match n with O => x | S m => kc m (PrimInt63.addmuldiv 3 x y) y end.\n")
+addA("pm_two", "", "PrimInt63.addmuldiv 1 a b + (let (q, r) := PrimInt63.diveucl a b in q)",
+     "")
 # natural forms found by a probe (step 63): what Rocq's libraries define, the operations of PrimInt63, casts, data of other sorts
 addA("n_nat_iter", "", "Nat.iter n (fun v => v + 1) a",
      "")

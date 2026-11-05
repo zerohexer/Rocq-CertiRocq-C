@@ -53,16 +53,10 @@ DESIGN_CELLS = {
 }
 # gaps whose refusal message is shared with another category: classified by name
 BY_NAME = {
-  "A_n_compare": "an operation of Rocq's machine numbers that KQL has no instruction for (§2.1, §12.O)",
-  "A_n_compares": "an operation of Rocq's machine numbers that KQL has no instruction for (§2.1, §12.O)",
   "A_n_head0": "an operation of Rocq's machine numbers that KQL has no instruction for (§2.1, §12.O)",
   "A_n_tail0": "an operation of Rocq's machine numbers that KQL has no instruction for (§2.1, §12.O)",
   "A_n_mulc": "an operation of Rocq's machine numbers that KQL has no instruction for (§2.1, §12.O)",
-  "A_n_addc": "an operation of Rocq's machine numbers that KQL has no instruction for (§2.1, §12.O)",
-  "A_n_subc": "an operation of Rocq's machine numbers that KQL has no instruction for (§2.1, §12.O)",
-  "A_n_diveucl": "an operation of Rocq's machine numbers that KQL has no instruction for (§2.1, §12.O)",
   "A_n_diveucl_21": "an operation of Rocq's machine numbers that KQL has no instruction for (§2.1, §12.O)",
-  "A_n_addmuldiv": "an operation of Rocq's machine numbers that KQL has no instruction for (§2.1, §12.O)",
   "A_n_nat_min": "a library function on a counter beyond S, +, pred: min, max, sub, div2, even, mul",
   "A_n_nat_max": "a library function on a counter beyond S, +, pred: min, max, sub, div2, even, mul",
   "A_n_nat_sub": "a library function on a counter beyond S, +, pred: min, max, sub, div2, even, mul",

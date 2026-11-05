@@ -1,0 +1,12 @@
+(* operations of Rocq's machine numbers that its axioms define by others.  With a = 7, b = 3: compare gives Gt, 3; addc no carry, 10; diveucl (2, 1), 21;
+   addmuldiv 2: 7 << 2 | 3 >> 61, 28; subc b a a borrow, 1000.  3 + 10 + 21 + 28 + 1000 = 1062. *)
+From Corelib Require Import Numbers.Cyclic.Int63.CarryType.
+Definition solve (a b : int) (s : mem) : int :=
+  (match PrimInt63.compare a b with Eq => 1 | Lt => 2 | Gt => 3 end)
+  + (match PrimInt63.addc a b with C0 v => v | C1 v => v + 100 end)
+  + (let (q, r) := PrimInt63.diveucl a b in q * 10 + r)
+  + PrimInt63.addmuldiv 2 a b
+  + (match PrimInt63.subc b a with C0 v => 0 | C1 v => 1000 end).
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve 7 3 (kq_input 0).
