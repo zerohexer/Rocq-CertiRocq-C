@@ -4941,6 +4941,19 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   verified compiler, 0 refused**; the trusted base as step 65 left it.  Next: type aliases, the library's recursors, Rocq's lists
   written in the text, tests with a proof.
 
+**Step 68, what Rocq's libraries and ordinary text spell otherwise (§3.1, §12.A) — the design (2026-11-05).**  The rest of the second probe that needs no new construct of `S`: each is the same term up to conversion, or an equation of step 61's kind, with `KQR.v` unchanged.
+- *A program's name for a type*: `Definition cell := int`, `Definition P := (int * int)%type`, in a fixpoint's signature, a binder, a match's return type, a record's parameters.  Read as its definition, the same up to delta.  The record table reads it the same way, or the reader's table and `kitc.py`'s differ (`al_t`, `rtab_of`).
+- *Lets or a test before the counter's match*: `Fixpoint f m x := let y := x + 1 in match m with .. end`, `if x <? 0 then x else match m with ..`, refused until now with no cell.  The whole body in each branch of the counter's match, an equation at each counter (`y_fix`).  A match on a written constructor is read away first: a fixpoint's guard does not see through it (`y_kn`).
+- *A function chosen by a match, applied*: `(if c then f else g) x`, `(match n with ..) x`, in any place.  The arguments in each branch (`y_pull`), an equation.  A convoy written by hand, `match m as k return m = k -> int with .. end eq_refl`, is the same when no branch names the proof: given at once (`y_beta`).
+- *The libraries' recursors and small functions*: `bool_rect`, `prod_rect`, `option_rect`, `sum_rect`, `option_map`, `eq_rect` and their `_rec`: helpers, written out (`lib_open`).
+- *A test that gives a proof with its answer*: `Nat.eq_dec`, `lt_dec`, `le_dec`, `gt_dec`, `ge_dec`, `le_lt_dec`, `le_gt_dec`, `Uint63.eqs`: read as the boolean test it is, one lemma each in `KQRWf.v`, when what follows does not name the proof (`dec_of`).  `Nat.compare` by its definition, as step 64's `compare`.
+- *Rocq's lists on a list written in the text*: `List.fold_left f (cons a (cons b nil)) 0`, `map`, `nth`, `rev`, `app`, `hd`, `tl`, a helper giving one, a let of one: its size is in the text, so nothing runs behind anyone's back.  Worked out before it is read, the same up to Rocq's own reduction (`lu_t`); if it stays stuck on a variable, left as it is.
+- *By design, each with a pin and a control*: a list whose length comes from the data, built by a recursion (`A_l_list_data`; control `A_l_list_fold_left`); arithmetic on `Z` (`A_l_z_arith`; control `A_l_z_arith_ctrl`); a counter the recursion grows and gives back (`A_l_nat_ret_grow`; control `A_l_nat_ret_ctrl`).
+- *A slip found*: `bound_le`, step 58's: `Nat.div2_decr a a (le_n a)` did not type at the premise it has, and no cell had a measure with `Nat.div2`.  `A_l_pf_div2`.
+- *Left, each with its cells*: a recursive function polymorphic in a type (`A_l_poly_rec`, `_nofun`; next step); a function of the program giving a proof with its answer (`A_l_dec_own`); a proof a test gives, named by what follows (`A_l_dec_proof_used`); a local mutual fixpoint (`A_l_fix_mut`); a counter given back that does not grow (`A_l_nat_ret_same`); a fixpoint inside a fixpoint giving back a function (`A_l_ack`).
+- *Cells*: 87, `A_l_*`.
+- *The acceptance*: `proved/examples/lib2_fix`: a name for a type, a let before the counter's match, a function chosen by a test, `Nat.eq_dec`, `Nat.compare`, a list written in the text, `option_rect`; the answer worked out apart: 4108235.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5120,7 +5133,8 @@ Pushed to the public repository up to `c7ff7fc` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 67 (values of a fixed size holding booleans, records and data types: the construct table 2425 of 2465, 15 by design, 24 gaps), the C, the gate |
+| (this commit) | §12.V: step 68's design -- type aliases, the library's recursors, Rocq's lists written in the text, tests with a proof |
+| `7b23a45` | §12.V: step 67 (values of a fixed size holding booleans, records and data types: the construct table 2425 of 2465, 15 by design, 24 gaps), the C, the gate |
 | `c7ff7fc` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix` + `examples/value_fix` step 67: values of a fixed size holding booleans, records and data types; 223 cells |
 | `f437907` | §12.V: step 67's design -- values of a fixed size holding booleans, records and data types |
 | `e9d25bd` | §12.V: step 66 (counters: `Nat.min`, `Nat.max`, `Nat.sub`, `Nat.div2`: the construct table 2204 of 2242, 15 by design, 22 gaps), the C, the gate |
