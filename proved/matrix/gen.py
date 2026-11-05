@@ -616,6 +616,59 @@ addA("par_pm_let_fst_pv", "", "let '(x, t) := kz n a s in x + rd 0 0 t",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : int * mem := let p := g n x t in (fst p + 1, snd p).\n")
 addA("par_pm_let_fst_mem", "", "rd 0 0 (kz n a s)",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : mem := let p := g n x t in upd 0 (fst p) 1 (snd p).\n")
+# a function read in another form: a memory never read, a type parameter (step 69)
+addA('rp_dead_first', "", 'rd 0 0 (kw n s a s)',
+     'Fixpoint kw (n : nat) (u : mem) (x : int) (t : mem) : mem := match n with O => t | S m => kw m (upd 1 0 x u) (x + 1) (upd 0 x x t) end.\n')
+addA('rp_dead_last', "", 'rd 0 0 (kw n s a s)',
+     'Fixpoint kw (n : nat) (t : mem) (x : int) (u : mem) : mem := match n with O => t | S m => kw m (upd 0 x x t) (x + 1) t end.\n')
+addA('rp_dead_three', "", 'kw n s s a s',
+     'Fixpoint kw (n : nat) (u v : mem) (x : int) (t : mem) : int := match n with O => rd 0 x t | S m => kw m t u (x + 1) t end.\n')
+addA('rp_dead_num', "", 'kw n (upd 0 a b s) a s',
+     'Fixpoint kw (n : nat) (u : mem) (x : int) (t : mem) : int := match n with O => rd 0 x t | S m => kw m t (x + 1) t end.\n')
+addA('rp_dead_bool', "", 'if kw n (upd 0 a b s) a s then a else b',
+     'Fixpoint kw (n : nat) (u : mem) (x : int) (t : mem) : bool := match n with O => rd 0 x t <? 3 | S m => kw m t (x + 1) t end.\n')
+addA('rp_dead_rec', "", 'fst (kw n (upd 0 a b s) a s)',
+     'Fixpoint kw (n : nat) (u : mem) (x : int) (t : mem) : int * int := match n with O => (rd 0 x t, x) | S m => kw m t (x + 1) t end.\n')
+addA('rp_dead_write_num', "", 'kw n s a s',
+     'Fixpoint kw (n : nat) (u : mem) (x : int) (t : mem) : int := match n with O => rd 0 x t | S m => kw m t (x + 1) (upd 0 x x t) end.\n')
+addA('rp_dead_pm', "", 'fst (kw n s a s)',
+     'Fixpoint kw (n : nat) (u : mem) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => kw m t (x + 1) (upd 0 x x t) end.\n')
+addA('rp_dead_caller_fix', "", 'cl n a s',
+     'Fixpoint kw (n : nat) (u : mem) (x : int) (t : mem) : mem := match n with O => t | S m => kw m t (x + 1) (upd 0 x x t) end.\nFixpoint cl (m : nat) (x : int) (t : mem) : int := match m with O => rd 0 x t | S q => cl q (x + 1) (kw 2 t x t) end.\n')
+addA('rp_dead_caller_mem', "", 'rd 0 0 (cl n a s)',
+     'Fixpoint kw (n : nat) (u : mem) (x : int) (t : mem) : mem := match n with O => t | S m => kw m t (x + 1) (upd 0 x x t) end.\nFixpoint cl (m : nat) (x : int) (t : mem) : mem := match m with O => t | S q => cl q (x + 1) (kw 2 t x t) end.\n')
+addA('rp_dead_callee_too', "", 'rd 0 0 (ka n s a s)',
+     'Fixpoint kb (n : nat) (u : mem) (x : int) (t : mem) : mem := match n with O => t | S m => kb m t (x + 1) (upd 1 x x t) end.\nFixpoint ka (n : nat) (u : mem) (x : int) (t : mem) : mem := match n with O => t | S m => ka m (kb 1 u x u) (x + 1) (kb 2 t x t) end.\n')
+addA('rp_dead_opnd', "", 'rd 0 0 (kw n s a s) + b',
+     'Fixpoint kw (n : nat) (u : mem) (x : int) (t : mem) : mem := match n with O => t | S m => kw m t (x + 1) (upd 0 x x t) end.\n')
+addA('rp_dead_helper', "", 'hk n a s',
+     'Fixpoint kw (n : nat) (u : mem) (x : int) (t : mem) : mem := match n with O => t | S m => kw m t (x + 1) (upd 0 x x t) end.\nDefinition hk (n : nat) (x : int) (t : mem) : int := rd 0 0 (kw n t x t).\n')
+addA('rp_dead_live_control', "", 'rd 0 0 (kw n s a s)',
+     'Fixpoint kw (n : nat) (u : mem) (x : int) (t : mem) : mem := match n with O => t | S m => kw m u (x + 1) (upd 0 x (rd 1 x u) t) end.\n')
+addA('rp_poly_pair', "", 'fst (pf n (fun p => (snd p, fst p)) (a, b))',
+     'Fixpoint pf {T : Type} (m : nat) (g : T -> T) (x : T) : T := match m with O => x | S q => pf q g (g x) end.\n')
+addA('rp_poly_bool', "", 'if pf n negb (a <? b) then a else b',
+     'Fixpoint pf {T : Type} (m : nat) (g : T -> T) (x : T) : T := match m with O => x | S q => pf q g (g x) end.\n')
+addA('rp_poly_mem', "", 'rd 0 0 (pf n (fun t => upd 0 a b t) s)',
+     'Fixpoint pf {T : Type} (m : nat) (g : T -> T) (x : T) : T := match m with O => x | S q => pf q g (g x) end.\n')
+addA('rp_poly_two', "", 'pf n (fun v => v + 1) a + (if pf n negb (a <? b) then 1 else 2)',
+     'Fixpoint pf {T : Type} (m : nat) (g : T -> T) (x : T) : T := match m with O => x | S q => pf q g (g x) end.\n')
+addA('rp_poly_record', "", 'f1 (pf n (fun r => mk3 (f2 r) (f3 r) (f1 r)) (mk3 a b 1))',
+     'Fixpoint pf {T : Type} (m : nat) (g : T -> T) (x : T) : T := match m with O => x | S q => pf q g (g x) end.\n')
+addA('rp_poly_option', "", 'match pf n (fun o => match o with Some v => None | None => Some a end) (Some b) with Some v => v | None => 0 end',
+     'Fixpoint pf {T : Type} (m : nat) (g : T -> T) (x : T) : T := match m with O => x | S q => pf q g (g x) end.\n')
+addA('rp_poly_in_rec', "", 'cl n a',
+     'Fixpoint pf {T : Type} (m : nat) (g : T -> T) (x : T) : T := match m with O => x | S q => pf q g (g x) end.\nFixpoint cl (m : nat) (x : int) : int := match m with O => x | S q => cl q (pf 2 (fun v => v + 1) x) end.\n')
+addA('rp_poly_nofun', "", 'pid n a',
+     'Fixpoint pid {T : Type} (m : nat) (x : T) : T := match m with O => x | S q => pid q x end.\n')
+addA('rp_poly_two_params', "", 'fst (pp n a (a <? b))',
+     'Fixpoint pp {A B : Type} (m : nat) (x : A) (y : B) : A * B := match m with O => (x, y) | S q => pp q x y end.\n')
+addA('rp_poly_helper', "", 'hp2 n a',
+     'Fixpoint pf {T : Type} (m : nat) (g : T -> T) (x : T) : T := match m with O => x | S q => pf q g (g x) end.\nDefinition hp2 {U : Type} (m : nat) (x : U) : U := pf m (fun v => v) x.\n')
+addA('rp_poly_mem_param', "", 'pw n a s',
+     'Fixpoint pw {T : Type} (m : nat) (x : T) (t : mem) : T := match m with O => x | S q => pw q x (upd 0 0 1 t) end.\n')
+addA('rp_poly_measure', "", 'pq a a',
+     'From Stdlib Require Import ZArith Lia Program.Wf.\nDefinition mu (x : int) : nat := Z.to_nat (Sint63.to_Z x).\nLemma mu_pred : forall x, (0 <? x) = true -> (mu (x - 1) < mu x)%nat.\nProof.\n  intros x H. unfold mu. apply Sint63.ltb_spec in H. change (Sint63.to_Z 0) with 0%Z in H. change (0 < Sint63.to_Z x)%Z in H.\n  pose proof (Sint63.to_Z_bounded x) as [Bl Bh].\n  assert (Mi : Sint63.to_Z Sint63.max_int = 4611686018427387903%Z) by reflexivity. rewrite Mi in Bh.\n  assert (W2 : (Uint63.wB / 2 = 4611686018427387904)%Z) by reflexivity.\n  assert (E : Sint63.to_Z (x - 1) = (Sint63.to_Z x - 1)%Z).\n  { rewrite Sint63.sub_spec. change (Sint63.to_Z 1) with 1%Z. apply Sint63.cmod_small. rewrite W2. lia. }\n  rewrite E. lia.\nQed.\nProgram Fixpoint pq {T : Type} (x : int) (y : T) {measure (mu x)} : T :=\n  match 0 <? x with true => pq (x - 1) y | false => y end.\nNext Obligation. apply mu_pred. auto. Qed.\n')
 # what Rocq's libraries and ordinary text spell otherwise (step 68)
 addA('l_al_rec', "", 'f n a',
      'Definition cell := int.\nDefinition M := mem.\nDefinition P := (int * int)%type.\nDefinition C := nat.\nDefinition B := bool.\nFixpoint f (m : C) (x : cell) : cell := match m with O => x | S q => f q (x + 1) end.\n')

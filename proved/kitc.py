@@ -781,6 +781,7 @@ def reflect(name, entry, prog, no_proof):
     # the functions that are one fixpoint, not a member of a block (step 51)
     xp = os.path.join(GEN, f"{name}_rfix.out")
     fix1 = set(re.findall(r'"([^"]*)"', open(xp).read())) if os.path.exists(xp) else set()
+    fix1 |= {m for m in made if m.endswith("__rp__wy") and not m.endswith("__n__rp__wy")}   # (step 69) a fixpoint in another's place
     # (step 56) a Program Fixpoint equal to its budget function's call at every argument (KQRWf.fix_sub_budget), before anything is made opaque
     # (step 59) a copy, for the functions it is given, of a function that is one call of a budget function
     pfc = {m: h for m, h in mts if h in pfs and iscp(m)}
@@ -885,6 +886,20 @@ def reflect(name, entry, prog, no_proof):
             t += (f"    unfold Corelib.Program.Wf.Fix_sub; refine (kqP{ph - 1} _ _ {K} _); cbv beta zeta; cbn [projT1 projT2]; change ({WN} {ss} <= {K} + S {Kp[ph - 2]}); unfold {WN}; KQRWf.bound_le\n"
                   f"  end.\nQed.\n")
     # (step 61) a fixpoint read with a choice floated out of an operand: equal to the user's at each counter
+    # (step 69) a function read in another form: equal at every argument to what is in its place, by induction, each one's lemma
+    # among the rewrites of what follows
+    rrs = [(m, h) for m, h in mts if m.endswith("__rq__wy")]
+    rrn = []
+    for j, (m, h) in enumerate(rrs):
+        F = m[:-len("__rq__wy")] + "__rp__wy"
+        unf = " ".join(x for x in [h, F] if x)
+        unfc = ", ".join(x for x in [h, F] if x)
+        if m.endswith("__n__rq__wy"):
+            t += (f"Lemma {name}_rr{j} : {m}.\nProof. unfold {m}. intros; unfold {unfc}; KQRWf.own_step0. Qed.\n")
+        else:
+            t += (f"Lemma {name}_rr{j} : {m}.\nProof. unfold {m}. fix IH 1. intros kqn; destruct kqn as [|kqn]; intros; cbn [{unf}]; KQRWf.own_step IH. Qed.\n")
+        rrn.append(f"{name}_rr{j}")
+        t += "Ltac KQRWf.kq_rw ::= progress (rewrite " + ", ".join("?" + x for x in rrn) + ").\n"
     yf = {f[0]: f[0].rsplit(".", 1)[-1] + "__wy" for f in fs if f[0].rsplit(".", 1)[-1] + "__wy" in made}
     for j, f in enumerate(fs):
         if f[0] in yf:

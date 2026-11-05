@@ -1,0 +1,11 @@
+(* a function read in another form.  pf 3 (+1) 0 = 3; pf 3 negb true = false: 20; kw 2 s 5 (upd 0 0 7 s), cell 0 still 7; pf 2 swap (1, 2) = (1, 2).
+   3 + 2000 + 70000 + 1000000 = 1072003. *)
+Fixpoint pf {T : Type} (m : nat) (g : T -> T) (x : T) : T := match m with O => x | S q => pf q g (g x) end.
+Fixpoint kw (n : nat) (u : mem) (x : int) (t : mem) : mem := match n with O => t | S m => kw m t (x + 1) (upd 0 x x t) end.
+Definition solve (a : int) (s : mem) : int :=
+  let n := kq_nat 3 in
+  pf n (fun v => v + 1) a + (if pf n negb true then 10 else 20) * 100 + rd 0 0 (kw (kq_nat 2) s 5 (upd 0 0 7 s)) * 10000
+  + fst (pf (kq_nat 2) (fun p : int * int => (snd p, fst p)) (1, 2)) * 1000000.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve 0 (kq_input 0).

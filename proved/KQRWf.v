@@ -287,10 +287,13 @@ Ltac prim_rw :=
                     ?Uint63Axioms.subc_def_spec, ?Uint63Axioms.subcarryc_def_spec, ?Uint63Axioms.diveucl_def_spec, ?Uint63Axioms.addmuldiv_def_spec;
             unfold Uint63Axioms.compare_def, Uint63Axioms.addc_def, Uint63Axioms.addcarryc_def, Uint63Axioms.subc_def, Uint63Axioms.subcarryc_def,
                    Uint63Axioms.diveucl_def, Uint63Axioms.addmuldiv_def, Uint63Axioms.addcarry).
+(** (step 69) a program's lemmas of what is read in another form: [kitc.py] sets it *)
+Ltac kq_rw := fail.
 (** (step 61) a fixpoint with its own call under a choice in an operand, and the same with the choice floated out: equal at each counter, test by test *)
 Ltac own_step IH :=
   repeat (cbn beta iota zeta;
           first [ prim_rw
+                | kq_rw
                 | progress (rewrite ?IH)
                 | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
                 | match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
@@ -302,6 +305,7 @@ Ltac own_step IH :=
 Ltac deep_step IH pr :=
   repeat (cbn beta iota zeta; pr;
           first [ exfalso; lia
+                | kq_rw
                 | progress (rewrite ?IH by lia)
                 | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
                 | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
@@ -313,6 +317,7 @@ Definition kq_no_ih : True := I.
 Ltac own_step0 :=
   repeat (cbn beta iota zeta;
           first [ prim_rw
+                | kq_rw
                 | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
                 | match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
                 | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end

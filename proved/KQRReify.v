@@ -4758,6 +4758,7 @@ Fixpoint real_copies (fuel : nat) (dp : modpath) (t : term) : term :=
       | tConst kn u => if eq_mp (fst kn) copy_mp then tConst (dp, snd kn) u else t
       | tApp f args => tApp (real_copies fuel dp f) (map (real_copies fuel dp) args)
       | tLambda na ty b => tLambda na ty (real_copies fuel dp b)
+      | tProd na ty b => tProd na ty (real_copies fuel dp b)
       | tLetIn na b ty body => tLetIn na (real_copies fuel dp b) ty (real_copies fuel dp body)
       | tCase ci p c brs => tCase ci p (real_copies fuel dp c) (map (fun br => {| bcontext := bcontext br; bbody := real_copies fuel dp (bbody br) |}) brs)
       | tFix mfix k => tFix (map (fun d => {| dname := dname d; dtype := dtype d; dbody := real_copies fuel dp (dbody d); rarg := rarg d |}) mfix) k
@@ -6112,7 +6113,286 @@ Definition pm_has (t : term) : bool :=
 (** a body's choices over known constructors floated out: for a function with no fixpoint *)
 Definition y_nf (T b : term) : term :=
   let '(tys, body) := lams b in lams_of tys (y_tail 1000 1000000 T body).
+(* ---------------------------------------------------------------- a function read in another form (step 69) *)
+(** A function whose form the compiler's theorem does not take and no conversion reaches: a memory parameter never read, moved by the
+    recursion or given another memory by the call; a type parameter.  A function of its own in its place, at every argument equal to it, by
+    induction (a row holds the statement; [kitc.py] proves it); its callers' text calls that one, each by an equation, step 61's, with that
+    lemma among its rewrites *)
+Definition drop_at (slots : list nat) (args : list term) : list term :=
+  map snd (filter (fun ja : nat * term => negb (existsb (Nat.eqb (fst ja)) slots)) (combine (seq 0 (length args)) args)).
+(** does the variable [v] occur outside the slots [slots] of the function's own calls ([fv] the function's variable) *)
+Fixpoint rp_occ (fuel fv : nat) (slots : list nat) (v d : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => true
+  | S fuel =>
+      let go := rp_occ fuel fv slots v d in
+      match t with
+      | tRel i => Nat.eqb i (v + d)
+      | tApp (tRel f) args =>
+          if Nat.eqb f (fv + d) then existsb go (drop_at slots args)
+          else if Nat.eqb f (v + d) then true else existsb go args
+      | tApp f args => if go f then true else existsb go args
+      | tLambda _ _ b => rp_occ fuel fv slots v (S d) b
+      | tLetIn _ x _ b => if go x then true else rp_occ fuel fv slots v (S d) b
+      | tCase _ _ c brs => if go c then true else existsb (fun br => rp_occ fuel fv slots v (d + length (bcontext br)) (bbody br)) brs
+      | tFix mfix _ => existsb (fun df => rp_occ fuel fv slots v (d + length mfix) (dbody df)) mfix
+      | tProj _ c => go c
+      | _ => false
+      end
+  end.
+(** the function's own calls given other arguments *)
+Fixpoint rp_own (fuel fv d : nat) (f : list term -> list term) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := rp_own fuel fv d f in
+      match t with
+      | tApp (tRel i) args => if Nat.eqb i (fv + d) then tApp (tRel i) (map go (f args)) else tApp (tRel i) (map go args)
+      | tApp g args => tApp (go g) (map go args)
+      | tLambda na a b => tLambda na a (rp_own fuel fv (S d) f b)
+      | tLetIn na x a b => tLetIn na (go x) a (rp_own fuel fv (S d) f b)
+      | tCase ci p c brs => tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := rp_own fuel fv (d + length (bcontext br)) f (bbody br) |}) brs)
+      | tFix mfix k => tFix (map (fun df => {| dname := dname df; dtype := dtype df; rarg := rarg df; dbody := rp_own fuel fv (d + length mfix) f (dbody df) |}) mfix) k
+      | tProj p c => tProj p (go c)
+      | _ => t
+      end
+  end.
+(** the memory parameters never read; one stays *)
+Definition dead_slots (d : def term) : list nat :=
+  let '(tys, body) := lams (dbody d) in
+  let n := length tys in
+  let pms := existsb is_pm tys in
+  match filter (fun p => is_ty kn_mem (nth p tys (tRel 0))) (seq 0 n) with
+  | [] => []
+  | ms =>
+      if if pms then false else Nat.eqb (length ms) 1 then [] else
+      let dead := filter (fun p => negb (rp_occ 100000 n [p] (n - 1 - p) 0 body)) ms in
+      (* a memory stays: the last one if none else holds one *)
+      if if pms then false else Nat.eqb (length dead) (length ms) then removelast dead else dead
+  end.
+(** the type parameters a fixpoint starts with *)
+Fixpoint lead_sorts (t : term) : nat := match t with tLambda _ (tSort _) b => S (lead_sorts b) | _ => O end.
+Fixpoint skip_lam (k : nat) (t : term) : term :=
+  match k, t with S k, tLambda _ _ b => skip_lam k b | _, _ => t end.
+Fixpoint skip_pi (k : nat) (t : term) : term :=
+  match k, t with S k, tProd _ _ b => skip_pi k b | _, _ => t end.
+(** a definition with no fixpoint of its own: its body, marked by a [rarg] no fixpoint has *)
+Definition rp_nofix : nat := 999.
+(** a row: the function as the text names it, the types it is given, the slots dropped, the stem of what is made, its fixpoint *)
+Definition rprow : Type := term * list term * list nat * string * def term.
+(** the fixpoint in its place *)
+Definition rp_def (r : rprow) : def term :=
+  let '(_, inst, slots, _, d) := r in
+  match inst with
+  | [] =>
+      let '(tys, body) := lams (dbody d) in
+      let n := length tys in
+      let b1 := rp_own 100000 n 0 (drop_at slots) body in
+      let b2 := fold_left (fun b p => subst [tVar "dead"%bs] (n - 1 - p) b) slots b1 in
+      let tys' := drop_at slots tys in
+      {| dname := dname d; dtype := pis_of tys' (ret_ty (dtype d));
+         rarg := if Nat.eqb (rarg d) rp_nofix then rp_nofix else rarg d - length (filter (fun p => Nat.ltb p (rarg d)) slots);
+         dbody := lams_of tys' b2 |}
+  | _ =>
+      let t := length inst in
+      let u := subst (rev inst) 0 (skip_lam t (dbody d)) in
+      if Nat.eqb (rarg d) rp_nofix then
+        {| dname := dname d; dtype := subst (rev inst) 0 (skip_pi t (dtype d)); rarg := rp_nofix; dbody := u |}
+      else
+      {| dname := dname d; dtype := subst (rev inst) 0 (skip_pi t (dtype d)); rarg := rarg d - t;
+         dbody := rp_own 100000 0 0 (skipn t) u |}
+  end.
+Definition y_eq := <% @eq %>.
+Definition rp_name (r : rprow) : kername := let '(_, _, _, st, _) := r in (copy_mp, st ^ "__rp__wy"%bs).
+Definition rq_name (r : rprow) : kername := let '(_, _, _, st, _) := r in (copy_mp, st ^ "__rq__wy"%bs).
+(** at every argument the function and the fixpoint in its place are equal *)
+Definition rp_stmt (r : rprow) : term :=
+  let '(h, inst, slots, _, _) := r in
+  let d' := rp_def r in
+  let tys := fst (lams (dbody d')) in
+  (* a dropped slot's type is a memory: the statement takes every parameter of the function as the text names it *)
+  let tys0 := match inst with [] => (let '(_, _, _, _, d0) := r in fst (lams (dbody d0))) | _ => tys end in
+  let m := length tys0 in
+  let rels := map (fun j => tRel (m - 1 - j)) (seq 0 m) in
+  pis_of tys0 (tApp y_eq [ret_ty (dtype d'); tApp h (inst ++ rels); tApp (tConst (rp_name r) []) (match inst with [] => drop_at slots rels | _ => rels end)]).
+(** a text with each such call written as a call of what is in its place *)
+Definition rp_match (rows : list rprow) (h : term) (args : list term) : option term :=
+  match List.find (fun r : rprow =>
+          let '(h0, inst, _, _, _) := r in
+          match h0, h with
+          | tConst k0 _, tConst k _ => if Kername.eqb k0 k then teqs (firstn (length inst) args) inst else false
+          | tFix _ _, tFix _ _ => teq 100000 h0 h
+          | _, _ => false
+          end) rows with
+  | Some r =>
+      let '(_, inst, slots, _, _) := r in
+      Some (tApp (tConst (rp_name r) []) (match inst with [] => drop_at slots args | _ => skipn (length inst) args end))
+  | None => None
+  end.
+Fixpoint rp_sub (fuel : nat) (rows : list rprow) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := rp_sub fuel rows in
+      match t with
+      | tApp h args =>
+          let args' := map go args in
+          match rp_match rows h args' with
+          | Some u => u
+          | None => tApp (go h) args'
+          end
+      | tLambda na a b => tLambda na a (go b)
+      | tLetIn na x a b => tLetIn na (go x) a (go b)
+      | tCase ci p c brs => tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := go (bbody br) |}) brs)
+      | tFix mfix k => tFix (map (fun df => {| dname := dname df; dtype := dtype df; rarg := rarg df; dbody := go (dbody df) |}) mfix) k
+      | tProj p c => tProj p (go c)
+      | _ => t
+      end
+  end.
+(** the heads applied in a text, a constant or a closed local fixpoint *)
+Fixpoint rp_apps (fuel : nat) (t : term) (acc : list (term * list term)) {struct fuel} : list (term * list term) :=
+  match fuel with
+  | O => acc
+  | S fuel =>
+      let go := fun a x => rp_apps fuel x a in
+      match t with
+      | tApp h args =>
+          let acc' := fold_left go args acc in
+          match h with
+          | tConst _ _ => (h, args) :: acc'
+          | tFix [_] 0 => (h, args) :: acc'
+          | _ => go acc' h
+          end
+      | tLambda _ _ b => go acc b
+      | tLetIn _ x _ b => go (go acc x) b
+      | tCase _ _ c brs => fold_left (fun a br => go a (bbody br)) brs (go acc c)
+      | tFix mfix _ => fold_left (fun a df => go a (dbody df)) mfix acc
+      | tProj _ c => go acc c
+      | _ => acc
+      end
+  end.
+Definition rp_known (rows : list rprow) (h : term) (inst : list term) : bool :=
+  existsb (fun r : rprow =>
+    let '(h0, i0, _, _, _) := r in
+    match h0, h with
+    | tConst k0 _, tConst k _ => if Kername.eqb k0 k then teqs i0 inst else false
+    | tFix _ _, tFix _ _ => teq 100000 h0 h
+    | _, _ => false
+    end) rows.
+(** the rows of a text *)
+Definition rp_rows_of (Σ : global_env) (mp : modpath) (stem : string) (t : term) (rows : list rprow) : list rprow :=
+  fold_left (fun (rs : list rprow) (ha : term * list term) =>
+    let '(h, args) := ha in
+    match h with
+    | tFix [d] 0 =>
+        match dead_slots d with
+        | [] => rs
+        | sl => if negb (closedn 0 h) then rs else
+                if rp_known rs h [] then rs
+                else rs ++ [(h, [], sl, stem ^ "__l"%bs ^ string_of_nat (length rs), d)]
+        end
+    | tConst k _ =>
+        if in_prog mp (fst k) then
+          match body_of Σ k with
+          | Some (tFix [d] 0) =>
+              match lead_sorts (dbody d) with
+              | O => rs
+              | t0 =>
+                  let inst := firstn t0 args in
+                  if Nat.eqb (length inst) t0 && forallb (closedn 0) inst then
+                    if rp_known rs h inst then rs
+                    else rs ++ [(h, inst, [], mangle k ^ "__i"%bs ^ string_of_nat (length rs), d)]
+                  else rs
+              end
+          | Some b =>
+              (* a definition polymorphic in a type, its body naming a fixpoint that is *)
+              match lead_sorts b with
+              | O => rs
+              | t0 =>
+                  let inst := firstn t0 args in
+                  if Nat.eqb (length inst) t0 && forallb (closedn 0) inst
+                     && existsb (fun ha2 : term * list term =>
+                          match fst ha2 with
+                          | tConst k2 _ => match body_of Σ k2 with Some (tFix [d2] 0) => Nat.ltb 0 (lead_sorts (dbody d2)) | _ => false end
+                          | _ => false
+                          end) (rp_apps 100000 b []) then
+                    if rp_known rs h inst then rs
+                    else match lookup_env Σ k with
+                         | Some (ConstantDecl cb) =>
+                             rs ++ [(h, inst, [], mangle k ^ "__i"%bs ^ string_of_nat (length rs) ^ "__n"%bs,
+                                     {| dname := anon_b; dtype := cst_type cb; rarg := rp_nofix; dbody := b |})]
+                         | _ => rs
+                         end
+                  else rs
+              end
+          | _ => rs
+          end
+        else rs
+    | _ => rs
+    end) (rp_apps 100000 t []) rows.
+(** all the rows of a program: a memory never read in its functions, then the types its calls give, again in what those make *)
+Definition rp_all (Σ : global_env) (mp : modpath) (root : kername) : list rprow :=
+  let kns := snd (reach_go 1000 Σ mp root root ([], [])) in
+  let r0 := fold_left (fun rs kn =>
+              if if in_prog mp (fst kn) then negb (Kername.eqb kn root) else false then
+                match body_of Σ kn with
+                | Some (tFix [d] 0) =>
+                    match dead_slots d with
+                    | [] => rs
+                    | sl => rs ++ [(tConst kn [], [], sl, mangle kn ^ "__i"%bs, d)]
+                    end
+                | _ => rs
+                end
+              else rs) kns [] in
+  let r1 := fold_left (fun rs kn => match body_of Σ kn with Some b => if in_prog mp (fst kn) then rp_rows_of Σ mp (mangle kn) b rs else rs | None => rs end) kns r0 in
+  let r2 := fold_left (fun (rs : list rprow) (_ : nat) => fold_left (fun a r => rp_rows_of Σ mp "p"%bs (dbody (rp_def r)) a) rs rs) (seq 0 3) r1 in
+  (* a definition holding a call read in another form, a memory it hands only to that call now never read: one of its own, or it is read with two memories *)
+  fold_left (fun rs kn =>
+    if if in_prog mp (fst kn) then negb (Kername.eqb kn root) else false then
+      match body_of Σ kn, lookup_env Σ kn with
+      | Some (tFix _ _), _ => rs
+      | Some b, Some (ConstantDecl cb) =>
+          let b' := rp_sub 100000 r2 b in
+          if teq 100000 b' b then rs else
+          let dn := {| dname := anon_b; dtype := cst_type cb; rarg := rp_nofix; dbody := b' |} in
+          match dead_slots dn with
+          | [] => rs
+          | sl => rs ++ [(tConst kn [], [], sl, mangle kn ^ "__n"%bs, dn)]
+          end
+      | _, _ => rs
+      end
+    else rs) kns r2.
+(** each after what it names *)
+Definition rp_topo (Σ : global_env) (rows : list rprow) : list rprow :=
+  let names := fun r => consts 10000 (rp_sub 100000 rows (dbody (rp_def r))) [] in
+  let is_row := fun k => existsb (fun q => Kername.eqb k (rp_name q)) rows in
+  let rd := map (fun r => (r, filter is_row (names r))) rows in
+  let fix go (fu : nat) (todo : list (rprow * list kername)) (doneL : list rprow) {struct fu} : list rprow :=
+    match fu with
+    | O => doneL ++ map fst todo
+    | S fu =>
+        match todo with
+        | [] => doneL
+        | _ =>
+            let ready := filter (fun e : rprow * list kername =>
+                           forallb (fun k => if Kername.eqb k (rp_name (fst e)) then true else existsb (fun q => Kername.eqb k (rp_name q)) doneL) (snd e)) todo in
+            match ready with
+            | [] => doneL ++ map fst todo
+            | _ => go fu (filter (fun e : rprow * list kername => negb (existsb (fun q => Kername.eqb (rp_name (fst q)) (rp_name (fst e))) ready)) todo)
+                         (doneL ++ map fst ready)
+            end
+        end
+    end in
+  go 100 rd [].
 Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env * bool :=
+  let rows := rp_topo Σ (rp_all Σ mp root) in
+  (* (step 69) what is made, its own calls of what is in their place written too; the statements *)
+  let S0 := fold_left (fun S2 r =>
+              let d' := rp_def r in
+              add_decl (add_decl S2 (rp_name r) (dtype d')
+                         (if Nat.eqb (rarg d') rp_nofix then rp_sub 100000 rows (dbody d')
+                          else tFix [{| dname := dname d'; dtype := dtype d'; rarg := rarg d'; dbody := rp_sub 100000 rows (dbody d') |}] 0))
+                       (rq_name r) (tSort sProp) (rp_stmt r)) rows Σ in
   fold_left (fun st kn =>
     let '(S1, ch) := st in
     if in_prog mp (fst kn) then
@@ -6122,13 +6402,17 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
           | Some b00 =>
               (* (step 68) a program's name for a type, read as its definition, the same up to delta *)
               let ty0 := al_t 1000 Σ mp (cst_type cb) in
-              let b0 := lu_t 100000 Σ (al_t 100000 Σ mp b00) in
+              let b0x := lu_t 100000 Σ (al_t 100000 Σ mp b00) in
+              (* (step 69) its calls of what is read in another form *)
+              let b0 := match rows with [] => b0x | _ => rp_sub 100000 rows b0x end in
+              let r0 := match rows with [] => false | _ => negb (teq 100000 b0 b0x) end in
               let c1 := if teq 100000 ty0 (cst_type cb) then negb (teq 100000 b0 b00) else true in
               (* (step 63) a binder's type a redex, from a motive, a cast: the same up to beta *)
               let c0 := if c1 then true else ty_has 1000 b0 in
               let b1 := if ty_has 1000 b0 then ty_beta 1000 b0 else b0 in
-              let p0 := pm_has b1 in
-              let b := if p0 then pm_sub 100000 b1 else b1 in
+              let p00 := pm_has b1 in
+              let b := if p00 then pm_sub 100000 b1 else b1 in
+              let p0 := if p00 then true else r0 in
               (* (step 68) a function chosen by a match, applied *)
               let f0 := if p0 then false else fc_has 100000 b in
               let wy (f' : term) := (add_decl (add_decl S1 (copy_mp, snd kn ^ "__wy"%bs) ty0 f') kn ty0 f', true) in
@@ -6147,7 +6431,7 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
           end
       | _ => st
       end
-    else st) (snd (reach_go 1000 Σ mp root root ([], []))) (Σ, false).
+    else st) (snd (reach_go 1000 Σ mp root root ([], []))) (S0, match rows with [] => false | _ => true end).
 (** the rows of those: the head of the environment, where [y_all] put them *)
 Fixpoint ends_wy (s : string) : bool :=
   if String.eqb s "__wy"%bs then true else
@@ -6161,7 +6445,7 @@ Definition y_rows (Σ : global_env) : copytab :=
         | _ => []
         end
       else []
-    else []) (firstn 40 (declarations Σ)).
+    else []) (rev (firstn 200 (declarations Σ))).
 Definition reify_prog2c (lo : bool) (bt : kername -> option Z) (chk : bool) (p : program) : option (list (kername * sig * fbody) * list (string * term)) :=
   match p with
   | (Σ000, tConst root _) =>
@@ -6279,8 +6563,13 @@ Fixpoint has_kq (s : string) : bool :=
   | String.String _ r => if is_kq4 s then true else has_kq r
   end.
 (** the record types of the program as it was read *)
-Definition rec_info2 (p : program) (r : option (list (kername * sig * fbody) * list (string * term))) : list (string * string * nat * string) :=
+Definition rec_info2 (p0 : program) (r : option (list (kername * sig * fbody) * list (string * term))) : list (string * string * nat * string) :=
   let lo := match r with Some (_, mts) => existsb (fun q => has_kq (fst q)) mts | None => false end in
+  let p := match r, p0 with
+           | Some (_, mts), (Σ, tConst root u) =>
+               if existsb (fun q => ends_wy (fst q)) mts then (fst (y_all Σ (fst root) root), tConst root u) else p0
+           | _, _ => p0
+           end in
   let wf := match p with (Σ, _) => match lookup_env Σ kn_fix_sub with Some _ => true | None => pf_has_iter Σ end end in
   if (if lo then true else wf) then
     match p with
@@ -6338,7 +6627,8 @@ Definition meaning_of (l : list (string * term)) (nm : string) : term :=
 (** for kitc.py: each function the reifier made, and the constant it is a copy or a wrapper of (step 51) *)
 Fixpoint head_const (t : term) : option kername :=
   match t with
-  | tLambda _ _ b => head_const b
+  | tLambda _ _ b | tProd _ _ b => head_const b
+  | tApp (tInd _ _) [_; a; _] => head_const a
   | tApp f _ => head_const f
   | tConst kn _ => Some kn
   | _ => None
