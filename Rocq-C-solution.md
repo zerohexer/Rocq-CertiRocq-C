@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **2425 of 2465, 24 gaps, 15 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **2502 of 2552, 31 gaps, 18 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4954,6 +4954,20 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Cells*: 87, `A_l_*`.
 - *The acceptance*: `proved/examples/lib2_fix`: a name for a type, a let before the counter's match, a function chosen by a test, `Nat.eq_dec`, `Nat.compare`, a list written in the text, `option_rect`; the answer worked out apart: 4108235.
 
+**Step 68 done (2026-11-05): what Rocq's libraries and ordinary text spell otherwise.**  Built as designed, with `KQR.v` unchanged:
+- *The reader*: `al_t`, in `y_all` and in `rtab_of`; `y_fix` for a body that does not start with the counter's match, `y_kn`, `y_rep`; `y_pull` at a match applied, `y_beta`; `fc_has`; `lu_red`, `lu_full`, `lu_t`, `lu_stuck`; `dec_of`, in `pm_sub`; `Nat.compare` in `pm_table`; `lib_open` by name; `body_rtys` through a cast.
+- *`KQRWf.v`*: `kq_d_eq`, `kq_d_lt`, `kq_d_le`, `kq_d_gt`, `kq_d_ge`, `kq_d_lel`, `kq_d_leg`, `kq_d_eqs`, `kq_compare_nat`, each with its proof from Rocq's own lemmas, in `prim_rw`.  `bound_le`, on a measure with `Nat.div2`, the first time a cell had one: the lemma's premise was wrong; the function has two names, `Init.Nat.div2` and `PeanoNat.Nat.div2`, by the program's imports; and the budget's facts were posed on every goal, and `lia`, comparing its atoms by conversion, ran `Nat.div2 k` against `kq_nat` of a written number and out of memory: posed only where a budget is.
+- *A first version let a template take a type* (`is_prod` on a sort): it did not read a polymorphic recursive function, and every `Equations` cell stopped, `inspect` taken for a clause: found by a run of cells beside the family, and taken out.  A function polymorphic in a type wants a replacement of its own, next step.
+- *The acceptance*: `proved/examples/lib2_fix`: proved, built, 4108235.
+- *Cells*: 87 more: 77 proved, 3 by design (18 now), `A_l_ack`, `_dec_own`, `_dec_proof_used`, `_fix_mut`, `_nat_ret_same`, `_poly_rec`, `_poly_rec_nofun` gaps.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the trees without their generated files, F62; step 67's files / these): `HWP_kernel` 2.62 / 2.63 s, `HWP_own` 1.98 / 2.00, `HWP_irqnow` 1.73 / 1.74 — the same.
+- The C: the 75 programs before byte-identical, the new example through the verified compiler.  The construct table (on
+  `304ee51`): **2502 of 2552 through the verified compiler**, 18 by design, 31 gaps, 1 not Rocq (was 2425 of 2465: the 77 of the
+  87 new cells read, 3 by design, 7 gaps).  The gate on `304ee51`, the walk switched off: `make.sh` `core-ok`; examples 41 / 41;
+  corpus 36 / 36; the five kernels (12 / 13 / 13 / 14 / 13 s); **85 programs through the verified compiler, 0 refused**; the
+  trusted base as step 65 left it.  Next: a function read in another form, its callers told by a lemma: a memory never read, a
+  type parameter.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5129,11 +5143,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `c7ff7fc` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `304ee51` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 68's design -- type aliases, the library's recursors, Rocq's lists written in the text, tests with a proof |
+| (this commit) | §12.V: step 68 (what Rocq's libraries and ordinary text spell otherwise: the construct table 2502 of 2552, 18 by design, 31 gaps), the C, the gate |
+| `304ee51` | `proved/KQRReify.v` + `KQRWf.v` + `matrix` + `examples/lib2_fix` step 68: what Rocq's libraries and ordinary text spell otherwise; 87 cells; `KQR.v` unchanged |
+| `a1f392f` | §12.V: step 68's design -- type aliases, the library's recursors, Rocq's lists written in the text, tests with a proof |
 | `7b23a45` | §12.V: step 67 (values of a fixed size holding booleans, records and data types: the construct table 2425 of 2465, 15 by design, 24 gaps), the C, the gate |
 | `c7ff7fc` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix` + `examples/value_fix` step 67: values of a fixed size holding booleans, records and data types; 223 cells |
 | `f437907` | §12.V: step 67's design -- values of a fixed size holding booleans, records and data types |
