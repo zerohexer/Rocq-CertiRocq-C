@@ -4883,6 +4883,12 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   / 36; the five kernels (12 / 12 / 12 / 13 / 13 s); **81 programs through the verified compiler, 0 refused**; the trusted base
   unchanged.  Next: `head0`, `tail0`, the high half of `mulc`, `diveucl_21`.
 
+**Step 65, `head0`, `tail0`, the high half of `mulc`, `diveucl_21` (§2.1, §12.O) — the design (2026-11-05).**  Rocq's axioms only relate these to other operations (`head0_spec` for a positive number, `mulc_spec` as an equation in `Z`), so no definition stands in for them.  They are what a machine has instructions for, as `hw_addr` is what a machine knows: operations of the machine (`Ehwf`, §1.8), the number each gives named by Rocq's own primitive, `hwf_law` the statement that the C gives that number.
+- *The operations*: `FHead0`, `FTail0`, `FMulHi`, `FDiv21Q`, `FDiv21R`.  `kq_mulhi a b := fst (mulc a b)` and two more, in the kit, so that one result has a name.  `snd (mulc a b)` needs no operation: it is `mul a b`, proved from `mulc_spec` and `mul_spec`.
+- *The form read*: `pm_table`, step 64's: `mulc x y` as `(kq_mulhi x y, mul x y)`, by a lemma; the rest named directly.
+- *The C*, trusted as the others in `hw/kq_hw.h` are: `__builtin_clzll` on the tagged word, whose top bit is the number's and whose lowest is set, so never 0; `ctz` on the number, 63 at 0, as Rocq's; the high half by 32-bit limbs and `diveucl_21` by shifting and subtracting, as Rocq's own, no `__int128`, which CompCert has not.  Its wrappers only in a program that uses one: no other C changes.
+- *The acceptance*: `proved/examples/mach_fix`: its answer is what Rocq's `vm_compute` gives, `5302306`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5062,7 +5068,8 @@ Pushed to the public repository up to `2442197` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 64 (the operations Rocq's axioms define by others: the construct table 2187 of 2233, 15 by design, 30 gaps), the C, the gate |
+| (this commit) | §12.V: step 65's design -- head0, tail0, the high half of mulc, diveucl_21 as operations of the machine |
+| `5592c0f` | §12.V: step 64 (the operations Rocq's axioms define by others: the construct table 2187 of 2233, 15 by design, 30 gaps), the C, the gate |
 | `2442197` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix/gen.py` + `classify.py` + `examples/prim_fix` step 64: `compare`, `addc`, `subc`, `diveucl`, `addmuldiv` by Rocq's own axioms defining them; 12 cells; `KQR.v` unchanged |
 | `8e75962` | §12.V: step 64's design -- the operations of Rocq's machine numbers that its own axioms define by others |
 | `2649859` | §12.V: step 63 (natural forms from a probe: the construct table 2169 of 2221, 15 by design, 36 gaps), the C, the gate |
