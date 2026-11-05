@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **2187 of 2233, 30 gaps, 15 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **2191 of 2233, 26 gaps, 15 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4889,6 +4889,18 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*, trusted as the others in `hw/kq_hw.h` are: `__builtin_clzll` on the tagged word, whose top bit is the number's and whose lowest is set, so never 0; `ctz` on the number, 63 at 0, as Rocq's; the high half by 32-bit limbs and `diveucl_21` by shifting and subtracting, as Rocq's own, no `__int128`, which CompCert has not.  Its wrappers only in a program that uses one: no other C changes.
 - *The acceptance*: `proved/examples/mach_fix`: its answer is what Rocq's `vm_compute` gives, `5302306`.
 
+**Step 65 done (2026-11-05): `head0`, `tail0`, the high half of `mulc`, `diveucl_21`.**  Built as designed: `hwfop` five more, `hwf_sem`, the names in `KQLGen.v`, `kq_mulhi`, `kq_div21q`, `kq_div21r` in `KQRun.v`, the C in `hw/kq_hw.h`, `kq_mulc_def`, `kq_div21_def`.  The generator's proof took them with no change, being over any `hwfop`.  What is assumed grows by five statements of the same form as those there (`hwf_law`): the C gives the number Rocq's primitive gives.
+- *The acceptance*: `proved/examples/mach_fix`: proved, built, its answer `vm_compute`'s, `5302306`.
+- *Cells*: `A_n_head0`, `_tail0`, `_mulc`, `_diveucl_21`, gaps before, read.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the trees without their generated files, F62; step 64's files / these): `HWP_kernel` 2.59 / 2.62 s, `HWP_own` 1.97 / 1.99, `HWP_irqnow` 1.65 / 1.66 — the same within the noise.
+- The C: the 73 programs before the same but for five new declarations of the external functions, which nothing calls (the first
+  build also wrote the five wrappers into every program: the test for use matched the declarations, so it now looks at calls), the
+  new example through the verified compiler.  The construct table (on `62cc800`): **2191 of 2233 through the verified compiler**,
+  15 by design, 26 gaps, 1 not Rocq (was 2187 of 2233: 4 gaps before read).  The gate on `62cc800`, the walk switched off:
+  `make.sh` `core-ok`; examples 38 / 38; corpus 36 / 36; the five kernels (12 / 12 / 13 / 13 / 14 s); **82 programs through the
+  verified compiler, 0 refused**; the trusted base: `head0`, `tail0`, `mulc`, `diveucl_21` of Rocq's primitives, which the
+  statements of `hwf_law` now name, and nothing else.  Next: counters: `Nat.min`, `Nat.max`, `Nat.sub`, `Nat.div2`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5064,11 +5076,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `2442197` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `62cc800` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 65's design -- head0, tail0, the high half of mulc, diveucl_21 as operations of the machine |
+| (this commit) | §12.V: step 65 (`head0`, `tail0`, `mulc`, `diveucl_21`: the construct table 2191 of 2233, 15 by design, 26 gaps), the C, the gate |
+| `62cc800` | `KQRun.v` + `hw/kq_hw.h` + `proved/KQL.v` + `KQLGen.v` + `KQMSem.v` + `KQRReify.v` + `KQRWf.v` + `kitc.py` + `classify` + `examples/mach_fix` step 65: `head0`, `tail0`, the high half of `mulc`, `diveucl_21` as machine operations |
+| `aee51b5` | §12.V: step 65's design -- head0, tail0, the high half of mulc, diveucl_21 as operations of the machine |
 | `5592c0f` | §12.V: step 64 (the operations Rocq's axioms define by others: the construct table 2187 of 2233, 15 by design, 30 gaps), the C, the gate |
 | `2442197` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix/gen.py` + `classify.py` + `examples/prim_fix` step 64: `compare`, `addc`, `subc`, `diveucl`, `addmuldiv` by Rocq's own axioms defining them; 12 cells; `KQR.v` unchanged |
 | `8e75962` | §12.V: step 64's design -- the operations of Rocq's machine numbers that its own axioms define by others |
