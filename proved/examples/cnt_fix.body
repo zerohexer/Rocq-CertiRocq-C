@@ -1,0 +1,8 @@
+(* counters: Nat.min, Nat.max, Nat.sub, Nat.div2.  With n = 10, a = 0: 3 + 12 * 100 + 6 * 10000 + 5 * 1000000 = 5061203. *)
+Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.
+Definition solve (a : int) (s : mem) : int :=
+  let n := kq_nat 10 in
+  ff (Nat.min n 3) a + ff (Nat.max n 12) a * 100 + ff (Nat.sub n 4) a * 10000 + ff (Nat.div2 n) a * 1000000.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve 0 (kq_input 0).

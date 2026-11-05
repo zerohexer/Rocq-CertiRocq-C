@@ -53,12 +53,8 @@ DESIGN_CELLS = {
 }
 # gaps whose refusal message is shared with another category: classified by name
 BY_NAME = {
-  "A_n_nat_min": "a library function on a counter beyond S, +, pred: min, max, sub, div2, even, mul",
-  "A_n_nat_max": "a library function on a counter beyond S, +, pred: min, max, sub, div2, even, mul",
-  "A_n_nat_sub": "a library function on a counter beyond S, +, pred: min, max, sub, div2, even, mul",
-  "A_n_nat_even": "a library function on a counter beyond S, +, pred: min, max, sub, div2, even, mul",
-  "A_n_nat_div2": "a library function on a counter beyond S, +, pred: min, max, sub, div2, even, mul",
-  "A_n_nat_mul": "a library function on a counter beyond S, +, pred: min, max, sub, div2, even, mul",
+  "A_n_nat_even": "a library function on a counter beyond S, +, pred, min, max, sub, div2: even, mul",
+  "A_n_nat_mul": "a library function on a counter beyond S, +, pred, min, max, sub, div2: even, mul",
   "A_n_sum_ty": "a boolean as a field of a record or a data type",
   "A_n_option_bool": "a boolean as a field of a record or a data type",
   "A_n_record_bool": "a boolean as a field of a record or a data type",

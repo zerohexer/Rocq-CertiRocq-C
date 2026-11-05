@@ -94,6 +94,10 @@ Definition kn_nat_ltb := kn_of <% Nat.ltb %>.
 Definition kn_nat_leb := kn_of <% Nat.leb %>.
 Definition kn_nat_pred := kn_of <% Nat.pred %>.
 Definition kn_nat_add := kn_of <% Nat.add %>.   (* a sum of counters (step 33) *)
+Definition kn_c_min := kn_of <% Nat.min %>.
+Definition kn_c_max := kn_of <% Nat.max %>.
+Definition kn_c_sub := kn_of <% Nat.sub %>.
+Definition kn_c_div2 := kn_of <% Nat.div2 %>.
 Definition ncmp_v (kn : kername) : option cmpop :=
   if Kername.eqb kn kn_nat_eqb then Some Ceq else if Kername.eqb kn kn_nat_ltb then Some Clt
   else if Kername.eqb kn kn_nat_leb then Some Cle else None.
@@ -1319,6 +1323,14 @@ with reify_c (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sc
       else if Kername.eqb kn kn_nat_pred then match args with [c] => option_map KQR.CPred (reify_c fuel ctx c) | _ => None end
       else if Kername.eqb kn kn_nat_add then
         match args with [a; b] => match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (CAdd x y) | _, _ => None end | _ => None end
+      (* (step 66) *)
+      else if Kername.eqb kn kn_c_min then
+        match args with [a; b] => match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (CMin x y) | _, _ => None end | _ => None end
+      else if Kername.eqb kn kn_c_max then
+        match args with [a; b] => match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (CMax x y) | _, _ => None end | _ => None end
+      else if Kername.eqb kn kn_c_sub then
+        match args with [a; b] => match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (CSub x y) | _, _ => None end | _ => None end
+      else if Kername.eqb kn kn_c_div2 then match args with [c] => option_map CDiv2 (reify_c fuel ctx c) | _ => None end
       else match hb kn with Some b => reify_c fuel ctx (wout b args) | None => None end
   | _ => None
   end
@@ -2919,7 +2931,7 @@ with cl_es (B : Z) (bs : list cbe) (es : sexps) {struct es} : list site :=
   | SConsR x r => cl_r B bs x ++ cl_es B bs r
   end
 with cl_c (B : Z) (bs : list cbe) (c : scnt) {struct c} : list site :=
-  match c with CVar _ | CO => [] | CS c | KQR.CPred c => cl_c B bs c | CAdd a b => cl_c B bs a ++ cl_c B bs b | CNat e => cl_e B bs e end
+  match c with CVar _ | CO => [] | CS c | KQR.CPred c | CDiv2 c => cl_c B bs c | CAdd a b | CMin a b | CMax a b | CSub a b => cl_c B bs a ++ cl_c B bs b | CNat e => cl_e B bs e end
 with cl_cs (B : Z) (bs : list cbe) (cs : scnts) {struct cs} : list site :=
   match cs with CNil => [] | CCons c r => cl_c B bs c ++ cl_cs B bs r end
 with cl_b (B : Z) (bs : list cbe) (b : sbool) {struct b} : list site :=
@@ -5880,6 +5892,7 @@ Definition known_const (fns : list kername) (kn : kername) : bool :=
   || existsb (fun e => Kername.eqb (fst (fst e)) kn) hw_table || existsb (fun e => Kername.eqb (fst (fst e)) kn) hwf_table
   || Kername.eqb kn kn_andb || Kername.eqb kn kn_orb || Kername.eqb kn kn_negb
   || match ncmp_v kn with Some _ => true | None => false end || Kername.eqb kn kn_nat_pred || Kername.eqb kn kn_nat_add
+  || Kername.eqb kn kn_c_min || Kername.eqb kn kn_c_max || Kername.eqb kn kn_c_sub || Kername.eqb kn kn_c_div2
   || Kername.eqb kn kn_int || Kername.eqb kn kn_mem.     (* as type arguments *)
 
 Definition head_name (t : term) : string :=

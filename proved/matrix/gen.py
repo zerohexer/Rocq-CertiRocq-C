@@ -616,6 +616,25 @@ addA("par_pm_let_fst_pv", "", "let '(x, t) := kz n a s in x + rd 0 0 t",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : int * mem := let p := g n x t in (fst p + 1, snd p).\n")
 addA("par_pm_let_fst_mem", "", "rd 0 0 (kz n a s)",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : mem := let p := g n x t in upd 0 (fst p) 1 (snd p).\n")
+# counters: Nat.min, Nat.max, Nat.sub, Nat.div2 in more places (step 66)
+addA("c_min_arg", "", "ff (Nat.min n 3) a",
+     "Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n")
+addA("c_max_arg", "", "ff (Nat.max n 3) a",
+     "Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n")
+addA("c_sub_arg", "", "ff (Nat.sub n 1) a",
+     "Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n")
+addA("c_div2_arg", "", "ff (Nat.div2 n) a",
+     "Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n")
+addA("c_min_let", "", "let k := Nat.min n 3 in ff k a + ff k b",
+     "Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n")
+addA("c_sub_match", "", "match Nat.sub n 1 with O => a | S q => ff q b end",
+     "Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n")
+addA("c_div2_match", "", "match Nat.div2 n with O => a | S q => ff q b end",
+     "Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n")
+addA("c_nest", "", "ff (Nat.min (Nat.sub n 1) (Nat.max n 2)) a",
+     "Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n")
+addA("c_sub_cmp", "", "if Nat.leb (Nat.sub n 2) (Nat.div2 n) then a else b",
+     "Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n")
 # the operations of Rocq's machine numbers its axioms define by others (step 64), in more places
 addA("pm_addcarryc", "", "match PrimInt63.addcarryc a b with C0 v => v | C1 v => v + 1 end",
      "From Corelib Require Import Numbers.Cyclic.Int63.CarryType.\n")
