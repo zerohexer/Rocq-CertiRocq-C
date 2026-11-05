@@ -4901,6 +4901,10 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   verified compiler, 0 refused**; the trusted base: `head0`, `tail0`, `mulc`, `diveucl_21` of Rocq's primitives, which the
   statements of `hwf_law` now name, and nothing else.  Next: counters: `Nat.min`, `Nat.max`, `Nat.sub`, `Nat.div2`.
 
+**Step 66, counters: `Nat.min`, `Nat.max`, `Nat.sub`, `Nat.div2` (§3.5, §12.A) — the design (2026-11-05).**  A counter was `S`, `+`, `pred` and a written number.  These four stay within what they are given (`+` is the only one that grows), so they need no bound of their own: four constructs of `scnt`, `CMin`, `CMax`, `CSub`, `CDiv2`, their meanings, their code (a conditional move, `-` and a move, a shift), each a case of the theorem.  `Nat.mul` grows from the data, `Nat.even` is a test of its own: left, with their cells.
+- *Cells*: 9, `A_c_*`, as an argument, in a let, a match on one, nested, compared; `A_n_nat_min`, `_max`, `_sub`, `_div2` read.
+- *The acceptance*: `proved/examples/cnt_fix`, worked out apart: 5061203.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5080,7 +5084,8 @@ Pushed to the public repository up to `62cc800` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 65 (`head0`, `tail0`, `mulc`, `diveucl_21`: the construct table 2191 of 2233, 15 by design, 26 gaps), the C, the gate |
+| (this commit) | §12.V: step 66's design -- counters: Nat.min, Nat.max, Nat.sub, Nat.div2 |
+| `ef3b1f6` | §12.V: step 65 (`head0`, `tail0`, `mulc`, `diveucl_21`: the construct table 2191 of 2233, 15 by design, 26 gaps), the C, the gate |
 | `62cc800` | `KQRun.v` + `hw/kq_hw.h` + `proved/KQL.v` + `KQLGen.v` + `KQMSem.v` + `KQRReify.v` + `KQRWf.v` + `kitc.py` + `classify` + `examples/mach_fix` step 65: `head0`, `tail0`, the high half of `mulc`, `diveucl_21` as machine operations |
 | `aee51b5` | §12.V: step 65's design -- head0, tail0, the high half of mulc, diveucl_21 as operations of the machine |
 | `5592c0f` | §12.V: step 64 (the operations Rocq's axioms define by others: the construct table 2187 of 2233, 15 by design, 30 gaps), the C, the gate |
