@@ -1,0 +1,23 @@
+(* values of a fixed size holding booleans, records and data types.  step 5 (true, 0): false, 3.  find: (2, true).  look: Some (0, 5).
+   walk 3 (sh 2) 1: 202 at 1, 201 at 203, 7 at 404, 7 + 411 = 418.  2000 + 30 + 200 + 15 + 418 = 2663. *)
+Inductive dp := DA (p : int * int) | DB (c : bool) (n : int) | DC.
+Record flag := mkf { on : bool; cnt : int }.
+Fixpoint step (n : nat) (f : flag) : flag :=
+  match n with O => f | S m => step m (mkf (negb (on f)) (if on f then cnt f + 1 else cnt f)) end.
+Fixpoint find (n : nat) (i k : int) (s : mem) : int * bool :=
+  match n with O => (0, false) | S m => if PrimInt63.eqb (rd 0 i s) k then (i, true) else find m (i + 1) k s end.
+Fixpoint look (n : nat) (i : int) (s : mem) : option (int * int) :=
+  match n with O => None | S m => if 0 <? rd 0 i s then Some (i, rd 0 i s) else look m (i + 1) s end.
+Definition sh (x : int) : dp := if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC.
+Definition ud (d : dp) : int := match d with DA (u, w) => u + w | DB c n => if c then n + 100 else n + 200 | DC => 7 end.
+Fixpoint walk (n : nat) (d : dp) (x : int) : int := match n with O => ud d + x | S m => walk m (sh x) (x + ud d) end.
+Definition solve (a : int) (s : mem) : int :=
+  let t := upd 0 0 5 (upd 0 1 7 (upd 0 2 9 s)) in
+  let f := step (kq_nat 5) (mkf true a) in
+  let (p, ok) := find (kq_nat 3) 0 9 t in
+  let o := look (kq_nat 3) 0 t in
+  let w := walk (kq_nat 3) (sh 2) 1 in
+  (if on f then 1000 else 2000) + cnt f * 10 + (if ok then p * 100 else 0) + (match o with Some (u, v) => u + v * 3 | None => 0 end) + w.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve 0 (kq_input 0).

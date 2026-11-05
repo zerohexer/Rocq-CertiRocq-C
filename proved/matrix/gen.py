@@ -616,6 +616,441 @@ addA("par_pm_let_fst_pv", "", "let '(x, t) := kz n a s in x + rd 0 0 t",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : int * mem := let p := g n x t in (fst p + 1, snd p).\n")
 addA("par_pm_let_fst_mem", "", "rd 0 0 (kz n a s)",
      "Fixpoint g (n : nat) (x : int) (t : mem) : int * mem := match n with O => (x, t) | S m => g m (x + 1) (upd 0 x x t) end.\nDefinition kz (n : nat) (x : int) (t : mem) : mem := let p := g n x t in upd 0 (fst p) 1 (snd p).\n")
+# values of a fixed size holding booleans, records and data types, crossed with the places a value stands in (step 67)
+addA('fx_pb_let', "", 'let v := mv a in (if snd v then fst v else 0)',
+     'Definition mv (x : int) : (int * bool)%type := (x, x <? 3).\n')
+addA('fx_pb_param', "", 'uv (mv a)',
+     'Definition mv (x : int) : (int * bool)%type := (x, x <? 3).\nDefinition uv (v : (int * bool)%type) : int := (if snd v then fst v else 0).\n')
+addA('fx_pb_rec', "", 'let v := fr n a in (if snd v then fst v else 0)',
+     'Definition mv (x : int) : (int * bool)%type := (x, x <? 3).\nFixpoint fr (n : nat) (x : int) : (int * bool)%type := match n with O => (x, x <? 3) | S m => fr m (x + 1) end.\n')
+addA('fx_pb_nontail', "", 'let v := fn n a in (if snd v then fst v else 0)',
+     'Definition mv (x : int) : (int * bool)%type := (x, x <? 3).\nFixpoint fn (n : nat) (x : int) : (int * bool)%type := match n with O => (x, x <? 3) | S m => let v := fn m (x + 1) in if (if snd v then fst v else 0) <? 5 then v else (x, x <? 3) end.\n')
+addA('fx_pb_state', "", 'fs n (mv a) b',
+     'Definition mv (x : int) : (int * bool)%type := (x, x <? 3).\nFixpoint fs (n : nat) (v : (int * bool)%type) (x : int) : int := match n with O => (if snd v then fst v else 0) + x | S m => fs m (x, x <? 3) (x + (if snd v then fst v else 0)) end.\n')
+addA('fx_pb_choice', "", 'let v := if a <? b then mv a else mv b in (if snd v then fst v else 0)',
+     'Definition mv (x : int) : (int * bool)%type := (x, x <? 3).\n')
+addA('fx_pb_writes', "", 'let v := fw n a s in (if snd v then fst v else 0)',
+     'Definition mv (x : int) : (int * bool)%type := (x, x <? 3).\nFixpoint fw (n : nat) (x : int) (t : mem) : (int * bool)%type := match n with O => (let x := rd 0 x t in (x, x <? 3)) | S m => fw m (x + 1) (upd 0 x x t) end.\n')
+addA('fx_pb_mem', "", 'rd 0 0 (fm n (mv a) s)',
+     'Definition mv (x : int) : (int * bool)%type := (x, x <? 3).\nFixpoint fm (n : nat) (v : (int * bool)%type) (t : mem) : mem := match n with O => t | S m => fm m v (upd 0 (if snd v then fst v else 0) 1 t) end.\n')
+addA('fx_pb_tmpl', "", 'let v := ft n (fun x w => if (if snd w then fst w else 0) <? 3 then (x, x <? 3) else w) (mv a) b in (if snd v then fst v else 0)',
+     'Definition mv (x : int) : (int * bool)%type := (x, x <? 3).\nFixpoint ft (n : nat) (f : int -> (int * bool)%type -> (int * bool)%type) (v : (int * bool)%type) (x : int) : (int * bool)%type := match n with O => v | S m => ft m f (f x v) (x + 1) end.\n')
+addA('fx_pb_mutual', "", 'me n (mv a)',
+     'Definition mv (x : int) : (int * bool)%type := (x, x <? 3).\nFixpoint me (n : nat) (v : (int * bool)%type) : int := match n with O => (if snd v then fst v else 0) | S m => mo m v end with mo (n : nat) (v : (int * bool)%type) : int := match n with O => 1 | S m => me m v end.\n')
+addA('fx_pb_mutres', "", 'let v := mua n a in (if snd v then fst v else 0)',
+     'Definition mv (x : int) : (int * bool)%type := (x, x <? 3).\nFixpoint mua (n : nat) (x : int) : (int * bool)%type := match n with O => (x, x <? 3) | S m => mub m (x + 1) end with mub (n : nat) (x : int) : (int * bool)%type := match n with O => (x, x <? 3) | S m => mua m (x * 2) end.\n')
+addA('fx_pb_lfix', "", 'let v := mv a in let fix g (m : nat) (x : int) : int := match m with O => x + (if snd v then fst v else 0) | S q => g q (x + 1) end in g n b',
+     'Definition mv (x : int) : (int * bool)%type := (x, x <? 3).\n')
+addA('fx_pb_closure', "", 'let v := mv a in fold n 0 b (fun i acc => acc + (if snd v then fst v else 0))',
+     'Definition mv (x : int) : (int * bool)%type := (x, x <? 3).\n')
+addA('fx_pb_fun', "", 'tw (fun v => (if snd v then fst v else 0)) (mv a)',
+     'Definition mv (x : int) : (int * bool)%type := (x, x <? 3).\nDefinition tw (f : (int * bool)%type -> int) (v : (int * bool)%type) : int := f v + 1.\n')
+addA('fx_bb_let', "", 'let v := mv a in (if fst v && snd v then 1 else 2)',
+     'Definition mv (x : int) : (bool * bool)%type := (x <? 3, x <? 5).\n')
+addA('fx_bb_param', "", 'uv (mv a)',
+     'Definition mv (x : int) : (bool * bool)%type := (x <? 3, x <? 5).\nDefinition uv (v : (bool * bool)%type) : int := (if fst v && snd v then 1 else 2).\n')
+addA('fx_bb_rec', "", 'let v := fr n a in (if fst v && snd v then 1 else 2)',
+     'Definition mv (x : int) : (bool * bool)%type := (x <? 3, x <? 5).\nFixpoint fr (n : nat) (x : int) : (bool * bool)%type := match n with O => (x <? 3, x <? 5) | S m => fr m (x + 1) end.\n')
+addA('fx_bb_nontail', "", 'let v := fn n a in (if fst v && snd v then 1 else 2)',
+     'Definition mv (x : int) : (bool * bool)%type := (x <? 3, x <? 5).\nFixpoint fn (n : nat) (x : int) : (bool * bool)%type := match n with O => (x <? 3, x <? 5) | S m => let v := fn m (x + 1) in if (if fst v && snd v then 1 else 2) <? 5 then v else (x <? 3, x <? 5) end.\n')
+addA('fx_bb_state', "", 'fs n (mv a) b',
+     'Definition mv (x : int) : (bool * bool)%type := (x <? 3, x <? 5).\nFixpoint fs (n : nat) (v : (bool * bool)%type) (x : int) : int := match n with O => (if fst v && snd v then 1 else 2) + x | S m => fs m (x <? 3, x <? 5) (x + (if fst v && snd v then 1 else 2)) end.\n')
+addA('fx_bb_choice', "", 'let v := if a <? b then mv a else mv b in (if fst v && snd v then 1 else 2)',
+     'Definition mv (x : int) : (bool * bool)%type := (x <? 3, x <? 5).\n')
+addA('fx_bb_writes', "", 'let v := fw n a s in (if fst v && snd v then 1 else 2)',
+     'Definition mv (x : int) : (bool * bool)%type := (x <? 3, x <? 5).\nFixpoint fw (n : nat) (x : int) (t : mem) : (bool * bool)%type := match n with O => (let x := rd 0 x t in (x <? 3, x <? 5)) | S m => fw m (x + 1) (upd 0 x x t) end.\n')
+addA('fx_bb_mem', "", 'rd 0 0 (fm n (mv a) s)',
+     'Definition mv (x : int) : (bool * bool)%type := (x <? 3, x <? 5).\nFixpoint fm (n : nat) (v : (bool * bool)%type) (t : mem) : mem := match n with O => t | S m => fm m v (upd 0 (if fst v && snd v then 1 else 2) 1 t) end.\n')
+addA('fx_bb_tmpl', "", 'let v := ft n (fun x w => if (if fst w && snd w then 1 else 2) <? 3 then (x <? 3, x <? 5) else w) (mv a) b in (if fst v && snd v then 1 else 2)',
+     'Definition mv (x : int) : (bool * bool)%type := (x <? 3, x <? 5).\nFixpoint ft (n : nat) (f : int -> (bool * bool)%type -> (bool * bool)%type) (v : (bool * bool)%type) (x : int) : (bool * bool)%type := match n with O => v | S m => ft m f (f x v) (x + 1) end.\n')
+addA('fx_bb_mutual', "", 'me n (mv a)',
+     'Definition mv (x : int) : (bool * bool)%type := (x <? 3, x <? 5).\nFixpoint me (n : nat) (v : (bool * bool)%type) : int := match n with O => (if fst v && snd v then 1 else 2) | S m => mo m v end with mo (n : nat) (v : (bool * bool)%type) : int := match n with O => 1 | S m => me m v end.\n')
+addA('fx_bb_mutres', "", 'let v := mua n a in (if fst v && snd v then 1 else 2)',
+     'Definition mv (x : int) : (bool * bool)%type := (x <? 3, x <? 5).\nFixpoint mua (n : nat) (x : int) : (bool * bool)%type := match n with O => (x <? 3, x <? 5) | S m => mub m (x + 1) end with mub (n : nat) (x : int) : (bool * bool)%type := match n with O => (x <? 3, x <? 5) | S m => mua m (x * 2) end.\n')
+addA('fx_bb_lfix', "", 'let v := mv a in let fix g (m : nat) (x : int) : int := match m with O => x + (if fst v && snd v then 1 else 2) | S q => g q (x + 1) end in g n b',
+     'Definition mv (x : int) : (bool * bool)%type := (x <? 3, x <? 5).\n')
+addA('fx_bb_closure', "", 'let v := mv a in fold n 0 b (fun i acc => acc + (if fst v && snd v then 1 else 2))',
+     'Definition mv (x : int) : (bool * bool)%type := (x <? 3, x <? 5).\n')
+addA('fx_bb_fun', "", 'tw (fun v => (if fst v && snd v then 1 else 2)) (mv a)',
+     'Definition mv (x : int) : (bool * bool)%type := (x <? 3, x <? 5).\nDefinition tw (f : (bool * bool)%type -> int) (v : (bool * bool)%type) : int := f v + 1.\n')
+addA('fx_pn_let', "", "let v := mv a in (let '((u, c), w) := v in if c then u else w)",
+     'Definition mv (x : int) : ((int * bool) * int)%type := ((x, x <? 3), x + 1).\n')
+addA('fx_pn_param', "", 'uv (mv a)',
+     "Definition mv (x : int) : ((int * bool) * int)%type := ((x, x <? 3), x + 1).\nDefinition uv (v : ((int * bool) * int)%type) : int := (let '((u, c), w) := v in if c then u else w).\n")
+addA('fx_pn_rec', "", "let v := fr n a in (let '((u, c), w) := v in if c then u else w)",
+     'Definition mv (x : int) : ((int * bool) * int)%type := ((x, x <? 3), x + 1).\nFixpoint fr (n : nat) (x : int) : ((int * bool) * int)%type := match n with O => ((x, x <? 3), x + 1) | S m => fr m (x + 1) end.\n')
+addA('fx_pn_nontail', "", "let v := fn n a in (let '((u, c), w) := v in if c then u else w)",
+     "Definition mv (x : int) : ((int * bool) * int)%type := ((x, x <? 3), x + 1).\nFixpoint fn (n : nat) (x : int) : ((int * bool) * int)%type := match n with O => ((x, x <? 3), x + 1) | S m => let v := fn m (x + 1) in if (let '((u, c), w) := v in if c then u else w) <? 5 then v else ((x, x <? 3), x + 1) end.\n")
+addA('fx_pn_state', "", 'fs n (mv a) b',
+     "Definition mv (x : int) : ((int * bool) * int)%type := ((x, x <? 3), x + 1).\nFixpoint fs (n : nat) (v : ((int * bool) * int)%type) (x : int) : int := match n with O => (let '((u, c), w) := v in if c then u else w) + x | S m => fs m ((x, x <? 3), x + 1) (x + (let '((u, c), w) := v in if c then u else w)) end.\n")
+addA('fx_pn_choice', "", "let v := if a <? b then mv a else mv b in (let '((u, c), w) := v in if c then u else w)",
+     'Definition mv (x : int) : ((int * bool) * int)%type := ((x, x <? 3), x + 1).\n')
+addA('fx_pn_writes', "", "let v := fw n a s in (let '((u, c), w) := v in if c then u else w)",
+     'Definition mv (x : int) : ((int * bool) * int)%type := ((x, x <? 3), x + 1).\nFixpoint fw (n : nat) (x : int) (t : mem) : ((int * bool) * int)%type := match n with O => (let x := rd 0 x t in ((x, x <? 3), x + 1)) | S m => fw m (x + 1) (upd 0 x x t) end.\n')
+addA('fx_pn_mem', "", 'rd 0 0 (fm n (mv a) s)',
+     "Definition mv (x : int) : ((int * bool) * int)%type := ((x, x <? 3), x + 1).\nFixpoint fm (n : nat) (v : ((int * bool) * int)%type) (t : mem) : mem := match n with O => t | S m => fm m v (upd 0 (let '((u, c), w) := v in if c then u else w) 1 t) end.\n")
+addA('fx_pn_tmpl', "", "let v := ft n (fun x w => if (let '((u, c), w) := w in if c then u else w) <? 3 then ((x, x <? 3), x + 1) else w) (mv a) b in (let '((u, c), w) := v in if c then u else w)",
+     'Definition mv (x : int) : ((int * bool) * int)%type := ((x, x <? 3), x + 1).\nFixpoint ft (n : nat) (f : int -> ((int * bool) * int)%type -> ((int * bool) * int)%type) (v : ((int * bool) * int)%type) (x : int) : ((int * bool) * int)%type := match n with O => v | S m => ft m f (f x v) (x + 1) end.\n')
+addA('fx_pn_mutual', "", 'me n (mv a)',
+     "Definition mv (x : int) : ((int * bool) * int)%type := ((x, x <? 3), x + 1).\nFixpoint me (n : nat) (v : ((int * bool) * int)%type) : int := match n with O => (let '((u, c), w) := v in if c then u else w) | S m => mo m v end with mo (n : nat) (v : ((int * bool) * int)%type) : int := match n with O => 1 | S m => me m v end.\n")
+addA('fx_pn_mutres', "", "let v := mua n a in (let '((u, c), w) := v in if c then u else w)",
+     'Definition mv (x : int) : ((int * bool) * int)%type := ((x, x <? 3), x + 1).\nFixpoint mua (n : nat) (x : int) : ((int * bool) * int)%type := match n with O => ((x, x <? 3), x + 1) | S m => mub m (x + 1) end with mub (n : nat) (x : int) : ((int * bool) * int)%type := match n with O => ((x, x <? 3), x + 1) | S m => mua m (x * 2) end.\n')
+addA('fx_pn_lfix', "", "let v := mv a in let fix g (m : nat) (x : int) : int := match m with O => x + (let '((u, c), w) := v in if c then u else w) | S q => g q (x + 1) end in g n b",
+     'Definition mv (x : int) : ((int * bool) * int)%type := ((x, x <? 3), x + 1).\n')
+addA('fx_pn_closure', "", "let v := mv a in fold n 0 b (fun i acc => acc + (let '((u, c), w) := v in if c then u else w))",
+     'Definition mv (x : int) : ((int * bool) * int)%type := ((x, x <? 3), x + 1).\n')
+addA('fx_pn_fun', "", "tw (fun v => (let '((u, c), w) := v in if c then u else w)) (mv a)",
+     'Definition mv (x : int) : ((int * bool) * int)%type := ((x, x <? 3), x + 1).\nDefinition tw (f : ((int * bool) * int)%type -> int) (v : ((int * bool) * int)%type) : int := f v + 1.\n')
+addA('fx_rb_let', "", 'let v := mv a in (if b1 v then b2 v else 0)',
+     'Record rb := mkb { b1 : bool; b2 : int }.\nDefinition mv (x : int) : rb := (mkb (x <? 3) x).\n')
+addA('fx_rb_param', "", 'uv (mv a)',
+     'Record rb := mkb { b1 : bool; b2 : int }.\nDefinition mv (x : int) : rb := (mkb (x <? 3) x).\nDefinition uv (v : rb) : int := (if b1 v then b2 v else 0).\n')
+addA('fx_rb_rec', "", 'let v := fr n a in (if b1 v then b2 v else 0)',
+     'Record rb := mkb { b1 : bool; b2 : int }.\nDefinition mv (x : int) : rb := (mkb (x <? 3) x).\nFixpoint fr (n : nat) (x : int) : rb := match n with O => (mkb (x <? 3) x) | S m => fr m (x + 1) end.\n')
+addA('fx_rb_nontail', "", 'let v := fn n a in (if b1 v then b2 v else 0)',
+     'Record rb := mkb { b1 : bool; b2 : int }.\nDefinition mv (x : int) : rb := (mkb (x <? 3) x).\nFixpoint fn (n : nat) (x : int) : rb := match n with O => (mkb (x <? 3) x) | S m => let v := fn m (x + 1) in if (if b1 v then b2 v else 0) <? 5 then v else (mkb (x <? 3) x) end.\n')
+addA('fx_rb_state', "", 'fs n (mv a) b',
+     'Record rb := mkb { b1 : bool; b2 : int }.\nDefinition mv (x : int) : rb := (mkb (x <? 3) x).\nFixpoint fs (n : nat) (v : rb) (x : int) : int := match n with O => (if b1 v then b2 v else 0) + x | S m => fs m (mkb (x <? 3) x) (x + (if b1 v then b2 v else 0)) end.\n')
+addA('fx_rb_choice', "", 'let v := if a <? b then mv a else mv b in (if b1 v then b2 v else 0)',
+     'Record rb := mkb { b1 : bool; b2 : int }.\nDefinition mv (x : int) : rb := (mkb (x <? 3) x).\n')
+addA('fx_rb_writes', "", 'let v := fw n a s in (if b1 v then b2 v else 0)',
+     'Record rb := mkb { b1 : bool; b2 : int }.\nDefinition mv (x : int) : rb := (mkb (x <? 3) x).\nFixpoint fw (n : nat) (x : int) (t : mem) : rb := match n with O => (let x := rd 0 x t in (mkb (x <? 3) x)) | S m => fw m (x + 1) (upd 0 x x t) end.\n')
+addA('fx_rb_mem', "", 'rd 0 0 (fm n (mv a) s)',
+     'Record rb := mkb { b1 : bool; b2 : int }.\nDefinition mv (x : int) : rb := (mkb (x <? 3) x).\nFixpoint fm (n : nat) (v : rb) (t : mem) : mem := match n with O => t | S m => fm m v (upd 0 (if b1 v then b2 v else 0) 1 t) end.\n')
+addA('fx_rb_tmpl', "", 'let v := ft n (fun x w => if (if b1 w then b2 w else 0) <? 3 then (mkb (x <? 3) x) else w) (mv a) b in (if b1 v then b2 v else 0)',
+     'Record rb := mkb { b1 : bool; b2 : int }.\nDefinition mv (x : int) : rb := (mkb (x <? 3) x).\nFixpoint ft (n : nat) (f : int -> rb -> rb) (v : rb) (x : int) : rb := match n with O => v | S m => ft m f (f x v) (x + 1) end.\n')
+addA('fx_rb_mutual', "", 'me n (mv a)',
+     'Record rb := mkb { b1 : bool; b2 : int }.\nDefinition mv (x : int) : rb := (mkb (x <? 3) x).\nFixpoint me (n : nat) (v : rb) : int := match n with O => (if b1 v then b2 v else 0) | S m => mo m v end with mo (n : nat) (v : rb) : int := match n with O => 1 | S m => me m v end.\n')
+addA('fx_rb_mutres', "", 'let v := mua n a in (if b1 v then b2 v else 0)',
+     'Record rb := mkb { b1 : bool; b2 : int }.\nDefinition mv (x : int) : rb := (mkb (x <? 3) x).\nFixpoint mua (n : nat) (x : int) : rb := match n with O => (mkb (x <? 3) x) | S m => mub m (x + 1) end with mub (n : nat) (x : int) : rb := match n with O => (mkb (x <? 3) x) | S m => mua m (x * 2) end.\n')
+addA('fx_rb_lfix', "", 'let v := mv a in let fix g (m : nat) (x : int) : int := match m with O => x + (if b1 v then b2 v else 0) | S q => g q (x + 1) end in g n b',
+     'Record rb := mkb { b1 : bool; b2 : int }.\nDefinition mv (x : int) : rb := (mkb (x <? 3) x).\n')
+addA('fx_rb_closure', "", 'let v := mv a in fold n 0 b (fun i acc => acc + (if b1 v then b2 v else 0))',
+     'Record rb := mkb { b1 : bool; b2 : int }.\nDefinition mv (x : int) : rb := (mkb (x <? 3) x).\n')
+addA('fx_rb_fun', "", 'tw (fun v => (if b1 v then b2 v else 0)) (mv a)',
+     'Record rb := mkb { b1 : bool; b2 : int }.\nDefinition mv (x : int) : rb := (mkb (x <? 3) x).\nDefinition tw (f : rb -> int) (v : rb) : int := f v + 1.\n')
+addA('fx_rc_let', "", 'let v := mv a in (match cc v with Red => cv v | _ => 1 end)',
+     'Inductive color := Red | Green | Blue.\nRecord rc := mkc { cc : color; cv : int }.\nDefinition mv (x : int) : rc := (mkc (if x <? 0 then Red else Blue) x).\n')
+addA('fx_rc_param', "", 'uv (mv a)',
+     'Inductive color := Red | Green | Blue.\nRecord rc := mkc { cc : color; cv : int }.\nDefinition mv (x : int) : rc := (mkc (if x <? 0 then Red else Blue) x).\nDefinition uv (v : rc) : int := (match cc v with Red => cv v | _ => 1 end).\n')
+addA('fx_rc_rec', "", 'let v := fr n a in (match cc v with Red => cv v | _ => 1 end)',
+     'Inductive color := Red | Green | Blue.\nRecord rc := mkc { cc : color; cv : int }.\nDefinition mv (x : int) : rc := (mkc (if x <? 0 then Red else Blue) x).\nFixpoint fr (n : nat) (x : int) : rc := match n with O => (mkc (if x <? 0 then Red else Blue) x) | S m => fr m (x + 1) end.\n')
+addA('fx_rc_nontail', "", 'let v := fn n a in (match cc v with Red => cv v | _ => 1 end)',
+     'Inductive color := Red | Green | Blue.\nRecord rc := mkc { cc : color; cv : int }.\nDefinition mv (x : int) : rc := (mkc (if x <? 0 then Red else Blue) x).\nFixpoint fn (n : nat) (x : int) : rc := match n with O => (mkc (if x <? 0 then Red else Blue) x) | S m => let v := fn m (x + 1) in if (match cc v with Red => cv v | _ => 1 end) <? 5 then v else (mkc (if x <? 0 then Red else Blue) x) end.\n')
+addA('fx_rc_state', "", 'fs n (mv a) b',
+     'Inductive color := Red | Green | Blue.\nRecord rc := mkc { cc : color; cv : int }.\nDefinition mv (x : int) : rc := (mkc (if x <? 0 then Red else Blue) x).\nFixpoint fs (n : nat) (v : rc) (x : int) : int := match n with O => (match cc v with Red => cv v | _ => 1 end) + x | S m => fs m (mkc (if x <? 0 then Red else Blue) x) (x + (match cc v with Red => cv v | _ => 1 end)) end.\n')
+addA('fx_rc_choice', "", 'let v := if a <? b then mv a else mv b in (match cc v with Red => cv v | _ => 1 end)',
+     'Inductive color := Red | Green | Blue.\nRecord rc := mkc { cc : color; cv : int }.\nDefinition mv (x : int) : rc := (mkc (if x <? 0 then Red else Blue) x).\n')
+addA('fx_rc_writes', "", 'let v := fw n a s in (match cc v with Red => cv v | _ => 1 end)',
+     'Inductive color := Red | Green | Blue.\nRecord rc := mkc { cc : color; cv : int }.\nDefinition mv (x : int) : rc := (mkc (if x <? 0 then Red else Blue) x).\nFixpoint fw (n : nat) (x : int) (t : mem) : rc := match n with O => (let x := rd 0 x t in (mkc (if x <? 0 then Red else Blue) x)) | S m => fw m (x + 1) (upd 0 x x t) end.\n')
+addA('fx_rc_mem', "", 'rd 0 0 (fm n (mv a) s)',
+     'Inductive color := Red | Green | Blue.\nRecord rc := mkc { cc : color; cv : int }.\nDefinition mv (x : int) : rc := (mkc (if x <? 0 then Red else Blue) x).\nFixpoint fm (n : nat) (v : rc) (t : mem) : mem := match n with O => t | S m => fm m v (upd 0 (match cc v with Red => cv v | _ => 1 end) 1 t) end.\n')
+addA('fx_rc_tmpl', "", 'let v := ft n (fun x w => if (match cc w with Red => cv w | _ => 1 end) <? 3 then (mkc (if x <? 0 then Red else Blue) x) else w) (mv a) b in (match cc v with Red => cv v | _ => 1 end)',
+     'Inductive color := Red | Green | Blue.\nRecord rc := mkc { cc : color; cv : int }.\nDefinition mv (x : int) : rc := (mkc (if x <? 0 then Red else Blue) x).\nFixpoint ft (n : nat) (f : int -> rc -> rc) (v : rc) (x : int) : rc := match n with O => v | S m => ft m f (f x v) (x + 1) end.\n')
+addA('fx_rc_mutual', "", 'me n (mv a)',
+     'Inductive color := Red | Green | Blue.\nRecord rc := mkc { cc : color; cv : int }.\nDefinition mv (x : int) : rc := (mkc (if x <? 0 then Red else Blue) x).\nFixpoint me (n : nat) (v : rc) : int := match n with O => (match cc v with Red => cv v | _ => 1 end) | S m => mo m v end with mo (n : nat) (v : rc) : int := match n with O => 1 | S m => me m v end.\n')
+addA('fx_rc_mutres', "", 'let v := mua n a in (match cc v with Red => cv v | _ => 1 end)',
+     'Inductive color := Red | Green | Blue.\nRecord rc := mkc { cc : color; cv : int }.\nDefinition mv (x : int) : rc := (mkc (if x <? 0 then Red else Blue) x).\nFixpoint mua (n : nat) (x : int) : rc := match n with O => (mkc (if x <? 0 then Red else Blue) x) | S m => mub m (x + 1) end with mub (n : nat) (x : int) : rc := match n with O => (mkc (if x <? 0 then Red else Blue) x) | S m => mua m (x * 2) end.\n')
+addA('fx_rc_lfix', "", 'let v := mv a in let fix g (m : nat) (x : int) : int := match m with O => x + (match cc v with Red => cv v | _ => 1 end) | S q => g q (x + 1) end in g n b',
+     'Inductive color := Red | Green | Blue.\nRecord rc := mkc { cc : color; cv : int }.\nDefinition mv (x : int) : rc := (mkc (if x <? 0 then Red else Blue) x).\n')
+addA('fx_rc_closure', "", 'let v := mv a in fold n 0 b (fun i acc => acc + (match cc v with Red => cv v | _ => 1 end))',
+     'Inductive color := Red | Green | Blue.\nRecord rc := mkc { cc : color; cv : int }.\nDefinition mv (x : int) : rc := (mkc (if x <? 0 then Red else Blue) x).\n')
+addA('fx_rc_fun', "", 'tw (fun v => (match cc v with Red => cv v | _ => 1 end)) (mv a)',
+     'Inductive color := Red | Green | Blue.\nRecord rc := mkc { cc : color; cv : int }.\nDefinition mv (x : int) : rc := (mkc (if x <? 0 then Red else Blue) x).\nDefinition tw (f : rc -> int) (v : rc) : int := f v + 1.\n')
+addA('fx_rd_let', "", 'let v := mv a in (match sa v with Circle r => r + sb v | Rect w h => w * h | Dot => 1 end)',
+     'Inductive shape := Circle (r : int) | Rect (w h : int) | Dot.\nRecord rs := mks { sa : shape; sb : int }.\nDefinition mv (x : int) : rs := (mks (if x <? 0 then Circle x else Rect x x) x).\n')
+addA('fx_rd_param', "", 'uv (mv a)',
+     'Inductive shape := Circle (r : int) | Rect (w h : int) | Dot.\nRecord rs := mks { sa : shape; sb : int }.\nDefinition mv (x : int) : rs := (mks (if x <? 0 then Circle x else Rect x x) x).\nDefinition uv (v : rs) : int := (match sa v with Circle r => r + sb v | Rect w h => w * h | Dot => 1 end).\n')
+addA('fx_rd_rec', "", 'let v := fr n a in (match sa v with Circle r => r + sb v | Rect w h => w * h | Dot => 1 end)',
+     'Inductive shape := Circle (r : int) | Rect (w h : int) | Dot.\nRecord rs := mks { sa : shape; sb : int }.\nDefinition mv (x : int) : rs := (mks (if x <? 0 then Circle x else Rect x x) x).\nFixpoint fr (n : nat) (x : int) : rs := match n with O => (mks (if x <? 0 then Circle x else Rect x x) x) | S m => fr m (x + 1) end.\n')
+addA('fx_rd_nontail', "", 'let v := fn n a in (match sa v with Circle r => r + sb v | Rect w h => w * h | Dot => 1 end)',
+     'Inductive shape := Circle (r : int) | Rect (w h : int) | Dot.\nRecord rs := mks { sa : shape; sb : int }.\nDefinition mv (x : int) : rs := (mks (if x <? 0 then Circle x else Rect x x) x).\nFixpoint fn (n : nat) (x : int) : rs := match n with O => (mks (if x <? 0 then Circle x else Rect x x) x) | S m => let v := fn m (x + 1) in if (match sa v with Circle r => r + sb v | Rect w h => w * h | Dot => 1 end) <? 5 then v else (mks (if x <? 0 then Circle x else Rect x x) x) end.\n')
+addA('fx_rd_state', "", 'fs n (mv a) b',
+     'Inductive shape := Circle (r : int) | Rect (w h : int) | Dot.\nRecord rs := mks { sa : shape; sb : int }.\nDefinition mv (x : int) : rs := (mks (if x <? 0 then Circle x else Rect x x) x).\nFixpoint fs (n : nat) (v : rs) (x : int) : int := match n with O => (match sa v with Circle r => r + sb v | Rect w h => w * h | Dot => 1 end) + x | S m => fs m (mks (if x <? 0 then Circle x else Rect x x) x) (x + (match sa v with Circle r => r + sb v | Rect w h => w * h | Dot => 1 end)) end.\n')
+addA('fx_rd_choice', "", 'let v := if a <? b then mv a else mv b in (match sa v with Circle r => r + sb v | Rect w h => w * h | Dot => 1 end)',
+     'Inductive shape := Circle (r : int) | Rect (w h : int) | Dot.\nRecord rs := mks { sa : shape; sb : int }.\nDefinition mv (x : int) : rs := (mks (if x <? 0 then Circle x else Rect x x) x).\n')
+addA('fx_rd_writes', "", 'let v := fw n a s in (match sa v with Circle r => r + sb v | Rect w h => w * h | Dot => 1 end)',
+     'Inductive shape := Circle (r : int) | Rect (w h : int) | Dot.\nRecord rs := mks { sa : shape; sb : int }.\nDefinition mv (x : int) : rs := (mks (if x <? 0 then Circle x else Rect x x) x).\nFixpoint fw (n : nat) (x : int) (t : mem) : rs := match n with O => (let x := rd 0 x t in (mks (if x <? 0 then Circle x else Rect x x) x)) | S m => fw m (x + 1) (upd 0 x x t) end.\n')
+addA('fx_rd_mem', "", 'rd 0 0 (fm n (mv a) s)',
+     'Inductive shape := Circle (r : int) | Rect (w h : int) | Dot.\nRecord rs := mks { sa : shape; sb : int }.\nDefinition mv (x : int) : rs := (mks (if x <? 0 then Circle x else Rect x x) x).\nFixpoint fm (n : nat) (v : rs) (t : mem) : mem := match n with O => t | S m => fm m v (upd 0 (match sa v with Circle r => r + sb v | Rect w h => w * h | Dot => 1 end) 1 t) end.\n')
+addA('fx_rd_tmpl', "", 'let v := ft n (fun x w => if (match sa w with Circle r => r + sb w | Rect w h => w * h | Dot => 1 end) <? 3 then (mks (if x <? 0 then Circle x else Rect x x) x) else w) (mv a) b in (match sa v with Circle r => r + sb v | Rect w h => w * h | Dot => 1 end)',
+     'Inductive shape := Circle (r : int) | Rect (w h : int) | Dot.\nRecord rs := mks { sa : shape; sb : int }.\nDefinition mv (x : int) : rs := (mks (if x <? 0 then Circle x else Rect x x) x).\nFixpoint ft (n : nat) (f : int -> rs -> rs) (v : rs) (x : int) : rs := match n with O => v | S m => ft m f (f x v) (x + 1) end.\n')
+addA('fx_rd_mutual', "", 'me n (mv a)',
+     'Inductive shape := Circle (r : int) | Rect (w h : int) | Dot.\nRecord rs := mks { sa : shape; sb : int }.\nDefinition mv (x : int) : rs := (mks (if x <? 0 then Circle x else Rect x x) x).\nFixpoint me (n : nat) (v : rs) : int := match n with O => (match sa v with Circle r => r + sb v | Rect w h => w * h | Dot => 1 end) | S m => mo m v end with mo (n : nat) (v : rs) : int := match n with O => 1 | S m => me m v end.\n')
+addA('fx_rd_mutres', "", 'let v := mua n a in (match sa v with Circle r => r + sb v | Rect w h => w * h | Dot => 1 end)',
+     'Inductive shape := Circle (r : int) | Rect (w h : int) | Dot.\nRecord rs := mks { sa : shape; sb : int }.\nDefinition mv (x : int) : rs := (mks (if x <? 0 then Circle x else Rect x x) x).\nFixpoint mua (n : nat) (x : int) : rs := match n with O => (mks (if x <? 0 then Circle x else Rect x x) x) | S m => mub m (x + 1) end with mub (n : nat) (x : int) : rs := match n with O => (mks (if x <? 0 then Circle x else Rect x x) x) | S m => mua m (x * 2) end.\n')
+addA('fx_rd_lfix', "", 'let v := mv a in let fix g (m : nat) (x : int) : int := match m with O => x + (match sa v with Circle r => r + sb v | Rect w h => w * h | Dot => 1 end) | S q => g q (x + 1) end in g n b',
+     'Inductive shape := Circle (r : int) | Rect (w h : int) | Dot.\nRecord rs := mks { sa : shape; sb : int }.\nDefinition mv (x : int) : rs := (mks (if x <? 0 then Circle x else Rect x x) x).\n')
+addA('fx_rd_closure', "", 'let v := mv a in fold n 0 b (fun i acc => acc + (match sa v with Circle r => r + sb v | Rect w h => w * h | Dot => 1 end))',
+     'Inductive shape := Circle (r : int) | Rect (w h : int) | Dot.\nRecord rs := mks { sa : shape; sb : int }.\nDefinition mv (x : int) : rs := (mks (if x <? 0 then Circle x else Rect x x) x).\n')
+addA('fx_rd_fun', "", 'tw (fun v => (match sa v with Circle r => r + sb v | Rect w h => w * h | Dot => 1 end)) (mv a)',
+     'Inductive shape := Circle (r : int) | Rect (w h : int) | Dot.\nRecord rs := mks { sa : shape; sb : int }.\nDefinition mv (x : int) : rs := (mks (if x <? 0 then Circle x else Rect x x) x).\nDefinition tw (f : rs -> int) (v : rs) : int := f v + 1.\n')
+addA('fx_ob_let', "", 'let v := mv a in (match v with Some c => if c then 1 else 2 | None => 3 end)',
+     'Definition mv (x : int) : (option bool) := (if x <? 0 then None else Some (x <? 5)).\n')
+addA('fx_ob_param', "", 'uv (mv a)',
+     'Definition mv (x : int) : (option bool) := (if x <? 0 then None else Some (x <? 5)).\nDefinition uv (v : (option bool)) : int := (match v with Some c => if c then 1 else 2 | None => 3 end).\n')
+addA('fx_ob_rec', "", 'let v := fr n a in (match v with Some c => if c then 1 else 2 | None => 3 end)',
+     'Definition mv (x : int) : (option bool) := (if x <? 0 then None else Some (x <? 5)).\nFixpoint fr (n : nat) (x : int) : (option bool) := match n with O => (if x <? 0 then None else Some (x <? 5)) | S m => fr m (x + 1) end.\n')
+addA('fx_ob_nontail', "", 'let v := fn n a in (match v with Some c => if c then 1 else 2 | None => 3 end)',
+     'Definition mv (x : int) : (option bool) := (if x <? 0 then None else Some (x <? 5)).\nFixpoint fn (n : nat) (x : int) : (option bool) := match n with O => (if x <? 0 then None else Some (x <? 5)) | S m => let v := fn m (x + 1) in if (match v with Some c => if c then 1 else 2 | None => 3 end) <? 5 then v else (if x <? 0 then None else Some (x <? 5)) end.\n')
+addA('fx_ob_state', "", 'fs n (mv a) b',
+     'Definition mv (x : int) : (option bool) := (if x <? 0 then None else Some (x <? 5)).\nFixpoint fs (n : nat) (v : (option bool)) (x : int) : int := match n with O => (match v with Some c => if c then 1 else 2 | None => 3 end) + x | S m => fs m (if x <? 0 then None else Some (x <? 5)) (x + (match v with Some c => if c then 1 else 2 | None => 3 end)) end.\n')
+addA('fx_ob_choice', "", 'let v := if a <? b then mv a else mv b in (match v with Some c => if c then 1 else 2 | None => 3 end)',
+     'Definition mv (x : int) : (option bool) := (if x <? 0 then None else Some (x <? 5)).\n')
+addA('fx_ob_writes', "", 'let v := fw n a s in (match v with Some c => if c then 1 else 2 | None => 3 end)',
+     'Definition mv (x : int) : (option bool) := (if x <? 0 then None else Some (x <? 5)).\nFixpoint fw (n : nat) (x : int) (t : mem) : (option bool) := match n with O => (let x := rd 0 x t in (if x <? 0 then None else Some (x <? 5))) | S m => fw m (x + 1) (upd 0 x x t) end.\n')
+addA('fx_ob_mem', "", 'rd 0 0 (fm n (mv a) s)',
+     'Definition mv (x : int) : (option bool) := (if x <? 0 then None else Some (x <? 5)).\nFixpoint fm (n : nat) (v : (option bool)) (t : mem) : mem := match n with O => t | S m => fm m v (upd 0 (match v with Some c => if c then 1 else 2 | None => 3 end) 1 t) end.\n')
+addA('fx_ob_tmpl', "", 'let v := ft n (fun x w => if (match w with Some c => if c then 1 else 2 | None => 3 end) <? 3 then (if x <? 0 then None else Some (x <? 5)) else w) (mv a) b in (match v with Some c => if c then 1 else 2 | None => 3 end)',
+     'Definition mv (x : int) : (option bool) := (if x <? 0 then None else Some (x <? 5)).\nFixpoint ft (n : nat) (f : int -> (option bool) -> (option bool)) (v : (option bool)) (x : int) : (option bool) := match n with O => v | S m => ft m f (f x v) (x + 1) end.\n')
+addA('fx_ob_mutual', "", 'me n (mv a)',
+     'Definition mv (x : int) : (option bool) := (if x <? 0 then None else Some (x <? 5)).\nFixpoint me (n : nat) (v : (option bool)) : int := match n with O => (match v with Some c => if c then 1 else 2 | None => 3 end) | S m => mo m v end with mo (n : nat) (v : (option bool)) : int := match n with O => 1 | S m => me m v end.\n')
+addA('fx_ob_mutres', "", 'let v := mua n a in (match v with Some c => if c then 1 else 2 | None => 3 end)',
+     'Definition mv (x : int) : (option bool) := (if x <? 0 then None else Some (x <? 5)).\nFixpoint mua (n : nat) (x : int) : (option bool) := match n with O => (if x <? 0 then None else Some (x <? 5)) | S m => mub m (x + 1) end with mub (n : nat) (x : int) : (option bool) := match n with O => (if x <? 0 then None else Some (x <? 5)) | S m => mua m (x * 2) end.\n')
+addA('fx_ob_lfix', "", 'let v := mv a in let fix g (m : nat) (x : int) : int := match m with O => x + (match v with Some c => if c then 1 else 2 | None => 3 end) | S q => g q (x + 1) end in g n b',
+     'Definition mv (x : int) : (option bool) := (if x <? 0 then None else Some (x <? 5)).\n')
+addA('fx_ob_closure', "", 'let v := mv a in fold n 0 b (fun i acc => acc + (match v with Some c => if c then 1 else 2 | None => 3 end))',
+     'Definition mv (x : int) : (option bool) := (if x <? 0 then None else Some (x <? 5)).\n')
+addA('fx_ob_fun', "", 'tw (fun v => (match v with Some c => if c then 1 else 2 | None => 3 end)) (mv a)',
+     'Definition mv (x : int) : (option bool) := (if x <? 0 then None else Some (x <? 5)).\nDefinition tw (f : (option bool) -> int) (v : (option bool)) : int := f v + 1.\n')
+addA('fx_op_let', "", 'let v := mv a in (match v with Some (u, w) => u + w | None => 3 end)',
+     'Definition mv (x : int) : (option (int * int)) := (if x <? 0 then None else Some (x, x + 1)).\n')
+addA('fx_op_param', "", 'uv (mv a)',
+     'Definition mv (x : int) : (option (int * int)) := (if x <? 0 then None else Some (x, x + 1)).\nDefinition uv (v : (option (int * int))) : int := (match v with Some (u, w) => u + w | None => 3 end).\n')
+addA('fx_op_rec', "", 'let v := fr n a in (match v with Some (u, w) => u + w | None => 3 end)',
+     'Definition mv (x : int) : (option (int * int)) := (if x <? 0 then None else Some (x, x + 1)).\nFixpoint fr (n : nat) (x : int) : (option (int * int)) := match n with O => (if x <? 0 then None else Some (x, x + 1)) | S m => fr m (x + 1) end.\n')
+addA('fx_op_nontail', "", 'let v := fn n a in (match v with Some (u, w) => u + w | None => 3 end)',
+     'Definition mv (x : int) : (option (int * int)) := (if x <? 0 then None else Some (x, x + 1)).\nFixpoint fn (n : nat) (x : int) : (option (int * int)) := match n with O => (if x <? 0 then None else Some (x, x + 1)) | S m => let v := fn m (x + 1) in if (match v with Some (u, w) => u + w | None => 3 end) <? 5 then v else (if x <? 0 then None else Some (x, x + 1)) end.\n')
+addA('fx_op_state', "", 'fs n (mv a) b',
+     'Definition mv (x : int) : (option (int * int)) := (if x <? 0 then None else Some (x, x + 1)).\nFixpoint fs (n : nat) (v : (option (int * int))) (x : int) : int := match n with O => (match v with Some (u, w) => u + w | None => 3 end) + x | S m => fs m (if x <? 0 then None else Some (x, x + 1)) (x + (match v with Some (u, w) => u + w | None => 3 end)) end.\n')
+addA('fx_op_choice', "", 'let v := if a <? b then mv a else mv b in (match v with Some (u, w) => u + w | None => 3 end)',
+     'Definition mv (x : int) : (option (int * int)) := (if x <? 0 then None else Some (x, x + 1)).\n')
+addA('fx_op_writes', "", 'let v := fw n a s in (match v with Some (u, w) => u + w | None => 3 end)',
+     'Definition mv (x : int) : (option (int * int)) := (if x <? 0 then None else Some (x, x + 1)).\nFixpoint fw (n : nat) (x : int) (t : mem) : (option (int * int)) := match n with O => (let x := rd 0 x t in (if x <? 0 then None else Some (x, x + 1))) | S m => fw m (x + 1) (upd 0 x x t) end.\n')
+addA('fx_op_mem', "", 'rd 0 0 (fm n (mv a) s)',
+     'Definition mv (x : int) : (option (int * int)) := (if x <? 0 then None else Some (x, x + 1)).\nFixpoint fm (n : nat) (v : (option (int * int))) (t : mem) : mem := match n with O => t | S m => fm m v (upd 0 (match v with Some (u, w) => u + w | None => 3 end) 1 t) end.\n')
+addA('fx_op_tmpl', "", 'let v := ft n (fun x w => if (match w with Some (u, w) => u + w | None => 3 end) <? 3 then (if x <? 0 then None else Some (x, x + 1)) else w) (mv a) b in (match v with Some (u, w) => u + w | None => 3 end)',
+     'Definition mv (x : int) : (option (int * int)) := (if x <? 0 then None else Some (x, x + 1)).\nFixpoint ft (n : nat) (f : int -> (option (int * int)) -> (option (int * int))) (v : (option (int * int))) (x : int) : (option (int * int)) := match n with O => v | S m => ft m f (f x v) (x + 1) end.\n')
+addA('fx_op_mutual', "", 'me n (mv a)',
+     'Definition mv (x : int) : (option (int * int)) := (if x <? 0 then None else Some (x, x + 1)).\nFixpoint me (n : nat) (v : (option (int * int))) : int := match n with O => (match v with Some (u, w) => u + w | None => 3 end) | S m => mo m v end with mo (n : nat) (v : (option (int * int))) : int := match n with O => 1 | S m => me m v end.\n')
+addA('fx_op_mutres', "", 'let v := mua n a in (match v with Some (u, w) => u + w | None => 3 end)',
+     'Definition mv (x : int) : (option (int * int)) := (if x <? 0 then None else Some (x, x + 1)).\nFixpoint mua (n : nat) (x : int) : (option (int * int)) := match n with O => (if x <? 0 then None else Some (x, x + 1)) | S m => mub m (x + 1) end with mub (n : nat) (x : int) : (option (int * int)) := match n with O => (if x <? 0 then None else Some (x, x + 1)) | S m => mua m (x * 2) end.\n')
+addA('fx_op_lfix', "", 'let v := mv a in let fix g (m : nat) (x : int) : int := match m with O => x + (match v with Some (u, w) => u + w | None => 3 end) | S q => g q (x + 1) end in g n b',
+     'Definition mv (x : int) : (option (int * int)) := (if x <? 0 then None else Some (x, x + 1)).\n')
+addA('fx_op_closure', "", 'let v := mv a in fold n 0 b (fun i acc => acc + (match v with Some (u, w) => u + w | None => 3 end))',
+     'Definition mv (x : int) : (option (int * int)) := (if x <? 0 then None else Some (x, x + 1)).\n')
+addA('fx_op_fun', "", 'tw (fun v => (match v with Some (u, w) => u + w | None => 3 end)) (mv a)',
+     'Definition mv (x : int) : (option (int * int)) := (if x <? 0 then None else Some (x, x + 1)).\nDefinition tw (f : (option (int * int)) -> int) (v : (option (int * int))) : int := f v + 1.\n')
+addA('fx_or_let', "", 'let v := mv a in (match v with Some r => f1 r + f3 r | None => 3 end)',
+     'Definition mv (x : int) : (option r3) := (if x <? 0 then None else Some (mk3 x x x)).\n')
+addA('fx_or_param', "", 'uv (mv a)',
+     'Definition mv (x : int) : (option r3) := (if x <? 0 then None else Some (mk3 x x x)).\nDefinition uv (v : (option r3)) : int := (match v with Some r => f1 r + f3 r | None => 3 end).\n')
+addA('fx_or_rec', "", 'let v := fr n a in (match v with Some r => f1 r + f3 r | None => 3 end)',
+     'Definition mv (x : int) : (option r3) := (if x <? 0 then None else Some (mk3 x x x)).\nFixpoint fr (n : nat) (x : int) : (option r3) := match n with O => (if x <? 0 then None else Some (mk3 x x x)) | S m => fr m (x + 1) end.\n')
+addA('fx_or_nontail', "", 'let v := fn n a in (match v with Some r => f1 r + f3 r | None => 3 end)',
+     'Definition mv (x : int) : (option r3) := (if x <? 0 then None else Some (mk3 x x x)).\nFixpoint fn (n : nat) (x : int) : (option r3) := match n with O => (if x <? 0 then None else Some (mk3 x x x)) | S m => let v := fn m (x + 1) in if (match v with Some r => f1 r + f3 r | None => 3 end) <? 5 then v else (if x <? 0 then None else Some (mk3 x x x)) end.\n')
+addA('fx_or_state', "", 'fs n (mv a) b',
+     'Definition mv (x : int) : (option r3) := (if x <? 0 then None else Some (mk3 x x x)).\nFixpoint fs (n : nat) (v : (option r3)) (x : int) : int := match n with O => (match v with Some r => f1 r + f3 r | None => 3 end) + x | S m => fs m (if x <? 0 then None else Some (mk3 x x x)) (x + (match v with Some r => f1 r + f3 r | None => 3 end)) end.\n')
+addA('fx_or_choice', "", 'let v := if a <? b then mv a else mv b in (match v with Some r => f1 r + f3 r | None => 3 end)',
+     'Definition mv (x : int) : (option r3) := (if x <? 0 then None else Some (mk3 x x x)).\n')
+addA('fx_or_writes', "", 'let v := fw n a s in (match v with Some r => f1 r + f3 r | None => 3 end)',
+     'Definition mv (x : int) : (option r3) := (if x <? 0 then None else Some (mk3 x x x)).\nFixpoint fw (n : nat) (x : int) (t : mem) : (option r3) := match n with O => (let x := rd 0 x t in (if x <? 0 then None else Some (mk3 x x x))) | S m => fw m (x + 1) (upd 0 x x t) end.\n')
+addA('fx_or_mem', "", 'rd 0 0 (fm n (mv a) s)',
+     'Definition mv (x : int) : (option r3) := (if x <? 0 then None else Some (mk3 x x x)).\nFixpoint fm (n : nat) (v : (option r3)) (t : mem) : mem := match n with O => t | S m => fm m v (upd 0 (match v with Some r => f1 r + f3 r | None => 3 end) 1 t) end.\n')
+addA('fx_or_tmpl', "", 'let v := ft n (fun x w => if (match w with Some r => f1 r + f3 r | None => 3 end) <? 3 then (if x <? 0 then None else Some (mk3 x x x)) else w) (mv a) b in (match v with Some r => f1 r + f3 r | None => 3 end)',
+     'Definition mv (x : int) : (option r3) := (if x <? 0 then None else Some (mk3 x x x)).\nFixpoint ft (n : nat) (f : int -> (option r3) -> (option r3)) (v : (option r3)) (x : int) : (option r3) := match n with O => v | S m => ft m f (f x v) (x + 1) end.\n')
+addA('fx_or_mutual', "", 'me n (mv a)',
+     'Definition mv (x : int) : (option r3) := (if x <? 0 then None else Some (mk3 x x x)).\nFixpoint me (n : nat) (v : (option r3)) : int := match n with O => (match v with Some r => f1 r + f3 r | None => 3 end) | S m => mo m v end with mo (n : nat) (v : (option r3)) : int := match n with O => 1 | S m => me m v end.\n')
+addA('fx_or_mutres', "", 'let v := mua n a in (match v with Some r => f1 r + f3 r | None => 3 end)',
+     'Definition mv (x : int) : (option r3) := (if x <? 0 then None else Some (mk3 x x x)).\nFixpoint mua (n : nat) (x : int) : (option r3) := match n with O => (if x <? 0 then None else Some (mk3 x x x)) | S m => mub m (x + 1) end with mub (n : nat) (x : int) : (option r3) := match n with O => (if x <? 0 then None else Some (mk3 x x x)) | S m => mua m (x * 2) end.\n')
+addA('fx_or_lfix', "", 'let v := mv a in let fix g (m : nat) (x : int) : int := match m with O => x + (match v with Some r => f1 r + f3 r | None => 3 end) | S q => g q (x + 1) end in g n b',
+     'Definition mv (x : int) : (option r3) := (if x <? 0 then None else Some (mk3 x x x)).\n')
+addA('fx_or_closure', "", 'let v := mv a in fold n 0 b (fun i acc => acc + (match v with Some r => f1 r + f3 r | None => 3 end))',
+     'Definition mv (x : int) : (option r3) := (if x <? 0 then None else Some (mk3 x x x)).\n')
+addA('fx_or_fun', "", 'tw (fun v => (match v with Some r => f1 r + f3 r | None => 3 end)) (mv a)',
+     'Definition mv (x : int) : (option r3) := (if x <? 0 then None else Some (mk3 x x x)).\nDefinition tw (f : (option r3) -> int) (v : (option r3)) : int := f v + 1.\n')
+addA('fx_oo_let', "", 'let v := mv a in (match v with Some (Some w) => w | Some None => 2 | None => 3 end)',
+     'Definition mv (x : int) : (option (option int)) := (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)).\n')
+addA('fx_oo_param', "", 'uv (mv a)',
+     'Definition mv (x : int) : (option (option int)) := (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)).\nDefinition uv (v : (option (option int))) : int := (match v with Some (Some w) => w | Some None => 2 | None => 3 end).\n')
+addA('fx_oo_rec', "", 'let v := fr n a in (match v with Some (Some w) => w | Some None => 2 | None => 3 end)',
+     'Definition mv (x : int) : (option (option int)) := (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)).\nFixpoint fr (n : nat) (x : int) : (option (option int)) := match n with O => (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)) | S m => fr m (x + 1) end.\n')
+addA('fx_oo_nontail', "", 'let v := fn n a in (match v with Some (Some w) => w | Some None => 2 | None => 3 end)',
+     'Definition mv (x : int) : (option (option int)) := (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)).\nFixpoint fn (n : nat) (x : int) : (option (option int)) := match n with O => (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)) | S m => let v := fn m (x + 1) in if (match v with Some (Some w) => w | Some None => 2 | None => 3 end) <? 5 then v else (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)) end.\n')
+addA('fx_oo_state', "", 'fs n (mv a) b',
+     'Definition mv (x : int) : (option (option int)) := (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)).\nFixpoint fs (n : nat) (v : (option (option int))) (x : int) : int := match n with O => (match v with Some (Some w) => w | Some None => 2 | None => 3 end) + x | S m => fs m (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)) (x + (match v with Some (Some w) => w | Some None => 2 | None => 3 end)) end.\n')
+addA('fx_oo_choice', "", 'let v := if a <? b then mv a else mv b in (match v with Some (Some w) => w | Some None => 2 | None => 3 end)',
+     'Definition mv (x : int) : (option (option int)) := (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)).\n')
+addA('fx_oo_writes', "", 'let v := fw n a s in (match v with Some (Some w) => w | Some None => 2 | None => 3 end)',
+     'Definition mv (x : int) : (option (option int)) := (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)).\nFixpoint fw (n : nat) (x : int) (t : mem) : (option (option int)) := match n with O => (let x := rd 0 x t in (if x <? 0 then None else if x <? 5 then Some None else Some (Some x))) | S m => fw m (x + 1) (upd 0 x x t) end.\n')
+addA('fx_oo_mem', "", 'rd 0 0 (fm n (mv a) s)',
+     'Definition mv (x : int) : (option (option int)) := (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)).\nFixpoint fm (n : nat) (v : (option (option int))) (t : mem) : mem := match n with O => t | S m => fm m v (upd 0 (match v with Some (Some w) => w | Some None => 2 | None => 3 end) 1 t) end.\n')
+addA('fx_oo_tmpl', "", 'let v := ft n (fun x w => if (match w with Some (Some w) => w | Some None => 2 | None => 3 end) <? 3 then (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)) else w) (mv a) b in (match v with Some (Some w) => w | Some None => 2 | None => 3 end)',
+     'Definition mv (x : int) : (option (option int)) := (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)).\nFixpoint ft (n : nat) (f : int -> (option (option int)) -> (option (option int))) (v : (option (option int))) (x : int) : (option (option int)) := match n with O => v | S m => ft m f (f x v) (x + 1) end.\n')
+addA('fx_oo_mutual', "", 'me n (mv a)',
+     'Definition mv (x : int) : (option (option int)) := (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)).\nFixpoint me (n : nat) (v : (option (option int))) : int := match n with O => (match v with Some (Some w) => w | Some None => 2 | None => 3 end) | S m => mo m v end with mo (n : nat) (v : (option (option int))) : int := match n with O => 1 | S m => me m v end.\n')
+addA('fx_oo_mutres', "", 'let v := mua n a in (match v with Some (Some w) => w | Some None => 2 | None => 3 end)',
+     'Definition mv (x : int) : (option (option int)) := (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)).\nFixpoint mua (n : nat) (x : int) : (option (option int)) := match n with O => (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)) | S m => mub m (x + 1) end with mub (n : nat) (x : int) : (option (option int)) := match n with O => (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)) | S m => mua m (x * 2) end.\n')
+addA('fx_oo_lfix', "", 'let v := mv a in let fix g (m : nat) (x : int) : int := match m with O => x + (match v with Some (Some w) => w | Some None => 2 | None => 3 end) | S q => g q (x + 1) end in g n b',
+     'Definition mv (x : int) : (option (option int)) := (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)).\n')
+addA('fx_oo_closure', "", 'let v := mv a in fold n 0 b (fun i acc => acc + (match v with Some (Some w) => w | Some None => 2 | None => 3 end))',
+     'Definition mv (x : int) : (option (option int)) := (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)).\n')
+addA('fx_oo_fun', "", 'tw (fun v => (match v with Some (Some w) => w | Some None => 2 | None => 3 end)) (mv a)',
+     'Definition mv (x : int) : (option (option int)) := (if x <? 0 then None else if x <? 5 then Some None else Some (Some x)).\nDefinition tw (f : (option (option int)) -> int) (v : (option (option int))) : int := f v + 1.\n')
+addA('fx_sp_let', "", 'let v := mv a in (match v with inl (u, w) => u + w | inr w => w end)',
+     'Definition mv (x : int) : ((int * int) + int)%type := (if x <? 0 then inl (x, x) else inr x).\n')
+addA('fx_sp_param', "", 'uv (mv a)',
+     'Definition mv (x : int) : ((int * int) + int)%type := (if x <? 0 then inl (x, x) else inr x).\nDefinition uv (v : ((int * int) + int)%type) : int := (match v with inl (u, w) => u + w | inr w => w end).\n')
+addA('fx_sp_rec', "", 'let v := fr n a in (match v with inl (u, w) => u + w | inr w => w end)',
+     'Definition mv (x : int) : ((int * int) + int)%type := (if x <? 0 then inl (x, x) else inr x).\nFixpoint fr (n : nat) (x : int) : ((int * int) + int)%type := match n with O => (if x <? 0 then inl (x, x) else inr x) | S m => fr m (x + 1) end.\n')
+addA('fx_sp_nontail', "", 'let v := fn n a in (match v with inl (u, w) => u + w | inr w => w end)',
+     'Definition mv (x : int) : ((int * int) + int)%type := (if x <? 0 then inl (x, x) else inr x).\nFixpoint fn (n : nat) (x : int) : ((int * int) + int)%type := match n with O => (if x <? 0 then inl (x, x) else inr x) | S m => let v := fn m (x + 1) in if (match v with inl (u, w) => u + w | inr w => w end) <? 5 then v else (if x <? 0 then inl (x, x) else inr x) end.\n')
+addA('fx_sp_state', "", 'fs n (mv a) b',
+     'Definition mv (x : int) : ((int * int) + int)%type := (if x <? 0 then inl (x, x) else inr x).\nFixpoint fs (n : nat) (v : ((int * int) + int)%type) (x : int) : int := match n with O => (match v with inl (u, w) => u + w | inr w => w end) + x | S m => fs m (if x <? 0 then inl (x, x) else inr x) (x + (match v with inl (u, w) => u + w | inr w => w end)) end.\n')
+addA('fx_sp_choice', "", 'let v := if a <? b then mv a else mv b in (match v with inl (u, w) => u + w | inr w => w end)',
+     'Definition mv (x : int) : ((int * int) + int)%type := (if x <? 0 then inl (x, x) else inr x).\n')
+addA('fx_sp_writes', "", 'let v := fw n a s in (match v with inl (u, w) => u + w | inr w => w end)',
+     'Definition mv (x : int) : ((int * int) + int)%type := (if x <? 0 then inl (x, x) else inr x).\nFixpoint fw (n : nat) (x : int) (t : mem) : ((int * int) + int)%type := match n with O => (let x := rd 0 x t in (if x <? 0 then inl (x, x) else inr x)) | S m => fw m (x + 1) (upd 0 x x t) end.\n')
+addA('fx_sp_mem', "", 'rd 0 0 (fm n (mv a) s)',
+     'Definition mv (x : int) : ((int * int) + int)%type := (if x <? 0 then inl (x, x) else inr x).\nFixpoint fm (n : nat) (v : ((int * int) + int)%type) (t : mem) : mem := match n with O => t | S m => fm m v (upd 0 (match v with inl (u, w) => u + w | inr w => w end) 1 t) end.\n')
+addA('fx_sp_tmpl', "", 'let v := ft n (fun x w => if (match w with inl (u, w) => u + w | inr w => w end) <? 3 then (if x <? 0 then inl (x, x) else inr x) else w) (mv a) b in (match v with inl (u, w) => u + w | inr w => w end)',
+     'Definition mv (x : int) : ((int * int) + int)%type := (if x <? 0 then inl (x, x) else inr x).\nFixpoint ft (n : nat) (f : int -> ((int * int) + int)%type -> ((int * int) + int)%type) (v : ((int * int) + int)%type) (x : int) : ((int * int) + int)%type := match n with O => v | S m => ft m f (f x v) (x + 1) end.\n')
+addA('fx_sp_mutual', "", 'me n (mv a)',
+     'Definition mv (x : int) : ((int * int) + int)%type := (if x <? 0 then inl (x, x) else inr x).\nFixpoint me (n : nat) (v : ((int * int) + int)%type) : int := match n with O => (match v with inl (u, w) => u + w | inr w => w end) | S m => mo m v end with mo (n : nat) (v : ((int * int) + int)%type) : int := match n with O => 1 | S m => me m v end.\n')
+addA('fx_sp_mutres', "", 'let v := mua n a in (match v with inl (u, w) => u + w | inr w => w end)',
+     'Definition mv (x : int) : ((int * int) + int)%type := (if x <? 0 then inl (x, x) else inr x).\nFixpoint mua (n : nat) (x : int) : ((int * int) + int)%type := match n with O => (if x <? 0 then inl (x, x) else inr x) | S m => mub m (x + 1) end with mub (n : nat) (x : int) : ((int * int) + int)%type := match n with O => (if x <? 0 then inl (x, x) else inr x) | S m => mua m (x * 2) end.\n')
+addA('fx_sp_lfix', "", 'let v := mv a in let fix g (m : nat) (x : int) : int := match m with O => x + (match v with inl (u, w) => u + w | inr w => w end) | S q => g q (x + 1) end in g n b',
+     'Definition mv (x : int) : ((int * int) + int)%type := (if x <? 0 then inl (x, x) else inr x).\n')
+addA('fx_sp_closure', "", 'let v := mv a in fold n 0 b (fun i acc => acc + (match v with inl (u, w) => u + w | inr w => w end))',
+     'Definition mv (x : int) : ((int * int) + int)%type := (if x <? 0 then inl (x, x) else inr x).\n')
+addA('fx_sp_fun', "", 'tw (fun v => (match v with inl (u, w) => u + w | inr w => w end)) (mv a)',
+     'Definition mv (x : int) : ((int * int) + int)%type := (if x <? 0 then inl (x, x) else inr x).\nDefinition tw (f : ((int * int) + int)%type -> int) (v : ((int * int) + int)%type) : int := f v + 1.\n')
+addA('fx_sb_let', "", 'let v := mv a in (match v with inl w => w | inr c => if c then 1 else 2 end)',
+     'Definition mv (x : int) : (int + bool)%type := (if x <? 0 then inl x else inr (x <? 5)).\n')
+addA('fx_sb_param', "", 'uv (mv a)',
+     'Definition mv (x : int) : (int + bool)%type := (if x <? 0 then inl x else inr (x <? 5)).\nDefinition uv (v : (int + bool)%type) : int := (match v with inl w => w | inr c => if c then 1 else 2 end).\n')
+addA('fx_sb_rec', "", 'let v := fr n a in (match v with inl w => w | inr c => if c then 1 else 2 end)',
+     'Definition mv (x : int) : (int + bool)%type := (if x <? 0 then inl x else inr (x <? 5)).\nFixpoint fr (n : nat) (x : int) : (int + bool)%type := match n with O => (if x <? 0 then inl x else inr (x <? 5)) | S m => fr m (x + 1) end.\n')
+addA('fx_sb_nontail', "", 'let v := fn n a in (match v with inl w => w | inr c => if c then 1 else 2 end)',
+     'Definition mv (x : int) : (int + bool)%type := (if x <? 0 then inl x else inr (x <? 5)).\nFixpoint fn (n : nat) (x : int) : (int + bool)%type := match n with O => (if x <? 0 then inl x else inr (x <? 5)) | S m => let v := fn m (x + 1) in if (match v with inl w => w | inr c => if c then 1 else 2 end) <? 5 then v else (if x <? 0 then inl x else inr (x <? 5)) end.\n')
+addA('fx_sb_state', "", 'fs n (mv a) b',
+     'Definition mv (x : int) : (int + bool)%type := (if x <? 0 then inl x else inr (x <? 5)).\nFixpoint fs (n : nat) (v : (int + bool)%type) (x : int) : int := match n with O => (match v with inl w => w | inr c => if c then 1 else 2 end) + x | S m => fs m (if x <? 0 then inl x else inr (x <? 5)) (x + (match v with inl w => w | inr c => if c then 1 else 2 end)) end.\n')
+addA('fx_sb_choice', "", 'let v := if a <? b then mv a else mv b in (match v with inl w => w | inr c => if c then 1 else 2 end)',
+     'Definition mv (x : int) : (int + bool)%type := (if x <? 0 then inl x else inr (x <? 5)).\n')
+addA('fx_sb_writes', "", 'let v := fw n a s in (match v with inl w => w | inr c => if c then 1 else 2 end)',
+     'Definition mv (x : int) : (int + bool)%type := (if x <? 0 then inl x else inr (x <? 5)).\nFixpoint fw (n : nat) (x : int) (t : mem) : (int + bool)%type := match n with O => (let x := rd 0 x t in (if x <? 0 then inl x else inr (x <? 5))) | S m => fw m (x + 1) (upd 0 x x t) end.\n')
+addA('fx_sb_mem', "", 'rd 0 0 (fm n (mv a) s)',
+     'Definition mv (x : int) : (int + bool)%type := (if x <? 0 then inl x else inr (x <? 5)).\nFixpoint fm (n : nat) (v : (int + bool)%type) (t : mem) : mem := match n with O => t | S m => fm m v (upd 0 (match v with inl w => w | inr c => if c then 1 else 2 end) 1 t) end.\n')
+addA('fx_sb_tmpl', "", 'let v := ft n (fun x w => if (match w with inl w => w | inr c => if c then 1 else 2 end) <? 3 then (if x <? 0 then inl x else inr (x <? 5)) else w) (mv a) b in (match v with inl w => w | inr c => if c then 1 else 2 end)',
+     'Definition mv (x : int) : (int + bool)%type := (if x <? 0 then inl x else inr (x <? 5)).\nFixpoint ft (n : nat) (f : int -> (int + bool)%type -> (int + bool)%type) (v : (int + bool)%type) (x : int) : (int + bool)%type := match n with O => v | S m => ft m f (f x v) (x + 1) end.\n')
+addA('fx_sb_mutual', "", 'me n (mv a)',
+     'Definition mv (x : int) : (int + bool)%type := (if x <? 0 then inl x else inr (x <? 5)).\nFixpoint me (n : nat) (v : (int + bool)%type) : int := match n with O => (match v with inl w => w | inr c => if c then 1 else 2 end) | S m => mo m v end with mo (n : nat) (v : (int + bool)%type) : int := match n with O => 1 | S m => me m v end.\n')
+addA('fx_sb_mutres', "", 'let v := mua n a in (match v with inl w => w | inr c => if c then 1 else 2 end)',
+     'Definition mv (x : int) : (int + bool)%type := (if x <? 0 then inl x else inr (x <? 5)).\nFixpoint mua (n : nat) (x : int) : (int + bool)%type := match n with O => (if x <? 0 then inl x else inr (x <? 5)) | S m => mub m (x + 1) end with mub (n : nat) (x : int) : (int + bool)%type := match n with O => (if x <? 0 then inl x else inr (x <? 5)) | S m => mua m (x * 2) end.\n')
+addA('fx_sb_lfix', "", 'let v := mv a in let fix g (m : nat) (x : int) : int := match m with O => x + (match v with inl w => w | inr c => if c then 1 else 2 end) | S q => g q (x + 1) end in g n b',
+     'Definition mv (x : int) : (int + bool)%type := (if x <? 0 then inl x else inr (x <? 5)).\n')
+addA('fx_sb_closure', "", 'let v := mv a in fold n 0 b (fun i acc => acc + (match v with inl w => w | inr c => if c then 1 else 2 end))',
+     'Definition mv (x : int) : (int + bool)%type := (if x <? 0 then inl x else inr (x <? 5)).\n')
+addA('fx_sb_fun', "", 'tw (fun v => (match v with inl w => w | inr c => if c then 1 else 2 end)) (mv a)',
+     'Definition mv (x : int) : (int + bool)%type := (if x <? 0 then inl x else inr (x <? 5)).\nDefinition tw (f : (int + bool)%type -> int) (v : (int + bool)%type) : int := f v + 1.\n')
+addA('fx_po_let', "", 'let v := mv a in (match v with (Some u, w) => u + w | (None, w) => w end)',
+     'Definition mv (x : int) : (option int * int)%type := (if x <? 0 then None else Some x, x).\n')
+addA('fx_po_param', "", 'uv (mv a)',
+     'Definition mv (x : int) : (option int * int)%type := (if x <? 0 then None else Some x, x).\nDefinition uv (v : (option int * int)%type) : int := (match v with (Some u, w) => u + w | (None, w) => w end).\n')
+addA('fx_po_rec', "", 'let v := fr n a in (match v with (Some u, w) => u + w | (None, w) => w end)',
+     'Definition mv (x : int) : (option int * int)%type := (if x <? 0 then None else Some x, x).\nFixpoint fr (n : nat) (x : int) : (option int * int)%type := match n with O => (if x <? 0 then None else Some x, x) | S m => fr m (x + 1) end.\n')
+addA('fx_po_nontail', "", 'let v := fn n a in (match v with (Some u, w) => u + w | (None, w) => w end)',
+     'Definition mv (x : int) : (option int * int)%type := (if x <? 0 then None else Some x, x).\nFixpoint fn (n : nat) (x : int) : (option int * int)%type := match n with O => (if x <? 0 then None else Some x, x) | S m => let v := fn m (x + 1) in if (match v with (Some u, w) => u + w | (None, w) => w end) <? 5 then v else (if x <? 0 then None else Some x, x) end.\n')
+addA('fx_po_state', "", 'fs n (mv a) b',
+     'Definition mv (x : int) : (option int * int)%type := (if x <? 0 then None else Some x, x).\nFixpoint fs (n : nat) (v : (option int * int)%type) (x : int) : int := match n with O => (match v with (Some u, w) => u + w | (None, w) => w end) + x | S m => fs m (if x <? 0 then None else Some x, x) (x + (match v with (Some u, w) => u + w | (None, w) => w end)) end.\n')
+addA('fx_po_choice', "", 'let v := if a <? b then mv a else mv b in (match v with (Some u, w) => u + w | (None, w) => w end)',
+     'Definition mv (x : int) : (option int * int)%type := (if x <? 0 then None else Some x, x).\n')
+addA('fx_po_writes', "", 'let v := fw n a s in (match v with (Some u, w) => u + w | (None, w) => w end)',
+     'Definition mv (x : int) : (option int * int)%type := (if x <? 0 then None else Some x, x).\nFixpoint fw (n : nat) (x : int) (t : mem) : (option int * int)%type := match n with O => (let x := rd 0 x t in (if x <? 0 then None else Some x, x)) | S m => fw m (x + 1) (upd 0 x x t) end.\n')
+addA('fx_po_mem', "", 'rd 0 0 (fm n (mv a) s)',
+     'Definition mv (x : int) : (option int * int)%type := (if x <? 0 then None else Some x, x).\nFixpoint fm (n : nat) (v : (option int * int)%type) (t : mem) : mem := match n with O => t | S m => fm m v (upd 0 (match v with (Some u, w) => u + w | (None, w) => w end) 1 t) end.\n')
+addA('fx_po_tmpl', "", 'let v := ft n (fun x w => if (match w with (Some u, w) => u + w | (None, w) => w end) <? 3 then (if x <? 0 then None else Some x, x) else w) (mv a) b in (match v with (Some u, w) => u + w | (None, w) => w end)',
+     'Definition mv (x : int) : (option int * int)%type := (if x <? 0 then None else Some x, x).\nFixpoint ft (n : nat) (f : int -> (option int * int)%type -> (option int * int)%type) (v : (option int * int)%type) (x : int) : (option int * int)%type := match n with O => v | S m => ft m f (f x v) (x + 1) end.\n')
+addA('fx_po_mutual', "", 'me n (mv a)',
+     'Definition mv (x : int) : (option int * int)%type := (if x <? 0 then None else Some x, x).\nFixpoint me (n : nat) (v : (option int * int)%type) : int := match n with O => (match v with (Some u, w) => u + w | (None, w) => w end) | S m => mo m v end with mo (n : nat) (v : (option int * int)%type) : int := match n with O => 1 | S m => me m v end.\n')
+addA('fx_po_mutres', "", 'let v := mua n a in (match v with (Some u, w) => u + w | (None, w) => w end)',
+     'Definition mv (x : int) : (option int * int)%type := (if x <? 0 then None else Some x, x).\nFixpoint mua (n : nat) (x : int) : (option int * int)%type := match n with O => (if x <? 0 then None else Some x, x) | S m => mub m (x + 1) end with mub (n : nat) (x : int) : (option int * int)%type := match n with O => (if x <? 0 then None else Some x, x) | S m => mua m (x * 2) end.\n')
+addA('fx_po_lfix', "", 'let v := mv a in let fix g (m : nat) (x : int) : int := match m with O => x + (match v with (Some u, w) => u + w | (None, w) => w end) | S q => g q (x + 1) end in g n b',
+     'Definition mv (x : int) : (option int * int)%type := (if x <? 0 then None else Some x, x).\n')
+addA('fx_po_closure', "", 'let v := mv a in fold n 0 b (fun i acc => acc + (match v with (Some u, w) => u + w | (None, w) => w end))',
+     'Definition mv (x : int) : (option int * int)%type := (if x <? 0 then None else Some x, x).\n')
+addA('fx_po_fun', "", 'tw (fun v => (match v with (Some u, w) => u + w | (None, w) => w end)) (mv a)',
+     'Definition mv (x : int) : (option int * int)%type := (if x <? 0 then None else Some x, x).\nDefinition tw (f : (option int * int)%type -> int) (v : (option int * int)%type) : int := f v + 1.\n')
+addA('fx_ub_let', "", 'let v := mv a in (snd v + 1)',
+     'Definition mv (x : int) : (unit * int)%type := (tt, x).\n')
+addA('fx_ub_param', "", 'uv (mv a)',
+     'Definition mv (x : int) : (unit * int)%type := (tt, x).\nDefinition uv (v : (unit * int)%type) : int := (snd v + 1).\n')
+addA('fx_ub_rec', "", 'let v := fr n a in (snd v + 1)',
+     'Definition mv (x : int) : (unit * int)%type := (tt, x).\nFixpoint fr (n : nat) (x : int) : (unit * int)%type := match n with O => (tt, x) | S m => fr m (x + 1) end.\n')
+addA('fx_ub_nontail', "", 'let v := fn n a in (snd v + 1)',
+     'Definition mv (x : int) : (unit * int)%type := (tt, x).\nFixpoint fn (n : nat) (x : int) : (unit * int)%type := match n with O => (tt, x) | S m => let v := fn m (x + 1) in if (snd v + 1) <? 5 then v else (tt, x) end.\n')
+addA('fx_ub_state', "", 'fs n (mv a) b',
+     'Definition mv (x : int) : (unit * int)%type := (tt, x).\nFixpoint fs (n : nat) (v : (unit * int)%type) (x : int) : int := match n with O => (snd v + 1) + x | S m => fs m (tt, x) (x + (snd v + 1)) end.\n')
+addA('fx_ub_choice', "", 'let v := if a <? b then mv a else mv b in (snd v + 1)',
+     'Definition mv (x : int) : (unit * int)%type := (tt, x).\n')
+addA('fx_ub_writes', "", 'let v := fw n a s in (snd v + 1)',
+     'Definition mv (x : int) : (unit * int)%type := (tt, x).\nFixpoint fw (n : nat) (x : int) (t : mem) : (unit * int)%type := match n with O => (let x := rd 0 x t in (tt, x)) | S m => fw m (x + 1) (upd 0 x x t) end.\n')
+addA('fx_ub_mem', "", 'rd 0 0 (fm n (mv a) s)',
+     'Definition mv (x : int) : (unit * int)%type := (tt, x).\nFixpoint fm (n : nat) (v : (unit * int)%type) (t : mem) : mem := match n with O => t | S m => fm m v (upd 0 (snd v + 1) 1 t) end.\n')
+addA('fx_ub_tmpl', "", 'let v := ft n (fun x w => if (snd w + 1) <? 3 then (tt, x) else w) (mv a) b in (snd v + 1)',
+     'Definition mv (x : int) : (unit * int)%type := (tt, x).\nFixpoint ft (n : nat) (f : int -> (unit * int)%type -> (unit * int)%type) (v : (unit * int)%type) (x : int) : (unit * int)%type := match n with O => v | S m => ft m f (f x v) (x + 1) end.\n')
+addA('fx_ub_mutual', "", 'me n (mv a)',
+     'Definition mv (x : int) : (unit * int)%type := (tt, x).\nFixpoint me (n : nat) (v : (unit * int)%type) : int := match n with O => (snd v + 1) | S m => mo m v end with mo (n : nat) (v : (unit * int)%type) : int := match n with O => 1 | S m => me m v end.\n')
+addA('fx_ub_mutres', "", 'let v := mua n a in (snd v + 1)',
+     'Definition mv (x : int) : (unit * int)%type := (tt, x).\nFixpoint mua (n : nat) (x : int) : (unit * int)%type := match n with O => (tt, x) | S m => mub m (x + 1) end with mub (n : nat) (x : int) : (unit * int)%type := match n with O => (tt, x) | S m => mua m (x * 2) end.\n')
+addA('fx_ub_lfix', "", 'let v := mv a in let fix g (m : nat) (x : int) : int := match m with O => x + (snd v + 1) | S q => g q (x + 1) end in g n b',
+     'Definition mv (x : int) : (unit * int)%type := (tt, x).\n')
+addA('fx_ub_closure', "", 'let v := mv a in fold n 0 b (fun i acc => acc + (snd v + 1))',
+     'Definition mv (x : int) : (unit * int)%type := (tt, x).\n')
+addA('fx_ub_fun', "", 'tw (fun v => (snd v + 1)) (mv a)',
+     'Definition mv (x : int) : (unit * int)%type := (tt, x).\nDefinition tw (f : (unit * int)%type -> int) (v : (unit * int)%type) : int := f v + 1.\n')
+addA('fx_dd_let', "", 'let v := mv a in (match v with DA (u, w) => u + w | DB c n => if c then n else 1 | DC => 2 end)',
+     'Inductive dp := DA (p : int * int) | DB (c : bool) (n : int) | DC.\nDefinition mv (x : int) : dp := (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC).\n')
+addA('fx_dd_param', "", 'uv (mv a)',
+     'Inductive dp := DA (p : int * int) | DB (c : bool) (n : int) | DC.\nDefinition mv (x : int) : dp := (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC).\nDefinition uv (v : dp) : int := (match v with DA (u, w) => u + w | DB c n => if c then n else 1 | DC => 2 end).\n')
+addA('fx_dd_rec', "", 'let v := fr n a in (match v with DA (u, w) => u + w | DB c n => if c then n else 1 | DC => 2 end)',
+     'Inductive dp := DA (p : int * int) | DB (c : bool) (n : int) | DC.\nDefinition mv (x : int) : dp := (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC).\nFixpoint fr (n : nat) (x : int) : dp := match n with O => (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC) | S m => fr m (x + 1) end.\n')
+addA('fx_dd_nontail', "", 'let v := fn n a in (match v with DA (u, w) => u + w | DB c n => if c then n else 1 | DC => 2 end)',
+     'Inductive dp := DA (p : int * int) | DB (c : bool) (n : int) | DC.\nDefinition mv (x : int) : dp := (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC).\nFixpoint fn (n : nat) (x : int) : dp := match n with O => (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC) | S m => let v := fn m (x + 1) in if (match v with DA (u, w) => u + w | DB c n => if c then n else 1 | DC => 2 end) <? 5 then v else (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC) end.\n')
+addA('fx_dd_state', "", 'fs n (mv a) b',
+     'Inductive dp := DA (p : int * int) | DB (c : bool) (n : int) | DC.\nDefinition mv (x : int) : dp := (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC).\nFixpoint fs (n : nat) (v : dp) (x : int) : int := match n with O => (match v with DA (u, w) => u + w | DB c n => if c then n else 1 | DC => 2 end) + x | S m => fs m (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC) (x + (match v with DA (u, w) => u + w | DB c n => if c then n else 1 | DC => 2 end)) end.\n')
+addA('fx_dd_choice', "", 'let v := if a <? b then mv a else mv b in (match v with DA (u, w) => u + w | DB c n => if c then n else 1 | DC => 2 end)',
+     'Inductive dp := DA (p : int * int) | DB (c : bool) (n : int) | DC.\nDefinition mv (x : int) : dp := (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC).\n')
+addA('fx_dd_writes', "", 'let v := fw n a s in (match v with DA (u, w) => u + w | DB c n => if c then n else 1 | DC => 2 end)',
+     'Inductive dp := DA (p : int * int) | DB (c : bool) (n : int) | DC.\nDefinition mv (x : int) : dp := (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC).\nFixpoint fw (n : nat) (x : int) (t : mem) : dp := match n with O => (let x := rd 0 x t in (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC)) | S m => fw m (x + 1) (upd 0 x x t) end.\n')
+addA('fx_dd_mem', "", 'rd 0 0 (fm n (mv a) s)',
+     'Inductive dp := DA (p : int * int) | DB (c : bool) (n : int) | DC.\nDefinition mv (x : int) : dp := (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC).\nFixpoint fm (n : nat) (v : dp) (t : mem) : mem := match n with O => t | S m => fm m v (upd 0 (match v with DA (u, w) => u + w | DB c n => if c then n else 1 | DC => 2 end) 1 t) end.\n')
+addA('fx_dd_tmpl', "", 'let v := ft n (fun x w => if (match w with DA (u, w) => u + w | DB c n => if c then n else 1 | DC => 2 end) <? 3 then (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC) else w) (mv a) b in (match v with DA (u, w) => u + w | DB c n => if c then n else 1 | DC => 2 end)',
+     'Inductive dp := DA (p : int * int) | DB (c : bool) (n : int) | DC.\nDefinition mv (x : int) : dp := (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC).\nFixpoint ft (n : nat) (f : int -> dp -> dp) (v : dp) (x : int) : dp := match n with O => v | S m => ft m f (f x v) (x + 1) end.\n')
+addA('fx_dd_mutual', "", 'me n (mv a)',
+     'Inductive dp := DA (p : int * int) | DB (c : bool) (n : int) | DC.\nDefinition mv (x : int) : dp := (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC).\nFixpoint me (n : nat) (v : dp) : int := match n with O => (match v with DA (u, w) => u + w | DB c n => if c then n else 1 | DC => 2 end) | S m => mo m v end with mo (n : nat) (v : dp) : int := match n with O => 1 | S m => me m v end.\n')
+addA('fx_dd_mutres', "", 'let v := mua n a in (match v with DA (u, w) => u + w | DB c n => if c then n else 1 | DC => 2 end)',
+     'Inductive dp := DA (p : int * int) | DB (c : bool) (n : int) | DC.\nDefinition mv (x : int) : dp := (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC).\nFixpoint mua (n : nat) (x : int) : dp := match n with O => (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC) | S m => mub m (x + 1) end with mub (n : nat) (x : int) : dp := match n with O => (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC) | S m => mua m (x * 2) end.\n')
+addA('fx_dd_lfix', "", 'let v := mv a in let fix g (m : nat) (x : int) : int := match m with O => x + (match v with DA (u, w) => u + w | DB c n => if c then n else 1 | DC => 2 end) | S q => g q (x + 1) end in g n b',
+     'Inductive dp := DA (p : int * int) | DB (c : bool) (n : int) | DC.\nDefinition mv (x : int) : dp := (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC).\n')
+addA('fx_dd_closure', "", 'let v := mv a in fold n 0 b (fun i acc => acc + (match v with DA (u, w) => u + w | DB c n => if c then n else 1 | DC => 2 end))',
+     'Inductive dp := DA (p : int * int) | DB (c : bool) (n : int) | DC.\nDefinition mv (x : int) : dp := (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC).\n')
+addA('fx_dd_fun', "", 'tw (fun v => (match v with DA (u, w) => u + w | DB c n => if c then n else 1 | DC => 2 end)) (mv a)',
+     'Inductive dp := DA (p : int * int) | DB (c : bool) (n : int) | DC.\nDefinition mv (x : int) : dp := (if x <? 0 then DA (x, x) else if x <? 5 then DB (x <? 1) x else DC).\nDefinition tw (f : dp -> int) (v : dp) : int := f v + 1.\n')
+addA("fx_bool_arg", "", "gb (snd (mv a))", "Definition mv (x : int) : (int * bool)%type := (x, x <? 3).\nDefinition gb (c : bool) : int := if c then 1 else 2.\n")
+addA("fx_bool_and", "", "if snd (mv a) && (a <? b) then a else b", "Definition mv (x : int) : (int * bool)%type := (x, x <? 3).\n")
+addA("fx_bool_let", "", "let c := snd (mv a) in if negb c then a else b", "Definition mv (x : int) : (int * bool)%type := (x, x <? 3).\n")
+addA("fx_bool_copy", "", "let p := mv a in let q := (fst p + 1, snd p) in if snd q then fst q else b", "Definition mv (x : int) : (int * bool)%type := (x, x <? 3).\n")
+addA("fx_bool_val", "", "if snd (fb (a <? b) a) then a else b", "Definition fb (c : bool) (x : int) : (int * bool)%type := (x, c).\n")
+addA("fx_bool_lit", "", "if snd (fb a) then a else b", "Definition fb (x : int) : (int * bool)%type := (x, true).\n")
+addA("fx_nested3", "", "match mv a with (Some (u, c), w) => if c then u else w | (None, w) => w end", "Definition mv (x : int) : (option (int * bool) * int)%type := (if x <? 0 then None else Some (x, x <? 3), x).\n")
+addA("fx_nested3_rec", "", "match fr n a with (Some (u, c), w) => if c then u else w | (None, w) => w end", "Fixpoint fr (n : nat) (x : int) : (option (int * bool) * int)%type := match n with O => (None, x) | S m => if x <? 3 then (Some (x, x <? 1), x) else fr m (x - 1) end.\n")
+addA("fx_opt_mem", "", "match fo a s with Some t => rd 0 0 t | None => b end", "Definition fo (x : int) (t : mem) : option mem := if x <? 0 then None else Some (upd 0 0 x t).\n")
+addA("fx_opt_mem_rec", "", "match fo n a s with Some t => rd 0 0 t | None => b end", "Fixpoint fo (n : nat) (x : int) (t : mem) : option mem := match n with O => Some t | S m => if x <? 0 then None else fo m (x - 1) (upd 0 0 x t) end.\n")
+addA("par_mutual_three", "", "h n a", "Fixpoint h (n : nat) (x : int) : int := match n with O => x | S m => if t1 m x then fst (t2 m x) else x + 1 end\nwith t1 (n : nat) (x : int) : bool := match n with O => x <? 3 | S m => h m x <? 5 end\nwith t2 (n : nat) (x : int) : int * int := match n with O => (x, x) | S m => (h m (x + 1), x) end.\n")
+addA("fx_nat_pair", "", "let (k, v) := fp n a in match k with O => v | S _ => b end", "Fixpoint fp (m : nat) (x : int) : nat * int := match m with O => (O, x) | S q => let (k, v) := fp q (x + 1) in (k, v + 1) end.\n")
+addA("fx_nat_field", "", "match nc (fk a) with O => a | S _ => nv (fk a) end", "Record rn := mkn { nc : nat; nv : int }.\nDefinition fk (x : int) : rn := mkn 3 x.\n")
+addA("fx_nat_opt", "", "match fq n with Some _ => a | None => b end", "Definition fq (m : nat) : option nat := match m with O => None | S q => Some q end.\n")
 # counters: Nat.min, Nat.max, Nat.sub, Nat.div2 in more places (step 66)
 addA("c_min_arg", "", "ff (Nat.min n 3) a",
      "Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n")

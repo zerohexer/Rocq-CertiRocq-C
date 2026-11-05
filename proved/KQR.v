@@ -47,11 +47,19 @@ Class RecTypes := { RT : nat -> Type; RO : forall i, rops (RT i); Rd : forall i,
      its type), each in their order; [RJ i] the types of its record fields *)
   RS : forall i (P : Type), RT i -> (list i63 -> list (sigT RT) -> P) -> P;
   RB : forall i, list i63 -> list (sigT RT) -> RT i;
-  RJ : nat -> list nat }.
+  RJ : nat -> list nat;
+  (* (step 67) a boolean as a field: type [i] is [bool] when [RBI i], a boolean as a value of it and back; [RNC i]: the numbers of a
+     value of type [i] are not free (a boolean, a data type among its fields), so it is not built from numbers alone; [RM i c]:
+     which of data type [i]'s record slots constructor [c] holds a field in *)
+  RBl : forall i, bool -> RT i;
+  RTb : forall i, RT i -> bool;
+  RBI : nat -> bool;
+  RNC : nat -> bool;
+  RM : nat -> nat -> list bool }.
 (** the record types of a program without records holding records: the one-level match and constructor are [relim] and [rmk] *)
 Definition mkrecs (Tr : nat -> Type) (Ro : forall i, rops (Tr i)) (Dr : forall i, Tr i) : RecTypes :=
   {| RT := Tr; RO := Ro; Rd := Dr; RS := fun i P x k => relim (Ro i) x (fun l => k l []); RB := fun i l _ => rmk (Ro i) l;
-     RJ := fun _ => [] |}.
+     RJ := fun _ => []; RBl := fun i _ => Dr i; RTb := fun _ _ => false; RBI := fun _ => false; RNC := fun _ => false; RM := fun _ _ => [] |}.
 (** a list in a constructor's form (step 28): for a record ([rtg = None]), any; for a data type held as its tag and its fields
     ([rtg = Some ws]: constructor [c] carries [nth c ws] numbers), the tag a constructor's number and the fields after its own 0 *)
 Fixpoint zeros_from (w : nat) (l : list i63) : bool :=
@@ -67,14 +75,20 @@ Definition canon (g : option (list nat)) (l : list i63) : bool :=
                | [] => false
                end
   end.
+(** (step 67) a data type's record slots a constructor holds no field in: the value every other constructor leaves there *)
+Fixpoint rs_own `{RecTypes} (m : list bool) (rs : list (sigT RT)) : Prop :=
+  match m, rs with
+  | own :: m', r :: rs' => (own = false -> projT2 r = Rd (projT1 r)) /\ rs_own m' rs'
+  | _, _ => True
+  end.
 (** what the proof needs of them: the match gives the fields to its continuation, there are [rn] of them, and the constructor
     on [rn] numbers in a constructor's form has those as its fields; for each program, proof terms by a dependent match *)
 Class RecLaws `{RecTypes} : Prop := {
   rl_nat : forall i (x : RT i) (P : Type) (k : list i63 -> P), relim (RO i) x k = k (relim (RO i) x (fun l => l));
   rl_len : forall i (x : RT i), length (relim (RO i) x (fun l => l)) = rn (RO i);
-  rl_mk : forall i l, rtg (RO i) = None -> length l = rn (RO i) -> relim (RO i) (rmk (RO i) l) (fun l => l) = l;
+  rl_mk : forall i l, rtg (RO i) = None -> length l = rn (RO i) -> RNC i = false -> relim (RO i) (rmk (RO i) l) (fun l => l) = l;
   rl_mk_tag : forall i ws c rest, rtg (RO i) = Some ws -> (c < length ws)%nat -> length rest = Nat.pred (rn (RO i)) ->
-    zeros_from (nth c ws O) rest = true -> relim (RO i) (rmk (RO i) (ofn c :: rest)) (fun l => l) = ofn c :: rest;
+    zeros_from (nth c ws O) rest = true -> RNC i = false -> relim (RO i) (rmk (RO i) (ofn c :: rest)) (fun l => l) = ofn c :: rest;
   (* the one-level match gives its fields to its continuation; the number fields, then the record fields' numbers, are the
      record's numbers; the record fields are of the types [RJ]; the one-level constructor on such fields has them as its numbers *)
   rs_nat : forall i (x : RT i) (P : Type) (k : list i63 -> list (sigT RT) -> P),
@@ -85,7 +99,15 @@ Class RecLaws `{RecTypes} : Prop := {
   rs_kinds : forall i (x : RT i), map (@projT1 _ _) (snd (RS i _ x (fun l rs => (l, rs)))) = RJ i;
   rb_mk : forall i l rs, rtg (RO i) = None -> map (@projT1 _ _) rs = RJ i ->
     (length l + fold_right (fun r a => rn (RO (projT1 r)) + a) O rs)%nat = rn (RO i) ->
-    relim (RO i) (RB i l rs) (fun l => l) = l ++ concat (map (fun r => relim (RO (projT1 r)) (projT2 r) (fun l => l)) rs) }.
+    relim (RO i) (RB i l rs) (fun l => l) = l ++ concat (map (fun r => relim (RO (projT1 r)) (projT2 r) (fun l => l)) rs);
+  (* (step 67) the one-level constructor of a data type: its tag, its number slots, its record slots, those the constructor holds no
+     field in at their value of no field; a boolean as a value has itself as its one number, a value of type bool its boolean *)
+  rb_tag : forall i ws c rest rs, rtg (RO i) = Some ws -> (c < length ws)%nat -> map (@projT1 _ _) rs = RJ i ->
+    (length (ofn c :: rest) + fold_right (fun r a => rn (RO (projT1 r)) + a) O rs)%nat = rn (RO i) ->
+    zeros_from (nth c ws O) rest = true -> rs_own (RM i c) rs ->
+    relim (RO i) (RB i (ofn c :: rest) rs) (fun l => l) = ofn c :: rest ++ concat (map (fun r => relim (RO (projT1 r)) (projT2 r) (fun l => l)) rs);
+  rb_b : forall i b, RBI i = true -> relim (RO i) (RBl i b) (fun l => l) = [b2i b];
+  rt_b : forall i x, RBI i = true -> relim (RO i) x (fun l => l) = [b2i (RTb i x)] }.
 (** the laws of a program without records holding records: those of its matches and constructors *)
 Lemma laws_of {Tr : nat -> Type} {Ro : forall i, rops (Tr i)} {Dr : forall i, Tr i} :
   (forall i (x : Tr i) (P : Type) (k : list i63 -> P), relim (Ro i) x k = k (relim (Ro i) x (fun l => l))) ->
@@ -95,11 +117,16 @@ Lemma laws_of {Tr : nat -> Type} {Ro : forall i, rops (Tr i)} {Dr : forall i, Tr
     zeros_from (nth c ws O) rest = true -> relim (Ro i) (rmk (Ro i) (ofn c :: rest)) (fun l => l) = ofn c :: rest) ->
   @RecLaws (mkrecs Tr Ro Dr).
 Proof.
-  intros H1 H2 H3 H4. split; cbn [RT RO RS RB RJ mkrecs]; [exact H1 | exact H2 | exact H3 | exact H4 | | | |].
+  intros H1 H2 H3 H4. split; cbn [RT RO RS RB RJ RBl RTb RBI RNC RM mkrecs];
+    [exact H1 | exact H2 | intros i l E L _; exact (H3 i l E L) | intros i ws c rest E Lc Lr Hz _; exact (H4 i ws c rest E Lc Lr Hz) | | | | | | | ].
   - intros i x P k. rewrite (H1 i x _ (fun l => k l [])), (H1 i x _ (fun l => (l, []))). reflexivity.
   - intros i x. rewrite (H1 i x _ (fun l => (l, []))). cbn. apply app_nil_r.
   - intros i x. rewrite (H1 i x _ (fun l => (l, []))). reflexivity.
   - intros i l rs G Hk Hl. destruct rs as [|r rs]; [|discriminate Hk]. cbn in Hl |- *. rewrite app_nil_r. apply H3; [exact G | lia].
+  - intros i ws c rest rs G Lc Hk Hl Hz _. destruct rs as [|r rs]; [|discriminate Hk]. cbn in Hl |- *. rewrite app_nil_r.
+    apply (H4 i ws c rest G Lc); [lia | exact Hz].
+  - intros i b E; discriminate E.
+  - intros i x E; discriminate E.
 Qed.
 
 Section Recs.
@@ -211,6 +238,7 @@ with sbool : Type :=
 | BxLetR (r : srec) (x : sbool)      (* let w := r in x, w a record: RVar 0 in x *)
 | BxMatchR (r : srec) (x : sbool)    (* let '(a, b, ..) := r in x: r's fields the numbers 0 .. in x, the last one first *)
 | BxSplitR (ri : nat) (r : srec) (x : sbool)   (* r, of type ri, taken apart one level (step 43) *)
+| BOfRec (r : srec)                  (* a value of a record type that is bool: its boolean (step 67) *)
 with srec : Type :=                  (* a record *)
 | RVar (i : nat)                     (* the i-th record variable *)
 | RMk (ri : nat) (es : sexps)        (* the constructor of record type ri on these numbers *)
@@ -226,7 +254,9 @@ with srec : Type :=                  (* a record *)
 | RLetC (c : scnt) (x : srec)        (* let w := c in x, w a counter: CVar 0 in x *)
 | RMatchCnt (ri : nat) (c : nat) (x y : srec)    (* match on counter variable c, records of type ri: x at 0, y otherwise *)
 | RSplitR (ri rj : nat) (x y : srec)   (* x, of type rj, taken apart one level in y, of type ri (step 43) *)
-| RMkR (ri : nat) (ns rs : sexps).     (* the one-level constructor of record type ri on these numbers and records (step 43) *)
+| RMkR (ri : nat) (ns rs : sexps)      (* the one-level constructor of record type ri on these numbers and records (step 43) *)
+| RDflt (ri : nat)                     (* the value of type ri a data type's record slot holds where its constructor has no field (step 67) *)
+| RBoolV (ri : nat) (b : sbool).       (* a boolean as a value of the record type ri that is bool (step 67) *)
 
 Scheme sexp_mut := Induction for sexp Sort Prop
 with sexps_mut := Induction for sexps Sort Prop
@@ -638,6 +668,7 @@ with denote_b (cs : list callee) (rec : list nat -> list val -> mem -> i63) (cen
   | BxLetR r x => let w := denote_r cs rec cenv benv renv env s r in denote_b cs rec cenv benv (w :: renv) env s x
   | BxMatchR r x => rmatch (denote_r cs rec cenv benv renv env s r) (fun l => denote_b cs rec cenv benv renv (rev l ++ env) s x)
   | BxSplitR sj r x => rsplit (denote_r cs rec cenv benv renv env s r) (fun l rs => denote_b cs rec cenv benv (rev rs ++ renv) (rev l ++ env) s x)
+  | BOfRec r => match denote_r cs rec cenv benv renv env s r with VRec ri x => RTb ri x | _ => false end
   end
 with denote_r (cs : list callee) (rec : list nat -> list val -> mem -> i63) (cenv : list nat) (benv : list bool) (renv : list val)
   (env : list i63) (s : mem) (x : srec) {struct x} : val :=
@@ -670,6 +701,8 @@ with denote_r (cs : list callee) (rec : list nat -> list val -> mem -> i63) (cen
   | RSplitR ri _ x y => VRec ri (rsplit (denote_r cs rec cenv benv renv env s x)
                                         (fun l rs => to_rt ri (denote_r cs rec cenv benv (rev rs ++ renv) (rev l ++ env) s y)))
   | RMkR ri ns rs => VRec ri (RB ri (vnums (denote_es cs rec cenv benv renv env s ns)) (vrecs_t (denote_es cs rec cenv benv renv env s rs)))
+  | RDflt ri => VRec ri (Rd ri)
+  | RBoolV ri b => VRec ri (RBl ri (denote_b cs rec cenv benv renv env s b))
   end.
 
 Definition dpair : list nat -> list val -> mem -> (i63 * mem)%type := fun _ _ s => (0%uint63, s).
@@ -1333,7 +1366,7 @@ with specb (b : sbool) : bool :=
   | BAnd x y | BOr x y => specb x && specb y
   | BNot x => specb x
   | BIfCmp _ _ _ _ _ | BMatchCnt _ _ _ | BCall _ _ _ | BCmpC _ _ _ | BxIfB _ _ _ | BxLet _ _ | BxLetB _ _ | BxLetC _ _
-  | BxLetR _ _ | BxMatchR _ _ | BxSplitR _ _ _ => false
+  | BxLetR _ _ | BxMatchR _ _ | BxSplitR _ _ _ | BOfRec _ => false
   end.
 Fixpoint nrd (e : sexp) : nat :=
   match e with
@@ -1361,7 +1394,7 @@ Fixpoint rtype (rk : list nat) (x : srec) : nat :=
   | RMk ri _ | RCall ri _ _ _ | RW64 ri _ _ _ => ri
   | RLet _ x => rtype rk x
   | RLetR y x => rtype (rtype rk y :: rk) x
-  | RIf ri _ _ _ _ _ | RMatchR ri _ _ | RIfB ri _ _ _ | RMatchCnt ri _ _ _ | RSplitR ri _ _ _ | RMkR ri _ _ => ri
+  | RIf ri _ _ _ _ _ | RMatchR ri _ _ | RIfB ri _ _ _ | RMatchCnt ri _ _ _ | RSplitR ri _ _ _ | RMkR ri _ _ | RDflt ri | RBoolV ri _ => ri
   | RLetB _ x | RLetC _ x => rtype rk x
   end.
 Fixpoint kinds_s (rk : list nat) (es : sexps) : list kind :=
@@ -1590,6 +1623,7 @@ with ccond (b : sbool) (cenv benv : list atom) (renv : list (list atom)) (env : 
   | BxLetR r x => crec r cenv benv renv env nxt (fun As n1 => ccond x cenv benv (As :: renv) env n1 KT KF)
   | BxMatchR r x => crec r cenv benv renv env nxt (fun As n1 => ccond x cenv benv renv (rev As ++ env) n1 KT KF)
   | BxSplitR sj r x => crec r cenv benv renv env nxt (fun As n1 => ccond x cenv benv (rev (rsl sj As) ++ renv) (rev (firstn (rnn sj) As) ++ env) n1 KT KF)
+  | BOfRec r => crec r cenv benv renv env nxt (fun As n1 => Eif Ceq (nth 0 As (Aint 0%uint63)) (Aint 0%uint63) (KF n1) (KT (after n1 (KF n1))))
   end
 (** a boolean as a value, 1 or 0, with no jump: a comparison by a conditional move, [&&] [||] [negb] by [land] [lor]
     [lxor 1] of the parts' values *)
@@ -1622,6 +1656,7 @@ with cbval (b : sbool) (cenv benv : list atom) (renv : list (list atom)) (env : 
   | BxLetR r x => crec r cenv benv renv env nxt (fun As n1 => cbval x cenv benv (As :: renv) env n1 K)
   | BxMatchR r x => crec r cenv benv renv env nxt (fun As n1 => cbval x cenv benv renv (rev As ++ env) n1 K)
   | BxSplitR sj r x => crec r cenv benv renv env nxt (fun As n1 => cbval x cenv benv (rev (rsl sj As) ++ renv) (rev (firstn (rnn sj) As) ++ env) n1 K)
+  | BOfRec r => crec r cenv benv renv env nxt (fun As n1 => K (nth 0 As (Aint 0%uint63)) n1)
   end
 (** a choice of [T] or [F] on a boolean, with no jump, as the translator makes it (§1.5): on a comparison or a boolean
     variable a conditional move; on [&&], [||], [negb] choices on the parts -- [if a && b then T else F] is
@@ -1654,6 +1689,7 @@ with csel (b : sbool) (cenv benv : list atom) (renv : list (list atom)) (env : l
   | BxLetR r x => crec r cenv benv renv env nxt (fun As n1 => csel x cenv benv (As :: renv) env n1 T F K)
   | BxMatchR r x => crec r cenv benv renv env nxt (fun As n1 => csel x cenv benv renv (rev As ++ env) n1 T F K)
   | BxSplitR sj r x => crec r cenv benv renv env nxt (fun As n1 => csel x cenv benv (rev (rsl sj As) ++ renv) (rev (firstn (rnn sj) As) ++ env) n1 T F K)
+  | BOfRec r => crec r cenv benv renv env nxt (fun As n1 => Esel n1 Ceq (nth 0 As (Aint 0%uint63)) (Aint 0%uint63) F T (K (Avar n1) (Pos.succ n1)))
   end
 (** a record: its fields' atoms *)
 with crec (x : srec) (cenv benv : list atom) (renv : list (list atom)) (env : list atom) (nxt : ident) (K : list atom -> ident -> exp)
@@ -1662,6 +1698,8 @@ with crec (x : srec) (cenv benv : list atom) (renv : list (list atom)) (env : li
   | RVar i => K (nth i renv [Aint 0%uint63]) nxt
   | RMk _ es => cexps es cenv benv renv env nxt K
   | RMkR _ ns rs => cexps ns cenv benv renv env nxt (fun As n1 => cexps rs cenv benv renv env n1 (fun Bs n2 => K (As ++ Bs) n2))
+  | RDflt ri => K (map Aint (relim (RO ri) (Rd ri) (fun l => l))) nxt
+  | RBoolV _ b => cbval b cenv benv renv env nxt (fun A n1 => K [A] n1)
   | RCall ri f ccs args => ccnts ccs cenv benv renv env nxt (fun Cs n1 => cexps args cenv benv renv env n1 (fun As n2 =>
                             ccallr (gidf f) (Cs ++ As) (Nat.pred (rn (RO ri))) n2 K))
   | RW64 _ o a b => crec a cenv benv renv env nxt (fun As n1 => crec b cenv benv renv env n1 (fun Bs n2 =>
@@ -1981,6 +2019,23 @@ Definition canon_s (g : option (list nat)) (es : sexps) : bool :=
                end
   end.
 
+(** (step 67) the one-level constructor of a data type: its tag written, its number slots past its fields zeros, its record slots
+    where it holds no field [RDflt] *)
+Definition is_dflt (x : srec) : bool := match x with RDflt _ => true | _ => false end.
+Fixpoint rs_canon (m : list bool) (rs : sexps) : bool :=
+  match m, rs with
+  | own :: m', SConsR x rs' => (own || is_dflt x) && rs_canon m' rs'
+  | [], _ | _, SNil => true
+  | _, _ => false
+  end.
+Definition canon_mk (ri : nat) (ns rs : sexps) : bool :=
+  match rtg (RO ri) with
+  | None => true
+  | Some ws => match ns with
+               | SCons (SInt t) fs => existsb (fun c => PrimInt63.eqb t (ofn c) && zeros_s (nth c ws O) fs && rs_canon (RM ri c) rs) (seq 0 (length ws))
+               | _ => false
+               end
+  end.
 (** the bound on the counters of function [j] of a program: its own when its signature gives one (step 33), else its index's *)
 Definition cbz (j : nat) : Z := (4611686018427387904 - Z.of_nat j * 1048576)%Z.
 Definition fbound (gs : sig) (j : nat) : Z := match sb gs with Some b => b | None => cbz j end.
@@ -2178,12 +2233,13 @@ with wfb (sigs : wfctx) (r mok : bool) (nx : nat) (k : list kind) (rk : list nat
   | BxLetR y x => wfr sigs r mok nx k rk y && wfb sigs r mok nx k (rtype rk y :: rk) x
   | BxMatchR y x => wfr sigs r mok nx k rk y && wfb sigs r mok nx k rk x
   | BxSplitR sj y x => Nat.eqb (rtype rk y) sj && wfr sigs r mok nx k rk y && wfb sigs r mok nx k (rev (RJ sj) ++ rk) x
+  | BOfRec y => RBI (rtype rk y) && wfr sigs r mok nx k rk y
   end
 (** a record: built of as many numbers as its type has fields *)
 with wfr (sigs : wfctx) (r mok : bool) (nx : nat) (k : list kind) (rk : list nat) (x : srec) {struct x} : bool :=
   match x with
   | RVar i => Nat.ltb i (length rk)        (* a record variable in scope: its type is known *)
-  | RMk ri es => canon_s (rtg (RO ri)) es && Nat.eqb (len_s es) (rn (RO ri)) && forallb (kind_eqb KNum) (kinds_s rk es) && wfs sigs r mok nx k rk es
+  | RMk ri es => negb (RNC ri) && canon_s (rtg (RO ri)) es && Nat.eqb (len_s es) (rn (RO ri)) && forallb (kind_eqb KNum) (kinds_s rk es) && wfs sigs r mok nx k rk es
   (* a call of a function giving back a record of type ri, read from the memory or not; a record of at least one field and
      at most 2^20 *)
   | RCall ri f ccs args =>
@@ -2195,7 +2251,7 @@ with wfr (sigs : wfctx) (r mok : bool) (nx : nat) (k : list kind) (rk : list nat
       | None => false
       end
   (* a u64 operation: the result and both operands of types of two fields *)
-  | RW64 ri _ a b => match rtg (RO ri) with None => true | Some _ => false end && Nat.eqb (rn (RO ri)) 2 && Nat.eqb (rn (RO (rtype rk a))) 2 && Nat.eqb (rn (RO (rtype rk b))) 2
+  | RW64 ri _ a b => negb (RNC ri) && match rtg (RO ri) with None => true | Some _ => false end && Nat.eqb (rn (RO ri)) 2 && Nat.eqb (rn (RO (rtype rk a))) 2 && Nat.eqb (rn (RO (rtype rk b))) 2
                      && wfr sigs r mok nx k rk a && wfr sigs r mok nx k rk b
   | RLet e x => wf sigs r mok nx k rk e && wfr sigs r mok nx k rk x
   | RLetR y x => wfr sigs r mok nx k rk y && wfr sigs r mok nx k (rtype rk y :: rk) x
@@ -2211,9 +2267,11 @@ with wfr (sigs : wfctx) (r mok : bool) (nx : nat) (k : list kind) (rk : list nat
   | RSplitR ri sj x y => Nat.eqb (rtype rk x) sj && Nat.eqb (rtype (rev (RJ sj) ++ rk) y) ri && wfr sigs r mok nx k rk x
                          && wfr sigs r mok nx k (rev (RJ sj) ++ rk) y
   (* the one-level constructor of a record (not a data type): its numbers, then records of the types of its record fields *)
-  | RMkR ri ns rs => match rtg (RO ri) with None => true | Some _ => false end && forallb (kind_eqb KNum) (kinds_s rk ns)
+  | RMkR ri ns rs => canon_mk ri ns rs && forallb (kind_eqb KNum) (kinds_s rk ns)
                      && kinds_eqb (kinds_s rk rs) (map KRec (RJ ri)) && Nat.eqb (len_s ns + fold_right (fun j a => rn (RO j) + a) O (RJ ri))%nat (rn (RO ri))
                      && wfs sigs r mok nx k rk ns && wfs sigs r mok nx k rk rs
+  | RDflt _ => true
+  | RBoolV ri b => RBI ri && wfb sigs r mok nx k rk b
   end.
 
 (** a memory: its numbers as above; the recursive call only where [rm] allows it; a callee called for a memory takes one and
@@ -2475,6 +2533,7 @@ with sh_b (sh : list i63) (b : sbool) {struct b} : bool :=
   | BxLetB b x => sh_b sh b && sh_b sh x
   | BxLetC c x => sh_c sh c && sh_b sh x
   | BxLetR y x | BxMatchR y x | BxSplitR _ y x => sh_r sh y && sh_b sh x
+  | BOfRec y => sh_r sh y
   end
 with sh_r (sh : list i63) (x : srec) {struct x} : bool :=
   match x with
@@ -2487,6 +2546,8 @@ with sh_r (sh : list i63) (x : srec) {struct x} : bool :=
   | RIf _ _ a b x y => sh_e sh a && sh_e sh b && sh_r sh x && sh_r sh y
   | RMatchR _ x y | RSplitR _ _ x y => sh_r sh x && sh_r sh y
   | RMkR _ ns rs => sh_es sh ns && sh_es sh rs
+  | RDflt _ => true
+  | RBoolV _ b => sh_b sh b
   | RIfB _ b x y => sh_b sh b && sh_r sh x && sh_r sh y
   | RLetB b x => sh_b sh b && sh_r sh x
   | RLetC c x => sh_c sh c && sh_r sh x
@@ -2914,6 +2975,12 @@ Proof. intros envA a n L A [|i]; simpl; auto. Qed.
 Lemma cbound_cons : forall B cenv v, cbound B cenv -> (Z.of_nat v < B)%Z -> cbound B (v :: cenv).
 Proof. intros B cenv v C L [|i]; simpl; auto. Qed.
 
+Lemma avals_lits : forall rho l, avals rho (map Aint l) = Some l.
+Proof. intros rho l. induction l as [|a l IH]; [reflexivity|]. cbn [map avals aval]. rewrite IH. reflexivity. Qed.
+Lemma lits_lt : forall n l, Forall (fun a => atom_lt a n) (map Aint l).
+Proof. intros n l. induction l as [|a l IH]; constructor; [exact Logic.I | exact IH]. Qed.
+Lemma nth_atom_lt : forall As n, Forall (fun a => atom_lt a n) As -> atom_lt (nth 0 As (Aint 0%uint63)) n.
+Proof. intros [|a As] n H; [exact Logic.I | inversion H; assumption]. Qed.
 Lemma avals_app : forall rho l1 l2 v1 v2, avals rho l1 = Some v1 -> avals rho l2 = Some v2 -> avals rho (l1 ++ l2) = Some (v1 ++ v2).
 Proof.
   induction l1 as [|a l1 IH]; intros l2 v1 v2 A1 A2; simpl in *.
@@ -2977,12 +3044,12 @@ Proof.
 Qed.
 Arguments flat_nums cs rec cenv benv renv denv M es {rk} _.
 (** built in a constructor's form, a record or a data type gives its fields back (step 28) *)
-Lemma rl_mk_c : forall i l, length l = rn (RO i) -> canon (rtg (RO i)) l = true -> relim (RO i) (rmk (RO i) l) (fun l => l) = l.
+Lemma rl_mk_c : forall i l, length l = rn (RO i) -> canon (rtg (RO i)) l = true -> RNC i = false -> relim (RO i) (rmk (RO i) l) (fun l => l) = l.
 Proof.
-  intros i l L C. destruct (rtg (RO i)) as [ws|] eqn:G; [| apply rl_mk; assumption].
+  intros i l L C Nc. destruct (rtg (RO i)) as [ws|] eqn:G; [| apply rl_mk; assumption].
   cbn [canon] in C. destruct l as [|t rest]; [discriminate C|].
   apply existsb_exists in C as (c & Hin & C). apply in_seq in Hin. apply andb_true_iff in C as [Ht Hz].
-  apply eqb_correct in Ht. subst t. apply (rl_mk_tag i ws c rest G); [lia | simpl in L; lia | exact Hz].
+  apply eqb_correct in Ht. subst t. apply (rl_mk_tag i ws c rest G); [lia | simpl in L; lia | exact Hz | exact Nc].
 Qed.
 (** a record built in a constructor's form, read off the syntax, is in that form (step 28) *)
 Lemma zeros_s_ok : forall cs rec cenv benv renv denv M es w, zeros_s w es = true ->
@@ -3066,7 +3133,7 @@ Lemma kind_denote_r : forall cbo, forall r mok nx k rk cs rec cenv benv renv den
 Proof. intros cbo.
   intros r mok nx k rk cs rec cenv benv renv denv s x. revert cbo rk cenv benv renv denv.
   induction x as [i | rj es | rj fi ccs args | rj o a IHa b IHb | e x IH | y IHy x IHx | rj c a b x IHx y IHy | rj x IHx y IHy
-                 | rj b x IHx y IHy | b x IHx | c x IHx | rj c x IHx y IHy | rj sj x IHx y IHy | rj ns rs];
+                 | rj b x IHx y IHy | b x IHx | c x IHx | rj c x IHx y IHy | rj sj x IHx y IHy | rj ns rs | rj | rj b];
     intros cbo rk cenv benv renv denv W T; cbn [rtype].
   - cbn [wfr] in W. apply Nat.ltb_lt in W. cbn [denote_r]. apply rtyped_nth; assumption.
   - reflexivity.
@@ -3082,6 +3149,8 @@ Proof. intros cbo.
   - reflexivity.
   - cbn [wfr] in W. apply andb_true_iff in W as [_ Wx]. cbn [denote_r]. eapply IHx; [exact Wx | exact T].
   - cbn [wfr] in W. apply andb_true_iff in W as [_ Wx]. cbn [denote_r]. eapply IHx; [exact Wx | exact T].
+  - reflexivity.
+  - reflexivity.
   - reflexivity.
   - reflexivity.
   - reflexivity.
@@ -3375,6 +3444,8 @@ Proof.
   - intros sj y IHy x IHx cs rec cenv benv renv env s s' r nx k rk cbo Hr W. cbn [wfb denote_b] in *.
     apply andb_true_iff in W as [W Wx]. apply andb_true_iff in W as [_ Wy].
     rewrite (IHy _ _ _ _ _ _ s s' _ _ _ _ _ Hr Wy), !rsplit_eq. apply (IHx _ _ _ _ _ _ s s' _ _ _ _ _ Hr Wx).
+  - intros y IHy cs rec cenv benv renv env s s' r nx k rk cbo Hr W. cbn [wfb denote_b] in *. apply andb_true_iff in W as [_ Wy].
+    rewrite (IHy _ _ _ _ _ _ s s' _ _ _ _ _ Hr Wy). reflexivity.
   - intros; reflexivity.
   - intros ri es IHes cs rec cenv benv renv env s s' r nx k rk cbo Hr W. cbn [denote_r wfr] in *. apply andb_true_iff in W as [_ Wes].
     rewrite (IHes _ _ _ _ _ _ s s' _ _ _ _ _ Hr Wes). reflexivity.
@@ -3415,6 +3486,9 @@ Proof.
   - intros ri ns IHns rs IHrs cs rec cenv benv renv env s s' r nx k rk cbo Hr W. cbn [denote_r wfr] in *.
     apply andb_true_iff in W as [W Wrs]. apply andb_true_iff in W as [_ Wns].
     rewrite (IHns _ _ _ _ _ _ s s' _ _ _ _ _ Hr Wns), (IHrs _ _ _ _ _ _ s s' _ _ _ _ _ Hr Wrs). reflexivity.
+  - intros; reflexivity.
+  - intros ri b IHb cs rec cenv benv renv env s s' r nx k rk cbo Hr W. cbn [denote_r wfr] in *. apply andb_true_iff in W as [_ Wb].
+    rewrite (IHb _ _ _ _ _ _ s s' _ _ _ _ _ Hr Wb). reflexivity.
 Qed.
 
 (** a record given back reads no memory where its function has none *)
@@ -3652,6 +3726,8 @@ Proof.
     apply andb_true_iff in W as [W Wx]. apply andb_true_iff in W as [Ey Wy]. apply Nat.eqb_eq in Ey.
     rewrite (IHy _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wy T), !rsplit_eq. apply (IHx _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wx).
     apply rsplit_typed; [rewrite <- Ey; eapply kind_denote_r; [exact Wy | exact T] | exact T].
+  - intros y IHy cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [wfb denote_b] in *. apply andb_true_iff in W as [_ Wy].
+    rewrite (IHy _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wy T). reflexivity.
   - intros; reflexivity.
   - intros ri es IHes cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [denote_r wfr] in *. apply andb_true_iff in W as [_ Wes].
     rewrite (IHes _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wes T). reflexivity.
@@ -3691,6 +3767,9 @@ Proof.
   - intros ri ns IHns rs IHrs cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [denote_r wfr] in *.
     apply andb_true_iff in W as [W Wrs]. apply andb_true_iff in W as [_ Wns].
     rewrite (IHns _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wns T), (IHrs _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wrs T). reflexivity.
+  - intros; reflexivity.
+  - intros ri b IHb cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [denote_r wfr] in *. apply andb_true_iff in W as [_ Wb].
+    rewrite (IHb _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wb T). reflexivity.
 Qed.
 
 Ltac split_w W := repeat match type of W with (_ && _) = true => let W1 := fresh "W" in apply andb_true_iff in W as [W W1] end.
@@ -4043,6 +4122,8 @@ Proof.
     apply andb_true_iff in W as [W Wx]. apply andb_true_iff in W as [Ey Wy]. apply Nat.eqb_eq in Ey.
     rewrite (IHy _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wy T), !rsplit_eq. apply (IHx _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wx).
     apply rsplit_typed; [rewrite <- Ey; eapply kind_denote_r; [exact Wy | exact T] | exact T].
+  - intros y IHy cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [wfb denote_b] in *. apply andb_true_iff in W as [_ Wy].
+    rewrite (IHy _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wy T). reflexivity.
   - intros; reflexivity.
   - intros ri es IHes cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [denote_r wfr] in *. apply andb_true_iff in W as [_ Wes].
     rewrite (IHes _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wes T). reflexivity.
@@ -4082,6 +4163,9 @@ Proof.
   - intros ri ns IHns rs IHrs cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [denote_r wfr] in *.
     apply andb_true_iff in W as [W Wrs]. apply andb_true_iff in W as [_ Wns].
     rewrite (IHns _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wns T), (IHrs _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wrs T). reflexivity.
+  - intros; reflexivity.
+  - intros ri b IHb cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [denote_r wfr] in *. apply andb_true_iff in W as [_ Wb].
+    rewrite (IHb _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wb T). reflexivity.
 Qed.
 
 (** a call's result given to what follows it (step 47): the same when what follows is *)
@@ -4933,6 +5017,25 @@ Proof.
     destruct (IH js Wes T Kes) as [H1 H2]. unfold vrecs_t in *. cbn [denote_es flat_map].
     destruct (denote_r cs rec cenv benv renv denv M x) as [n|b|ri y]; cbn [kind_of] in Kx; try discriminate. injection Kx as <-.
     cbn [flat_map map concat vflat projT1 projT2 app]. split; [f_equal; exact H1 | f_equal; exact H2].
+Qed.
+
+(** (step 67) the record slots a constructor holds no field in are at their value of no field *)
+Lemma rs_canon_ok : forall cs rec cenv benv renv denv M cbo r mok nx k rk es js m,
+  wfs (map (@projT1 _ _) cs, cbo) r mok nx k rk es = true -> rtyped renv rk -> kinds_eqb (kinds_s rk es) (map KRec js) = true ->
+  rs_canon m es = true -> rs_own m (vrecs_t (denote_es cs rec cenv benv renv denv M es)).
+Proof.
+  intros cs rec cenv benv renv denv M cbo r mok nx k rk es. induction es as [|e es IH|b es IH|x es IH]; intros js m W T K C;
+    destruct js as [|j js]; cbn [kinds_s map kinds_eqb kind_eqb andb] in K; try discriminate.
+  - destruct m; exact Logic.I.
+  - destruct m as [|own m]; [exact Logic.I|]. cbn [rs_canon] in C. apply andb_true_iff in C as [C0 C1].
+    cbn [wfs] in W. apply andb_true_iff in W as [Wx Wes]. apply andb_true_iff in K as [Kj Kes]. apply Nat.eqb_eq in Kj.
+    destruct own.
+    + pose proof (kind_denote_r cbo r mok nx k rk cs rec cenv benv renv denv M x Wx T) as Kx. rewrite Kj in Kx.
+      unfold vrecs_t in *. cbn [denote_es flat_map].
+      destruct (denote_r cs rec cenv benv renv denv M x) as [n|b|ri y]; cbn [kind_of] in Kx; try discriminate.
+      cbn [flat_map app rs_own]. split; [discriminate | apply (IH js m Wes T Kes C1)].
+    + cbn [orb] in C0. destruct x; try discriminate C0. unfold vrecs_t in *. cbn [denote_es denote_r flat_map app rs_own projT1 projT2].
+      split; [reflexivity | apply (IH js m Wes T Kes C1)].
 Qed.
 
 (** counters below [wB] compare as their machine numbers do (step 30) *)
@@ -6402,14 +6505,45 @@ Proof.
       destruct (split_atoms rho1 As _ sj Kx VAs) as [V1 V2].
       eapply IHxs; [exact Wx | apply inv_lets; [apply inv_rlets; [eapply inv_step; eauto | exact V2 | apply Forall_slices_kq; apply Forall_skipn_kq; exact LAs] | exact V1 | apply Forall_firstn_kq; exact LAs] | apply rsplit_typed; [exact Kx | exact Rt] | eapply atom_lt_mono; [exact LT | lia] | eapply atom_lt_mono; [exact LF | lia] | rewrite (aval_agree rho rho1 nxt); eauto | rewrite (aval_agree rho rho1 nxt); eauto | ].
       intros rho2 n2 a2 A2 Le2 L2 V2'. apply HK; [eapply (agree_trans rho rho1 rho2 nxt n1); eauto | lia | exact L2 | first [exact V2' | cbn [denote_b]; rewrite rsplit_eq; exact V2']].
+  - (* BOfRec *) intros y IHy. split; [| split].
+    + intros cenvA benvA renvA envA cenv benv renv denv nxt KT KF rho M v M' rk cbs W Iv Rt HT HF. cbn [ccond]. cbn [wfb] in W.
+      apply andb_true_iff in W as [Wi Wy].
+      eapply IHy; [exact Wy | exact Iv | exact Rt |]. intros rho1 n1 As A1 Le1 LAs VAs.
+      pose proof (kind_denote_r _ _ _ _ _ _ cs rec cenv benv renv denv M y Wy Rt) as Kx.
+      destruct (denote_r cs rec cenv benv renv denv M y) as [m|b|ri z] eqn:Ey; cbn [kind_of] in Kx; try discriminate. injection Kx as Kx. subst ri.
+      cbn [vflat] in VAs. rewrite (rt_b _ z Wi) in VAs.
+      eapply K_if; [exact (avals_nth rho1 As _ 0%nat VAs) | reflexivity | ]. cbn [nth]. rewrite b2i_eq0.
+      destruct (RTb (rtype rk y) z) eqn:Eb; simpl.
+      * apply HT; [cbn [denote_b]; rewrite Ey; exact Eb | exact A1 | lia_a].
+      * apply HF; [cbn [denote_b]; rewrite Ey; exact Eb | exact A1 | lia].
+    + intros cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W Iv Rt HK. cbn [cbval]. cbn [wfb] in W.
+      apply andb_true_iff in W as [Wi Wy].
+      eapply IHy; [exact Wy | exact Iv | exact Rt |]. intros rho1 n1 As A1 Le1 LAs VAs.
+      pose proof (kind_denote_r _ _ _ _ _ _ cs rec cenv benv renv denv M y Wy Rt) as Kx.
+      destruct (denote_r cs rec cenv benv renv denv M y) as [m|b|ri z] eqn:Ey; cbn [kind_of] in Kx; try discriminate. injection Kx as Kx. subst ri.
+      cbn [vflat] in VAs. rewrite (rt_b _ z Wi) in VAs.
+      apply HK; [exact A1 | exact Le1 | apply nth_atom_lt; exact LAs | cbn [denote_b]; rewrite Ey; exact (avals_nth rho1 As _ 0%nat VAs)].
+    + intros cenvA benvA renvA envA cenv benv renv denv nxt T F tv fv K rho M v M' rk cbs W Iv Rt LT LF VT VF HK. cbn [csel]. cbn [wfb] in W.
+      apply andb_true_iff in W as [Wi Wy].
+      eapply IHy; [exact Wy | exact Iv | exact Rt |]. intros rho1 n1 As A1 Le1 LAs VAs.
+      pose proof (kind_denote_r _ _ _ _ _ _ cs rec cenv benv renv denv M y Wy Rt) as Kx.
+      destruct (denote_r cs rec cenv benv renv denv M y) as [m|b|ri z] eqn:Ey; cbn [kind_of] in Kx; try discriminate. injection Kx as Kx. subst ri.
+      cbn [vflat] in VAs. rewrite (rt_b _ z Wi) in VAs.
+      eapply K_sel; [exact (avals_nth rho1 As _ 0%nat VAs) | reflexivity | rewrite (aval_agree rho rho1 nxt); eauto | rewrite (aval_agree rho rho1 nxt); eauto | ].
+      apply HK.
+      * apply agree_set1; [exact A1 | lia].
+      * lia.
+      * simpl. lia.
+      * cbn [aval denote_b nth]. rewrite Ey, PTree.gss, b2i_eq0. destruct (RTb (rtype rk y) z); reflexivity.
   - (* RVar *) intros i cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W Iv Rt HK. cbn [crec denote_r].
     pose proof Iv as (_ & _ & _ & _ & _ & _ & _ & _ & _ & RV & RL).
     apply HK; [apply agree_refl | lia | apply rlt_nth; exact RL | apply renv_nth; exact RV].
   - (* RMk *) intros ri es IHes cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W Iv Rt HK. cbn [crec denote_r wfr] in *.
-    apply andb_true_iff in W as [W Wes]. apply andb_true_iff in W as [W Fn]. apply andb_true_iff in W as [Cn La]. apply Nat.eqb_eq in La.
+    apply andb_true_iff in W as [W Wes]. apply andb_true_iff in W as [W Fn]. apply andb_true_iff in W as [W La]. apply andb_true_iff in W as [Nc Cn].
+    apply Bool.negb_true_iff in Nc. apply Nat.eqb_eq in La.
     eapply IHes; [exact Wes | exact Iv | exact Rt |]. intros rho1 n1 As A1 Le1 LAs VAs.
     apply HK; auto. cbn [vflat]. destruct (flat_nums cs rec cenv benv renv denv M es Fn) as [F1 F2].
-    rewrite rl_mk_c; [ | lia | apply canon_s_ok; exact Cn]. rewrite <- F1. exact VAs.
+    rewrite rl_mk_c; [ | lia | apply canon_s_ok; exact Cn | exact Nc]. rewrite <- F1. exact VAs.
   - (* RCall *) intros ri fi ccs IHc args IHs cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W Iv Rt HK.
     destruct (wfr_call_inv _ _ _ _ _ _ _ _ _ _ W) as (gs & E & Wn & Wk & Wm & Wr & Wsw & Q & R1 & R2 & Wsh & Wc & Ws).
     cbn [denote_r] in HK. unfold sigsv in E. cbn [fst] in E; rewrite nth_sigs in E. pose proof (Hcs fi) as Hc.
@@ -6450,6 +6584,7 @@ Proof.
     cbn [crec denote_r wfr] in *.
     apply andb_true_iff in W as [W Wb]. apply andb_true_iff in W as [W Wa]. apply andb_true_iff in W as [W Rb].
     apply andb_true_iff in W as [W Ra]. apply andb_true_iff in W as [Tg Ri]. apply Nat.eqb_eq in Ri.
+    apply andb_true_iff in Tg as [Nc Tg]. apply Bool.negb_true_iff in Nc.
     apply IHa with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto. intros rho1 n1 As A1 Le1 LAs VAs.
     apply IHb with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto. { eapply inv_step; eauto. }
     intros rho2 n2 Bs A2 Le2 LBs VBs.
@@ -6465,7 +6600,7 @@ Proof.
       * eapply agree_set1; [eapply (agree_set2 rho rho1 rho2); eauto; lia | lia].
       * lia.
       * constructor; [simpl; lia | constructor; [simpl; lia | constructor]].
-      * cbn [vflat]. rewrite rl_mk; [ | destruct (rtg (RO ri)); [discriminate | reflexivity] | simpl; lia]. simpl.
+      * cbn [vflat]. rewrite rl_mk; [ | destruct (rtg (RO ri)); [discriminate | reflexivity] | simpl; lia | exact Nc]. simpl.
         rewrite PTree.gss. rewrite PTree.gso by (apply Pos.succ_discr). rewrite PTree.gss. reflexivity.
   - (* RLet *) intros e IHe x IHx cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W Iv Rt HK. cbn [crec denote_r wfr] in *.
     apply andb_true_iff in W as [We Wx].
@@ -6560,14 +6695,30 @@ Proof.
   - (* RMkR *) intros ri ns IHns rs IHrs cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W Iv Rt HK. cbn [crec denote_r wfr] in *.
     apply andb_true_iff in W as [W Wrs]. apply andb_true_iff in W as [W Wns]. apply andb_true_iff in W as [W Wl].
     apply andb_true_iff in W as [W Wk]. apply andb_true_iff in W as [Wg Wn]. apply Nat.eqb_eq in Wl.
-    destruct (rtg (RO ri)) eqn:G; [discriminate Wg|].
     destruct (flat_nums cs rec cenv benv renv denv M ns Wn) as [F1 F2].
     destruct (rec_vals cs rec cenv benv renv denv M _ _ _ _ _ _ rs (RJ ri) Wrs Rt Wk) as [R1 R2].
+    assert (FL : relim (RO ri) (RB ri (vnums (denote_es cs rec cenv benv renv denv M ns)) (vrecs_t (denote_es cs rec cenv benv renv denv M rs))) (fun l => l)
+                 = vnums (denote_es cs rec cenv benv renv denv M ns)
+                   ++ concat (map (fun r => relim (RO (projT1 r)) (projT2 r) (fun l => l)) (vrecs_t (denote_es cs rec cenv benv renv denv M rs)))).
+    { unfold canon_mk in Wg. destruct (rtg (RO ri)) as [ws|] eqn:G.
+      - destruct ns as [|e fs|b fs|x fs]; try discriminate Wg. destruct e; try discriminate Wg.
+        apply existsb_exists in Wg as (c & Hin & Wg). apply in_seq in Hin.
+        apply andb_true_iff in Wg as [Wg Wc]. apply andb_true_iff in Wg as [Ht Hz]. apply eqb_correct in Ht. subst.
+        cbn [denote_es flat_map vnums denote_e app] in *.
+        apply (rb_tag ri ws c _ _ G); [lia | exact R2 | rewrite fold_rn_map, R2; rewrite <- Wl; f_equal; exact F2 | apply zeros_s_ok; exact Hz | ].
+        eapply rs_canon_ok; [exact Wrs | exact Rt | exact Wk | exact Wc].
+      - apply rb_mk; [exact G | exact R2 | rewrite fold_rn_map, R2, F2; exact Wl]. }
     eapply IHns; [exact Wns | exact Iv | exact Rt |]. intros rho1 n1 As A1 Le1 LAs VAs.
     eapply IHrs; [exact Wrs | eapply inv_step; eauto | exact Rt |]. intros rho2 n2 Bs A2 Le2 LBs VBs.
     apply HK; [eapply (agree_trans rho rho1 rho2 nxt n1); eauto | lia | apply Forall_app; split; [eapply Forall_impl; [|exact LAs]; intros a La; eapply atom_lt_mono; [exact La | lia] | exact LBs] |].
-    cbn [vflat]. rewrite rb_mk; [ | exact G | exact R2 | rewrite fold_rn_map, R2, F2; exact Wl].
+    cbn [vflat]. rewrite FL.
     apply avals_app; [rewrite (avals_agree rho1 rho2 n1); [rewrite <- F1; exact VAs | exact A2 | exact LAs] | rewrite <- R1; exact VBs].
+  - (* RDflt *) intros ri cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W Iv Rt HK. cbn [crec denote_r wfr] in *.
+    apply HK; [apply agree_refl | lia | apply lits_lt | apply avals_lits].
+  - (* RBoolV *) intros ri b IHb cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W Iv Rt HK. cbn [crec denote_r wfr] in *.
+    destruct IHb as [_ [IHv _]]. apply andb_true_iff in W as [Wi Wb].
+    eapply IHv; [exact Wb | exact Iv | exact Rt |]. intros rho1 n1 A A1 Le1 LA VA.
+    apply HK; [exact A1 | exact Le1 | constructor; [exact LA | constructor] | ]. cbn [vflat]. rewrite rb_b by exact Wi. cbn [avals]. rewrite VA. reflexivity.
 Qed.
 
 Definition cexp_ok := proj1 cexp_all.
@@ -11778,6 +11929,26 @@ Ltac kq_rb_case :=
   match goal with Hl : (length ?l + _)%nat = _ |- _ =>
     kq_rs_list; cbn in Hl; rewrite Nat.add_comm in Hl; cbn in Hl; repeat (destruct l as [|? l]; try discriminate Hl);
     cbn; repeat match goal with |- context [match ?v with _ => _ end] => destruct v end; reflexivity
+  end.
+(** (step 67) a program's one-level constructor of a data type: constructor by constructor, its number slots their exact number, the zeros
+    written, its record slots of no field at their value, then by computation *)
+Ltac kq_rbt_own :=
+  repeat match goal with H : _ /\ _ |- _ => destruct H end;
+  repeat match goal with
+         | H : false = false -> _ = _ |- _ => specialize (H eq_refl); subst
+         | H : true = false -> _ |- _ => clear H
+         | H : True |- _ => clear H
+         end.
+Ltac kq_rbt_arm :=
+  match goal with Hl : (length (_ :: ?rest) + _)%nat = _, Hz : zeros_from _ ?rest = true, Ho : rs_own _ _ |- _ =>
+    cbn in Hl; rewrite Nat.add_comm in Hl; cbn in Hl; repeat (destruct rest as [|? rest]; try discriminate Hl);
+    cbn in Hz; kq_zeros; cbn in Ho; kq_rbt_own;
+    cbn; repeat match goal with |- context [match ?v with _ => _ end] => destruct v end; reflexivity
+  end.
+Ltac kq_rbt_case :=
+  match goal with Lc : (?c < _)%nat, Hk : map (@projT1 _ _) ?rs = _ |- _ =>
+    cbn in Lc, Hk; kq_rs_list;
+    repeat (destruct c as [|c]; [ kq_rbt_arm | cbn in Lc ]); lia
   end.
 (* ================================================================ the measurement: the per-program check, end to end *)
 Local Open Scope uint63_scope.
