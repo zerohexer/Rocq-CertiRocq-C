@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **2191 of 2233, 26 gaps, 15 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **2204 of 2242, 22 gaps, 15 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4905,6 +4905,17 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Cells*: 9, `A_c_*`, as an argument, in a let, a match on one, nested, compared; `A_n_nat_min`, `_max`, `_sub`, `_div2` read.
 - *The acceptance*: `proved/examples/cnt_fix`, worked out apart: 5061203.
 
+**Step 66 done (2026-11-05): counters: `Nat.min`, `Nat.max`, `Nat.sub`, `Nat.div2`.**  Built as designed, in `KQR.v` (`scnt` four constructors, `denote_c`, `ccnt`, `cmax`, `cmaxv`, `clinf`, `pvars`, `wfc`, `sh_c`, `noadd`, `ofn_min`, `ofn_max`, `ofn_sub_sel`, `ofn_div2`, the arms of three mutual inductions and of the simulation), no new assumption, and the reader.
+- *The acceptance*: `proved/examples/cnt_fix`: proved, built, 5061203.
+- *Cells*: 9 more (2242), all proved; `A_n_nat_min`, `_max`, `_sub`, `_div2`, gaps before, read.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the trees without their generated files, F62; step 65's files / these): `HWP_kernel` 2.59 / 2.58 s, `HWP_own` 2.00 / 1.98, `HWP_irqnow` 1.67 / 1.65 — the same.
+- The C: the 73 programs before byte-identical, and `modules`, whose hash step 65's check had not recorded, the same as before
+  with step 65's five declarations taken out; the new example through the verified compiler.  The construct table (on `f3878f9`):
+  **2204 of 2242 through the verified compiler**, 15 by design, 22 gaps, 1 not Rocq (was 2191 of 2233: the 9 new cells read, 4
+  gaps before read).  The gate on `f3878f9`, the walk switched off: `make.sh` `core-ok`; examples 39 / 39; corpus 36 / 36; the
+  five kernels (14 / 13 / 14 / 15 / 16 s); **83 programs through the verified compiler, 0 refused**; the trusted base as step 65
+  left it.  Next: values of a fixed size holding booleans, records and data types.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5080,11 +5091,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `62cc800` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `f3878f9` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 66's design -- counters: Nat.min, Nat.max, Nat.sub, Nat.div2 |
+| (this commit) | §12.V: step 66 (counters: `Nat.min`, `Nat.max`, `Nat.sub`, `Nat.div2`: the construct table 2204 of 2242, 15 by design, 22 gaps), the C, the gate |
+| `f3878f9` | `proved/KQR.v` + `KQRReify.v` + `matrix` + `examples/cnt_fix` step 66: counters: `Nat.min`, `Nat.max`, `Nat.sub`, `Nat.div2`; four constructs of the counters, each a case of the theorem; 9 cells |
+| `d040b2e` | §12.V: step 66's design -- counters: Nat.min, Nat.max, Nat.sub, Nat.div2 |
 | `ef3b1f6` | §12.V: step 65 (`head0`, `tail0`, `mulc`, `diveucl_21`: the construct table 2191 of 2233, 15 by design, 26 gaps), the C, the gate |
 | `62cc800` | `KQRun.v` + `hw/kq_hw.h` + `proved/KQL.v` + `KQLGen.v` + `KQMSem.v` + `KQRReify.v` + `KQRWf.v` + `kitc.py` + `classify` + `examples/mach_fix` step 65: `head0`, `tail0`, the high half of `mulc`, `diveucl_21` as machine operations |
 | `aee51b5` | §12.V: step 65's design -- head0, tail0, the high half of mulc, diveucl_21 as operations of the machine |
