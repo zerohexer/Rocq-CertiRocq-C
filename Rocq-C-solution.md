@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **2169 of 2221, 36 gaps, 15 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **2187 of 2233, 30 gaps, 15 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4870,6 +4870,19 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Cells*: 12, `A_pm_*`, in a fixpoint, under an operand, writing, in a let, a helper giving `comparison` back.
 - *The acceptance*: `proved/examples/prim_fix`: the answer worked out apart: 1062.
 
+**Step 64 done (2026-11-05): the operations of Rocq's machine numbers that its own axioms define by others.**  Built as designed:
+- *`KQRWf.v`*: `kq_compares_def`, `prim_rw`, `own_step0`; `own_step` rewrites the axioms first.  `KQR.v` unchanged.
+- *The reader*: `pm_table`, `pm_sub`, `pm_has`, `y_nf`, `y_conb`, in `y_all`, the last resort; `is_fn`.
+- *`kitc.py`*: the equation of a function with no fixpoint.
+- *The acceptance*: `proved/examples/prim_fix`: proved, built, 1062.
+- *Cells*: 12 more (2233), all proved; `A_n_compare`, `_compares`, `_addc`, `_subc`, `_diveucl`, `_addmuldiv`, gaps before, read.  `Print Assumptions` of the example's theorem: the kit's and Rocq's integers' only.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the trees without their generated files, F62; step 63's files / these): `HWP_kernel` 2.63 / 2.63 s, `HWP_own` 1.98 / 1.99, `HWP_irqnow` 1.65 / 1.67 — the same.
+- The C: the 72 programs before byte-identical, the new example through the verified compiler.  The construct table (on
+  `2442197`): **2187 of 2233 through the verified compiler**, 15 by design, 30 gaps, 1 not Rocq (was 2169 of 2221: the 12 new
+  cells read, 6 gaps before read).  The gate on `2442197`, the walk switched off: `make.sh` `core-ok`; examples 37 / 37; corpus 36
+  / 36; the five kernels (12 / 12 / 12 / 13 / 13 s); **81 programs through the verified compiler, 0 refused**; the trusted base
+  unchanged.  Next: `head0`, `tail0`, the high half of `mulc`, `diveucl_21`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5045,11 +5058,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `f1d978e` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `2442197` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 64's design -- the operations of Rocq's machine numbers that its own axioms define by others |
+| (this commit) | §12.V: step 64 (the operations Rocq's axioms define by others: the construct table 2187 of 2233, 15 by design, 30 gaps), the C, the gate |
+| `2442197` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix/gen.py` + `classify.py` + `examples/prim_fix` step 64: `compare`, `addc`, `subc`, `diveucl`, `addmuldiv` by Rocq's own axioms defining them; 12 cells; `KQR.v` unchanged |
+| `8e75962` | §12.V: step 64's design -- the operations of Rocq's machine numbers that its own axioms define by others |
 | `2649859` | §12.V: step 63 (natural forms from a probe: the construct table 2169 of 2221, 15 by design, 36 gaps), the C, the gate |
 | `f1d978e` | `proved/KQRReify.v` + `matrix/gen.py` + `classify.py` + `examples/lib_fix` step 63: natural forms the table had no cell for, from a probe: what Rocq's libraries define, a motive, a cast, a value holding a proof, `unit`; 74 cells; `KQR.v` unchanged |
 | `139fc4d` | §12.V: step 63's design -- natural forms the table had no cell for: a probe, what Rocq's libraries define, a motive, a cast, a value holding a proof |
