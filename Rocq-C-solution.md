@@ -4916,6 +4916,17 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   five kernels (14 / 13 / 14 / 15 / 16 s); **83 programs through the verified compiler, 0 refused**; the trusted base as step 65
   left it.  Next: values of a fixed size holding booleans, records and data types.
 
+**Step 67, values of a fixed size holding booleans, records and data types (§0.5, §3.5, §12.A) — the design (2026-11-05).**  A second probe, 116 programs written as one writes Rocq (`int * bool` given back by a search, a record with a flag, `option (int * int)`, `option (option int)`, an enumeration as a field), found the largest class left: 57 refused, 24 of them this one.  §0.5 says whether a value needs a runtime is decided by its size and its lifetime, never by its type; these have a fixed size, and a C programmer writes them as a tagged struct passed by value.  The table's families had varied numbers in their fields only.
+- *The difficulty*: a record is held as its numbers, `relim` gives them and `rmk` builds from them.  A boolean's number is 1 or 0, and `(if b then 1 else 0) =? 1` is not `b` up to conversion on a stuck `b`: no reading through numbers converts to the user's text.  And `rmk` on any number is not the inverse: 2 would come back as 1.
+- *A boolean as a value*: the table gets an entry for `bool`, its one number `b2i b`, and two nodes: `RBoolV ri b`, a boolean as a value of that type, whose meaning is `b` itself; `BOfRec r`, the boolean of such a value, whose meaning is the value itself.  So the check stays a conversion and no equation is proved per program.  The entry is marked, so that everywhere else a boolean stays a boolean, 1 or 0, as it was.
+- *Numbers not free*: `RNC i`: a value whose numbers are not free is not built from numbers alone: `RMk` is refused on it, by the check.  It is built one level, by `RMkR` (step 43), and taken apart one level, by the `*SplitR` nodes (step 43), in every sort.  Nothing else in the theorem changes: a value is still passed, returned through the slot block and held as its flat numbers.
+- *A data type holding other than numbers*: its tag, its number slots, its record slots, the same for every constructor: a field goes to the next slot of its type its constructor has not used, so `int + bool` is 3 numbers, tag, number, boolean.  A match is `*SplitR` and a chain of tests on the tag; the branch's binders are moved to the slots.  A constructor is `RMkR` with its tag written, the number slots past its fields zeros, the record slots where it holds no field `RDflt`, the value every other constructor leaves there.  The law: `rb_tag`, per program by a fixed tactic.
+- *Data types of numbers only keep their layout*, and a value built and taken apart in place is still read away by iota, so no program read before changes.
+- *Captures*: a captured variable's type with parameters (`int * int` too, refused until now, with no cell): `ty_cent`.
+- *Left, each with its cells*: a counter as a field (`A_fx_nat_pair`, `_field`, `_opt`): its number is `ofn c`, and a bound must come from somewhere; a memory as a field of a data type (`A_fx_opt_mem`, `_rec`).
+- *Cells*: 224: `A_fx_*`: 15 values (`int * bool`, `bool * bool`, nested, records with a flag, an enumeration and a data type as a field, `option bool`, `option (int * int)`, `option r3`, `option (option int)`, sums, a pair holding an `option`, `unit`, a data type of the user's holding a pair and a boolean) crossed with 14 places (a let, a parameter, given back by a tail and a non-tail recursion, a loop's state, a choice, a function that writes, beside a memory, a copy's state, a mutual block's parameter and result, a local fixpoint, a closure, a function given); a boolean field given on, in `&&`, let-bound, copied, a literal; `A_par_mutual_three`, step 62's.
+- *The acceptance*: `proved/examples/value_fix`: a flag in a loop's state, a search giving back `int * bool`, `option (int * int)`, a data type with a pair and a boolean; the answer worked out apart: 2663.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5095,7 +5106,8 @@ Pushed to the public repository up to `f3878f9` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 66 (counters: `Nat.min`, `Nat.max`, `Nat.sub`, `Nat.div2`: the construct table 2204 of 2242, 15 by design, 22 gaps), the C, the gate |
+| (this commit) | §12.V: step 67's design -- values of a fixed size holding booleans, records and data types |
+| `e9d25bd` | §12.V: step 66 (counters: `Nat.min`, `Nat.max`, `Nat.sub`, `Nat.div2`: the construct table 2204 of 2242, 15 by design, 22 gaps), the C, the gate |
 | `f3878f9` | `proved/KQR.v` + `KQRReify.v` + `matrix` + `examples/cnt_fix` step 66: counters: `Nat.min`, `Nat.max`, `Nat.sub`, `Nat.div2`; four constructs of the counters, each a case of the theorem; 9 cells |
 | `d040b2e` | §12.V: step 66's design -- counters: Nat.min, Nat.max, Nat.sub, Nat.div2 |
 | `ef3b1f6` | §12.V: step 65 (`head0`, `tail0`, `mulc`, `diveucl_21`: the construct table 2191 of 2233, 15 by design, 26 gaps), the C, the gate |
