@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **2204 of 2242, 22 gaps, 15 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **2425 of 2465, 24 gaps, 15 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4927,6 +4927,20 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Cells*: 224: `A_fx_*`: 15 values (`int * bool`, `bool * bool`, nested, records with a flag, an enumeration and a data type as a field, `option bool`, `option (int * int)`, `option r3`, `option (option int)`, sums, a pair holding an `option`, `unit`, a data type of the user's holding a pair and a boolean) crossed with 14 places (a let, a parameter, given back by a tail and a non-tail recursion, a loop's state, a choice, a function that writes, beside a memory, a copy's state, a mutual block's parameter and result, a local fixpoint, a closure, a function given); a boolean field given on, in `&&`, let-bound, copied, a literal; `A_par_mutual_three`, step 62's.
 - *The acceptance*: `proved/examples/value_fix`: a flag in a loop's state, a search giving back `int * bool`, `option (int * int)`, a data type with a pair and a boolean; the answer worked out apart: 2663.
 
+**Step 67 done (2026-11-05): values of a fixed size holding booleans, records and data types.**  Built as designed:
+- *`KQR.v`*: three nodes, `RBoolV`, `BOfRec`, `RDflt`; `RMkR` on a data type (`canon_mk`, `rs_canon`); the class's `RBl`, `RTb`, `RBI`, `RNC`, `RM`; the laws `rb_tag`, `rb_b`, `rt_b`, and `RNC` in `rl_mk`, `rl_mk_tag`; `kq_rbt_case`, the per-program tactic for `rb_tag`.  The per-program step is a conversion, as before: no equation.
+- *The reader*: `rentry` holds each constructor's slots; `ctor_slots`, `slot_ent`, `tag_ents`; `tag_parts` moves a branch's binders to the slots; `tctor_go`; `CRecB`, a record variable holding a boolean; `bool_entry`; `rtab_of` puts a value holding such fields after what it holds; `ty_cent` takes a type with parameters.  In a `let` or a match on a constructor the value is still read away, so no program read before changes: found by the test of step 25's, `w5go`, which failed until `held` and `generic_ind` said so.
+- *`kitc.py`*: three kinds of a table entry, `B:`, `G:`, `T:`.
+- *The acceptance*: `proved/examples/value_fix`: proved, built, 2663.
+- *Cells*: 223 more: 218 proved; `A_fx_nat_pair`, `_field`, `_opt`, `A_fx_opt_mem`, `_rec` gaps; `A_n_sum_ty`, `A_n_option_bool`, `A_n_record_bool`, gaps before, read.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the trees without their generated files, F62; step 66's files / these): `HWP_kernel` 2.61 / 2.61 s, `HWP_own` 1.97 / 1.99, `HWP_irqnow` 1.65 / 1.72.  The first version was the same on the first two and 1.64 / 1.71 on the third; a data type's slots were worked out before the test that it is `bool` or `nat`, at every test in every body, and moving that test first left it as it was, so that was not the cause.  **`HWP_irqnow`'s 4% is not explained**: it has no record type at all, and the other two kernels do not show it.
+- The C: the 74 programs before byte-identical, the new example through the verified compiler.  The construct table (on
+  `c7ff7fc`): **2425 of 2465 through the verified compiler**, 15 by design, 24 gaps, 1 not Rocq (was 2204 of 2242: 218 of the 223
+  new cells read, 5 gaps; `A_n_sum_ty`, `A_n_option_bool`, `A_n_record_bool` read).  The gate on `c7ff7fc`, the walk switched off:
+  `make.sh` `core-ok`; examples 40 / 40; corpus 36 / 36; the five kernels (12 / 12 / 13 / 14 / 13 s); **84 programs through the
+  verified compiler, 0 refused**; the trusted base as step 65 left it.  Next: type aliases, the library's recursors, Rocq's lists
+  written in the text, tests with a proof.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5102,11 +5116,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `f3878f9` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `c7ff7fc` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 67's design -- values of a fixed size holding booleans, records and data types |
+| (this commit) | §12.V: step 67 (values of a fixed size holding booleans, records and data types: the construct table 2425 of 2465, 15 by design, 24 gaps), the C, the gate |
+| `c7ff7fc` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + `matrix` + `examples/value_fix` step 67: values of a fixed size holding booleans, records and data types; 223 cells |
+| `f437907` | §12.V: step 67's design -- values of a fixed size holding booleans, records and data types |
 | `e9d25bd` | §12.V: step 66 (counters: `Nat.min`, `Nat.max`, `Nat.sub`, `Nat.div2`: the construct table 2204 of 2242, 15 by design, 22 gaps), the C, the gate |
 | `f3878f9` | `proved/KQR.v` + `KQRReify.v` + `matrix` + `examples/cnt_fix` step 66: counters: `Nat.min`, `Nat.max`, `Nat.sub`, `Nat.div2`; four constructs of the counters, each a case of the theorem; 9 cells |
 | `d040b2e` | §12.V: step 66's design -- counters: Nat.min, Nat.max, Nat.sub, Nat.div2 |
