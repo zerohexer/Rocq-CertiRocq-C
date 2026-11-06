@@ -7,8 +7,9 @@ in it.
 ## THE GOAL IS COMPLETENESS — STRICTLY.  NO NARROWER SUBSTITUTE IS EVER "DONE".
 
 The goal (§0): ordinary Rocq compiled to freestanding C at C speed, everything that is logic proved, only the hardware assumed —
-and **nothing refused except the three reasons of §0.5** (a value allocated behind the programmer's back that outlives the call,
-an unbounded number, two versions of the memory both used).  Every other refusal of a correct, ordinary program is a gap.
+and **nothing refused except the four reasons of §0.5** (a value allocated behind the programmer's back that outlives the call,
+an unbounded number, two versions of the memory both used, a constant Rocq itself gives no meaning to).  Every other refusal of a correct,
+ordinary program is a gap.
 
 This is not a preference.  It is the measure every step is judged by:
 
@@ -28,13 +29,25 @@ This is not a preference.  It is the measure every step is judged by:
 6. If the general form is genuinely blocked (needs a new assumption, a decision of the owner, a change to a settled decision of
    §10), **stop and ask the owner** — do not land a substitute and call it the decision (§13.8, F36).
 
+## WHAT MAY BE ASSUMED: ONLY WHAT HAS NO DEFINITION EXCEPT THE MACHINE (§0.3, D29, F66)
+
+**Before writing anything that is not proved, ask: does it have a definition other than the machine?**  If Rocq can state what it computes,
+it is logic: write it in Rocq and prove it.  A CPU having an instruction for it does not make it hardware.  "Trusted" and "hardware" are
+different words: C written here that nobody proved is trusted, and it is this work's to prove.  About Rocq's own primitives assume its axioms
+and kernel and nothing more; where they are silent add no fact (a closed term is computed, a test in the text rules the case out, otherwise a
+refusal with that reason).
+
+Any change to what is assumed (an `Axiom` or `Parameter`, `hwop`, `hwfop`, a body in `hw/kq_hw.h`, a line of `proved/TRUSTED.txt`) stops the
+step and goes to the owner before any commit; "no need to wait" does not cover it.  `proved/check_trust.py` compares the list with the tree and
+with the gate's log; chains and pushes stop on a difference.  Say what is true: today the proof ends at Clight, under that list.
+
 ## How a step is done (§13.2, §13.7)
 
 - Record the step's design in `Rocq-C-solution.md` §12.V and commit it **before** building.
 - Build it in its general form; add construct-table cells for every place and type the construct can appear in.
 - The gate on the work machine, the walk switched off: `make.sh` `core-ok`, examples, corpus, the five kernels, every program
   through the verified compiler, none refused; the C of every program byte-identical (or a measured reason); the construct table
-  re-run; `ASSUME=1 make.sh` the trusted base of §1.10 and nothing more.  A program moved to the verified compiler is timed
+  re-run; `proved/check_trust.py --gate LOG`: `ASSUME=1 make.sh` lists what `proved/TRUSTED.txt` lists and nothing more.  A program moved to the verified compiler is timed
   against the translator's build (F49); a reifier change that touches the helpers or the call sites is timed on the kernels'
   programs (F58).
 - Record the result in §12.V with the numbers that ran, then push.

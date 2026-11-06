@@ -1,0 +1,238 @@
+# What is assumed.  proved/check_trust.py compares this list with the tree and with the gate's Print Assumptions; a difference stops a chain and a push.
+# Adding a line is the owner's decision (Rocq-C-solution.md §13.9).  Removing one is what the work is for.
+# hw: only the machine defines it.  mem: the abstract memory, its laws proved for a model.  env: what the program is given by the loader and the driver.
+# rocq: a fact Rocq's own axioms leave open.  audit: not plainly hardware, to be checked.  remove: logic, to be proved and taken off this list.
+
+axiom KQBound.v:kq_len  # mem
+axiom KQBound.v:kq_len32  # mem
+axiom KQRun.v:hw_addr  # hw
+axiom KQRun.v:hw_aload  # hw
+axiom KQRun.v:hw_astore  # hw
+axiom KQRun.v:hw_astore64  # hw
+axiom KQRun.v:hw_atomic  # hw
+axiom KQRun.v:hw_atomic64  # hw
+axiom KQRun.v:hw_call  # hw
+axiom KQRun.v:hw_cas  # hw
+axiom KQRun.v:hw_cas64  # hw
+axiom KQRun.v:hw_cmp  # audit
+axiom KQRun.v:hw_code_sync  # hw
+axiom KQRun.v:hw_copy  # audit
+axiom KQRun.v:hw_fence  # hw
+axiom KQRun.v:hw_fill  # audit
+axiom KQRun.v:hw_load  # hw
+axiom KQRun.v:hw_run  # hw
+axiom KQRun.v:hw_store  # hw
+axiom KQRun.v:hw_store64  # hw
+axiom KQRun.v:kq_arg  # env
+axiom KQRun.v:kq_grow  # audit
+axiom KQRun.v:kq_in  # env
+axiom KQRun.v:kq_input  # env
+axiom KQRun.v:kq_out  # env
+axiom KQRun.v:kq_size  # mem
+axiom KQRun.v:kq_sum  # env
+axiom KQRun.v:mem  # mem
+axiom KQRun.v:rd  # mem
+axiom KQRun.v:rd32  # mem
+axiom KQRun.v:upd  # mem
+axiom KQRun.v:upd32  # mem
+axiom KQSpec.v:hw_trace  # mem
+axiom KQSpec.v:real_laws  # mem
+axiom hw/Runtime.v:hw_cpu_code  # hw
+axiom hw/Runtime.v:hw_irq_entry  # hw
+axiom hw/Runtime.v:hw_irq_info  # hw
+axiom hw/Runtime.v:hw_irq_take  # hw
+axiom hw/Runtime.v:hw_sym  # hw
+axiom hw/User.v:hw_user  # hw
+axiom hw/User.v:hw_userf  # hw
+axiom proved/KQTArith.v:divs_min_neg1  # rocq
+
+hwop HLoad  # hw
+hwop HStore  # hw
+hwop HStore64  # hw
+hwop HAtomic  # hw
+hwop HAtomic64  # hw
+hwop HCas  # hw
+hwop HCas64  # hw
+hwop HALoad  # hw
+hwop HAStore  # hw
+hwop HAStore64  # hw
+hwop HFence  # hw
+hwop HCopy  # audit
+hwop HFill  # audit
+hwop HCmp  # audit
+hwop HCall  # hw
+hwop HRun  # hw
+hwop HCodeSync  # hw
+hwop HIrqTake  # hw
+hwop HUser  # hw
+hwop HGrow  # audit
+
+hwfop FAddr  # hw
+hwfop FIrqInfo  # hw
+hwfop FIrqEntry  # hw
+hwfop FCpuCode  # hw
+hwfop FSym  # hw
+hwfop FUser  # hw
+hwfop FHead0  # remove
+hwfop FTail0  # remove
+hwfop FMulHi  # remove
+hwfop FDiv21Q  # remove
+hwfop FDiv21R  # remove
+
+cbody kq_hw_addr  # hw
+cbody kq_hw_aload  # hw
+cbody kq_hw_astore  # hw
+cbody kq_hw_astore64  # hw
+cbody kq_hw_atomic  # hw
+cbody kq_hw_atomic64  # hw
+cbody kq_hw_call  # hw
+cbody kq_hw_cas  # hw
+cbody kq_hw_cas64  # hw
+cbody kq_hw_cmp  # audit
+cbody kq_hw_code_sync  # hw
+cbody kq_hw_copy  # audit
+cbody kq_hw_cpu_code  # hw
+cbody kq_hw_div21q  # remove
+cbody kq_hw_div21r  # remove
+cbody kq_hw_fence  # hw
+cbody kq_hw_fill  # audit
+cbody kq_hw_head0  # remove
+cbody kq_hw_irq_entry  # hw
+cbody kq_hw_irq_info  # hw
+cbody kq_hw_irq_take  # hw
+cbody kq_hw_load  # hw
+cbody kq_hw_mulhi  # remove
+cbody kq_hw_put  # hw
+cbody kq_hw_put64  # hw
+cbody kq_hw_run  # hw
+cbody kq_hw_store  # hw
+cbody kq_hw_store64  # hw
+cbody kq_hw_sym  # hw
+cbody kq_hw_tail0  # remove
+cbody kq_hw_wide  # hw
+
+assumption Axioms.proof_irr
+assumption ClassicalDedekindReals.sig_forall_dec
+assumption ClassicalDedekindReals.sig_not_dec
+assumption Classical_Prop.classic
+assumption Events.external_functions_sem
+assumption Events.inline_assembly_sem
+assumption FunctionalExtensionality.functional_extensionality_dep
+assumption KQBound.kq_len
+assumption KQBound.kq_len32
+assumption KQRun.hw_addr
+assumption KQRun.hw_aload
+assumption KQRun.hw_astore
+assumption KQRun.hw_astore64
+assumption KQRun.hw_atomic
+assumption KQRun.hw_atomic64
+assumption KQRun.hw_call
+assumption KQRun.hw_cas
+assumption KQRun.hw_cas64
+assumption KQRun.hw_cmp
+assumption KQRun.hw_code_sync
+assumption KQRun.hw_copy
+assumption KQRun.hw_fence
+assumption KQRun.hw_fill
+assumption KQRun.hw_load
+assumption KQRun.hw_run
+assumption KQRun.hw_store
+assumption KQRun.hw_store64
+assumption KQRun.kq_grow
+assumption KQRun.kq_input
+assumption KQRun.kq_size
+assumption KQRun.mem
+assumption KQRun.rd
+assumption KQRun.rd32
+assumption KQRun.upd
+assumption KQRun.upd32
+assumption KQSpec.hw_trace
+assumption KQSpec.real_laws
+assumption KQTArith.divs_min_neg1
+assumption PrimFloat.float
+assumption PrimInt63.add
+assumption PrimInt63.asr
+assumption PrimInt63.div
+assumption PrimInt63.diveucl_21
+assumption PrimInt63.divs
+assumption PrimInt63.eqb
+assumption PrimInt63.head0
+assumption PrimInt63.int
+assumption PrimInt63.land
+assumption PrimInt63.leb
+assumption PrimInt63.lesb
+assumption PrimInt63.lor
+assumption PrimInt63.lsl
+assumption PrimInt63.lsr
+assumption PrimInt63.ltb
+assumption PrimInt63.ltsb
+assumption PrimInt63.lxor
+assumption PrimInt63.mod
+assumption PrimInt63.mods
+assumption PrimInt63.mul
+assumption PrimInt63.mulc
+assumption PrimInt63.sub
+assumption PrimInt63.tail0
+assumption PrimString.string
+assumption Runtime.hw_cpu_code
+assumption Runtime.hw_irq_entry
+assumption Runtime.hw_irq_info
+assumption Runtime.hw_irq_take
+assumption Runtime.hw_sym
+assumption Sint63Axioms.asr_spec
+assumption Sint63Axioms.div_spec
+assumption Sint63Axioms.leb_spec
+assumption Sint63Axioms.ltb_spec
+assumption Sint63Axioms.mod_spec
+assumption Uint63Axioms.add_spec
+assumption Uint63Axioms.div_spec
+assumption Uint63Axioms.eqb_correct
+assumption Uint63Axioms.eqb_refl
+assumption Uint63Axioms.land_spec
+assumption Uint63Axioms.leb_spec
+assumption Uint63Axioms.lor_spec
+assumption Uint63Axioms.lsl_spec
+assumption Uint63Axioms.lsr_spec
+assumption Uint63Axioms.ltb_spec
+assumption Uint63Axioms.lxor_spec
+assumption Uint63Axioms.mod_spec
+assumption Uint63Axioms.mul_spec
+assumption Uint63Axioms.of_to_Z
+assumption Uint63Axioms.sub_spec
+assumption User.hw_user
+assumption User.hw_userf
+assumption add
+assumption add_spec
+assumption asr
+assumption div
+assumption diveucl_21
+assumption divs
+assumption eq_refl
+assumption eqb
+assumption eqb_correct
+assumption eqb_refl
+assumption head0
+assumption int
+assumption land
+assumption land_spec
+assumption leb
+assumption leb_spec
+assumption lesb
+assumption lor
+assumption lor_spec
+assumption lsl
+assumption lsl_spec
+assumption lsr
+assumption lsr_spec
+assumption ltb
+assumption ltb_spec
+assumption ltsb
+assumption lxor
+assumption mod
+assumption mods
+assumption mul
+assumption mulc
+assumption of_to_Z
+assumption sub
+assumption sub_spec
+assumption tail0

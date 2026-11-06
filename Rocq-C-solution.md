@@ -24,6 +24,11 @@ appear in.  A step built narrower than its design ("only at the entry", "only in
 a construct-table cell in the same commit, so the table shows it as a gap; "0 gaps" is a claim about the table's cells, never
 about completeness while known unread places have no cell.  (`CLAUDE.md` in the repository says the same, for every session.)
 
+**WHAT MAY BE ASSUMED IS STRICT TOO (owner, 2026-11-06).**  Everything that has a definition other than the machine is proved.  A CPU having
+an instruction for something does not make it hardware.  `proved/TRUSTED.txt` lists what is assumed; a chain and a push stop on any difference
+from it (`proved/check_trust.py`), and a change to it goes to the owner (§0.3, §13.9, D29, F66).  **Today the proof ends at Clight**: the
+printer, clang, the loader and the driver are not proved (§12.H), and five operations of step 65 are C bodies nobody proved, being removed (§12.T).
+
 **What exists and works (all verified on the final tree, 2026-10-29/30):**
 
 ```
@@ -167,9 +172,19 @@ ordinary Rocq over 63-bit integers and memory blocks.  The proof says the genera
 including the sequence of operations on memory and devices.  Properties of the Rocq text (a protocol, an invariant) carry over
 to the C.
 
-**Assumed (hardware level): what an instruction does.**  A store to a device register, a barrier, an atomic, a control
-register write, a halt.  Each is a primitive with a stated law and an entry in the trace.  The real behaviour of the hardware is
-checked by running on the device or an emulator (QEMU, KVM), not proved.  There is no model of the CPU.
+**Assumed (hardware level): only what has no definition except the machine.**  A store to a device register, a barrier, an
+atomic against another processor, a control register write, a halt.  Each is a primitive with a stated law and an entry in the
+trace.  The real behaviour of the hardware is checked by running on the device or an emulator (QEMU, KVM), not proved.  There is
+no model of the CPU.
+
+**The test: does it have a definition other than the machine?**  If Rocq can state what it computes, it is logic: it is written in
+Rocq and proved.  A CPU having an instruction for it does not make it hardware: `clz`, the high half of a product, a division, what
+a copy does to a memory are logic.  "Trusted" and "hardware" are different words: C written here that nobody proved is trusted, and
+it is this work's to prove, not the hardware's.  About Rocq's own primitives nothing is assumed beyond Rocq's axioms and its kernel;
+"the axioms only relate them" is no reason to assume anything, since relating them is enough to prove a definition equal.  Where
+the axioms are silent no fact is added: a closed term is computed, a test in the program rules the case out, otherwise the program
+is refused with that reason (§0.5).  Speed is no reason either: a faster form is a Rocq function or a case of the generator's proof,
+measured.  The list of what is assumed is `proved/TRUSTED.txt` (§1.10, §13.9).
 
 **Hand-written, once per architecture, trusted:** boot and entry stubs, interrupt entry, context switch, the linker script, in
 the style of Linux (`head.S`, `entry.S`).  Small `.S` files or inline asm.  Not per program.
@@ -210,6 +225,9 @@ inlining, join points, lambda lifting, specialization, tail calls as jumps — i
 4. **A constant with no body in Rocq's kernel**: an `Axiom`, a `Parameter`, a function behind a module's `:`.  This one has nothing to do
    with a runtime: Rocq itself cannot run such a constant and nothing says what it computes, so no theorem can say the C computes it
    (F65).  `<:` keeps a module's bodies; what only the hardware defines is named by a machine operation with its law (§1.8).
+   The same reason covers a primitive where Rocq's axioms say nothing and the arguments are not known (`diveucl_21 a b c` with nothing
+   showing `a < c`): nothing says what it computes there.  A literal is computed, a test in the text rules the case out, otherwise it
+   is refused with that reason (§12.T).
 
 **Whether a value needs a runtime is decided by its size and its lifetime, never by its type.**  A value of a non-recursive
 inductive type of numbers (`option int`, `int + int`, an enumeration whose constructors carry numbers) has a fixed size: it is
@@ -260,9 +278,11 @@ convention that makes the translator simpler, a check that makes a proof go thro
 limit written down instead of removed).  Before any change, answer these in order; a change that fails one is not made, however
 convenient.
 
-1. **Does the trusted base stay the same?**  Nothing new is trusted: the translator stays unchecked-but-verified-per-program, the
-   generator's theorem covers the change (a new operation is a new case of it), and a machine operation comes with a law proved
-   for the model.  If the change needs a new assumption, it is a decision for the owner, not a step.
+1. **Does the trusted base stay the same?**  Nothing new is trusted: the translator stays unchecked-but-verified-per-program and
+   the generator's theorem covers the change.  A new machine operation, a new C body, a new axiom is a new assumption, whatever comes
+   with it: a law proved for the model shows the laws do not contradict each other and says nothing about the C.  It passes only
+   §0.3's test, and then it is a decision for the owner, not a step (§13.9); `proved/check_trust.py` stops the chain and the push on
+   a difference.  If a construct costs no proof work, find what is carrying it (F66).
 2. **Is it natural and native?**  Would ordinary Rocq or Lean code look like this?  Then it must be accepted.  Does the change
    make the user write something they would not otherwise write (an order of parameters, a wrapper, a special name, a budget to
    guess)?  Then it is the wrong change, unless Rocq itself imposes it or a theorem needs it (D22).  The only refusals are the four
@@ -298,7 +318,7 @@ All of these, on one tree, each by its own check — not before, and never by a 
 | 4 | **Written and compiled like `lean --c`**: one command in an ordinary `.v` file, the C at once, the proofs behind it, refusals that read like type errors (§12.B, D23) | every example and corpus program compiled that way, with the same C as before |
 | 5 | **Freestanding** (§9.5) | the generated C of the examples builds with no hosted headers and runs |
 | 6 | **C speed**: no cost the translation adds to every operation is left once the general passes are in (§6.4) | the same-shape benchmarks (`tests/mkworst.py`) against C written the same way; `proved/corpus.sh times` |
-| 7 | **Trust unchanged** | `ASSUME=1 bash proved/make.sh` lists what §1.10 lists and nothing more |
+| 7 | **Trust: only what has no definition except the machine** | `proved/check_trust.py --gate LOG`: the tree and `ASSUME=1 bash proved/make.sh` list what `proved/TRUSTED.txt` lists, with no line of the classes `remove` and `audit` left |
 | 8 | **Proof time small**: cold test kernels under a minute, an unchanged rerun at the cache's floor | `KQ_TIMES=1`; the kernels' times |
 | 8b | **No proof search per program**: every program is compiled through the verified `compile`, with only the conversion check `denote s = f` (§1.12) | the gate with the walk switched off |
 | 9 | **Hardware by the user**: the test kernels prove and boot; an architecture is added from its manual over the generic primitives with no change to the core (§9.1) | `bash hw/check.sh` |
@@ -555,6 +575,17 @@ memory primitives `KQRun.rd` / `upd` / `kq_size` / `mem` and `KQSpec.real_laws`;
 Outside the proofs: the loader that fills the tables, the driver in `kitc.py`, the printer, clang, and the C bodies of the
 machine operations with the laws the theorem assumes of them.  The per-program statements add nothing: the translator's output
 is checked by the kernel every time.
+
+**So the proof ends at Clight**: the theorem says the Clight the generator makes computes the Rocq function, under the list below.
+Printing that Clight as C, compiling the C, filling the tables and starting it are not proved (§12.H).  Say "proved to Clight, under
+`proved/TRUSTED.txt`"; "verified Rocq to C" is not true past that.
+
+**`proved/TRUSTED.txt` is the list**: every axiom of the proofs, every operation of `hwop` and `hwfop`, every C body of `hw/kq_hw.h`,
+every name the gate's `Print Assumptions` gives, each with a class: `hw` (only the machine defines it), `mem` (the abstract memory, its
+laws proved for a model), `env` (what the program is given by the loader and the driver), `rocq` (a fact Rocq's own axioms leave open),
+`audit` (not plainly hardware, to be checked), `remove` (logic, to be proved and taken off).  `proved/check_trust.py` compares it with
+the tree and, with `--gate`, with the gate's log: a difference exits 1, and the chains and the repository's push hook stop.  A cell of
+the construct table that rests on an operation marked `remove` or `audit` is not simply "proved" (§12.T).
 
 ### 1.11 Where the architecture goes: proofs built by construction, the CakeML way (decided by the owner, 2026-10-30; its plan superseded the same day by §1.12)
 
@@ -858,7 +889,7 @@ programmer builds by hand as a struct; written implicitly it allocates behind th
 The generator's theorem (`kit_function_correct`) is proved once, by induction over KQL, **one case per constructor of a finite
 operation set** — the shape of the "mother theorem" of the KernelQ records (pedagogy doc LS.19.9: *for all programs, by induction,
 one case per constructor of the finite op set*).  Adding an operation is adding a constructor, its meaning, one case of the
-proof, its C, and (for a machine operation) its law with the law proved for the model.  So "the primitives are complete" is a
+proof, its C, and (for a machine operation, which only what passes §0.3's test may be) its law with the law proved for the model.  So "the primitives are complete" is a
 finite checklist against what freestanding C offers, not an open question:
 
 | C | KQL | State |
@@ -875,8 +906,8 @@ finite checklist against what freestanding C offers, not an open question:
 | **`uint64_t` `/ %`**, signed 64-bit (`int64_t`) arithmetic beyond 63 bits, the high half of a 64×64 product | — | **missing** (add `W_divu`, `W_modu`, signed variants, `W_mulhi` to `w64op`) |
 | `int8/16/32_t`, `uint8/16/32_t` arithmetic with C's wrap-around | a library over `int` with masks and sign extension (`sx32` exists) | **library to write** |
 | loads and stores of 8, 16, 32, 64 bits | `Ekld8`/`Ekst8`, `rd16`/`upd16` (two bytes), `Ekld32`/`Ekst32`, `Ekld`/`Ekst`, views | proved |
-| `volatile`, atomics, fences, `memcpy`, `memset`, `memcmp` | `Ehw` machine operations | laws, C bodies assumed |
-| `__builtin_popcount`, `clz`, `ctz`, `bswap`, rotate | expressible as loops or bit tricks today | **optional single instructions** (speed) |
+| `volatile`, atomics, fences, `memcpy`, `memset`, `memcmp` | `Ehw` machine operations | laws, C bodies assumed; `memcpy`, `memset`, `memcmp` have a definition, so they are on the list as `audit` (§12.T) |
+| `__builtin_popcount`, `clz`, `ctz`, `bswap`, rotate | Rocq functions, proved (`head0`, `tail0`: §12.T) | a single instruction only as a case of the generator's proof, measured; never as a machine operation (F66) |
 | `malloc`, `free` | a library on growing blocks | proved library |
 | `float`, `double` | — | hosted, not started |
 | `setjmp`/`longjmp`, variadic functions, `alloca` | — | not planned (not needed by freestanding programs written this way) |
@@ -1551,6 +1582,7 @@ Each with its reason.  Re-opening one needs a new fact, not a new preference.
 | D25 | **The top half moves to proofs built by construction, the CakeML way: the translator emits each piece of KQL with the lemma that justifies it (one lemma per construct), so no proof is searched for.  The hybrid stays (per-program proofs on top, one proved generator below); the translator itself is not proved (no single "for every program" theorem).  Spike first, then convert construct by construct, then the completeness theorem; release builds through `ccomp`**  *(Its plan — converting the walk — was superseded the same day by D26.)* | CakeML, the strongest project of this kind, uses this split with a proof-producing translator on top (§1.11); it removes proof-search failures and most proof time and makes each new construct one rule plus one lemma, at a fraction of the cost of a verified translator, which would mean proving the translator against MetaRocq's semantics with primitive integers for months (owner, 2026-10-30: "go ahead, record this decision with every context") |
 | D27 | **The memory law "writes to two different cells commute" may be added to `KQSpec.laws`** (proved for the model in `KQModel.v`, with functional extensionality as the other laws are), when the construct that needs it is built — results of more than two numbers through the slot block | it holds of every memory; it does not follow from the two existing equations (F43); one more statement assumed of the real memory, so the owner decided (2026-10-30: "go ahead") |
 | D28 | **Our own fork of Rocq carries the conversion memo** (rocq-prover/rocq#22309, backported to 9.1.1 as `rocq-fork/conv-memo-v9.1.1.patch`), not contributed upstream and not waited for.  It is a change to Rocq's kernel, so to the trusted base; the owner asked for it to be made sound and proved correct (§12.R) | measured: it removes F46 (a read-then-write chain of 100 steps checked in 0.003 s, 30 steps were over 120 s) with nothing else changed.  It is a **general** change (§0.7, §0.9 question 3), not a rule for some programs: memoization of the kernel's comparison within one conversion check, so that two shared subterms are compared once rather than once per path to them — the standard way to compare graphs with sharing, and what Lean's kernel does (F46: 13 ms at 1000 steps); it is not a store of results across runs (the table lives for one check and is dropped), and it is keyed to no construct or program.  Owner, 2026-10-31: "no need to patch upstream to them, we do our own upstream fork".  **Weighed against the alternative and chosen over it:** `Kq Definition` (the compiled function *defined as* `denote s` by our command, as `Program Definition` / `Equations` define theirs) adds nothing to the trusted base and needs no per-program check at all, but users write the command instead of `Definition`, the kernel checks "the C computes what you typed" only where the check is cheap, and users' own proofs that unfold a long read-then-write chain stay exponential; the fork keeps plain `Definition`, checks fidelity always in linear time and makes those proofs fast too, at the price of a patch under every proof.  The owner: "I will choose fork regardless unverified OCaml since it follows same as MetaRocq" — Rocq's kernel is unverified OCaml, and the project already relies on MetaRocq's OCaml quote, so an argued, model-proved, tested patch is the same class of trust |
+| D29 | **Only what has no definition except the machine is assumed.  About Rocq's primitives: Rocq's axioms and kernel and nothing more; where they are silent a closed term is computed, a test in the text rules the case out, otherwise a refusal with that reason.  `proved/TRUSTED.txt` is the list; a change to it is the owner's; a chain and a push stop on a difference** | owner, 2026-11-06: "I want everything verified"; "write them as ordinary Rocq functions and prove each equal to the primitive".  The goal already said so; step 65 went around it (F66), so the check is a program now, not a sentence |
 | D26 | **A verified compiler by reflection: a syntax `S` of the accepted fragment, its meaning `denote`, a compiler `compile : S -> KQL` proved once, the user's function reified into `S` by an untrusted reifier, and per program only the conversion check `denote s = f`.  The current translator with the walk stays as the fallback until `S` covers the table; emit-then-prove is the interim.  The walk is not converted to proofs built by construction (D25's plan dropped)** | the owner needs other people's programs compiled with zero proof time (2026-10-30); MetaRocq's formal evaluation has no rule for primitive operations, so a translator verified against it cannot even state our programs' runs and would add MetaRocq's quote and typing/erasure assumptions to the trust; reflection gives one theorem for every program of `S`, no search per program and nothing added to the trust (§1.12).  The owner, after the full comparison (§1.12, "the weighing"): "we are going with reflection" |
 
 ---
@@ -1623,6 +1655,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F62 | The reifier's step was timed in two trees whose directories differ in size: `coqc` scans every directory `-R` and `-Q` give it, and the working tree holds every cell's generated files and the cells themselves (234 MB against 101 MB), so a file that loads only MetaRocq takes 0.80 s there against 0.73 s.  The 0.04–0.08 s the records of steps 44 continued to 48 put on the libraries' loading (and on the reifier's tests) was this.  Timed in copies of both trees without those directories, step 44 continued's files against step 48's: `HWP_kernel` 2.50 / 2.52 s, `HWP_own` 1.93 / 1.95, `HWP_irqnow` 1.63 / 1.64 — the same.  The timing now makes those copies. |
 | F63 | §0.5's third refusal took its example from a fixed difference: `let t := upd .. s in .. t .. s ..` differs from `s` in one cell, whose old value a variable keeps and puts back, as a C programmer does; `A_par_write_two` (step 47, one cell named in the callee's text) is the same.  Only two versions differing in cells whose number comes from the data need a copy (found by step 49's design, 2026-11-03) | §0.5's third refusal worded by the size of the difference, as values are (F35); the fixed side gets cells (gaps), a pin and a control show the side from the data (step 49) |
 | F64 | `&&` and `||` are functions: under `vm_compute` both sides are evaluated, and a scan written `is_pm ty && pm_bare 100000 0 body` walked the whole body at every let, a fuel literal of 100000 built each time, quadratic on a long chain of lets.  The first version of step 48 continued's `has_pm_let` cost 27% on the kernels' reifier step (`HWP_kernel` 2.36 to 3.00 s), found by the timing before its commit (2026-11-04) | the test written with `if`, the cheap one first: back to 2.38 s.  The same as F58: a test the reifier runs often goes cheapest first, and only `if` makes that an order |
+| F66 | **Step 65 was wrong, and is recorded, not reverted silently.**  It put `head0`, `tail0`, the high half of `mulc` and `diveucl_21` behind `hwf_law` as five machine operations whose C bodies were written here (`hw/kq_hw.h`), and landed it without the owner's decision, against §0.3, §0.9 and §13.9.  The reasoning was false: its design says Rocq's axioms "only relate these", "so no definition stands in for them", while relating them is enough to prove a definition equal.  Nothing stopped it: §0.3 worded what is assumed as "what an instruction does", and CPUs have `clz`; §0.9 read as if a machine operation with a law were no new assumption, though the law's model says nothing about the C; §2.1 and §12.O offered these as "single instructions" and §13.4 had a recipe with no proof of the body; the chain printed the difference in the trusted base and carried on, and the record wrote it up; the table counted those cells as proved.  It is F36's drift: an easier route written up as the design.  Also found while answering it: Rocq's kernel gives `head0 0 = tail0 0 = 63` and `diveucl_21 a b c = (0, 0)` when `c <= a` (`vm_compute`), which the axioms do not say.  The first follows from computing at 0, the second cannot be stated for variables | §0.3's test, D29, `proved/TRUSTED.txt`, `proved/check_trust.py` in the chains and in a push hook, §13.4, §13.8; the operations proved and removed by §12.T.  If a construct costs no proof work, find what is carrying it |
 | F65 | §0.5 said three refusals, and a function behind a module's `:` is not one of them and not a gap: the kernel holds no body for it, Rocq cannot run it, and `denote s = f` has nothing to unfold.  The same for an `Axiom` and a `Parameter`.  Refused only with its short name until now, as if it were something not read.  And `kitc.py` looked for `kq_shared` in the body's own text alone, so a list of shared blocks in another file would have meant no check of them, silently (found by step 51's design, 2026-11-04) | a fourth refusal in §0.5 with its own reason, which names `<:`; `kq_shared` looked for wherever the program's text is, with the refusal of a plain access pinned from a module and from a file |
 | F38 | MetaRocq's formal evaluation (`EWcbvEval.eval`, `PCUICWcbvEval`) has rules for primitive values only, none for primitive operations: `PrimInt63.add` has no body, `eval_delta` cannot fire, every program here is stuck in it | the verified compiler is built by reflection over our own syntax instead (D26, §1.12) (read in the image's MetaRocq sources, 2026-10-30) |
 | F37 | CakeML's architecture is ours: a proof-producing translator from the logic's functions on top, one verified compiler below; Pancake is verified through a proof-producing decompiler.  The difference is that CakeML builds each proof by construction while ours searches | D25, §1.11 (read in the CakeML repository, 2026-10-30) |
@@ -1633,12 +1666,20 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 
 Each item: what, why, and how it is accepted.  The order is by how much of the goal it closes per unit of risk.
 
-**The order to take them in** (the letters are names, not the order): the batch of **A** in progress lands (done,
+**The order to take them in** (the letters are names, not the order): **T** first, after the steps already built land (the assumptions step 65 added; owner, 2026-11-06).  Before that: the batch of **A** in progress lands (done,
 `30d0199`) → **B**'s emit-then-prove part (done: `--emit-first`, `--no-proof`) → **V** (the verified compiler by reflection:
 spike, then growth; D26 — done 2026-11-02, the walk retired, step 29) → the rest of **A**, **L**, **P** (the user's ordinary text refused), done as constructs of `S` →
 **O** (operations C has) → the rest of **B** (compiling like `lean --c`) → **C** → **D** → **E** → **H** (with release builds
 through `ccomp`) → **G** → **M** → **J**; **F**, **I** and **N** when their condition arises; **K** when the owner says.
 **Q** is dropped (D26).
+
+**T. What is assumed, down to what has no definition except the machine (owner, 2026-11-06; D29, F66).**
+- *`head0`, `tail0`, the high half of `mulc`*: ordinary Rocq functions in `KQRun.v`, proved equal to the primitive from Rocq's axioms alone, read through step 64's route.  `FHead0`, `FTail0`, `FMulHi`, their C bodies and their lines in `proved/TRUSTED.txt` go.
+- *`diveucl_21`*: the same when `a < c`: `FDiv21Q`, `FDiv21R` go.  For `c <= a` Rocq's axioms say nothing: a literal is computed, a test in the text rules the case out, otherwise refused with that reason and a cell with its control.  No fact is added.
+- *`hw_copy`, `hw_fill`, `hw_cmp`, `kq_grow`*: marked `audit`.  Each has a definition (what it does to a memory): proved as Rocq functions where that is possible, and what stays is said with its reason.
+- *`divs_min_neg1`* (`proved/KQTArith.v`, class `rocq`): the same shape as `diveucl_21`, older.  How many programs depend on it with a variable divisor is measured and brought to the owner before anything changes.
+- *The printer, clang, the loader, the driver*: §12.H, unless the owner wants them sooner.
+Accepted when: no line of the classes `remove` and `audit` is left in `proved/TRUSTED.txt`, and §1.10 says so.
 
 **A. The construct-table gaps (20 cells, §3.5), then the by-design pins.**  The categories of §3.5: proof search for
 pair-valued choices and nested counter tests (6); polymorphic and class-based helpers by specialization (4); arithmetic and
@@ -1700,8 +1741,9 @@ functions; a C loop matched step for step to the Rocq loop).  Not started here; 
 nothing in the C, which is a translator rule plus a theorem.
 
 **O. The operation checklist (§2.1):** `uint64_t` division and remainder, signed 64-bit arithmetic, the high half of a product;
-a library for 8/16/32-bit signed and unsigned arithmetic with C's wrap-around; optionally `popcount`, `clz`, `ctz`, `bswap`,
-rotate as single instructions.  Each is a constructor, a case of the generator's proof, its C, and an example.
+a library for 8/16/32-bit signed and unsigned arithmetic with C's wrap-around; `popcount`, `clz`, `ctz`, `bswap`, rotate as Rocq
+functions, proved (a single instruction only as a case of the generator's proof, measured; never a machine operation: F66).  Each is
+a Rocq function, or a constructor, a case of the generator's proof, its C, and an example.
 
 **R. The kernel's conversion memo, made sound and proved (D28, F46).**  What can be proved, and what not: (1) a Rocq proof of the
 memoized comparison over a model of the closure machine — cells with identities, allocation (a fresh identity), the in-place
@@ -5069,6 +5111,7 @@ this public file; the rules of §13.3 hold wherever the runs go.
 - `proved/examples.sh`: every example gives its expected answer;
 - `proved/corpus.sh`: 36 of 36 proved, built and equal to the C++ answers;
 - `hw/spec.sh` passes;
+- `proved/check_trust.py --gate LOG` says `trust unchanged`: a difference is a stop (§13.9), never a line to write up;
 - when the translator or the walk changed: the kernels (`hw/build_proved.sh` for the five, or `hw/check.sh`) and the full
   construct table;
 - for a release: the same with `KQ_MONO=1` (no cache).
@@ -5090,7 +5133,7 @@ trigger prefix in the tuple of `kitc.py` (and `compile.sh` for the kit route); i
 `proved/` if they need the translator's libraries, then in `proved/make.sh` after their dependencies); `hw/spec.sh` compiles
 the files and, for theorems that must rest on the laws alone, checks their assumptions.
 
-**Add a machine operation:** the primitive in `KQRun.v`; its law in `KQSpec.v` and the law proved for the model in
+**Add a machine operation:** only for what passes §0.3's test, no definition except the machine: it is an assumption, the owner's decision first (§13.9), its line in `proved/TRUSTED.txt` in the same commit.  What Rocq can state gets a Rocq function and a proof instead.  The law proved for the model shows the laws do not contradict each other and says nothing about the C.  The primitive in `KQRun.v`; its law in `KQSpec.v` and the law proved for the model in
 `KQModel.v`; its entry in the translator's operation table (`hw_table` / `hwf_table` in `KQMTrans.v`) and its meaning in
 `KQMSem.v` (`hw_sem` / `hwf_sem`); its C body in `hw/kq_hw.h`.  Existing programs must give byte-identical C.
 
@@ -5141,6 +5184,8 @@ needs its own memory or arguments.
 | edit `proved/KQLoopSpec.v` by hand | it is generated | change `tools/mkloopspec.py` and regenerate |
 | change a tactic library and test a file that imports it without recompiling | the old library runs | recompile in dependency order first (§11, F22) |
 | run two heavy jobs on one machine, or a container without a memory cap | clashes, out-of-memory dumps that fill a disk | one heavy job, capped, `core=0` (§13.3) |
+| make an operation of arithmetic a machine operation with a C body, because a CPU has an instruction for it or because Rocq's axioms "only relate it" | it is logic, and the C body is unproved code of ours; relating it is enough to prove a definition equal (F66) | a Rocq function proved equal; where the axioms are silent add no fact: compute a closed term, read a test in the text, or refuse with the reason |
+| write up a difference in the trusted base in the record and carry on | a difference is a decision of the owner's that nobody asked for (F66) | stop; `proved/check_trust.py` makes it a stop |
 | lower a safety threshold (disk guard, timeout) quietly | the owner relies on it | say so, with the reason, in the report |
 | put host names, addresses, user names or local paths in the repository | it is public | keep them in local notes only |
 | call a refusal "by design" because of the value's type (`option`, a list, a function) | type is not the cause; size and lifetime are (§0.5, F35) | by design only with a pin that shows the cause and a control (§3.6) |
@@ -5152,8 +5197,10 @@ needs its own memory or arguments.
 
 ### 13.9 When to stop and ask the owner
 
-Pushing; deleting anything that is not this work's own output; changing a settled decision of §10; adding an assumption to the
-trusted base; anything touching the owner's other work or machines beyond this work's own containers and files; and any choice
+Deleting anything that is not this work's own output; changing a settled decision of §10; **any change to what is assumed: an
+`Axiom` or `Parameter`, an operation in `hwop` or `hwfop`, a body in `hw/kq_hw.h`, a line of `proved/TRUSTED.txt`, a difference from
+`proved/check_trust.py`** (the owner's standing "no need to wait" does not cover these; removing a line because it is now proved is what
+§12.T is for, and is reported); anything touching the owner's other work or machines beyond this work's own containers and files; and any choice
 between two designs that §0.9 does not order.  Everything else — design within §0.9, building, measuring, recording — goes ahead.
 
 ### 13.10 Reporting
@@ -5170,7 +5217,8 @@ Pushed to the public repository up to `a89c37b` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 69 (a function read in another form, its callers told by a lemma: the construct table 2534 of 2578, 19 by design, 24 gaps), the C, the gate |
+| (this commit) | §0.3's test, D29, F66, §1.10, §12.T, §13: only what has no definition except the machine is assumed; `proved/TRUSTED.txt`, `proved/check_trust.py`; `CLAUDE.md` |
+| `f6290ad` | §12.V: step 69 (a function read in another form, its callers told by a lemma: the construct table 2534 of 2578, 19 by design, 24 gaps), the C, the gate |
 | `a89c37b` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix` + `examples/poly_fix` step 69: a function read in another form, its callers told by a lemma; 26 cells; `KQR.v` unchanged |
 | `309e6b6` | §12.V: step 69's design -- a function read in another form, its callers told by a lemma |
 | `b45dfe3` | §12.V: step 68 (what Rocq's libraries and ordinary text spell otherwise: the construct table 2502 of 2552, 18 by design, 31 gaps), the C, the gate |
