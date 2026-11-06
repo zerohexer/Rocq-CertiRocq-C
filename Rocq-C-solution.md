@@ -5064,6 +5064,19 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   since `KQR.v` now names them through `Uint63`.  Nothing assumed changed; the three spellings added to `proved/TRUSTED.txt`.
   Next: what a third probe of natural programs found.
 
+**Step 71, a third probe; the state monad (§3.1, §12.A) — the design (2026-11-06).**  106 programs written as one writes Rocq, without looking at the reader: a state monad over the memory, a state machine on a data type, records updated and nested, a record of functions, classes, sections, definitions by tactics, `sig`, `option` and a result type, lists and trees written in the text, the spellings of the operations.  72 read.  What was refused is few classes, the largest one the way a functional programmer writes an operating system's code: `Definition M A := mem -> A * mem`, `ret`, `bind`, `x <- m ;; k`.
+- *The monad is no construct*: with `M` written out by hand the sequences, the writes and the tests in a plain function read already: a helper is written out by conversion, and `let (x, t') := (rd h i t, t) in ..` is iota.  So nothing new in `KQR.v`.  What was missing:
+  - *A name for a type made from types*: `M A` (`al_t` took `Definition cell := int` only): its body at its arguments, the same up to delta and beta.
+  - *A fixpoint whose result is such a name*: `Fixpoint loop k i : M int := match k with ..`: the match gives a function, step 60's `conv_def`, which looked at the type as it stands, and at a branch that is a lambda.  A branch that is a helper's call applied to more is one application (`pf_beta`).
+  - *A test in a continuation*: `x <- rdm 0 i ;; if x <? j then ret x else ..` leaves `(if c then f else g) t'` inside the helpers.  `mo_t` writes out a helper that takes a function, then step 68's floating sees the choice.  The equation: step 61's tactic, tried with the helpers unfolded on the user's side too (`cbn`, then a `cbv` that leaves only `kq_nat`), after the tactic as it stood, so no program read before changes its proof.
+- *Data written in the text*: a fixpoint on a list, a tree, a string given constructors: worked out as step 68 works out Rocq's own list functions, by the same rule and for the program's own fixpoints, a table behind a constant too.  The same up to conversion.  A fixpoint on data in any other place is what it was, §0.5's first refusal.  So it must not be taken for a counter's: `y_fix` and `deep_body` look at the type.
+- *A helper that chooses a function*, `mk c a` with `mk c := if c then f else g`; a match on a helper that chooses between known constructors, `let (o, t) := tk a s in ..` with `tk` giving `(None, t)` or `(Some v, t')`: written out, then floated.
+- *A constant under a primitive projection* was not looked for (`consts`): `pa (f n a)`, `f` recursive.  Cells for primitive projections with it.
+- *By design*: `PArray`, Rocq's primitive arrays: persistent, every version kept, which is a runtime (§0.5's first reason).  Control: a memory.
+- *Left, each with its cells*: a value and a memory given back together by a recursion, the value not one number (`M unit` for a procedure, `int * int * mem`, a record holding a memory); a record of functions or a class's instance given to a recursive function; a value holding a proof given back (`sig`, a `sumbool` by tactics, `Scheme Equality`'s `eq_dec`); a function giving back a counter; floating point (§12.I).
+- *Cells*: 111, `A_q_*`.
+- *The acceptance*: `proved/examples/monad_fix`: a procedure that fills, a recursion that sums, a test in the monad, a table and a tree written in the text; the answer worked out apart: 56043.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5248,7 +5261,8 @@ Pushed to the public repository up to `b682bd8` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 70 (counters and numbers: the construct table 2641 of 2697, 24 by design, 31 gaps), the C, the gate; `proved/TRUSTED.txt`: three spellings |
+| (this commit) | §12.V: step 71's design -- what a third probe of natural programs found |
+| `55d6105` | §12.V: step 70 (counters and numbers: the construct table 2641 of 2697, 24 by design, 31 gaps), the C, the gate; `proved/TRUSTED.txt`: three spellings |
 | `b682bd8` | `proved/KQR.v` + `KQRReify.v` + `matrix` + `examples/conv_fix` step 70: counters and numbers; 119 cells |
 | `34ebaa6` | §12.V: step 70's design -- counters and numbers |
 | `0739209` | §0.3's test, D29, F66, §1.10, §12.T, §13: only what has no definition except the machine is assumed; `proved/TRUSTED.txt`, `proved/check_trust.py`; `CLAUDE.md` |
