@@ -5219,6 +5219,13 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   / 14 / 14 s); **91 programs through the verified compiler, 0 refused**; `check_trust.py`: `trust unchanged`.  Next: what a
   fourth probe of natural programs found.
 
+**Step 77, what a fourth probe of natural programs found: a value and a memory written out (§3.1, §12.A) — the design (2026-11-07).**  A probe finds what the families do not, so another: 87 programs written as one writes them, drivers in an error monad over the memory, ring buffers, bitmaps, hash tables, schedulers, page-table walks, classes, sections, functors, proofs as arguments, with no thought of the reader.  60 are read as they stand.  The rest are classes, each with its cells:
+- *A helper giving back a value that is not one number and a memory* (`R A := M (option A)`, `res * mem`), not recursive: written out (`vm_ty` in `um_inl`, `vm_unf` until none is left), then the choices floated: a `let` of a value chosen among constructors is that value where it is taken apart, `fst` and `snd` go into a choice, a match on a `let` has the `let` outside.
+- *A program's own notation, a scope it opens*: what the reader found is read back as Rocq prints it, so `x |> f` printed an application otherwise and the reader's answer was lost: printed in a file with none of them in scope.
+- *The same with recursion*: `A_p_err_rec`, `_err_rec_mem`, `_res_mem_rec`, `_rec_mem_loop`, step 78.  *Left*: a proof as a parameter, a counter given back, a class's instance given to a recursion, a dependent pair, a vector, a written number through a definition, the kit's input and output: gaps with their cells.  `A_p_cps_grow` and `A_p_list_built` are by design, each with its control.
+- *The acceptance*: `proved/examples/drv_fix`: a driver in that monad; the answer worked out apart: 5024.
+- *Cells*: 87, `A_p_*`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5403,7 +5410,8 @@ Pushed to the public repository up to `64ac544` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 76 (a value with a proof given back: the construct table 2921 of 3018, 41 by design, 55 gaps, one cell lost), the C, the gate; F69 |
+| (this commit) | §12.V: step 77's design -- what a fourth probe found: a value and a memory written out |
+| `3db0886` | §12.V: step 76 (a value with a proof given back: the construct table 2921 of 3018, 41 by design, 55 gaps, one cell lost), the C, the gate; F69 |
 | `64ac544` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix` + `examples/proof_fix` step 76: a function giving back a value with a proof: `sig`, `sumbool`; 37 cells |
 | `1968a99` | §12.V: step 76's design -- a value and a proof given back |
 | `26acb1d` | §12.V: step 75 (the bytes in bulk as ordinary functions, §12.T done: the construct table 2882 of 2981, 41 by design, 57 gaps), the C, the gate |
