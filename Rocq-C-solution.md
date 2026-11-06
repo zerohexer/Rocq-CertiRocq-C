@@ -5145,6 +5145,12 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   `proved/TRUSTED.txt` now says, which has lost ten lines of the machine and four short names and gained four of Rocq's own
   axioms.  Next: the signed quotient: `divs_min_neg1` taken away.
 
+**Step 74, the signed quotient: `divs_min_neg1` taken away (§12.T) — the design (2026-11-06).**  `proved/KQTArith.v` had one axiom of ours about a primitive: the smallest number over -1 is the smallest number.  Rocq's `div_spec` excludes that case, and the generator's theorem needed its value.  It has the shape of `diveucl_21` when `c <= a`, and no fact is needed.
+- *`kq_divs a b`* (`KQRun.v`): `if a` is the smallest number `and b` is -1 `then a else divs a b`.  It says what the case is by its definition.  `Bdivs` means it: the theorem for the instruction is proved from `div_spec` and that definition, and the C is what it was.
+- *`/`*: `zdiv`'s text uses `kq_divs`, read as `Bdivs`.  A division by a variable needs no test and its C does not change.
+- *`PrimInt63.divs`, `Sint63.div` written out*: equal to `kq_divs` where the text rules the case out: a written number, a test that shows the divisor is not -1 or the first number is not the smallest (`=?`, a sign test, through `negb`, `andb`, `orb`, `let`s): `test_shows`, `divs_at`, `kq_guard`, by the lemmas of `proved/KQPrim.v`, which rest on nothing but `eqb_correct` and the kernel's computation.  Otherwise refused, with that reason and what to write: a pin and a control.
+- *Cells*: 45, `A_s_*`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5329,7 +5335,8 @@ Pushed to the public repository up to `9f620a8` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 73 (`head0`, `tail0`, `mulc`, `diveucl_21` proved: the construct table 2825 of 2915, 34 by design, 55 gaps), the C, the gate; F67, F68 |
+| (this commit) | §12.V: step 74's design -- the signed quotient: divs_min_neg1 taken away |
+| `bf35eb1` | §12.V: step 73 (`head0`, `tail0`, `mulc`, `diveucl_21` proved: the construct table 2825 of 2915, 34 by design, 55 gaps), the C, the gate; F67, F68 |
 | `9f620a8` | `KQRun.v` + `hw/kq_hw.h` + `proved/KQPrim.v` + `KQL.v` + `KQLGen.v` + `KQMSem.v` + `KQRReify.v` + `KQRWf.v` + `kitc.py` + `TRUSTED.txt` + `matrix` + `examples/mach_fix` step 73: `head0`, `tail0`, the high half of `mulc`, `diveucl_21` as ordinary functions, proved from Rocq's own axioms; five operations and their C bodies removed; 83 cells |
 | `8f3a57d` | §12.V: step 73's design -- head0, tail0, the high half of mulc, diveucl_21 as ordinary functions, proved |
 | `858221d` | §12.V: step 72 (a procedure, a test in a monad: the construct table 2756 of 2832, 26 by design, 49 gaps), the C, the gate |
