@@ -8,7 +8,7 @@ From KQ Require Import KQRun.
 From Corelib Require Import Numbers.Cyclic.Int63.CarryType.
 From Stdlib Require Sint63 Uint63.
 From Stdlib Require Arith.Compare_dec Arith.PeanoNat.
-From KQC Require KQMAuto.
+From KQC Require KQMAuto KQPrim.
 
 Section W.
 Variables (A : Type) (B : Type) (m : A -> nat) (wf : well_founded (MR lt m)).
@@ -249,16 +249,6 @@ Proof.
       assert (Heq : Sint63Axioms.to_Z x = Sint63Axioms.to_Z y) by lia.
       assert (x = y) by (apply Sint63.to_Z_inj; exact Heq). subst y. rewrite Uint63.eqb_refl in E2. discriminate.
 Qed.
-Lemma kq_mulc_def : forall x y : int, PrimInt63.mulc x y = (kq_mulhi x y, PrimInt63.mul x y).
-Proof.
-  intros x y. unfold kq_mulhi. destruct (PrimInt63.mulc x y) as [h l] eqn:E. cbn [fst]. f_equal.
-  apply Uint63.to_Z_inj. rewrite Uint63Axioms.mul_spec.
-  pose proof (Uint63Axioms.mulc_spec x y) as S. rewrite E in S. cbn [fst snd] in S. rewrite S.
-  pose proof (Uint63.to_Z_bounded l) as [L1 L2].
-  rewrite Z.add_comm, Z_mod_plus_full. rewrite Z.mod_small; [reflexivity | lia].
-Qed.
-Lemma kq_div21_def : forall a b c : int, PrimInt63.diveucl_21 a b c = (kq_div21q a b c, kq_div21r a b c).
-Proof. intros a b c. unfold kq_div21q, kq_div21r. destruct (PrimInt63.diveucl_21 a b c); reflexivity. Qed.
 Lemma kq_d_eq : forall (T : Type) (n m : nat) (a b : T), (if PeanoNat.Nat.eq_dec n m then a else b) = (if Nat.eqb n m then a else b).
 Proof. intros. destruct (PeanoNat.Nat.eq_dec n m) as [e|e]; [subst m; rewrite PeanoNat.Nat.eqb_refl | apply PeanoNat.Nat.eqb_neq in e; rewrite e]; reflexivity. Qed.
 Lemma kq_d_lt : forall (T : Type) (n m : nat) (a b : T), (if Compare_dec.lt_dec n m then a else b) = (if Nat.ltb n m then a else b).
@@ -283,20 +273,33 @@ Proof.
   - apply PeanoNat.Nat.ltb_nlt in E2. apply PeanoNat.Nat.compare_gt_iff. lia.
 Qed.
 Ltac prim_rw :=
-  progress (rewrite ?kq_d_eq, ?kq_d_lt, ?kq_d_le, ?kq_d_gt, ?kq_d_ge, ?kq_d_lel, ?kq_d_leg, ?kq_d_eqs, ?kq_compare_nat, ?kq_mulc_def, ?kq_div21_def, ?Uint63Axioms.compare_def_spec, ?kq_compares_def, ?Uint63Axioms.addc_def_spec, ?Uint63Axioms.addcarryc_def_spec,
+  progress (rewrite ?kq_d_eq, ?kq_d_lt, ?kq_d_le, ?kq_d_gt, ?kq_d_ge, ?kq_d_lel, ?kq_d_leg, ?kq_d_eqs, ?kq_compare_nat, ?KQPrim.kq_mulc_def, ?KQPrim.kq_h0_eq, ?KQPrim.kq_t0_eq, ?Uint63Axioms.compare_def_spec, ?kq_compares_def, ?Uint63Axioms.addc_def_spec, ?Uint63Axioms.addcarryc_def_spec,
                     ?Uint63Axioms.subc_def_spec, ?Uint63Axioms.subcarryc_def_spec, ?Uint63Axioms.diveucl_def_spec, ?Uint63Axioms.addmuldiv_def_spec;
             unfold Uint63Axioms.compare_def, Uint63Axioms.addc_def, Uint63Axioms.addcarryc_def, Uint63Axioms.subc_def, Uint63Axioms.subcarryc_def,
                    Uint63Axioms.diveucl_def, Uint63Axioms.addmuldiv_def, Uint63Axioms.addcarry).
+(** (step 73) [diveucl_21 a b c] where a test has shown [a < c], or the numbers are written: the kit's function *)
+Ltac kq_guard :=
+  match goal with
+  | e : andb ?x ?y = true |- context [PrimInt63.diveucl_21 _ _ _] => apply Bool.andb_true_iff in e; destruct e
+  | e : orb ?x ?y = false |- context [PrimInt63.diveucl_21 _ _ _] => apply Bool.orb_false_iff in e; destruct e
+  | e : negb ?x = true |- context [PrimInt63.diveucl_21 _ _ _] => apply Bool.negb_true_iff in e
+  | e : negb ?x = false |- context [PrimInt63.diveucl_21 _ _ _] => apply Bool.negb_false_iff in e
+  | e : PrimInt63.ltb ?a ?c = true |- context [PrimInt63.diveucl_21 ?a ?b ?c] => rewrite (KQPrim.kq_d21_eq a b c e)
+  | e : PrimInt63.leb ?c ?a = false |- context [PrimInt63.diveucl_21 ?a ?b ?c] => rewrite (KQPrim.kq_d21_le a b c e)
+  | |- context [PrimInt63.diveucl_21 ?a ?b ?c] => rewrite (KQPrim.kq_d21_eq a b c (eq_refl true))
+  | |- context [PrimInt63.diveucl_21 _ _ _] => match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
+  end.
 (** (step 69) a program's lemmas of what is read in another form: [kitc.py] sets it *)
 Ltac kq_rw := fail.
 (** (step 61) a fixpoint with its own call under a choice in an operand, and the same with the choice floated out: equal at each counter, test by test *)
 Ltac own_step IH :=
   repeat (cbn beta iota zeta delta [fst snd];
           first [ prim_rw
+                | kq_guard
                 | kq_rw
                 | progress (rewrite ?IH)
                 | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
-                | match goal with |- context [match ?c with pair _ _ => _ end] => lazymatch c with context [match _ with _ => _ end] => fail | _ => destruct c end end
+                | match goal with |- context [match ?c with pair _ _ => _ end] => lazymatch c with context [match _ with _ => _ end] => fail | PrimInt63.diveucl_21 _ _ _ => fail | _ => destruct c end end
                 | match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
                 | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
                 | match goal with |- context [match ?c with pair _ _ => _ end] => destruct c end
@@ -318,9 +321,10 @@ Definition kq_no_ih : True := I.
 Ltac own_step0 :=
   repeat (cbn beta iota zeta delta [fst snd];
           first [ prim_rw
+                | kq_guard
                 | kq_rw
                 | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
-                | match goal with |- context [match ?c with pair _ _ => _ end] => lazymatch c with context [match _ with _ => _ end] => fail | _ => destruct c end end
+                | match goal with |- context [match ?c with pair _ _ => _ end] => lazymatch c with context [match _ with _ => _ end] => fail | PrimInt63.diveucl_21 _ _ _ => fail | _ => destruct c end end
                 | match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
                 | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
                 | match goal with |- context [match ?c with pair _ _ => _ end] => destruct c end

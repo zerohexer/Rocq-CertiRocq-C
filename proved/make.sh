@@ -5,11 +5,11 @@
 cd "$(dirname "$0")/.."; eval $(opam env)
 for f in KQRun KQBound KQSpec KQModel hw/Runtime hw/User lib/Loop lib/LoopSpec; do coqc -w -all -R . KQ $f.v || exit 1; done
 cd proved
-for f in KQLSigned KQL KQTArith KQW64 KQByteArith KQBytes KQLGen KQMSem KQLProof KQLBack KQLAuto KQM KQMNames KQMAuto KQRWf KQLoopSpec KQLoopExamples KQMTrans KQMTop KQLPrint KQR KQRReify KQRChain; do
+for f in KQPrim KQLSigned KQL KQTArith KQW64 KQByteArith KQBytes KQLGen KQMSem KQLProof KQLBack KQLAuto KQM KQMNames KQMAuto KQRWf KQLoopSpec KQLoopExamples KQMTrans KQMTop KQLPrint KQR KQRReify KQRChain; do
   coqc -w -all -R .. KQ -Q . KQC $f.v || { echo "FAILED $f"; exit 1; }
 done
 if [ -n "$ASSUME" ]; then
-  printf 'From KQC Require Import KQMTop.\nPrint Assumptions kit_function_correct.\n' > /tmp/Assump.v
+  printf 'From KQC Require Import KQMTop.\nPrint Assumptions kit_function_correct.\nFrom KQC Require KQPrim.\nPrint Assumptions KQPrim.kq_mulc_def.\nPrint Assumptions KQPrim.kq_h0_eq.\nPrint Assumptions KQPrim.kq_t0_eq.\nPrint Assumptions KQPrim.kq_d21_eq.\nPrint Assumptions KQPrim.kq_d21_le.\n' > /tmp/Assump.v
   coqc -w -all -R .. KQ -Q . KQC /tmp/Assump.v
 fi
 echo core-ok

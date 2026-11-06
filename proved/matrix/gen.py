@@ -2846,6 +2846,173 @@ addA('q_nat_pair_ret', "", 'let (q, r) := sp n in if Nat.eqb r 0 then a else Uin
 addA('q_divmod', "", 'Uint63.of_nat (fst (Nat.divmod n 3 0 3))',
      '')
 
+# head0, tail0, mulc, diveucl_21: ordinary functions proved equal to the primitive (step 73)
+addA('t_h0_let', "", 'let x := PrimInt63.head0 a in x + b',
+     '')
+addA('t_h0_arg', "", 'PrimInt63.head0 (a + b)',
+     '')
+addA('t_h0_lit', "", 'PrimInt63.head0 5',
+     '')
+addA('t_h0_zero', "", 'PrimInt63.head0 0',
+     '')
+addA('t_h0_test', "", 'if PrimInt63.head0 a <? b then a else b',
+     '')
+addA('t_h0_read', "", 'PrimInt63.head0 (rd 0 a s)',
+     '')
+addA('t_h0_write', "", 'rd 0 a (upd 0 a (PrimInt63.head0 b) s)',
+     '')
+addA('t_h0_match', "", 'match n with O => PrimInt63.head0 a | S _ => b end',
+     '')
+addA('t_h0_pair', "", 'fst (PrimInt63.head0 a, b)',
+     '')
+addA('t_h0_helper', "", 'k a + k b',
+     'Definition k (x : int) : int := PrimInt63.head0 x + 1.\n')
+addA('t_h0_helper_mem', "", 'rd 0 a (wr a s)',
+     'Definition wr (x : int) (t : mem) : mem := upd 0 x (PrimInt63.head0 x) t.\n')
+addA('t_h0_loop', "", 'lp n a 0',
+     'Fixpoint lp (k : nat) (i acc : int) : int := match k with O => acc | S m => lp m (i + 1) (acc + PrimInt63.head0 i) end.\n')
+addA('t_h0_nontail', "", 'lp n a',
+     'Fixpoint lp (k : nat) (i : int) : int := match k with O => 0 | S m => PrimInt63.head0 i + lp m (i + 1) end.\n')
+addA('t_h0_given_lam', "", 'ap (fun x => PrimInt63.head0 x) n a',
+     'Fixpoint ap (f : int -> int) (k : nat) (x : int) : int := match k with O => x | S m => ap f m (f x) end.\n')
+addA('t_h0_given_bare', "", 'ap PrimInt63.head0 n a',
+     'Fixpoint ap (f : int -> int) (k : nat) (x : int) : int := match k with O => x | S m => ap f m (f x) end.\n')
+addA('t_t0_let', "", 'let x := PrimInt63.tail0 a in x + b',
+     '')
+addA('t_t0_arg', "", 'PrimInt63.tail0 (a + b)',
+     '')
+addA('t_t0_lit', "", 'PrimInt63.tail0 5',
+     '')
+addA('t_t0_zero', "", 'PrimInt63.tail0 0',
+     '')
+addA('t_t0_test', "", 'if PrimInt63.tail0 a <? b then a else b',
+     '')
+addA('t_t0_read', "", 'PrimInt63.tail0 (rd 0 a s)',
+     '')
+addA('t_t0_write', "", 'rd 0 a (upd 0 a (PrimInt63.tail0 b) s)',
+     '')
+addA('t_t0_match', "", 'match n with O => PrimInt63.tail0 a | S _ => b end',
+     '')
+addA('t_t0_pair', "", 'fst (PrimInt63.tail0 a, b)',
+     '')
+addA('t_t0_helper', "", 'k a + k b',
+     'Definition k (x : int) : int := PrimInt63.tail0 x + 1.\n')
+addA('t_t0_helper_mem', "", 'rd 0 a (wr a s)',
+     'Definition wr (x : int) (t : mem) : mem := upd 0 x (PrimInt63.tail0 x) t.\n')
+addA('t_t0_loop', "", 'lp n a 0',
+     'Fixpoint lp (k : nat) (i acc : int) : int := match k with O => acc | S m => lp m (i + 1) (acc + PrimInt63.tail0 i) end.\n')
+addA('t_t0_nontail', "", 'lp n a',
+     'Fixpoint lp (k : nat) (i : int) : int := match k with O => 0 | S m => PrimInt63.tail0 i + lp m (i + 1) end.\n')
+addA('t_t0_given_lam', "", 'ap (fun x => PrimInt63.tail0 x) n a',
+     'Fixpoint ap (f : int -> int) (k : nat) (x : int) : int := match k with O => x | S m => ap f m (f x) end.\n')
+addA('t_t0_given_bare', "", 'ap PrimInt63.tail0 n a',
+     'Fixpoint ap (f : int -> int) (k : nat) (x : int) : int := match k with O => x | S m => ap f m (f x) end.\n')
+addA('t_h0_nest', "", 'PrimInt63.head0 (PrimInt63.tail0 a)',
+     '')
+addA('t_mc_fst', "", 'fst (PrimInt63.mulc a b)',
+     '')
+addA('t_mc_snd', "", 'snd (PrimInt63.mulc a b)',
+     '')
+addA('t_mc_let', "", 'let (h, l) := PrimInt63.mulc a b in h * l',
+     '')
+addA('t_mc_lit', "", 'fst (PrimInt63.mulc 3 b)',
+     '')
+addA('t_mc_big', "", 'fst (PrimInt63.mulc 4611686018427387903 b)',
+     '')
+addA('t_mc_arg', "", 'fst (PrimInt63.mulc (a + 1) (b * 2))',
+     '')
+addA('t_mc_test', "", 'if fst (PrimInt63.mulc a b) =? 0 then a else b',
+     '')
+addA('t_mc_read', "", 'fst (PrimInt63.mulc (rd 0 a s) b)',
+     '')
+addA('t_mc_let_pair', "", 'let p := PrimInt63.mulc a b in fst p + snd p',
+     '')
+addA('t_mc_helper', "", 'hi a b + hi b a',
+     'Definition hi (x y : int) : int := fst (PrimInt63.mulc x y).\n')
+addA('t_mc_helper_pair', "", 'let (h, l) := m a b in h + l',
+     'Definition m (x y : int) : int * int := PrimInt63.mulc x y.\n')
+addA('t_mc_loop', "", 'lp n a 0',
+     'Fixpoint lp (k : nat) (i acc : int) : int := match k with O => acc | S m => lp m (i + 1) (acc + fst (PrimInt63.mulc i i)) end.\n')
+addA('t_mc_nontail', "", 'lp n a',
+     'Fixpoint lp (k : nat) (i : int) : int := match k with O => 0 | S m => fst (PrimInt63.mulc i i) + lp m (i + 1) end.\n')
+addA('t_mc_write', "", 'rd 0 a (upd 0 a (fst (PrimInt63.mulc a b)) s)',
+     '')
+addA('t_d_ltb', "", 'if PrimInt63.ltb a b then fst (PrimInt63.diveucl_21 a 7 b) else 0',
+     '')
+addA('t_d_leb', "", 'if PrimInt63.leb b a then 0 else fst (PrimInt63.diveucl_21 a 7 b)',
+     '')
+addA('t_d_negb', "", 'if negb (PrimInt63.ltb a b) then 0 else fst (PrimInt63.diveucl_21 a 7 b)',
+     '')
+addA('t_d_negb_leb', "", 'if negb (PrimInt63.leb b a) then fst (PrimInt63.diveucl_21 a 7 b) else 0',
+     '')
+addA('t_d_andb', "", 'if PrimInt63.ltb a b && (a <? 3) then fst (PrimInt63.diveucl_21 a 7 b) else 0',
+     '')
+addA('t_d_andb2', "", 'if (a <? 3) && PrimInt63.ltb a b then fst (PrimInt63.diveucl_21 a 7 b) else 0',
+     '')
+addA('t_d_orb', "", 'if PrimInt63.leb b a || (a =? 3) then 0 else fst (PrimInt63.diveucl_21 a 7 b)',
+     '')
+addA('t_d_match', "", 'match PrimInt63.ltb a b with true => fst (PrimInt63.diveucl_21 a 7 b) | false => 0 end',
+     '')
+addA('t_d_pair', "", 'if PrimInt63.ltb a b then let (q, r) := PrimInt63.diveucl_21 a 7 b in q + r else 0',
+     '')
+addA('t_d_pair_match', "", 'if PrimInt63.ltb a b then match PrimInt63.diveucl_21 a 7 b with pair q r => q * r end else 0',
+     '')
+addA('t_d_snd', "", 'if PrimInt63.ltb a b then snd (PrimInt63.diveucl_21 a 7 b) else 0',
+     '')
+addA('t_d_var', "", 'if PrimInt63.ltb a b then fst (PrimInt63.diveucl_21 a a b) else 0',
+     '')
+addA('t_d_under_let', "", 'if PrimInt63.ltb a b then let z := a + 1 in fst (PrimInt63.diveucl_21 a z b) else 0',
+     '')
+addA('t_d_let_arg', "", 'let x := a + 1 in if PrimInt63.ltb x b then fst (PrimInt63.diveucl_21 x 7 b) else 0',
+     '')
+addA('t_d_expr_arg', "", 'if PrimInt63.ltb (a + 1) b then fst (PrimInt63.diveucl_21 (a + 1) 7 b) else 0',
+     '')
+addA('t_d_nested', "", 'if PrimInt63.ltb a b then (if a <? 3 then fst (PrimInt63.diveucl_21 a 7 b) else 1) else 0',
+     '')
+addA('t_d_twice', "", 'if PrimInt63.ltb a b then fst (PrimInt63.diveucl_21 a 7 b) + snd (PrimInt63.diveucl_21 a 8 b) else 0',
+     '')
+addA('t_d_read', "", 'let x := rd 0 a s in if PrimInt63.ltb x b then fst (PrimInt63.diveucl_21 x 7 b) else 0',
+     '')
+addA('t_d_write', "", 'if PrimInt63.ltb a b then rd 0 a (upd 0 a (fst (PrimInt63.diveucl_21 a 3 b)) s) else 0',
+     '')
+addA('t_d_loop', "", 'lp n a b 0',
+     'Fixpoint lp (k : nat) (i c acc : int) : int := match k with O => acc | S m => if PrimInt63.ltb i c then lp m (i + 1) c (acc + fst (PrimInt63.diveucl_21 i 5 c)) else acc end.\n')
+addA('t_d_nontail', "", 'lp n a b',
+     'Fixpoint lp (k : nat) (i c : int) : int := match k with O => 0 | S m => if PrimInt63.ltb i c then fst (PrimInt63.diveucl_21 i 5 c) + lp m (i + 1) c else 0 end.\n')
+addA('t_d_helper_in', "", 'k a b + k b a',
+     'Definition k (x y : int) : int := if PrimInt63.ltb x y then fst (PrimInt63.diveucl_21 x 5 y) else 0.\n')
+addA('t_d_lit_lt', "", 'fst (PrimInt63.diveucl_21 1 a 3)',
+     '')
+addA('t_d_lit_all', "", 'fst (PrimInt63.diveucl_21 1 2 3)',
+     '')
+addA('t_d_lit_all_ge', "", 'fst (PrimInt63.diveucl_21 5 2 3)',
+     '')
+addA('t_d_lit_a', "", 'if PrimInt63.ltb 1 b then fst (PrimInt63.diveucl_21 1 a b) else 0',
+     '')
+addA('t_d_lit_c', "", 'if PrimInt63.ltb a 3 then fst (PrimInt63.diveucl_21 a b 3) else 0',
+     '')
+addA('t_d_let_test', "", 'let t := PrimInt63.ltb a b in if t then fst (PrimInt63.diveucl_21 a 7 b) else 0',
+     '')
+addA('t_d_helper_out', "", 'if PrimInt63.ltb a b then k a b else 0',
+     'Definition k (x y : int) : int := fst (PrimInt63.diveucl_21 x 5 y).\n')
+addA('t_d_trans', "", 'if PrimInt63.ltb a 5 then (if PrimInt63.ltb 5 b then fst (PrimInt63.diveucl_21 a 7 b) else 0) else 0',
+     '')
+addA('t_d_let_alias', "", 'let x := a in if PrimInt63.ltb a b then fst (PrimInt63.diveucl_21 x 7 b) else 0',
+     '')
+addA('t_d_none', "", 'fst (PrimInt63.diveucl_21 a 7 b)',
+     '')
+addA('t_d_lit_ge', "", 'fst (PrimInt63.diveucl_21 5 a 3)',
+     '')
+addA('t_d_other', "", 'if PrimInt63.ltb a b then fst (PrimInt63.diveucl_21 a 7 a) else 0',
+     '')
+addA('t_d_signed', "", 'if a <? b then fst (PrimInt63.diveucl_21 a 7 b) else 0',
+     '')
+addA('t_d_else', "", 'if PrimInt63.ltb a b then 0 else fst (PrimInt63.diveucl_21 a 7 b)',
+     '')
+addA('t_d_leb_then', "", 'if PrimInt63.leb b a then fst (PrimInt63.diveucl_21 a 7 b) else 0',
+     '')
+addA('t_d_outside', "", 'fst (PrimInt63.diveucl_21 a 7 b) + (if PrimInt63.ltb a b then 1 else 0)',
+     '')
 # a function giving back unit or a boolean and a memory, read in another form (step 72)
 addA('m_u_loop', "", 'rd 0 a (snd (loop n a s))',
      'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\nFixpoint loop (k : nat) (i : int) : M unit := match k with O => ret tt | S m => _ <- wrm 0 i i ;; loop m (i + 1) end.\n')

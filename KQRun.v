@@ -109,10 +109,52 @@ Fixpoint kq_nat_go (k : nat) (x : int) : nat :=
   end.
 (* a budget is at most 2^60 (more is more than any run can use): a counter always has room to count a few more *)
 Definition kq_nat (x : int) : nat := kq_nat_go 63 (if x <=? 1152921504606846976 then x else 1152921504606846976).
-(* the high half of a product and a division of two numbers by one (step 65): instructions of the machine, as hw_addr is *)
-Definition kq_mulhi (a b : int) : int := fst (PrimInt63.mulc a b).
-Definition kq_div21q (a b c : int) : int := fst (PrimInt63.diveucl_21 a b c).
-Definition kq_div21r (a b c : int) : int := snd (PrimInt63.diveucl_21 a b c).
+(* Rocq's machine numbers: what its axioms only relate to others, as ordinary functions, each proved equal to the primitive from
+   those axioms alone (proved/KQPrim.v; Rocq-C-solution.md §12.T, F66) *)
+(* the high half of a product, by digits of 21 bits *)
+Definition kq_mh (x y : int) : int :=
+  let x0 := PrimInt63.mod x 2097152 in
+  let x1 := PrimInt63.mod (PrimInt63.lsr x 21) 2097152 in
+  let x2 := PrimInt63.lsr x 42 in
+  let y0 := PrimInt63.mod y 2097152 in
+  let y1 := PrimInt63.mod (PrimInt63.lsr y 21) 2097152 in
+  let y2 := PrimInt63.lsr y 42 in
+  let t0 := PrimInt63.mul x0 y0 in
+  let t1 := PrimInt63.add (PrimInt63.add (PrimInt63.mul x0 y1) (PrimInt63.mul x1 y0)) (PrimInt63.lsr t0 21) in
+  let t2 := PrimInt63.add (PrimInt63.add (PrimInt63.add (PrimInt63.mul x0 y2) (PrimInt63.mul x1 y1)) (PrimInt63.mul x2 y0)) (PrimInt63.lsr t1 21) in
+  let t3 := PrimInt63.add (PrimInt63.add (PrimInt63.mul x1 y2) (PrimInt63.mul x2 y1)) (PrimInt63.lsr t2 21) in
+  PrimInt63.add t3 (PrimInt63.mul (PrimInt63.mul x2 y2) 2097152).
+(* the zeros above a number: a binary search, six tests *)
+Definition kq_h0x (t s x : int) : int := if PrimInt63.eqb (PrimInt63.lsr x t) 0 then PrimInt63.lsl x s else x.
+Definition kq_h0r (t s x r : int) : int := if PrimInt63.eqb (PrimInt63.lsr x t) 0 then PrimInt63.add r s else r.
+Definition kq_h0 (x0 : int) : int :=
+  let x1 := kq_h0x 31 32 x0 in let r1 := kq_h0r 31 32 x0 0 in
+  let x2 := kq_h0x 47 16 x1 in let r2 := kq_h0r 47 16 x1 r1 in
+  let x3 := kq_h0x 55 8 x2 in let r3 := kq_h0r 55 8 x2 r2 in
+  let x4 := kq_h0x 59 4 x3 in let r4 := kq_h0r 59 4 x3 r3 in
+  let x5 := kq_h0x 61 2 x4 in let r5 := kq_h0r 61 2 x4 r4 in
+  kq_h0r 62 1 x5 r5.
+(* the zeros below a number: the same downwards *)
+Definition kq_t0x (s t x : int) : int := if PrimInt63.eqb (PrimInt63.lsl x t) 0 then PrimInt63.lsr x s else x.
+Definition kq_t0r (s t x r : int) : int := if PrimInt63.eqb (PrimInt63.lsl x t) 0 then PrimInt63.add r s else r.
+Definition kq_t0 (x0 : int) : int :=
+  let x1 := kq_t0x 32 31 x0 in let r1 := kq_t0r 32 31 x0 0 in
+  let x2 := kq_t0x 16 47 x1 in let r2 := kq_t0r 16 47 x1 r1 in
+  let x3 := kq_t0x 8 55 x2 in let r3 := kq_t0r 8 55 x2 r2 in
+  let x4 := kq_t0x 4 59 x3 in let r4 := kq_t0r 4 59 x3 r3 in
+  let x5 := kq_t0x 2 61 x4 in let r5 := kq_t0r 2 61 x4 r4 in
+  kq_t0r 1 62 x5 r5.
+(* a number of two digits by a third, shift and subtract: what diveucl_21 is when the first digit is below the third *)
+Fixpoint kq_d21g (k : nat) (c q r l : int) {struct k} : int * int :=
+  match k with
+  | O => (q, r)
+  | S k' =>
+      let n := PrimInt63.add (PrimInt63.lsl r 1) (PrimInt63.lsr l 62) in
+      if andb (PrimInt63.eqb (PrimInt63.lsr r 62) 0) (PrimInt63.ltb n c)
+      then kq_d21g k' c (PrimInt63.lsl q 1) n (PrimInt63.lsl l 1)
+      else kq_d21g k' c (PrimInt63.add (PrimInt63.lsl q 1) 1) (PrimInt63.sub n c) (PrimInt63.lsl l 1)
+  end.
+Definition kq_d21 (a b c : int) : int * int := kq_d21g (kq_nat 63) c 0 a b.
 (* Rocq is told NOT to open `kq_nat` when it compares two programs (KQFast.v proves `main_kq = main` by having the
    kernel compare them).  A program's budget is `kq_nat (kq_arg 0)`: a number nobody knows before the run.  Opened,
    it is 63 nested tests each naming the next one twice, and comparing two of those never ends.  Computing with it

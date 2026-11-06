@@ -73,11 +73,6 @@ hwfop FIrqEntry  # hw
 hwfop FCpuCode  # hw
 hwfop FSym  # hw
 hwfop FUser  # hw
-hwfop FHead0  # remove
-hwfop FTail0  # remove
-hwfop FMulHi  # remove
-hwfop FDiv21Q  # remove
-hwfop FDiv21R  # remove
 
 cbody kq_hw_addr  # hw
 cbody kq_hw_aload  # hw
@@ -92,23 +87,18 @@ cbody kq_hw_cmp  # audit
 cbody kq_hw_code_sync  # hw
 cbody kq_hw_copy  # audit
 cbody kq_hw_cpu_code  # hw
-cbody kq_hw_div21q  # remove
-cbody kq_hw_div21r  # remove
 cbody kq_hw_fence  # hw
 cbody kq_hw_fill  # audit
-cbody kq_hw_head0  # remove
 cbody kq_hw_irq_entry  # hw
 cbody kq_hw_irq_info  # hw
 cbody kq_hw_irq_take  # hw
 cbody kq_hw_load  # hw
-cbody kq_hw_mulhi  # remove
 cbody kq_hw_put  # hw
 cbody kq_hw_put64  # hw
 cbody kq_hw_run  # hw
 cbody kq_hw_store  # hw
 cbody kq_hw_store64  # hw
 cbody kq_hw_sym  # hw
-cbody kq_hw_tail0  # remove
 cbody kq_hw_wide  # hw
 
 assumption Axioms.proof_irr
@@ -205,13 +195,11 @@ assumption add
 assumption add_spec
 assumption asr
 assumption div
-assumption diveucl_21
 assumption divs
 assumption eq_refl
 assumption eqb
 assumption eqb_correct
 assumption eqb_refl
-assumption head0
 assumption int
 assumption land
 assumption land_spec
@@ -231,12 +219,15 @@ assumption lxor
 assumption mod
 assumption mods
 assumption mul
-assumption mulc
 assumption of_to_Z
 assumption sub
 assumption sub_spec
-assumption tail0
 # Rocq's own: Uint63Axioms.div_spec, mod_spec, mul_spec, printed short where a file names them through Uint63
 assumption div_spec
 assumption mod_spec
 assumption mul_spec
+# Rocq's own axioms, what proved/KQPrim.v rests on: a program using head0, tail0, mulc or diveucl_21 rests on these
+assumption Uint63Axioms.diveucl_21_spec
+assumption Uint63Axioms.head0_spec
+assumption Uint63Axioms.mulc_spec
+assumption Uint63Axioms.tail0_spec

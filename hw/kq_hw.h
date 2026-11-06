@@ -150,29 +150,6 @@ KQ_HW value kq_hw_code_sync(value a, value n, value s) {
   if (k > 0) __builtin___clear_cache((char *) KQ_A(a), (char *) KQ_A(a) + k);
   KQ_BAR(); return s;
 }
-// ---- operations of Rocq's machine numbers that no other instruction gives (PrimInt63: head0, tail0, the high half of mulc, diveucl_21)
-KQ_HW value kq_hw_head0(value a) { return KQ_V((long) __builtin_clzll((kq_u) a)); }   /* a number's tag is the word's lowest bit, so the word is not 0, and its zeros on top are the number's */
-KQ_HW value kq_hw_tail0(value a) { kq_u n = (kq_u) a >> 1; return KQ_V(n ? (long) __builtin_ctzll(n) : 63L); }
-KQ_HW value kq_hw_mulhi(value a, value b) {
-  kq_u x = (kq_u) a >> 1, y = (kq_u) b >> 1, x0 = x & 0xffffffffULL, x1 = x >> 32, y0 = y & 0xffffffffULL, y1 = y >> 32;
-  kq_u p00 = x0 * y0, p01 = x0 * y1, p10 = x1 * y0, p11 = x1 * y1;
-  kq_u mid = (p00 >> 32) + (p01 & 0xffffffffULL) + (p10 & 0xffffffffULL);
-  kq_u hi = p11 + (p01 >> 32) + (p10 >> 32) + (mid >> 32), lo = (mid << 32) | (p00 & 0xffffffffULL);
-  return (value) (((hi << 1 | lo >> 63) << 1) | 1);
-}
-static inline void kq_div21(kq_u xh, kq_u xl, kq_u y, kq_u *q, kq_u *r) {
-  /* as Rocq's own: (xh xl) / y on 63-bit digits, 0 and 0 when the quotient would not fit */
-  if (y <= xh) { *q = 0; *r = 0; return; }
-  kq_u qq = 0, rr = xh;
-  for (int i = 62; i >= 0; i--) {
-    rr = (rr << 1) | ((xl >> i) & 1);
-    qq <<= 1;
-    if (rr >= y) { rr -= y; qq |= 1; }
-  }
-  *q = qq & 0x7fffffffffffffffULL; *r = rr;
-}
-KQ_HW value kq_hw_div21q(value a, value b, value c) { kq_u q, r; kq_div21((kq_u) a >> 1, (kq_u) b >> 1, (kq_u) c >> 1, &q, &r); return (value) ((q << 1) | 1); }
-KQ_HW value kq_hw_div21r(value a, value b, value c) { kq_u q, r; kq_div21((kq_u) a >> 1, (kq_u) b >> 1, (kq_u) c >> 1, &q, &r); return (value) ((r << 1) | 1); }
 // ---- where a narrow block is
 KQ_HW value kq_hw_addr(value h) { kq_u hh = (kq_u) h >> 1; return KQ_V(hh < KQ_MAXB ? (long) (uintptr_t) kq_n[hh].p : 0L); }
 // ---- what the runtime gives (hw/Runtime.v; hw/kq_bare.c, hw/boot.S)

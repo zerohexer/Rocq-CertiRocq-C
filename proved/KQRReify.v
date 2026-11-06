@@ -153,9 +153,7 @@ Definition hw_table : list (kername * hwop * nat) :=
 Definition hwf_table : list (kername * hwfop * nat) :=
   [ (kn_of <% KQ.KQRun.hw_addr %>, FAddr, 1); (kn_of <% KQ.hw.Runtime.hw_irq_info %>, FIrqInfo, 1);
     (kn_of <% KQ.hw.Runtime.hw_irq_entry %>, FIrqEntry, 1); (kn_of <% KQ.hw.Runtime.hw_cpu_code %>, FCpuCode, 1);
-    (kn_of <% KQ.hw.Runtime.hw_sym %>, FSym, 1); (kn_of <% KQ.hw.User.hw_userf %>, FUser, 5);
-    (kn_of <% PrimInt63.head0 %>, FHead0, 1); (kn_of <% PrimInt63.tail0 %>, FTail0, 1); (kn_of <% KQ.KQRun.kq_mulhi %>, FMulHi, 2);
-    (kn_of <% KQ.KQRun.kq_div21q %>, FDiv21Q, 3); (kn_of <% KQ.KQRun.kq_div21r %>, FDiv21R, 3) ].
+    (kn_of <% KQ.hw.Runtime.hw_sym %>, FSym, 1); (kn_of <% KQ.hw.User.hw_userf %>, FUser, 5) ].
 Definition hw_lookup (kn : kername) : option (hwop * nat) :=
   option_map (fun e => (snd (fst e), snd e)) (List.find (fun e => Kername.eqb (fst (fst e)) kn) hw_table).
 Definition hwf_lookup (kn : kername) : option (hwfop * nat) :=
@@ -3535,8 +3533,10 @@ Fixpoint is_w (t : term) : bool :=
   | tApp (tConst k _) _ => if eq_mp (fst k) copy_mp then ends_wg (snd k) else false
   | _ => false
   end.
+(** (step 73) the kit's division of two digits by one: a recursive function like the program's *)
+Definition kn_kq_d21g : kername := kn_of <% KQ.KQRun.kq_d21g %>.
 Definition is_fn (Σ : global_env) (mp : modpath) (root kn : kername) : bool :=
-  Kername.eqb kn root || eq_mp (fst kn) copy_mp
+  Kername.eqb kn root || eq_mp (fst kn) copy_mp || Kername.eqb kn kn_kq_d21g
   || (match body_of Σ kn with Some b => is_w b | None => false end)
   || (in_prog mp (fst kn) && (match lookup_env Σ (copy_mp, snd kn ^ "__wy"%bs) with Some _ => true | None => false end
                             || match body_of Σ kn with Some (tFix _ _) => true | _ => false end || big_def Σ kn
@@ -3567,7 +3567,6 @@ Definition reach (fuel : nat) (Σ : global_env) (mp : modpath) (root kn : kernam
     ([KQRun.v]) or of [Uint63] that is not a function of the program and has no fixpoint.  Bytes and halfwords ([rd8],
     [upd8], and so [rd16], [upd16] over them) are left for one byte access each, as the translator makes them, not shifts of
     4-byte cells; a 64-bit operation is one instruction; a budget ([kq_nat]) is a counter of its own *)
-Definition kn_prim_ops : list kername := [kn_of <% KQ.KQRun.kq_mulhi %>; kn_of <% KQ.KQRun.kq_div21q %>; kn_of <% KQ.KQRun.kq_div21r %>].
 Definition helper_of (Σ : global_env) (mp : modpath) (fns : list kername) (kn : kername) : option term :=
   if Kername.eqb kn kn_fst || Kername.eqb kn kn_snd then body_of Σ kn else
   if Kername.eqb kn kn_rd8 || Kername.eqb kn kn_upd8 || Kername.eqb kn kn_w64_op || Kername.eqb kn kn_kq_nat
@@ -3581,7 +3580,6 @@ Definition helper_of (Σ : global_env) (mp : modpath) (fns : list kername) (kn :
     | None => None
     end
   else if eq_mp (fst kn) kit_mp || eq_mp (fst kn) uint63_mp then
-    if existsb (Kername.eqb kn) kn_prim_ops then None else
     match body_of Σ kn with Some b => if has_fix 1000 b then None else Some b | None => None end
   (* (step 63) what Rocq's libraries define over machine numbers, booleans and counters: a definition, written out as the program's are; a fixpoint inside it, a local one *)
   else if lib_open kn then
@@ -6280,8 +6278,9 @@ Definition pm_table : list (kername * term) :=
    (kn_of <% PrimInt63.subcarryc %>, <% fun x y : PrimInt63.int => if PrimInt63.ltb y x then CarryType.C0 (PrimInt63.sub (PrimInt63.sub x y) 1) else CarryType.C1 (PrimInt63.sub (PrimInt63.sub x y) 1) %>);
    (kn_of <% PrimInt63.diveucl %>, <% fun x y : PrimInt63.int => (PrimInt63.div x y, PrimInt63.mod x y) %>);
    (kn_of <% PrimInt63.addmuldiv %>, <% fun p x y : PrimInt63.int => PrimInt63.lor (PrimInt63.lsl x p) (PrimInt63.lsr y (PrimInt63.sub 63 p)) %>);
-   (kn_of <% PrimInt63.mulc %>, <% fun x y : PrimInt63.int => (KQ.KQRun.kq_mulhi x y, PrimInt63.mul x y) %>);
-   (kn_of <% PrimInt63.diveucl_21 %>, <% fun a b c : PrimInt63.int => (KQ.KQRun.kq_div21q a b c, KQ.KQRun.kq_div21r a b c) %>);
+   (kn_of <% PrimInt63.mulc %>, <% fun x y : PrimInt63.int => (KQ.KQRun.kq_mh x y, PrimInt63.mul x y) %>);
+   (kn_of <% PrimInt63.head0 %>, <% fun x : PrimInt63.int => KQ.KQRun.kq_h0 x %>);
+   (kn_of <% PrimInt63.tail0 %>, <% fun x : PrimInt63.int => KQ.KQRun.kq_t0 x %>);
    (kn_of <% Nat.compare %>, <% fun a b : nat => if Nat.eqb a b then Eq else if Nat.ltb a b then Lt else Gt %>)].
 Definition pm_of (k : kername) : option term :=
   option_map snd (List.find (fun e => Kername.eqb k (fst e)) pm_table).
@@ -6305,20 +6304,82 @@ Definition dec_of (k : kername) : option (term -> term -> term) :=
     (if String.eqb (snd k) "eqs"%bs then nb (kn_of <% PrimInt63.eqb %>) false else None)
   else None.
 Definition y_case_bool := <% fun b : bool => if b then O else O %>.
-Fixpoint pm_sub (fuel : nat) (t : term) {struct fuel} : term :=
+(** (step 73) [diveucl_21 a b c]: Rocq's axioms say what it is when [a < c], and nothing else (§0.5, the fourth reason).  What the text shows at a place: the
+    pairs [(a, c)] a test around it has shown [a < c] of, each with the [let]s it stands under written out, since the equation's tactic sees them so *)
+Definition kn_d21 := kn_of <% PrimInt63.diveucl_21 %>.
+Definition kn_ltb := kn_of <% PrimInt63.ltb %>.
+Definition kn_leb := kn_of <% PrimInt63.leb %>.
+Fixpoint test_shows (fuel : nat) (pol : bool) (t : term) {struct fuel} : list (term * term) :=
+  match fuel with
+  | O => []
+  | S fuel =>
+      match t with
+      | tApp (tConst k _) [x; y] =>
+          if Kername.eqb k kn_ltb then (if pol then [(x, y)] else [])
+          else if Kername.eqb k kn_leb then (if pol then [] else [(y, x)])
+          else if Kername.eqb k kn_andb then (if pol then test_shows fuel true x ++ test_shows fuel true y else [])
+          else if Kername.eqb k kn_orb then (if pol then [] else test_shows fuel false x ++ test_shows fuel false y)
+          else []
+      | tApp (tConst k _) [x] => if Kername.eqb k kn_negb then test_shows fuel (negb pol) x else []
+      | _ => []
+      end
+  end.
+Fixpoint pm_norm (fuel : nat) (e : list (option term)) (t : term) {struct fuel} : term :=
   match fuel with
   | O => t
   | S fuel =>
       match t with
+      | tRel i =>
+          match nth_error e i with
+          | Some (Some v) => lift (S i) 0 (pm_norm fuel (skipn (S i) e) v)
+          | _ => t
+          end
+      | tApp f args => tApp (pm_norm fuel e f) (map (pm_norm fuel e) args)
+      | _ => t
+      end
+  end.
+Definition shows_lift (n : nat) (g : list (term * term)) : list (term * term) := map (fun p => (lift n 0 (fst p), lift n 0 (snd p))) g.
+Definition d21_pair := <% fun q r : PrimInt63.int => (q, r) %>.
+Definition d21_kit := <% fun a b c : PrimInt63.int => KQ.KQRun.kq_d21 a b c %>.
+(** what the program's text has at [diveucl_21 a b c]: three numbers written: its value, which the kernel computes; [a < c] shown or written: the kit's function; else itself, and the program is refused with that reason *)
+Definition d21_at (e : list (option term)) (g : list (term * term)) (a b c : term) : term :=
+  let a' := pm_norm 100 e a in
+  let b' := pm_norm 100 e b in
+  let c' := pm_norm 100 e c in
+  let same := existsb (fun p => teq 1000 (fst p) a' && teq 1000 (snd p) c') g in
+  match a', b', c' with
+  | tInt x, tInt y, tInt z =>
+      pf_beta d21_pair [tInt (fst (PrimInt63.diveucl_21 x y z)); tInt (snd (PrimInt63.diveucl_21 x y z))]
+  | tInt x, _, tInt z =>
+      if PrimInt63.ltb x z then pf_beta d21_kit [a; b; c] else tApp (tConst kn_d21 []) [a; b; c]
+  | _, _, _ => if same then pf_beta d21_kit [a; b; c] else tApp (tConst kn_d21 []) [a; b; c]
+  end.
+Definition pm_ctx (n : nat) (e : list (option term)) : list (option term) := List.repeat None n ++ e.
+Fixpoint pm_sub (fuel : nat) (e : list (option term)) (g : list (term * term)) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      (* a function given as an argument stays as it is: what it holds is under its binder, where no equation reaches *)
+      let arg := fun a => match a with tLambda _ _ _ => a | _ => pm_sub fuel e g a end in
+      let brch := fun (g' : list (term * term)) (br : branch term) =>
+        {| bcontext := bcontext br;
+           bbody := pm_sub fuel (pm_ctx (length (bcontext br)) e) (shows_lift (length (bcontext br)) g') (bbody br) |} in
+      match t with
       | tApp (tConst k u) args =>
-          let args' := map (pm_sub fuel) args in
+          let args' := map arg args in
+          if Kername.eqb k kn_d21 then
+            match args' with
+            | [a; b; c] => d21_at e g a b c
+            | _ => tApp (tConst k u) args'
+            end
+          else
           match pm_of k with
           | Some tm => pf_beta tm args'
           | None => tApp (tConst k u) args'
           end
-      | tApp f args => tApp (pm_sub fuel f) (map (pm_sub fuel) args)
-      | tLambda na ty b => tLambda na ty (pm_sub fuel b)
-      | tLetIn na v ty b => tLetIn na (pm_sub fuel v) ty (pm_sub fuel b)
+      | tApp f args => tApp (pm_sub fuel e g f) (map arg args)
+      | tLambda na ty b => tLambda na ty (pm_sub fuel (None :: e) (shows_lift 1 g) b)
+      | tLetIn na v ty b => tLetIn na (pm_sub fuel e g v) ty (pm_sub fuel (Some v :: e) (shows_lift 1 g) b)
       | tCase ci p (tApp (tConst k _) dargs) [b0; b1] =>
           (* (step 68) the proofs not named by what follows *)
           match dec_of k, y_case_bool with
@@ -6326,22 +6387,32 @@ Fixpoint pm_sub (fuel : nat) (t : term) {struct fuel} : term :=
               match rev dargs with
               | y :: x :: _ =>
                   if (if tm_has_rel 1000 0 (bbody b0) then true else tm_has_rel 1000 0 (bbody b1))
-                  then tCase ci p (tApp (tConst k []) (map (pm_sub fuel) dargs)) (map (fun br => {| bcontext := bcontext br; bbody := pm_sub fuel (bbody br) |}) [b0; b1])
+                  then tCase ci p (tApp (tConst k []) (map arg dargs)) (map (brch g) [b0; b1])
                   else
-                    tCase cib {| pparams := pparams pb; puinst := puinst pb; pcontext := pcontext pb; preturn := preturn p |} (mk (pm_sub fuel x) (pm_sub fuel y))
-                      [{| bcontext := []; bbody := pm_sub fuel (subst10 (tRel 0) (bbody b0)) |};
-                       {| bcontext := []; bbody := pm_sub fuel (subst10 (tRel 0) (bbody b1)) |}]
+                    tCase cib {| pparams := pparams pb; puinst := puinst pb; pcontext := pcontext pb; preturn := preturn p |} (mk (arg x) (arg y))
+                      [{| bcontext := []; bbody := pm_sub fuel e g (subst10 (tRel 0) (bbody b0)) |};
+                       {| bcontext := []; bbody := pm_sub fuel e g (subst10 (tRel 0) (bbody b1)) |}]
               | _ => t
               end
-          | _, _ => tCase ci p (pm_sub fuel (tApp (tConst k []) dargs)) (map (fun br => {| bcontext := bcontext br; bbody := pm_sub fuel (bbody br) |}) [b0; b1])
+          | _, _ =>
+              let c0 := pm_norm 100 e (tApp (tConst k []) dargs) in
+              tCase ci p (pm_sub fuel e g (tApp (tConst k []) dargs))
+                [brch (test_shows 100 true c0 ++ g) b0; brch (test_shows 100 false c0 ++ g) b1]
           end
-      | tCase ci p c brs => tCase ci p (pm_sub fuel c) (map (fun br => {| bcontext := bcontext br; bbody := pm_sub fuel (bbody br) |}) brs)
-      | tFix mfix k => tFix (map (fun d => {| dname := dname d; dtype := dtype d; rarg := rarg d; dbody := pm_sub fuel (dbody d) |}) mfix) k
+      | tCase ci p c [b0; b1] =>
+          (* a test held by a [let] *)
+          let c0 := pm_norm 100 e c in
+          tCase ci p (pm_sub fuel e g c)
+            [brch (test_shows 100 true c0 ++ g) b0; brch (test_shows 100 false c0 ++ g) b1]
+      | tCase ci p c brs => tCase ci p (pm_sub fuel e g c) (map (brch g) brs)
+      | tFix mfix k =>
+          tFix (map (fun d => {| dname := dname d; dtype := dtype d; rarg := rarg d;
+                                 dbody := pm_sub fuel (pm_ctx (length mfix) e) (shows_lift (length mfix) g) (dbody d) |}) mfix) k
       | _ => t
       end
   end.
 Definition pm_has (t : term) : bool :=
-  existsb (fun k => match pm_of k with Some _ => true | None => match dec_of k with Some _ => true | None => false end end) (consts 10000 t []).
+  existsb (fun k => if Kername.eqb k kn_d21 then true else match pm_of k with Some _ => true | None => match dec_of k with Some _ => true | None => false end end) (consts 10000 t []).
 (** a body's choices over known constructors floated out: for a function with no fixpoint *)
 Definition y_nf (T b : term) : term :=
   let '(tys, body) := lams b in lams_of tys (y_tail 1000 1000000 T body).
@@ -6904,6 +6975,15 @@ Definition rp_topo (Σ : global_env) (rows : list rprow) : list rprow :=
         end
     end in
   go 100 rd [].
+(** (step 73) the kit's functions [pm_table] names: a program that uses a primitive does not name them, so they are not in what Rocq quotes of it *)
+Definition pm_kit : global_env :=
+  ltac:(run_template_program (tmQuoteRecTransp (fun x y : PrimInt63.int => (KQ.KQRun.kq_h0 x, KQ.KQRun.kq_t0 x, KQ.KQRun.kq_mh x y, KQ.KQRun.kq_d21 x y x)) false)
+          (fun q => let r := eval vm_compute in (fst q) in exact r)).
+Definition pm_add (Σ : global_env) : global_env :=
+  fold_left (fun S e => match lookup_env S (fst e) with
+                        | Some _ => S
+                        | None => {| universes := universes S; declarations := e :: declarations S; retroknowledge := retroknowledge S |}
+                        end) (declarations pm_kit) Σ.
 Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env * bool :=
   let rows := rp_topo Σ (rp_all Σ mp root ++ um_rows (conv_all Σ mp) mp root (snd (reach_go 1000 Σ mp root root ([], [])))) in
   (* (step 69) what is made, its own calls of what is in their place written too; the statements *)
@@ -6932,10 +7012,11 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
               let c0 := if c1 then true else ty_has 1000 b0 in
               let b1 := if ty_has 1000 b0 then ty_beta 1000 b0 else b0 in
               let p00 := pm_has b1 in
-              let b := if p00 then pm_sub 100000 b1 else b1 in
+              let b := if p00 then pm_sub 100000 [] [] b1 else b1 in
               let p0 := if p00 then true else r0 in
               (* (step 68) a function chosen by a match, applied *)
               let f0 := if p0 then false else fc_has 100000 b in
+              let S1 := if p00 then pm_add S1 else S1 in
               let wy (f' : term) := (add_decl (add_decl S1 (copy_mp, snd kn ^ "__wy"%bs) ty0 f') kn ty0 f', true) in
               match b with
               | tFix [d] 0 =>
@@ -7356,6 +7437,8 @@ Definition why_fun (Σ : global_env) (hb : kername -> option term) (tc : kername
                                           | _ => a
                                           end)
                               (fold_left (fun a t => consts 10000 t a) texts []) r4 in
+          let r4 := if existsb (Kername.eqb kn_d21) (fold_left (fun a t => consts 10000 t a) texts [])
+                    then add_s "diveucl_21 a b c with nothing showing a < c: Rocq's axioms say nothing there, so nothing says what it computes (Rocq-C-solution.md 0.5, fourth reason); test a <? c around it" r4 else r4 in
           let r4 := if existsb (Kername.eqb kn_c_pow) (fold_left (fun a t => consts 10000 t a) texts [])
                     then add_s "a power of a counter: a number that may need more than a word (Rocq-C-solution.md 0.5, second reason)" r4 else r4 in
           let r4 := if existsb (Kername.eqb kn_c_mul) (fold_left (fun a t => consts 10000 t a) texts [])

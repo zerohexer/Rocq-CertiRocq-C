@@ -74,7 +74,8 @@ def build_user_files(body, path):
     user_files(body, d, set(), fs)
     USER[:] = ["-Q", d, ""] if fs or LOADED else []
     USER_FILES[:] = [(f, os.path.relpath(f, d)[:-2].replace(os.sep, ".") + ".") for f in fs] + [(f, "") for f in LOADED]
-    newest = 0
+    kit = os.path.join(ROOT, "KQRun.vo")
+    newest = os.path.getmtime(kit) if os.path.exists(kit) else 0
     for f in fs:
         vo = f + "o"
         newest = max(newest, os.path.getmtime(f))
@@ -321,14 +322,6 @@ unsigned long long f91018(unsigned long long a0, unsigned long long a1, unsigned
 unsigned long long f91105(unsigned long long a0, unsigned long long a1, unsigned long long a2, unsigned long long a3, unsigned long long a4) { return kq_hw_userf(a0, a1, a2, a3, a4); }
 """
 
-# (step 65) operations of Rocq's machine numbers: only in a program that uses one, so no other program's C changes
-HW_PRIM = {
-  "f91106": "unsigned long long f91106(unsigned long long a) { return kq_hw_head0(a); }\n",
-  "f91107": "unsigned long long f91107(unsigned long long a) { return kq_hw_tail0(a); }\n",
-  "f91108": "unsigned long long f91108(unsigned long long a, unsigned long long b) { return kq_hw_mulhi(a, b); }\n",
-  "f91109": "unsigned long long f91109(unsigned long long a, unsigned long long b, unsigned long long c) { return kq_hw_div21q(a, b, c); }\n",
-  "f91110": "unsigned long long f91110(unsigned long long a, unsigned long long b, unsigned long long c) { return kq_hw_div21r(a, b, c); }\n",
-}
 # growing a block (KQRun.v kq_grow): the kit's kq_grow may move the block, so the tables of the theorem are filled again
 HW_GROW = r"""
 unsigned long long f91019(unsigned long long a0, unsigned long long a1) {
@@ -362,7 +355,6 @@ def ext_dispatch(extfile):
             "static inline value kq_hw_userf(value k, value a, value b, value c, value d) {\n"
             "  switch (KQ_N(k)) {\n" + "\n".join(pure) + "\n    default: return KQ_V(0); } }\n")
 
-HW_USED = [""]
 def driver(name, entry_id, kinds, res, args, wrap, uses_hw=False, bare=False, prefix="", entry_name="body", secondary=False, ext=None, slots=False):
     # the entry's parameters, in order, from what `main` passes
     vals = [a for a in args if a[0] != "M"]
@@ -387,7 +379,7 @@ def driver(name, entry_id, kinds, res, args, wrap, uses_hw=False, bare=False, pr
                 f"    kq_b[63].p = kq_slot_cells; kq_b[63].len = {slots}; kq_b[63].lim = {2 * slots}; }}\n") if slots else ""
     ret = "return kq_sum(KQ_V(0));" if res == "M" else "return (value) r;"
     hwdef = ("/* ---- the machine's operations: the kit's C bodies (hw/kq_hw.h) behind the external functions of the theorem */\n"
-             + ("" if bare else "#include <sys/mman.h>\nuintptr_t kq_hw_wlo, kq_hw_whi;\n") + ext_dispatch(ext) + HW_WRAPPERS + HW_USED[0] + ("" if bare else HW_GROW)) if (uses_hw and not secondary) else ""
+             + ("" if bare else "#include <sys/mman.h>\nuintptr_t kq_hw_wlo, kq_hw_whi;\n") + ext_dispatch(ext) + HW_WRAPPERS + ("" if bare else HW_GROW)) if (uses_hw and not secondary) else ""
     hwset = "" if (bare or secondary) else ("  kq_hw_wlo = (uintptr_t) -1; kq_hw_whi = 0;\n"
              "  for (int h = 0; h < KQ_MAXB; h++) if (kq_b[h].lim) { uintptr_t p = (uintptr_t) kq_b[h].p, e = p + 4 * (uintptr_t) kq_b[h].lim;\n"
              "    if (p < kq_hw_wlo) kq_hw_wlo = p; if (e > kq_hw_whi) kq_hw_whi = e; }\n"
@@ -1181,7 +1173,6 @@ def write_c(name, eid, kinds, res, args, wrap, bare, prefix, entry_name, seconda
     c = raw[raw.index('"') + 1: raw.rindex('"')].replace('""', '"')
     cfile = os.path.join(GEN, f"{name}_bare.c" if bare else f"{name}_proved.c")
     uses_hw = re.search(r"\bf91[01]\d\d\b", c) is not None
-    HW_USED[0] = "".join(v for k, v in HW_PRIM.items() if re.search(r"(?m)^(?!unsigned long long )[^\n]*\b" + k + r"\(", c))
     if prefix:
         c = re.sub(r"\bf(1\d{3})\b", prefix + r"f\1", c)
     open(cfile, "w").write('#include "gc_stack.h"\n#include "kq_io.h"\n' + ('#include "kq_hw.h"\n' if uses_hw else "") + c

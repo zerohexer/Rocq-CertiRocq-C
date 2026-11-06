@@ -30,7 +30,7 @@ Definition bud (n : i63) : i63 := if PrimInt63.lesb n 0%uint63 then 0%uint63 els
     Each takes the memory and gives it back; what one reads goes into a cell of a wide block. *)
 Inductive hwop := HLoad | HStore | HStore64 | HAtomic | HAtomic64 | HCas | HCas64 | HALoad | HAStore | HAStore64 | HFence | HCopy | HFill | HCmp | HCall | HRun | HCodeSync | HIrqTake | HUser | HGrow.
 (** the machine's numbers that need no memory: the address of a narrow block, what the runtime knows *)
-Inductive hwfop := FAddr | FIrqInfo | FIrqEntry | FCpuCode | FSym | FUser | FHead0 | FTail0 | FMulHi | FDiv21Q | FDiv21R.
+Inductive hwfop := FAddr | FIrqInfo | FIrqEntry | FCpuCode | FSym | FUser.
 Definition hw_arity (o : hwop) : nat :=
   match o with
   | HLoad => 4
@@ -56,7 +56,7 @@ Definition hw_arity (o : hwop) : nat :=
   end.
 
 Definition hwf_arity (o : hwfop) : nat :=
-  match o with FUser => 5 | FMulHi => 2 | FDiv21Q | FDiv21R => 3 | _ => 1 end.
+  match o with FUser => 5 | _ => 1 end.
 
 Inductive exp :=
 | Eret (a : atom)

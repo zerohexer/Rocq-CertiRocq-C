@@ -63,11 +63,6 @@ Definition hwf_sem (o : hwfop) (vs : list i63) : i63 :=
   | FCpuCode, [v] => KQ.hw.Runtime.hw_cpu_code v
   | FSym, [v] => KQ.hw.Runtime.hw_sym v
   | FUser, [a0 ; a1 ; a2 ; a3 ; a4] => KQ.hw.User.hw_userf a0 a1 a2 a3 a4
-  | FHead0, [v] => PrimInt63.head0 v
-  | FTail0, [v] => PrimInt63.tail0 v
-  | FMulHi, [a ; b] => KQ.KQRun.kq_mulhi a b
-  | FDiv21Q, [a ; b ; c] => KQ.KQRun.kq_div21q a b c
-  | FDiv21R, [a ; b ; c] => KQ.KQRun.kq_div21r a b c
   | _, _ => 0%uint63
   end.
 

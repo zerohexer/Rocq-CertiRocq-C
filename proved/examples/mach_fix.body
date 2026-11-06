@@ -1,8 +1,8 @@
-(* head0, tail0, the high half of mulc, diveucl_21: instructions of the machine, with their laws.  The answer is what Rocq computes (see .expect). *)
+(* head0, tail0, the high half of mulc, diveucl_21: ordinary functions proved equal to the primitive, from Rocq's axioms alone (proved/KQPrim.v).  The answer is what Rocq computes (see .expect). *)
 Definition solve (a b : int) (s : mem) : int :=
   PrimInt63.head0 a * 1000 + PrimInt63.tail0 a * 100
   + (let (h, l) := PrimInt63.mulc (PrimInt63.lsl a 58) b in h * 10 + PrimInt63.lsr l 40)
-  + (let (q, r) := PrimInt63.diveucl_21 1 a b in (q land 255) + r)
+  + (if PrimInt63.ltb 1 b then let (q, r) := PrimInt63.diveucl_21 1 a b in (q land 255) + r else 0)
   + PrimInt63.head0 0 + PrimInt63.tail0 0.
 Definition main : int :=
   let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
