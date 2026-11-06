@@ -5196,6 +5196,14 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   tree and the gate's list as `proved/TRUSTED.txt` now says, which has lost the three operations, with no line of `remove` or
   `audit` left.  Next: a value and a proof given back: the rest of a function made by tactics.
 
+**Step 76, a function giving back a value with a proof: `sig`, `sumbool` (§12.A) — the design (2026-11-07).**  `{y : int | P y}` and `{A} + {B}` are the value and its proof, and a proof is no value: what such a function computes is a number or a boolean.  Step 69's route takes it: a function of its own in its place, equal at every argument.
+- *The row*: `f' args = proj1_sig (f args)`, `f' args = if f args then true else false` (`er_rows`, `er_tr`, `er_stmt`, marks `rp_sg`, `rp_sb`).  Its body is `f`'s with `exist v p` read as `v`, `left _` as `true`, `right _` as `false`, the recursive call as itself, by induction on the counter where there is one.
+- *Its callers* (`er_sub`): `proj1_sig (f args)`, a match on it, a `let` of it, a test on it, when the proof is not named by what follows; what names the proof is not a value, so it is not computed: it stays a gap with its cell.
+- *What tactics write*: `destruct t eqn:E` leaves `match t .. end eq_refl`, proofs of its branches naming `t`, so `t` cannot be taken apart in the goal (`kq_convoy`, `convoy_true`, `convoy_false`).  `decide equality` writes matches on the parameters: taken apart when a test is made of them.  `Scheme Equality` writes a test by a `let`, taken apart at once.  A library's test (`Uint63.eqs`) is its boolean test.
+- *A proof as a field*: step 67's table read `{True} + {True}` as a data type holding two empty records, and the check failed: a proposition's proof is no value, whatever its shape (`Sort.is_prop`).
+- *The acceptance*: `proved/examples/proof_fix`: a `sig` and a `sumbool` by recursion, one made by tactics, `decide equality`; the answer worked out apart: 1008112.
+- *Cells*: 37, `A_e_*`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5380,7 +5388,8 @@ Pushed to the public repository up to `4898663` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 75 (the bytes in bulk as ordinary functions, §12.T done: the construct table 2882 of 2981, 41 by design, 57 gaps), the C, the gate |
+| (this commit) | §12.V: step 76's design -- a value and a proof given back |
+| `26acb1d` | §12.V: step 75 (the bytes in bulk as ordinary functions, §12.T done: the construct table 2882 of 2981, 41 by design, 57 gaps), the C, the gate |
 | `4898663` | `KQRun.v` + `KQSpec.v` + `KQModel.v` + `hw` + `proved/KQL.v` + `KQLGen.v` + `KQMSem.v` + `KQMTrans.v` + `KQRReify.v` + `kitc.py` + `TRUSTED.txt` + `matrix` + `examples/bulk_fix` step 75: `hw_copy`, `hw_fill`, `hw_cmp` as loops over a load and a store; three operations and their C bodies removed; 21 cells |
 | `f951760` | §12.V: step 75's design -- the bytes in bulk as ordinary functions |
 | `7c33817` | §12.V: step 74 (`divs_min_neg1` gone: the construct table 2861 of 2960, 41 by design, 57 gaps), the C, the gate |
