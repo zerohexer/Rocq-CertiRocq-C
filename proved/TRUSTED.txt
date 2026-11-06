@@ -236,3 +236,7 @@ assumption of_to_Z
 assumption sub
 assumption sub_spec
 assumption tail0
+# Rocq's own: Uint63Axioms.div_spec, mod_spec, mul_spec, printed short where a file names them through Uint63
+assumption div_spec
+assumption mod_spec
+assumption mul_spec

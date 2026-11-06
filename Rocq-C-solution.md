@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **2534 of 2578, 24 gaps, 19 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **2641 of 2697, 31 gaps, 24 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -5048,6 +5048,22 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Cells*: 119, `A_c2_*`: a counter as a number in every place of a number; a number as a counter in every place of a counter, signed and unsigned; a product, `/`, `mod`, `even`, `odd`, a test, in a let, a match, a loop, a recursion, a function giving back a boolean, writing; the same names under `Require Import Arith`, whose module `Nat` is another.
 - *The acceptance*: `proved/examples/conv_fix`, answer worked out apart: 37172565.
 
+**Step 70 done (2026-11-06): counters and numbers.**  Built as designed:
+- *`KQR.v`*: `SOfC`, `BEven`, `CMulK`, `CToNat`, `CToNatU`, `CDivN`, `CModN`, `CIf`: seven cases of the theorem, each a few lines over the lemmas `ofn_mul` (no premise: the machine's product of the two words is the word of the product, modulo), `ofn_divn`, `ofn_modn`, `ofn_even`, `ofn_to_nat`, `ofn_to_natu`.  A counter's limit 2^63 everywhere it was 2^62, `cbz_small` removed, unused: the proofs took it as it stood, since what they ask of a counter is that it be below `wB`.  A test of the old limit (a let of `n + n` refused for want of room) now tests `n + n + n`.
+- *The reader*: `cnt_val`, `pos_lit`, `z_lit`; `Nat.mul`, `Nat.div`, `Nat.modulo`, `Nat.pow`, `Z.to_nat`, a test in `reify_c`; `Uint63.of_Z` in `reify`; `Nat.even`, `Nat.odd` in `reify_b`; `double`, `succ`, `square` in `lib_open`.  `A_c2_ar_*`: under `Require Import Arith`, whose `Nat` names were one worry: all read.
+- *A bound*: a function whose bound had to be smaller for `n + n` (`x36`) needs none now.  The bound is in the theorem, not in the C.
+- *The acceptance*: `proved/examples/conv_fix`: proved, built, 37172565.
+- *Cells*: 119 more: 105 proved; 5 by design; 9 gaps; `A_n_nat_even`, `A_n_nat_mul`, gaps before, read.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the trees without their generated files, F62; step 69's files / these): `HWP_kernel` 2.60 / 2.63 s, `HWP_own` 1.99 / 2.01, `HWP_irqnow` 1.74 / 1.73 — the same within the noise.
+- The C: the 77 programs before byte-identical, the new example through the verified compiler.  The construct table (on
+  `b682bd8`): **2641 of 2697 through the verified compiler**, 24 by design, 31 gaps, 1 not Rocq (was 2534 of 2578: 105 of the 119
+  new cells read, 5 by design, 9 gaps; `A_n_nat_even`, `A_n_nat_mul` read).  The gate on `b682bd8`, the walk switched off:
+  `make.sh` `core-ok`; examples 43 / 43; corpus 36 / 36; the five kernels (13 / 13 / 13 / 15 / 13 s); **87 programs through the
+  verified compiler, 0 refused**; `check_trust.py` stopped the chain on `mul_spec`, `div_spec`, `mod_spec`, new in the gate's
+  list: `About` shows they are `Uint63Axioms.mul_spec`, `div_spec`, `mod_spec`, Rocq's own and on the list already, printed short
+  since `KQR.v` now names them through `Uint63`.  Nothing assumed changed; the three spellings added to `proved/TRUSTED.txt`.
+  Next: what a third probe of natural programs found.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5228,11 +5244,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `a89c37b` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `b682bd8` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 70's design -- counters and numbers |
+| (this commit) | §12.V: step 70 (counters and numbers: the construct table 2641 of 2697, 24 by design, 31 gaps), the C, the gate; `proved/TRUSTED.txt`: three spellings |
+| `b682bd8` | `proved/KQR.v` + `KQRReify.v` + `matrix` + `examples/conv_fix` step 70: counters and numbers; 119 cells |
+| `34ebaa6` | §12.V: step 70's design -- counters and numbers |
 | `0739209` | §0.3's test, D29, F66, §1.10, §12.T, §13: only what has no definition except the machine is assumed; `proved/TRUSTED.txt`, `proved/check_trust.py`; `CLAUDE.md` |
 | `f6290ad` | §12.V: step 69 (a function read in another form, its callers told by a lemma: the construct table 2534 of 2578, 19 by design, 24 gaps), the C, the gate |
 | `a89c37b` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix` + `examples/poly_fix` step 69: a function read in another form, its callers told by a lemma; 26 cells; `KQR.v` unchanged |
