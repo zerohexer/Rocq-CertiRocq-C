@@ -916,7 +916,7 @@ def reflect(name, entry, prog, no_proof):
             W = yf[f[0]]
             t += (f"Lemma {name}_rqy{j} : KQR.eqC {f[1]} _ (KQR.eqN {kl(f)} {f[3]} _) {W} {f[0]}.\n"
                   + (f"Proof. cbn [KQR.eqC KQR.eqN]. fix IH 1. intros kqn; destruct kqn as [|kqn]; intros; cbn [{W} {f[0]}]; first [solve [KQRWf.own_step IH] | solve [cbn; KQRWf.own_step IH] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step IH]]. Qed.\n" if f[0] in fix1 else
-                     f"Proof. cbn [KQR.eqC KQR.eqN]. intros. unfold {W}, {f[0]}. first [solve [KQRWf.own_step0] | solve [cbn; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0]]. Qed.\n"))
+                     f"Proof. cbn [KQR.eqC KQR.eqN]. intros. unfold {W}, {f[0]}. first [solve [KQRWf.own_step0] | solve [cbn; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0p]]. Qed.\n"))
     t += "Strategy opaque [" + " ".join([f[0] for f in fs if not iswr(f[0])] + tmpls) + "].\n"   # a copy is unfolded first
     if not no_proof:
         for j, f in enumerate(fs):

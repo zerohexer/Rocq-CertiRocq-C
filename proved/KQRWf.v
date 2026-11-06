@@ -380,3 +380,22 @@ Ltac own_step0 :=
                 | match goal with |- context [match ?c with pair _ _ => _ end] => destruct c end
                 | reflexivity
                 | match goal with |- context [match ?c with _ => _ end] => is_var c; destruct c end ]).
+(** (step 77) the same, a call's pair taken apart as its two parts, so that the same call on both sides is the same two parts whatever is taken apart first *)
+Ltac pr_call :=
+  match goal with |- context [match ?c with pair _ _ => _ end] =>
+    lazymatch c with context [match _ with _ => _ end] => fail | PrimInt63.diveucl_21 _ _ _ => fail | pair _ _ => fail | _ => rewrite (surjective_pairing c) end end.
+Ltac own_step0p :=
+  repeat (cbn beta iota zeta delta [fst snd proj1_sig]; kq_unf;
+          first [ prim_rw
+                | kq_guard
+                | kq_rw
+                | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
+                | pr_call
+                | kq_convoy
+                | match goal with |- context [match ?c with exist _ _ _ => _ end] => destruct c end
+                | match goal with |- context [if ?c then _ else _] => lazymatch c with context [match _ with _ => _ end] => fail | _ => let e := fresh "kqe" in destruct c eqn:e end end
+                | match goal with |- context [if ?c then _ else _] => match c with context [match ?v with _ => _ end] => is_var v; destruct v end end
+                | match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
+                | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
+                | reflexivity
+                | match goal with |- context [match ?c with _ => _ end] => is_var c; destruct c end ]).

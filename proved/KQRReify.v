@@ -5811,6 +5811,41 @@ Fixpoint y_red (fuel : nat) (t : term) {struct fuel} : term :=
       | _ => t
       end
   end.
+(** (step 77) a [fst] or [snd] that [y_red] puts into a choice: the text is no longer the function's up to conversion *)
+Fixpoint y_fl (fuel : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      let go := y_fl fuel in
+      match t with
+      | tApp (tConst k _) [_; _; p] =>
+          (if Kername.eqb k kn_fst || Kername.eqb k kn_snd then
+             match y_red 1000 p with
+             | tCase _ _ _ _ as q => y_conb 100 q
+             | _ => false
+             end
+           else false) || go p
+      | tApp f args => go f || existsb go args
+      | tLambda _ _ b => go b
+      | tLetIn _ v _ b => go v || go b
+      | tCase _ _ c brs => go c || existsb (fun br => go (bbody br)) brs
+      | _ => false
+      end
+  end.
+Fixpoint y_hasp (fuel : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      let go := y_hasp fuel in
+      match t with
+      | tApp (tConst k _) args => (Kername.eqb k kn_fst || Kername.eqb k kn_snd) || existsb go args
+      | tApp f args => go f || existsb go args
+      | tLambda _ _ b => go b
+      | tLetIn _ v _ b => go v || go b
+      | tCase _ _ c brs => go c || existsb (fun br => go (bbody br)) brs
+      | _ => false
+      end
+  end.
 Definition y_ret (p : predicate term) (T : term) : predicate term :=
   {| pparams := pparams p; puinst := puinst p; pcontext := pcontext p; preturn := lift0 (length (pcontext p)) T |}.
 Fixpoint y_tail (fuel self : nat) (T t : term) {struct fuel} : term :=
@@ -7355,7 +7390,10 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
               let b0x := mo_t 100000 Σ mp (lu_t 100000 Σ (al_t 100000 Σ mp b00)) in
               (* (step 69) its calls of what is read in another form *)
               let b0 := y_red 100000 (rp_sub 100000 rows (er_sub 100000 rows [] (vm_unf 6 Σ mp b0x))) in
-              let r0 := match rows with [] => false | _ => negb (teq 100000 b0 b0x) end in
+              let r0 := match rows with
+                        | [] => if y_hasp 10000 b0x then y_fl 10000 (vm_unf 6 Σ mp b0x) else false
+                        | _ => negb (teq 100000 b0 b0x)
+                        end in
               let c1 := if teq 100000 ty0 (cst_type cb) then negb (teq 100000 b0 b00) else true in
               (* (step 63) a binder's type a redex, from a motive, a cast: the same up to beta *)
               let c0 := if c1 then true else ty_has 1000 b0 in
