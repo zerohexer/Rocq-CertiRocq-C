@@ -5115,6 +5115,16 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   verified compiler, 0 refused**; `check_trust.py`: trust unchanged.  Next: what is assumed, §12.T: the five operations of step 65
   proved and removed.
 
+**Step 73, `head0`, `tail0`, the high half of `mulc`, `diveucl_21` as ordinary functions, proved (§12.T, F66) — the design (2026-11-06).**  Step 65 made them operations of the machine with C bodies nobody proved, and that was wrong (F66): they are logic.  Rocq's axioms relate them to other operations, and that is enough to prove a definition equal.
+- *The kit* (`KQRun.v`): `kq_mh`, the high half by digits of 21 bits; `kq_h0`, `kq_t0`, a binary search of six tests; `kq_d21`, shift and subtract, 63 rounds, its budget written `kq_nat 63` so that no conversion unrolls it.  Ordinary Rocq over `PrimInt63`.
+- *`proved/KQPrim.v`*, from Rocq's own axioms and nothing else (`Print Assumptions` of each): `kq_mulc_def : mulc x y = (kq_mh x y, mul x y)`, `kq_h0_eq : head0 x = kq_h0 x`, `kq_t0_eq : tail0 x = kq_t0 x` at every argument (at 0 the axioms are silent and the kernel computes 63, by conversion); `kq_d21_eq : ltb a c = true -> diveucl_21 a b c = kq_d21 a b c`.
+- *`diveucl_21` when `c <= a`*: Rocq's axioms say nothing there, and its kernel's answer on numbers cannot be stated for variables.  No fact is added (D29).  Three written numbers: the kernel's value.  `a` and `c` written with `a < c`: the kit's function.  A test around it that shows `a < c`: `ltb a c` true, `leb c a` false, through `negb`, `andb`, `orb`: the kit's function (`test_shows`, `d21_at`, a list of what is shown carried down `pm_sub`).  Otherwise the program is refused with that reason (§0.5's fourth): a pin and a control.
+- *The form read*: step 64's route.  `pm_table` has the three; the equation is `own_step`'s, `prim_rw` with the three lemmas, `kq_guard` with `kq_d21_eq` where the test has been taken apart; a pair of `diveucl_21` is not taken apart before its test.
+- *Removed*: `FHead0`, `FTail0`, `FMulHi`, `FDiv21Q`, `FDiv21R`, their five C bodies, `kq_mulhi`, `kq_div21q`, `kq_div21r`, `HW_PRIM`.  `proved/TRUSTED.txt` loses them, and the gate's `Print Assumptions` no longer names `head0`, `tail0`, `mulc`, `diveucl_21`.
+- *The C*: the other programs lose the five declarations they never used; compared with them stripped, as step 65 did.  `mach_fix` is the one program that used them: its text now tests `1 <? b` around its `diveucl_21`.
+- *Speed*: `head0` and `tail0` are six tests where they were one instruction; measured against the instruction.  A faster form may come later as a case of the generator's proof, never as a machine operation.
+- *Cells*: 83, `A_t_*`: `head0`, `tail0` in every place of a number, `mulc` as a pair, `diveucl_21` under each test, recursion included; pins: nothing shown, the test the other way, another pair of numbers, a signed test.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5299,7 +5309,8 @@ Pushed to the public repository up to `dcf40e2` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 72 (a procedure, a test in a monad: the construct table 2756 of 2832, 26 by design, 49 gaps), the C, the gate |
+| (this commit) | §12.V: step 73's design -- head0, tail0, the high half of mulc, diveucl_21 as ordinary functions, proved |
+| `858221d` | §12.V: step 72 (a procedure, a test in a monad: the construct table 2756 of 2832, 26 by design, 49 gaps), the C, the gate |
 | `dcf40e2` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix` + `examples/proc_fix` step 72: a procedure and a test in a monad; 24 cells; `KQR.v` unchanged |
 | `2d66f8a` | §12.V: step 72's design -- a procedure, a test in a monad |
 | `3f2908e` | §12.V: step 71 (a third probe of natural programs: the construct table 2736 of 2808, 25 by design, 46 gaps), the C, the gate |
