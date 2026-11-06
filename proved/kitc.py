@@ -458,18 +458,28 @@ def reflect(name, entry, prog, no_proof):
         + "   end)).\n"
         + f"Definition {name}_src := option_map fst (fst (fst (fst (fst (fst {name}_res))))).\n"
         + f"Definition {name}_mts := match fst (fst (fst (fst (fst {name}_res)))) with Some x => snd x | None => [] end.\n"
-        + f'Redirect "{name}_rinfo" Eval vm_compute in (option_map KQRReify.info_of {name}_src).\n'
-        + f'Redirect "{name}_rwhy" Eval vm_compute in (snd (fst (fst (fst (fst {name}_res))))).\n'
-        + f'Redirect "{name}_rrec" Eval vm_compute in (snd (fst (fst (fst {name}_res)))).\n'
-        + f'Redirect "{name}_rperm" Eval vm_compute in (snd (fst (fst {name}_res))).\n'
-        + f'Redirect "{name}_rfix" Eval vm_compute in (snd (fst {name}_res)).\n'
-        + f'Redirect "{name}_rpf" Eval vm_compute in (snd {name}_res).\n'
-        + f'Redirect "{name}_rmts" Eval vm_compute in (KQRReify.mts_info {name}_mts).\n'
-        + (f'Redirect "{name}_rsh" Eval vm_compute in (match {name}_src with Some l => map (fun f => (snd (fst (fst f)), '
-           f'KQR.sh_ok {shared} (snd f))) l | None => [] end).\n' if shared else "")
         # a copy of a recursive function for the functions it is given: its meaning, the function applied to them (step 10)
         + f"MetaRocq Run (monad_iter (fun p => tmMkDefinition (fst p) (snd p)) (KQRReify.plain_mts {name}_mts)).\n")
-    rc, out = coqc(f0)
+    # (step 77) what the reader found, as Rocq prints it, read below: a notation of the program's or a scope it opens would print it otherwise; then in a file of its own
+    q = f"KQG.{name}_r." if re.search(r"\b(Notation|Infix|Open Scope|Bind Scope|Declare Scope)\b", prog) else ""
+    prt = (f'Redirect "{name}_rinfo" Eval vm_compute in (option_map KQRReify.info_of {q}{name}_src).\n'
+        + f'Redirect "{name}_rwhy" Eval vm_compute in (snd (fst (fst (fst (fst {q}{name}_res))))).\n'
+        + f'Redirect "{name}_rrec" Eval vm_compute in (snd (fst (fst (fst {q}{name}_res)))).\n'
+        + f'Redirect "{name}_rperm" Eval vm_compute in (snd (fst (fst {q}{name}_res))).\n'
+        + f'Redirect "{name}_rfix" Eval vm_compute in (snd (fst {q}{name}_res)).\n'
+        + f'Redirect "{name}_rpf" Eval vm_compute in (snd {q}{name}_res).\n'
+        + f'Redirect "{name}_rmts" Eval vm_compute in (KQRReify.mts_info {q}{name}_mts).\n'
+        + (f'Redirect "{name}_rsh" Eval vm_compute in (match {q}{name}_src with Some l => map (fun f => (snd (fst (fst f)), '
+           f'KQR.sh_ok {shared} (snd f))) l | None => [] end).\n' if shared else ""))
+    if q:
+        rc, out = coqc(f0)
+        if rc == 0:
+            f0b = os.path.join(GEN, f"{name}_ro.v")
+            open(f0b, "w").write(HDR + "From KQC Require KQR KQRReify.\n" + f"From KQG Require {name}_r.\n" + prt)
+            rc, out = coqc(f0b)
+    else:
+        open(f0, "a").write(prt)
+        rc, out = coqc(f0)
     info = open(os.path.join(GEN, f"{name}_rinfo.out")).read() if rc == 0 and os.path.exists(os.path.join(GEN, f"{name}_rinfo.out")) else ""
     # each function: its name, counters, kinds, flags, result, bound and weights (polynomials, step 39: read to the tuple's end)
     head = re.compile(r'\("([^"]+)"(?:%bs)?,\s*(\d+)(?:%nat)?,\s*"([IBa-hp]*)"(?:%bs)?,\s*(true|false),\s*(true|false),\s*(true|false),'

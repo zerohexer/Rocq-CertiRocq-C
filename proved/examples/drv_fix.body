@@ -1,0 +1,23 @@
+(* a driver in an error monad over the memory, written as one writes it: the helpers written out, the values chosen among constructors floated.  The answer is worked out apart (see .expect). *)
+Definition M (A : Type) : Type := mem -> A * mem.
+Definition ret {A : Type} (x : A) : M A := fun t => (x, t).
+Definition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t') := m t in f x t'.
+Definition R (A : Type) : Type := M (option A).
+Definition rret {A : Type} (x : A) : R A := ret (Some x).
+Definition rfail {A : Type} : R A := ret None.
+Definition rbind {A B : Type} (m : R A) (f : A -> R B) : R B :=
+  fun t => match m t with (Some x, t') => f x t' | (None, t') => (None, t') end.
+Notation "x <-? m ;; k" := (rbind m (fun x => k)) (at level 61, m at next level, right associativity).
+Definition rrd (i : int) : R int := fun t => (if i <? 0 then None else Some (rd 0 i t), t).
+Definition rwr (i v : int) : R unit := fun t => if i <? 0 then (None, t) else (Some tt, upd 0 i v t).
+Definition xfer (i j : int) : R int := x <-? rrd i ;; _ <-? rwr j (x * 2) ;; y <-? rrd j ;; rret (x + y).
+Inductive res := Ok (x : int) | Err (c : int).
+Definition check (x : int) (t : mem) : res * mem := if x <? 10 then (Err x, t) else (Ok (x - 10), upd 0 0 x t).
+Definition solve (a b : int) (s : mem) : int :=
+  let (r, s1) := xfer 1 2 s in
+  let v := match r with Some x => x | None => 100 end in
+  let (q, s2) := check (v + rd 0 2 s1) s1 in
+  match q with Ok w => w * 1000 + rd 0 0 s2 + v | Err c => c end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve 12 7 (kq_input 0).

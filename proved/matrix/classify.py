@@ -13,6 +13,8 @@ import re, sys, collections
 # differs only in the cause.  The cells once listed here (option, sum, a list cell, a function in a pair, a function returned,
 # a dead memory let) build and take apart their value in place, so they are gaps.
 DESIGN_CELLS = {
+  # a function built anew at each round of a recursion, a list whose size comes from the data: allocated behind the programmer's back (Rocq-C-solution.md §0.5, first reason); controls: A_p_cps, A_p_list_rec_lit (step 77)
+  "A_p_cps_grow", "A_p_list_built",
   # divs with nothing ruling out the smallest number over -1: Rocq's axioms say nothing there, so nothing says what it computes (Rocq-C-solution.md §0.5, fourth reason); controls: A_s_test_pos, A_s_lit_b, and / : A_s_slash_var (step 74)
   "A_s_none", "A_s_sint_none", "A_s_lit_min", "A_s_lit_m1", "A_s_else", "A_s_other", "A_s_test_unrelated",
   # diveucl_21 with nothing showing a < c, or shown the other way: Rocq's axioms say nothing there, so nothing says what it computes (Rocq-C-solution.md §0.5, fourth reason); controls: A_t_d_ltb, A_t_d_leb, A_t_d_lit_lt (step 73)
@@ -108,6 +110,24 @@ BY_NAME = {
   "A_e_sig_field": "a value and a proof as a field of what a function gives back",
   "A_e_sig_nat": "a counter given back with a proof",
   "A_e_sig_param": "a value and a proof as a parameter",
+  "A_p_err_rec": "a value and a memory given back together by a recursion or a loop, the value not one number",
+  "A_p_err_rec_mem": "a value and a memory given back together by a recursion or a loop, the value not one number",
+  "A_p_res_mem_rec": "a value and a memory given back together by a recursion or a loop, the value not one number",
+  "A_p_rec_mem_loop": "a value and a memory given back together by a recursion or a loop, the value not one number",
+  "A_p_class_rec": "a record of functions or a class's instance given to a recursive function",
+  "A_p_class_two": "a class's instance built from others, its fields read at once",
+  "A_p_proof_arg": "a proof as a parameter",
+  "A_p_proof_arg_rec": "a proof as a parameter",
+  "A_p_sig_arg": "a proof as a parameter",
+  "A_p_dep_pair": "a dependent pair, a vector: values whose type holds a value",
+  "A_p_vector": "a dependent pair, a vector: values whose type holds a value",
+  "A_p_string_len": "a test on strings: a library's fixpoint on a written string, whose constructors the test sees through",
+  "A_p_ascii": "a closed term of a library computed by what the reader does not know: a number written through a definition, a character",
+  "A_p_z_to_int": "a closed term of a library computed by what the reader does not know: a number written through a definition, a character",
+  "A_p_io": "the kit's input and output: hosted (§12.I)",
+  "A_p_nat_len": "a function giving back a counter, a counter as a field",
+  "A_p_nat_len_cmp": "a function giving back a counter, a counter as a field",
+  "A_p_nat_add": "a function giving back a counter, a counter as a field",
   "A_l_ack": "a fixpoint inside a fixpoint that gives back a function",
   "A_l_dec_proof_used": "a proof a test gives, named by what follows",
   "A_l_fix_mut": "a local mutual fixpoint",

@@ -5671,6 +5671,7 @@ Fixpoint y_conb (fuel : nat) (t : term) {struct fuel} : bool :=
       match t with
       | tConstruct _ _ _ | tApp (tConstruct _ _ _) _ => true
       | tCase _ _ _ brs => forallb (fun br => y_conb fuel (bbody br)) brs
+      | tLetIn _ _ _ b => y_conb fuel b
       | _ => false
       end
   end.
@@ -5742,6 +5743,11 @@ Definition y_small (t : term) : bool :=
   | tApp (tConst k _) [tRel _; tInt _] => eq_mp (fst k) prim_mp || Kername.eqb k kn_kq_divs
   | _ => false
   end.
+Definition y_dty (ty : term) : bool :=
+  match (match ty with tApp (tInd i _) _ => Some i | tInd i _ => Some i | _ => None end) with
+  | Some i => negb (Kername.eqb (inductive_mind i) (inductive_mind ind_bool)) && negb (Kername.eqb (inductive_mind i) (inductive_mind ind_nat))
+  | None => false
+  end.
 Fixpoint y_red (fuel : nat) (t : term) {struct fuel} : term :=
   match fuel with
   | O => t
@@ -5753,18 +5759,32 @@ Fixpoint y_red (fuel : nat) (t : term) {struct fuel} : term :=
             match p' with
             | tApp (tConstruct _ 0 _) [_; _; a; _] => a
             | tLetIn na v ty b => tLetIn na v ty (y_red fuel (tApp (tConst k u) [lift0 1 A; lift0 1 B; b]))
+            | tCase ci q c brs =>
+                if y_conb 100 p' then
+                  tCase ci {| pparams := pparams q; puinst := puinst q; pcontext := pcontext q; preturn := lift0 (length (pcontext q)) A |} c
+                    (map (fun br => let n := length (bcontext br) in
+                                    {| bcontext := bcontext br; bbody := y_red fuel (tApp (tConst k u) [lift0 n A; lift0 n B; bbody br]) |}) brs)
+                else tApp (tConst k u) [A; B; p']
             | _ => tApp (tConst k u) [A; B; p']
             end
           else if Kername.eqb k kn_snd then
             match p' with
             | tApp (tConstruct _ 0 _) [_; _; _; b] => b
             | tLetIn na v ty b => tLetIn na v ty (y_red fuel (tApp (tConst k u) [lift0 1 A; lift0 1 B; b]))
+            | tCase ci q c brs =>
+                if y_conb 100 p' then
+                  tCase ci {| pparams := pparams q; puinst := puinst q; pcontext := pcontext q; preturn := lift0 (length (pcontext q)) B |} c
+                    (map (fun br => let n := length (bcontext br) in
+                                    {| bcontext := bcontext br; bbody := y_red fuel (tApp (tConst k u) [lift0 n A; lift0 n B; bbody br]) |}) brs)
+                else tApp (tConst k u) [A; B; p']
             | _ => tApp (tConst k u) [A; B; p']
             end
           else tApp (tConst k u) [A; B; p']
       | tApp f args => tApp (y_red fuel f) (map (y_red fuel) args)
       | tLambda na ty b => tLambda na ty (y_red fuel b)
-      | tLetIn na v ty b => tLetIn na (y_red fuel v) ty (y_red fuel b)
+      | tLetIn na v ty b =>
+          let v' := y_red fuel v in
+          if y_dty ty && y_conb 100 v' then y_red fuel (subst10 v' b) else tLetIn na v' ty (y_red fuel b)
       | tCase ci p c brs =>
           let c' := y_red fuel c in
           let dflt := tCase ci p c' (map (fun br => {| bcontext := bcontext br; bbody := y_red fuel (bbody br) |}) brs) in
@@ -5781,8 +5801,8 @@ Fixpoint y_red (fuel : nat) (t : term) {struct fuel} : term :=
                 | [A; B; x; y], [br] =>
                     if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_prod) then
                       if y_small x then tLetIn y_anon y B (y_red fuel (subst [x] 1 (bbody br)))
-                      else if y_small y then tLetIn y_anon x A (y_red fuel (subst [lift0 1 y] 0 (bbody br)))
-                      else tLetIn y_anon x A (tLetIn y_anon (lift0 1 y) (lift0 1 B) (y_red fuel (bbody br)))
+                      else if y_small y then y_red fuel (tLetIn y_anon x A (subst [lift0 1 y] 0 (bbody br)))
+                      else y_red fuel (tLetIn y_anon x A (tLetIn y_anon (lift0 1 y) (lift0 1 B) (bbody br)))
                     else dflt
                 | _, _ => dflt
                 end
@@ -5798,6 +5818,12 @@ Fixpoint y_tail (fuel self : nat) (T t : term) {struct fuel} : term :=
   | O => t
   | S fuel =>
       match t with
+      | tCase ci p (tLetIn na v ty e) brs =>
+          (* a match on a let: the let outside *)
+          match lift0 1 t with
+          | tCase ci2 p2 (tLetIn _ _ _ _) brs2 => tLetIn na v ty (y_tail fuel (S self) (lift0 1 T) (tCase ci2 p2 e brs2))
+          | _ => t
+          end
       | tCase ci p c brs =>
           match match c with
                 | tCase ci1 p1 c1 brs1 => if y_conb 100 c then Some (ci1, p1, c1, brs1) else y_pull fuel self c
@@ -6479,7 +6505,7 @@ Definition pm_has (t : term) : bool :=
   existsb (fun k => if Kername.eqb k kn_d21 || Kername.eqb k kn_divs then true else match pm_of k with Some _ => true | None => match dec_of k with Some _ => true | None => false end end) (consts 10000 t []).
 (** a body's choices over known constructors floated out: for a function with no fixpoint *)
 Definition y_nf (T b : term) : term :=
-  let '(tys, body) := lams b in lams_of tys (y_tail 1000 1000000 T body).
+  let '(tys, body) := lams b in lams_of tys (y_tail 1000 9999 T body).
 (* ---------------------------------------------------------------- a function read in another form (step 69) *)
 (** A function whose form the compiler's theorem does not take and no conversion reaches: a memory parameter never read, moved by the
     recursion or given another memory by the call; a type parameter.  A function of its own in its place, at every argument equal to it, by
@@ -6957,6 +6983,13 @@ Fixpoint um_tr (fuel : nat) (Σ : global_env) (mp : modpath) (self d : nat) (t :
 (** a procedure that is one write or a few, no test: written out where it is called, as any helper *)
 Definition um_plain (Σ : global_env) (mp : modpath) (tys : list term) (t : term) : bool :=
   match um_red 1000 Σ mp t with tApp (tConstruct _ 0 _) _ => true | _ => false end.
+(** (step 77) a value that is not a number, a boolean or nothing, and a memory *)
+Definition vm_ty (T : term) : bool :=
+  match T with
+  | tApp (tInd i _) [V; M] =>
+      Kername.eqb (inductive_mind i) (inductive_mind (ind_of <% prod %>)) && is_ty kn_mem M && negb (is_ty kn_int V) && negb (is_bool V) && negb (teq 100 V (tInd (ind_of <% unit %>) []))
+  | _ => false
+  end.
 Fixpoint um_inl (fuel : nat) (Σ : global_env) (mp : modpath) (t : term) {struct fuel} : term :=
   match fuel with
   | O => t
@@ -6978,6 +7011,7 @@ Fixpoint um_inl (fuel : nat) (Σ : global_env) (mp : modpath) (t : term) {struct
                       | tApp (tConstruct _ 0 _) _ as r => r
                       | _ => dflt
                       end
+                    else if vm_ty (ret_ty ty) && Nat.eqb (length (removelast (prod_tys ty))) (length args') then um_red 1000 Σ mp dflt
                     else dflt
                 end
             | _ => dflt
@@ -7049,6 +7083,14 @@ Fixpoint bm_tr (fuel : nat) (Σ : global_env) (mp : modpath) (self d : nat) (t :
       | tLetIn na v ty b => option_map (fun b' => tLetIn na v ty b') (go (S d) b)
       | _ => None
       end
+  end.
+(** (step 77) helpers written out until none of those is left *)
+Fixpoint vm_unf (n : nat) (Σ : global_env) (mp : modpath) (t : term) {struct n} : term :=
+  match n with
+  | O => t
+  | S n =>
+      let u := mo_t 100000 Σ mp (um_inl 100000 Σ mp t) in
+      if teq 100000 u t then t else vm_unf n Σ mp u
   end.
 (** (step 76) a function giving back a value and a proof: the value alone *)
 Fixpoint er_proj (fuel self d : nat) (t : term) {struct fuel} : term :=
@@ -7312,7 +7354,7 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
               let ty0 := al_t 1000 Σ mp (cst_type cb) in
               let b0x := mo_t 100000 Σ mp (lu_t 100000 Σ (al_t 100000 Σ mp b00)) in
               (* (step 69) its calls of what is read in another form *)
-              let b0 := y_red 100000 (rp_sub 100000 rows (er_sub 100000 rows [] (um_inl 100000 Σ mp b0x))) in
+              let b0 := y_red 100000 (rp_sub 100000 rows (er_sub 100000 rows [] (vm_unf 6 Σ mp b0x))) in
               let r0 := match rows with [] => false | _ => negb (teq 100000 b0 b0x) end in
               let c1 := if teq 100000 ty0 (cst_type cb) then negb (teq 100000 b0 b00) else true in
               (* (step 63) a binder's type a redex, from a motive, a cast: the same up to beta *)
