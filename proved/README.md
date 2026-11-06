@@ -213,7 +213,7 @@ Anything else is refused with the reason.  Not read yet: a recursive function th
 ## Machine operations
 
 The operations of `KQRun.v` that reach the machine (`hw_load`, `hw_store`, `hw_store64`, the atomics and compare-and-swap,
-`hw_fence`, `hw_copy`, `hw_fill`, `hw_cmp`, `hw_call`, `hw_run`, `hw_code_sync`) are read like `upd`: each takes the memory
+`hw_fence`, `hw_call`, `hw_run`, `hw_code_sync`) are read like `upd`: each takes the memory
 and gives it back, and what one reads goes into the cell it is told to fill.  In KQL they are one instruction, `Ehw`,
 whose meaning is the kit's own operation on the abstract memory (`hw_sem`).  The generator emits it as a call of an
 external function (`f91000` ..), and the C bodies are the kit's (`hw/kq_hw.h`: `volatile` accesses, C11 atomics,

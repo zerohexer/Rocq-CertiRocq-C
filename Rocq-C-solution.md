@@ -27,7 +27,7 @@ about completeness while known unread places have no cell.  (`CLAUDE.md` in the 
 **WHAT MAY BE ASSUMED IS STRICT TOO (owner, 2026-11-06).**  Everything that has a definition other than the machine is proved.  A CPU having
 an instruction for something does not make it hardware.  `proved/TRUSTED.txt` lists what is assumed; a chain and a push stop on any difference
 from it (`proved/check_trust.py`), and a change to it goes to the owner (§0.3, §13.9, D29, F66).  **Today the proof ends at Clight**: the
-printer, clang, the loader and the driver are not proved (§12.H).  Step 65's five operations are gone (step 73); `divs_min_neg1` and the copy, the fill and the compare of bytes are next (§12.T).
+printer, clang, the loader and the driver are not proved (§12.H).  Step 65's five operations, `divs_min_neg1` and the copy, the fill and the compare of bytes are gone (steps 73, 74, 75, §12.T); what is left assumed is the machine's own, the memory's laws, what the loader gives.
 
 **What exists and works (all verified on the final tree, 2026-10-29/30):**
 
@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **2861 of 2960, 57 gaps, 41 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **2882 of 2981, 57 gaps, 41 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -543,7 +543,7 @@ no cache), `KQ_TIMES=1` (each proof's time).
 ### 1.8 Machine operations
 
 The operations of `KQRun.v` that reach the machine (`hw_load`, `hw_store`, `hw_store64`, the atomics and compare-and-swap,
-`hw_fence`, `hw_copy`, `hw_fill`, `hw_cmp`, `hw_call`, `hw_run`, `hw_code_sync`, `kq_grow`, interrupt-take) are read like
+`hw_fence`, `hw_call`, `hw_run`, `hw_code_sync`, `kq_grow`, interrupt-take) are read like
 `upd`: each takes the memory and gives it back, and what one reads goes into the cell it is told to fill.  In KQL they are one
 instruction, `Ehw`, whose meaning is the kit's own operation on the abstract memory (`hw_sem`).  The generator emits it as a
 call of an external function (`f91000` ..), and the C bodies are the kit's (`hw/kq_hw.h`: `volatile` accesses, C11 atomics,
@@ -906,7 +906,8 @@ finite checklist against what freestanding C offers, not an open question:
 | **`uint64_t` `/ %`**, signed 64-bit (`int64_t`) arithmetic beyond 63 bits, the high half of a 64×64 product | — | **missing** (add `W_divu`, `W_modu`, signed variants, `W_mulhi` to `w64op`) |
 | `int8/16/32_t`, `uint8/16/32_t` arithmetic with C's wrap-around | a library over `int` with masks and sign extension (`sx32` exists) | **library to write** |
 | loads and stores of 8, 16, 32, 64 bits | `Ekld8`/`Ekst8`, `rd16`/`upd16` (two bytes), `Ekld32`/`Ekst32`, `Ekld`/`Ekst`, views | proved |
-| `volatile`, atomics, fences, `memcpy`, `memset`, `memcmp` | `Ehw` machine operations | laws, C bodies assumed; `memcpy`, `memset`, `memcmp` have a definition, so they are on the list as `audit` (§12.T) |
+| `volatile`, atomics, fences | `Ehw` machine operations | laws, C bodies assumed |
+| `memcpy`, `memset`, `memcmp` | `hw_copy`, `hw_fill`, `hw_cmp`: loops over the byte loads and stores, ordinary functions of the kit (step 75) | proved |
 | `__builtin_popcount`, `clz`, `ctz`, `bswap`, rotate | Rocq functions, proved (`head0`, `tail0`: step 73) | a single instruction only as a case of the generator's proof, measured; never as a machine operation (F66) |
 | `malloc`, `free` | a library on growing blocks | proved library |
 | `float`, `double` | — | hosted, not started |
@@ -1677,10 +1678,10 @@ through `ccomp`) → **G** → **M** → **J**; **F**, **I** and **N** when thei
 
 **T. What is assumed, down to what has no definition except the machine (owner, 2026-11-06; D29, F66).**
 - ~~*`head0`, `tail0`, the high half of `mulc`, `diveucl_21`*~~ — **done, step 73**: ordinary Rocq functions in `KQRun.v`, proved equal to the primitive from Rocq's axioms alone (`proved/KQPrim.v`); for `diveucl_21` where `a < c`, and for `c <= a` Rocq's axioms say nothing: three written numbers are computed, a test in the text rules the case out, otherwise refused with that reason.
-- *`hw_copy`, `hw_fill`, `hw_cmp`, `kq_grow`*: marked `audit`.  Each has a definition (what it does to a memory): proved as Rocq functions where that is possible, and what stays is said with its reason.
+- ~~*`hw_copy`, `hw_fill`, `hw_cmp`*~~ — **done, step 75**: loops over the byte loads and stores in the kit, no operation of their own.  *`kq_grow`*: stays assumed, class `env`: the allocator under the memory's tables, with the loader and the driver (§12.H).
 - ~~*`divs_min_neg1`*~~ — **done, step 74**: `Bdivs` means `kq_divs`, which says what the smallest number over -1 is by its definition; `/` needs no test, and a written-out `divs` where the text rules the case out.
 - *The printer, clang, the loader, the driver*: §12.H, unless the owner wants them sooner.
-Accepted when: no line of the classes `remove` and `audit` is left in `proved/TRUSTED.txt`, and §1.10 says so.
+Accepted when: no line of the classes `remove` and `audit` is left in `proved/TRUSTED.txt`, and §1.10 says so.  **Done on `4898663`**, the printer, clang, the loader and the driver left at §12.H.
 
 **A. The construct-table gaps (20 cells, §3.5), then the by-design pins.**  The categories of §3.5: proof search for
 pair-valued choices and nested counter tests (6); polymorphic and class-based helpers by specialization (4); arithmetic and
@@ -1715,8 +1716,11 @@ proved once, measured against C written the same way.
 **G. Concurrency:** an interleaving semantics of two programs over the marked operations; protocol properties proved once (a
 lock's mutual exclusion, a queue); a ticket lock.
 
-**H. Checks of the trusted tools:** the printed C compiled by CompCert's own front end (`ccomp`) and compared; UBSan builds of
-the corpus and examples.
+**H. The tools the proof stops at.**  The theorem is about the Clight the generator makes.  The printer, clang, the loader that fills the
+tables, `kq_grow` and the driver are not proved, and the owner wants everything that is not the hardware verifiable (2026-11-06).  The
+way: release builds from that Clight through CompCert with no C text in between (`KQLBack.v` composes its passes), which leaves CompCert's
+own assumptions and its assembler; the loader and `kq_grow` as a case of the generator's proof or as Rocq on the primitives.  Until then,
+checks: the printed C compiled by CompCert's own front end (`ccomp`) and compared; UBSan builds of the corpus and examples.
 
 **I. Hosted features, when a program needs them:** `PrimFloat` as C `double`; system calls as primitives with a trace;
 declarations of C library functions as primitives with laws.
@@ -5176,6 +5180,22 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The acceptance*: `proved/examples/bulk_fix`: a fill, a copy each way, a compare each way, on the page that stands for a device; the answer worked out apart: 257985075201.
 - *Cells*: 21, `A_h_*`.
 
+**Step 75 done (2026-11-06): the bytes in bulk as ordinary functions.**  Built as designed:
+- *`KQRun.v`*: `hw_copy_up`, `hw_copy_down`, `hw_copy`, `hw_fill_go`, `hw_fill`, `hw_cmp_go`, `hw_cmp`.  *`KQSpec.v`, `KQModel.v`*: three operations and their ten laws gone, each proved of the model before, none needed.  *`hw/kq_hw.h`*, *`KQL.v`*, *`KQLGen.v`*, *`KQMSem.v`*, *`KQMTrans.v`*, *`kitc.py`*: as designed.
+- *The reader*: `kn_kit_fns`.  `KQR.v`, `KQRWf.v` unchanged.
+- *`proved/TRUSTED.txt`*: loses the axioms, `hwop`s, C bodies and printed names of the three; `kq_grow`'s class is `env`, and §12.H names it.  No line of `remove` or `audit` is left: §12.T's condition.
+- *The kernels*, built through the verified compiler and booted under KVM: `kernel` `bulk 0`, every check passed, answer 0; `smp` `cpus 2`, `atom 2000000`, answer 0; `lock` answer 0.  `lock` prints nothing: its two lines are in a `let` of a memory it does not use, dropped as a dead memory, the same on step 73's tree; a fault of its text, not of this step.  `hw/spec.sh`: the laws hold in a model, the proofs about kernel code rest on them alone.
+- *The acceptance*: `proved/examples/bulk_fix`: proved, built, 257985075201.
+- *Cells*: 21 more: 21 proved.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62; step 74's files / these): `HWP_kernel` 2.88 / 3.14 s, it now reads the loops of its copy and its fill as functions of its own; `HWP_own` 2.20 / 2.12, `HWP_irqnow` 1.90 / 1.80, the machine slower in this run than in the last, both sides.
+- The C: the 81 programs the same but for the three declarations and the three bodies they never used, compared with those lines
+  put back (the chain's first comparison stripped the declarations only and stopped: all 81 then the same to the byte).  The
+  construct table (on `4898663`): **2882 of 2981 through the verified compiler**, 41 by design, 57 gaps, 1 not Rocq (was 2861 of
+  2960: the 21 new cells read).  The gate on `4898663`, the walk switched off: `make.sh` `core-ok`; examples 46 / 46; corpus 36 /
+  36; the five kernels (13 / 13 / 16 / 14 / 15 s); **90 programs through the verified compiler, 0 refused**; `check_trust.py`: the
+  tree and the gate's list as `proved/TRUSTED.txt` now says, which has lost the three operations, with no line of `remove` or
+  `audit` left.  Next: a value and a proof given back: the rest of a function made by tactics.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5356,11 +5376,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `c79685b` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `4898663` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 75's design -- the bytes in bulk as ordinary functions |
+| (this commit) | §12.V: step 75 (the bytes in bulk as ordinary functions, §12.T done: the construct table 2882 of 2981, 41 by design, 57 gaps), the C, the gate |
+| `4898663` | `KQRun.v` + `KQSpec.v` + `KQModel.v` + `hw` + `proved/KQL.v` + `KQLGen.v` + `KQMSem.v` + `KQMTrans.v` + `KQRReify.v` + `kitc.py` + `TRUSTED.txt` + `matrix` + `examples/bulk_fix` step 75: `hw_copy`, `hw_fill`, `hw_cmp` as loops over a load and a store; three operations and their C bodies removed; 21 cells |
+| `f951760` | §12.V: step 75's design -- the bytes in bulk as ordinary functions |
 | `7c33817` | §12.V: step 74 (`divs_min_neg1` gone: the construct table 2861 of 2960, 41 by design, 57 gaps), the C, the gate |
 | `c79685b` | `KQRun.v` + `proved/KQL.v` + `KQTArith.v` + `KQMTrans.v` + `KQPrim.v` + `KQRReify.v` + `KQRWf.v` + `TRUSTED.txt` + `matrix` step 74: the signed quotient as `kq_divs`, proved; `divs_min_neg1` taken away; 45 cells |
 | `db25b11` | §12.V: step 74's design -- the signed quotient: divs_min_neg1 taken away |
