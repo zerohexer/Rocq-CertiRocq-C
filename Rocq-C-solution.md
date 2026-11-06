@@ -5033,6 +5033,21 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   examples 42 / 42; corpus 36 / 36; the five kernels (13 / 13 / 13 / 14 / 14 s); **86 programs through the verified compiler, 0
   refused**; the trusted base as step 65 left it, four of its names to be taken away (F66, §12.T).  Next: counters and numbers.
 
+**Step 70, counters and numbers (§0.5, §3.5, §12.A) — the design (2026-11-06).**  A counter was `S`, `+`, `pred`, `min`, `max`, `-`, `div2` and a budget.  What is left of the table's list and of the second probe, all the same matter, a counter's machine number: `Nat.even`, `Nat.mul`, `Uint63.of_nat`, `Uint63.to_nat`, `Z.to_nat (Sint63.to_Z e)`.
+- *A counter as a number*: `SOfC c`, whose meaning is `ofn c`, `of_Z (Z.of_nat c)`, what `Uint63.of_nat` is a notation for; its code is the counter's atom, which holds that number already.  No instruction.
+- *A number as a counter*: `CToNatU e`, `Z.to_nat (Uint63.to_Z e)`, what `Uint63.to_nat` is a notation for: the same word, no instruction.  `CToNat e`, `Z.to_nat (Sint63.to_Z e)`: a conditional move to 0 on the sign.
+- *A counter's room*: a counter was below 2^62, its bound asked to leave room above it (`cbz_small`), which nothing used.  `Uint63.to_nat a` reaches 2^63 - 1.  A counter only has to be a machine number: the limit becomes 2^63, in `bok`, `cfits_b`, `cboundv`.  What can grow past it is refused as before, by the check that every counter given is below the callee's bound and below 2^63.  The default bound of a function is unchanged, and a bound is no part of the C.
+- *A number written as a `Z`*: `Uint63.of_Z 5`: the reader works it out, `SInt`; the check is by conversion.
+- *A counter times a number written in the program*: `CMulK`, either side, one `mul`; the bound of a product is the product of bounds, zero included (`Nat.mul n 0`).
+- *`Nat.div`, `Nat.modulo`*: not on the list, the first thing one writes beside `even`: `CDivN`, `CModN`, one instruction each, Rocq's `x / 0 = 0` and `x mod 0 = x` being the machine's.
+- *`Nat.even`, `Nat.odd`*: `BEven c`: `c mod 2`, then a test, a value or a conditional move, as a comparison is; `odd` its negation by its definition.
+- *A counter chosen by a test*: `CIf b x y`: both counters worked out, a conditional move on the parts of the test (`csel`), as for numbers.
+- *`Nat.double`, `succ`, `square`, `Nat.pow` of written numbers*: written out or worked out.
+- *By design, §0.5's second reason, each with a control*: `Nat.mul n n`, `Nat.square n`, `Nat.pow 2 n`, and a product or a sum that can pass 2^63 (`Nat.mul 1000 n` for a budget, `Uint63.to_nat a + n`): a number that may need more than a word.  The refusal says so.
+- *Left, each with its cell*: a match on a counter giving a counter (`A_c2_match_cnt`); a `min` that bounds its operand (`A_c2_min_clamp`: a bound of the smaller of the two would take `wfc` asking each operand below 2^63); the library's recursive functions on counters, which give back a counter (`gcd`, `log2`, `sqrt`, `land`, `shiftr`, `testbit`), with `A_l_nat_ret_same`; `Nat.b2n`.
+- *Cells*: 119, `A_c2_*`: a counter as a number in every place of a number; a number as a counter in every place of a counter, signed and unsigned; a product, `/`, `mod`, `even`, `odd`, a test, in a let, a match, a loop, a recursion, a function giving back a boolean, writing; the same names under `Require Import Arith`, whose module `Nat` is another.
+- *The acceptance*: `proved/examples/conv_fix`, answer worked out apart: 37172565.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5217,7 +5232,8 @@ Pushed to the public repository up to `a89c37b` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §0.3's test, D29, F66, §1.10, §12.T, §13: only what has no definition except the machine is assumed; `proved/TRUSTED.txt`, `proved/check_trust.py`; `CLAUDE.md` |
+| (this commit) | §12.V: step 70's design -- counters and numbers |
+| `0739209` | §0.3's test, D29, F66, §1.10, §12.T, §13: only what has no definition except the machine is assumed; `proved/TRUSTED.txt`, `proved/check_trust.py`; `CLAUDE.md` |
 | `f6290ad` | §12.V: step 69 (a function read in another form, its callers told by a lemma: the construct table 2534 of 2578, 19 by design, 24 gaps), the C, the gate |
 | `a89c37b` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix` + `examples/poly_fix` step 69: a function read in another form, its callers told by a lemma; 26 cells; `KQR.v` unchanged |
 | `309e6b6` | §12.V: step 69's design -- a function read in another form, its callers told by a lemma |
