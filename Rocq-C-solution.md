@@ -5166,6 +5166,16 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   programs through the verified compiler, 0 refused**; `check_trust.py`: the tree and the gate's list as `proved/TRUSTED.txt` now
   says, which has lost `divs_min_neg1` twice.  Next: the bytes in bulk as ordinary functions.
 
+**Step 75, the bytes in bulk as ordinary functions (§12.T) — the design (2026-11-06).**  `hw_copy`, `hw_fill`, `hw_cmp` are operations of the machine with C bodies (`memmove`, `memset`, `memcmp`), and their laws say what they leave alone, not what they do.  They have a definition other than the machine: loops of one byte at a time over `hw_load` and `hw_store`.
+- *The kit* (`KQRun.v`): `hw_fill d b n s`; `hw_copy d src n h i s`, downwards when `d` is inside the source, each byte through cell `i` of block `h`, the way every load goes; `hw_cmp x y n h i s`, through cells `i` and `i + 1`, its answer in `i`.  `hw_copy` takes a cell it did not take before: a load puts what it reads in a cell, and no cell is the reader's to choose behind the program's back.
+- *Read as the program's*: `hw_copy_up`, `hw_copy_down`, `hw_fill_go`, `hw_cmp_go`, fixpoints of the kit, by name (`kn_kit_fns`).
+- *Removed*: `HCopy`, `HFill`, `HCmp`, their C bodies, their laws and the model's, three lines of `proved/TRUSTED.txt` each.  What a copy does now follows from the laws of a load and a store, and each byte is an event of the trace.
+- *`kq_grow`*: stays assumed, with the loader and the driver.  It is the allocator under the memory's tables, which the proof does not reach (§12.H, §12.D); its class in the list says so.
+- *The kernels*: `hw/kernel.body`, `kernel_p.body`, `smp.body`, `lock.body` name a free cell.  Booted under KVM: `bulk 0`, the second processor started from a trampoline copied by the new loop.
+- *The C*: the other programs lose the three declarations they never used; compared with them stripped.
+- *The acceptance*: `proved/examples/bulk_fix`: a fill, a copy each way, a compare each way, on the page that stands for a device; the answer worked out apart: 257985075201.
+- *Cells*: 21, `A_h_*`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5350,7 +5360,8 @@ Pushed to the public repository up to `c79685b` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 74 (`divs_min_neg1` gone: the construct table 2861 of 2960, 41 by design, 57 gaps), the C, the gate |
+| (this commit) | §12.V: step 75's design -- the bytes in bulk as ordinary functions |
+| `7c33817` | §12.V: step 74 (`divs_min_neg1` gone: the construct table 2861 of 2960, 41 by design, 57 gaps), the C, the gate |
 | `c79685b` | `KQRun.v` + `proved/KQL.v` + `KQTArith.v` + `KQMTrans.v` + `KQPrim.v` + `KQRReify.v` + `KQRWf.v` + `TRUSTED.txt` + `matrix` step 74: the signed quotient as `kq_divs`, proved; `divs_min_neg1` taken away; 45 cells |
 | `db25b11` | §12.V: step 74's design -- the signed quotient: divs_min_neg1 taken away |
 | `bf35eb1` | §12.V: step 73 (`head0`, `tail0`, `mulc`, `diveucl_21` proved: the construct table 2825 of 2915, 34 by design, 55 gaps), the C, the gate; F67, F68 |
