@@ -9,6 +9,7 @@ python3 tests/mkworst.py $D > /dev/null || exit 1
 ok=0; bad=0
 for b in proved/examples/*.body; do
   n=$(basename $b .body)
+  rm -f bin/P_$n   # no answer from a binary an earlier run left (F72)
   python3 proved/kitc.py $b 2>&1 | grep -v "^Warning\|^to KQC" | grep -v "^$n built" | head -3
   mem=$D/same.mem; args=$D/same.args   # an example with its own memory and arguments has NAME.mem, NAME.args
   [ -f proved/examples/$n.mem ] && mem=proved/examples/$n.mem; [ -f proved/examples/$n.args ] && args=proved/examples/$n.args

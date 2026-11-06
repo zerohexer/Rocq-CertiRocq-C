@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **2921 of 3018, 55 gaps, 41 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **2988 of 3105, 73 gaps, 43 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1656,6 +1656,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F62 | The reifier's step was timed in two trees whose directories differ in size: `coqc` scans every directory `-R` and `-Q` give it, and the working tree holds every cell's generated files and the cells themselves (234 MB against 101 MB), so a file that loads only MetaRocq takes 0.80 s there against 0.73 s.  The 0.04–0.08 s the records of steps 44 continued to 48 put on the libraries' loading (and on the reifier's tests) was this.  Timed in copies of both trees without those directories, step 44 continued's files against step 48's: `HWP_kernel` 2.50 / 2.52 s, `HWP_own` 1.93 / 1.95, `HWP_irqnow` 1.63 / 1.64 — the same.  The timing now makes those copies. |
 | F63 | §0.5's third refusal took its example from a fixed difference: `let t := upd .. s in .. t .. s ..` differs from `s` in one cell, whose old value a variable keeps and puts back, as a C programmer does; `A_par_write_two` (step 47, one cell named in the callee's text) is the same.  Only two versions differing in cells whose number comes from the data need a copy (found by step 49's design, 2026-11-03) | §0.5's third refusal worded by the size of the difference, as values are (F35); the fixed side gets cells (gaps), a pin and a control show the side from the data (step 49) |
 | F64 | `&&` and `||` are functions: under `vm_compute` both sides are evaluated, and a scan written `is_pm ty && pm_bare 100000 0 body` walked the whole body at every let, a fuel literal of 100000 built each time, quadratic on a long chain of lets.  The first version of step 48 continued's `has_pm_let` cost 27% on the kernels' reifier step (`HWP_kernel` 2.36 to 3.00 s), found by the timing before its commit (2026-11-04) | the test written with `if`, the cheap one first: back to 2.38 s.  The same as F58: a test the reifier runs often goes cheapest first, and only `if` makes that an order |
+| F72 | A chain went on past a refusal: the gate's `== refused (must be none): 1` line was printed and nothing read it, and `examples.sh` said 48 of 48 with `monad_fix` refused, because it ran the binary an earlier run had left (step 77's first version, found reading the log before the record) | a chain stops on that line; `examples.sh` removes the binary before it compiles |
 | F69 | `rewrite` compares up to unfolding, full, whatever `Strategy opaque` says: a lemma about a function whose body is one operation fires on that operation where the function is not written, and with a tactic turning the operation back the proof never ended | the lemma only where the function is in the goal (`match goal with |- context [F]`); a proof that looks for what to rewrite is stepped by hand when it times out |
 | F68 | A program's own file (`Require`d by its text) was compiled again only when older than its source, not than the kit, so after `KQRun.v` changed the program failed once on Rocq's inconsistent assumptions and `kitc.py` wrote no C; the comparison showed `none`, at steps 65 and 73 | `build_user_files` counts the kit's `.vo` |
 | F67 | A budget written as `S (S ..)` makes a conversion unroll the fixpoint: both sides reduce on the constructor, and with two branches in each round the comparison is exponential.  `reflexivity` on `(fix go ..) 63 c 0 a b = kq_d21_go 63 c 0 a b` did not end, nor `rewrite` of a term holding it, with the fixpoints' bodies identical | a written budget is `kq_nat 63`, opaque to a conversion (D18); a lemma about it is stated with the budget a variable, and the number put in with `exact` |
@@ -5226,6 +5227,20 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The acceptance*: `proved/examples/drv_fix`: a driver in that monad; the answer worked out apart: 5024.
 - *Cells*: 87, `A_p_*`.
 
+**Step 77 done (2026-11-07): what a fourth probe found: a value and a memory written out.**  Built as designed:
+- *The reader*: `vm_ty`, `vm_unf`, `y_dty`; `y_red`, `y_conb`, `y_tail` as designed.  `KQR.v`, `KQRWf.v` unchanged.  `y_nf`'s mark for no own call was the literal 1000000, added to at every test: this driver's read took 29 s and 2.4 GB, and 3 s and 885 MB with 9999 (F64 again).  Every program read in another form gains by it.
+- *`kitc.py`*: the reader's results printed in `NAME_ro.v` when the program has a notation or opens a scope; otherwise as before.
+- *The acceptance*: `proved/examples/drv_fix`: proved, built, 5024.
+- *Cells*: 87 more: 67 proved; `A_p_cps_grow`, `_list_built` by design; 18 gaps, listed by their categories.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62; step 76's files / these): `HWP_kernel` 2.95 / 2.96 s, `HWP_own` 2.02 / 2.03, `HWP_irqnow` 1.69 / 1.71 — the same.
+- *Found by the gate*: the first version floated `fst` and `snd` into a choice and then asked the kernel for a conversion, which is none: `monad_fix`, read before, was refused.  `y_fl`, `y_hasp`: such a body takes the equation route, and `KQRWf.own_step0p` is its proof's last alternative.  The gate printed `refused: 1` and the chain went on (F72).
+- The C: 83 of the 84 programs byte-identical; `proc_fix` differs in `solve`, not in a loop, by one conditional move more on a
+  boolean of a chosen pair.  The construct table (on `3d8a0a5`): **2988 of 3105 through the verified compiler**, 43 by design, 73
+  gaps, 1 not Rocq (was 2921 of 3018: 67 of the 87 new cells read, 2 by design, 18 gaps; no cell lost).  The gate on `3d8a0a5`,
+  the walk switched off: `make.sh` `core-ok`; examples 48 / 48; corpus 36 / 36; the five kernels (16 / 16 / 19 / 16 / 17 s); **92
+  programs through the verified compiler, 0 refused**; `check_trust.py`: `trust unchanged`.  Next: a value of several numbers and
+  a memory given back by a recursion.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5406,11 +5421,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `64ac544` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `3d8a0a5` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 77's design -- what a fourth probe found: a value and a memory written out |
+| (this commit) | §12.V: step 77 (a value and a memory written out: the construct table 2988 of 3105, 43 by design, 73 gaps), the C, the gate; F72; `examples.sh` counts no binary left by an earlier run |
+| `67c0d1a` | `proved/KQRReify.v` + `kitc.py` + `matrix` + `examples/drv_fix` step 77: a fourth probe: a value and a memory written out, a program's own notations; 87 cells |
+| `3d8a0a5` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` step 77: a projection floated into a choice is no conversion: by the equation |
+| `94fb392` | §12.V: step 77's design -- what a fourth probe found: a value and a memory written out |
 | `3db0886` | §12.V: step 76 (a value with a proof given back: the construct table 2921 of 3018, 41 by design, 55 gaps, one cell lost), the C, the gate; F69 |
 | `64ac544` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix` + `examples/proof_fix` step 76: a function giving back a value with a proof: `sig`, `sumbool`; 37 cells |
 | `1968a99` | §12.V: step 76's design -- a value and a proof given back |
