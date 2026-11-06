@@ -2846,6 +2846,81 @@ addA('q_nat_pair_ret', "", 'let (q, r) := sp n in if Nat.eqb r 0 then a else Uin
 addA('q_divmod', "", 'Uint63.of_nat (fst (Nat.divmod n 3 0 3))',
      '')
 
+# a function giving back a value and a proof: the value alone (step 76)
+addA('e_sig_def', "", 'proj1_sig (clamp a)',
+     'Definition clamp (x : int) : {y : int | True} := exist _ (if x <? 0 then 0 else x) I.\n')
+addA('e_sig_tactic', "", 'proj1_sig (clamp a) + 1',
+     'Definition clamp (x : int) : { y : int | (y <? 0) = false \\/ True }.\nProof. exists (if x <? 0 then 0 else x). right. exact I. Defined.\n')
+addA('e_sig_let', "", "let 'exist y _ := clamp a in y + 1",
+     'Definition clamp (x : int) : {y : int | True} := exist _ (if x <? 0 then 0 else x) I.\n')
+addA('e_sig_match', "", 'match clamp a with exist y _ => y * 2 end',
+     'Definition clamp (x : int) : {y : int | True} := exist _ (if x <? 0 then 0 else x) I.\n')
+addA('e_sig_two', "", 'proj1_sig (clamp a) + proj1_sig (clamp b)',
+     'Definition clamp (x : int) : {y : int | True} := exist _ (if x <? 0 then 0 else x) I.\n')
+addA('e_sig_arg', "", 'k (proj1_sig (clamp a))',
+     'Definition clamp (x : int) : {y : int | True} := exist _ (if x <? 0 then 0 else x) I.\nDefinition k (x : int) : int := x + 1.\n')
+addA('e_sig_spec', "", 'proj1_sig (same a)',
+     'Definition same (x : int) : {y : int | y = x} := exist _ x eq_refl.\n')
+addA('e_sig_spec_if', "", 'proj1_sig (cl a)',
+     'Definition cl (x : int) : {y : int | y = x \\/ y = 0}.\nProof. destruct (x <? 0) eqn:E; [exists 0; right; reflexivity | exists x; left; reflexivity]. Defined.\n')
+addA('e_sig_mem', "", 'proj1_sig (rdp a s)',
+     'Definition rdp (i : int) (t : mem) : {y : int | True} := exist _ (rd 0 i t) I.\n')
+addA('e_sig_rec', "", 'proj1_sig (lp n a)',
+     'Fixpoint lp (k : nat) (i : int) : {y : int | True} := match k with O => exist _ i I | S m => lp m (i + 1) end.\n')
+addA('e_sig_rec_match', "", 'match lp n a with exist y _ => y + b end',
+     'Fixpoint lp (k : nat) (i : int) : {y : int | True} := match k with O => exist _ i I | S m => lp m (i + 1) end.\n')
+addA('e_sig_rec_let', "", "let 'exist y _ := lp n a in y + b",
+     'Fixpoint lp (k : nat) (i : int) : {y : int | True} := match k with O => exist _ i I | S m => lp m (i + 1) end.\n')
+addA('e_sig_rec_mem', "", 'proj1_sig (lp n a s)',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : {y : int | True} := match k with O => exist _ (rd 0 i t) I | S m => lp m (i + 1) t end.\n')
+addA('e_sig_nontail', "", 'proj1_sig (lp n a)',
+     'Fixpoint lp (k : nat) (i : int) : {y : int | True} := match k with O => exist _ i I | S m => match lp m (i + 1) with exist y _ => exist _ (y + i) I end end.\n')
+addA('e_sig_proj_own', "", 'proj1_sig (lp n a)',
+     'Fixpoint lp (k : nat) (i : int) : {y : int | True} := match k with O => exist _ i I | S m => exist _ (proj1_sig (lp m (i + 1)) + i) I end.\n')
+addA('e_sig_if', "", 'proj1_sig (lp n a)',
+     'Fixpoint lp (k : nat) (i : int) : {y : int | True} := match k with O => exist _ i I | S m => if i <? 9 then lp m (i + 1) else exist _ i I end.\n')
+addA('e_sig_calls', "", 'proj1_sig (g a)',
+     'Definition clamp (x : int) : {y : int | True} := exist _ (if x <? 0 then 0 else x) I.\nDefinition g (x : int) : {y : int | True} := exist _ (proj1_sig (clamp x) + 1) I.\n')
+addA('e_sig_helper_rec', "", 'h2 n a',
+     'Fixpoint lp (k : nat) (i : int) : {y : int | True} := match k with O => exist _ i I | S m => lp m (i + 1) end.\nDefinition h2 (k : nat) (x : int) : int := proj1_sig (lp k x) + 1.\n')
+addA('e_sig_pair', "", 'fst (proj1_sig (pr a b))',
+     'Definition pr (x y : int) : {p : int * int | True} := exist _ (x, y) I.\n')
+addA('e_sig_bool', "", 'if proj1_sig (t a) then a else b',
+     'Definition t (x : int) : {c : bool | True} := exist _ (x <? 0) I.\n')
+addA('e_sig_nat', "", 'if Nat.ltb (proj1_sig (cn n)) 3 then a else b',
+     'Definition cn (k : nat) : {m : nat | True} := exist _ (S k) I.\n')
+addA('e_sig_param', "", 'u (clamp a)',
+     'Definition clamp (x : int) : {y : int | True} := exist _ (if x <? 0 then 0 else x) I.\nDefinition u (x : {y : int | True}) : int := proj1_sig x + 1.\n')
+addA('e_sig_field', "", 'proj1_sig (fst (pp a))',
+     'Definition clamp (x : int) : {y : int | True} := exist _ (if x <? 0 then 0 else x) I.\nDefinition pp (x : int) : {y : int | True} * int := (clamp x, x).\n')
+addA('e_sb_def', "", 'if neg a then a else b',
+     'Definition neg (x : int) : {True} + {True} := if x <? 0 then left I else right I.\n')
+addA('e_sb_match', "", 'match neg a with left _ => a | right _ => b end',
+     'Definition neg (x : int) : {True} + {True} := if x <? 0 then left I else right I.\n')
+addA('e_sb_two', "", '(if neg a then 1 else 2) + (if neg b then 3 else 4)',
+     'Definition neg (x : int) : {True} + {True} := if x <? 0 then left I else right I.\n')
+addA('e_sb_let', "", 'let c := neg a in if c then a else b',
+     'Definition neg (x : int) : {True} + {True} := if x <? 0 then left I else right I.\n')
+addA('e_sb_negb', "", 'if negb (if neg a then true else false) then a else b',
+     'Definition neg (x : int) : {True} + {True} := if x <? 0 then left I else right I.\n')
+addA('e_sb_rec', "", 'if fnd n a s then a else b',
+     'Fixpoint fnd (k : nat) (i : int) (t : mem) : {True} + {True} := match k with O => right I | S m => if rd 0 i t =? 7 then left I else fnd m (i + 1) t end.\n')
+addA('e_sb_own', "", 'if od n a then a else b',
+     'Fixpoint od (k : nat) (i : int) : {True} + {True} := match k with O => right I | S m => if od m (i + 1) then right I else left I end.\n')
+addA('e_sb_tactic', "", 'if isz a then a else b',
+     'Definition isz (x : int) : {x = 0} + {x <> 0}.\nProof. destruct (x =? 0) eqn:E; [left; apply Uint63.eqb_spec in E; exact E | right; intro H; subst x; discriminate E]. Defined.\n')
+addA('e_sb_calls', "", 'if g a then a else b',
+     'Definition neg (x : int) : {True} + {True} := if x <? 0 then left I else right I.\nDefinition g (x : int) : {True} + {True} := if neg x then right I else left I.\n')
+addA('e_sb_helper_rec', "", 'h2 n a s',
+     'Fixpoint fnd (k : nat) (i : int) (t : mem) : {True} + {True} := match k with O => right I | S m => if rd 0 i t =? 7 then left I else fnd m (i + 1) t end.\nDefinition h2 (k : nat) (x : int) (t : mem) : int := if fnd k x t then 1 else 0.\n')
+addA('e_sb_proof_used', "", 'match isz a with left p => a | right p => b end',
+     'Definition isz (x : int) : {x = 0} + {x <> 0}.\nProof. destruct (x =? 0) eqn:E; [left; apply Uint63.eqb_spec in E; exact E | right; intro H; subst x; discriminate E]. Defined.\n')
+addA('e_sb_result', "", 'if nz a then a else b',
+     'Definition nz (x : int) : {x = 0} + {x <> 0} := Uint63.eqs x 0.\n')
+addA('e_enum_scheme', "", 'if color_eq_dec (if a <? b then Red else Green) Blue then a else b',
+     'Inductive color := Red | Green | Blue.\nScheme Equality for color.\n')
+addA('e_enum_decide', "", 'if cdec (if a <? b then Red else Green) Blue then a else b',
+     'Inductive color := Red | Green | Blue.\nDefinition cdec (x y : color) : {x = y} + {x <> y}.\nProof. decide equality. Defined.\n')
 # the bytes in bulk: functions of the kit over the byte loads and stores (step 75)
 addA('h_fill', "", 'rd 0 a (hw_fill 268435456 7 b s)',
      '')

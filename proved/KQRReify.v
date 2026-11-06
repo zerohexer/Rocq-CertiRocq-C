@@ -545,6 +545,8 @@ Fixpoint rec_shape_go (fuel : nat) (Σ : global_env) (t : term) : option rentry 
       | Some (InductiveDecl mib) =>
           match ind_bodies mib with
           | [oib] =>
+              (* (step 76) a proposition's proof is no value, whatever its shape *)
+              if Sort.is_prop (ind_sort oib) then None else
               match ind_ctors oib with
               | [cb] =>
                   let args := rev (cstr_args cb) in
@@ -6552,6 +6554,22 @@ Definition rp_is_um (slots : list nat) : bool := existsb (Nat.eqb rp_um) slots.
 (** (step 72) a row whose function gives back a boolean and a memory, what is in its place a number and a memory *)
 Definition rp_bm : nat := 997.
 Definition rp_is_bm (slots : list nat) : bool := existsb (Nat.eqb rp_bm) slots.
+(** (step 76) a row whose function gives back a value and a proof: what is in its place the value alone, [f' args = proj1_sig (f args)],
+    [f' args = if f args then true else false] *)
+Definition rp_sg : nat := 996.
+Definition rp_sb : nat := 995.
+Definition rp_is_sg (slots : list nat) : bool := existsb (Nat.eqb rp_sg) slots.
+Definition rp_is_sb (slots : list nat) : bool := existsb (Nat.eqb rp_sb) slots.
+Definition rp_is_er (slots : list nat) : bool := if rp_is_sg slots then true else rp_is_sb slots.
+Definition kn_proj1_sig := kn_of <% @proj1_sig %>.
+Definition ind_sig := ind_of <% @Corelib.Init.Specif.sig %>.
+Definition ind_sumbool := ind_of <% @sumbool %>.
+Definition kq_sb2b {A B : Prop} (s : {A} + {B}) : bool := if s then true else false.
+Definition sb_val := <% @kq_sb2b %>.
+Definition er_bool := <% bool %>.
+Definition er_true := <% true %>.
+Definition er_false := <% false %>.
+Definition er_dead := tVar "kq_dead_proof"%bs.
 Definition bm_ty := <% (bool * KQ.KQRun.mem)%type %>.
 Definition bm_num := <% (PrimInt63.int * KQ.KQRun.mem)%type %>.
 Definition bm_wrap := <% fun p : PrimInt63.int * KQ.KQRun.mem => let (x, t) := p in (PrimInt63.eqb x 1%uint63, t) %>.
@@ -6660,6 +6678,92 @@ Fixpoint rp_sub (fuel : nat) (rows : list rprow) (t : term) {struct fuel} : term
       | tLetIn na x a b => tLetIn na (go x) a (go b)
       | tCase ci p c brs => tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := go (bbody br) |}) brs)
       | tFix mfix k => tFix (map (fun df => {| dname := dname df; dtype := dtype df; rarg := rarg df; dbody := go (dbody df) |}) mfix) k
+      | tProj p c => tProj p (go c)
+      | _ => t
+      end
+  end.
+(** (step 76) the row of a function giving back a proof, at a full application *)
+Definition er_row (rows : list rprow) (h : term) (args : list term) : option term :=
+  match List.find (fun r : rprow =>
+          let '(h0, _, sl, _, d0) := r in
+          if rp_is_er sl then
+            match h0, h with
+            | tConst k0 _, tConst k _ => Kername.eqb k0 k && Nat.eqb (length args) (length (fst (lams (dbody d0))))
+            | _, _ => false
+            end
+          else false) rows with
+  | Some r => Some (tApp (tConst (rp_name r) []) args)
+  | None => None
+  end.
+Fixpoint er_sub (fuel : nat) (rows : list rprow) (lv : list bool) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := er_sub fuel rows lv in
+      let under := fun n => er_sub fuel rows (List.repeat false n ++ lv) in
+      match t with
+      | tApp (tConst k u) [A; P; tRel i] =>
+          if Kername.eqb k kn_proj1_sig && nth i lv false then tRel i else t
+      | tApp (tConst k u) [A; P; tApp h args] =>
+          let args' := map go args in
+          if Kername.eqb k kn_proj1_sig then
+            match er_row rows h args' with
+            | Some u' => u'
+            | None => tApp (tConst k u) [A; P; tApp h args']
+            end
+          else tApp (tConst k u) [go A; go P; go (tApp h args)]
+      | tApp f args => tApp (go f) (map go args)
+      | tLambda na a b => tLambda na a (under 1 b)
+      | tLetIn na (tApp h args) (tApp (tInd i0 _) [A; _] as a) b =>
+          (* a let of what is read in another form: of the value alone *)
+          let args' := map go args in
+          match er_row rows h args' with
+          | Some u' =>
+              if Kername.eqb (inductive_mind i0) (inductive_mind ind_sumbool) then
+                tLetIn na u' er_bool (er_sub fuel rows (true :: lv) b)
+              else if Kername.eqb (inductive_mind i0) (inductive_mind ind_sig) then
+                tLetIn na u' A (er_sub fuel rows (true :: lv) b)
+              else tLetIn na (go (tApp h args)) a (under 1 b)
+          | None => tLetIn na (go (tApp h args)) a (under 1 b)
+          end
+      | tLetIn na x a b => tLetIn na (go x) a (under 1 b)
+      | tCase ci p (tRel i) [b0; b1] =>
+          (* a test on such a let *)
+          let k := if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_sumbool) then nth i lv false else false in
+          match k, y_case_bool with
+          | true, tLambda _ _ (tCase cib pb _ _) =>
+              if (if tm_has_rel 1000 0 (bbody b0) then true else tm_has_rel 1000 0 (bbody b1))
+              then t
+              else tCase cib {| pparams := pparams pb; puinst := puinst pb; pcontext := pcontext pb; preturn := preturn p |} (tRel i)
+                     [{| bcontext := []; bbody := go (subst10 (tRel 0) (bbody b0)) |};
+                      {| bcontext := []; bbody := go (subst10 (tRel 0) (bbody b1)) |}]
+          | _, _ => tCase ci p (tRel i) (map (fun br => {| bcontext := bcontext br; bbody := under (length (bcontext br)) (bbody br) |}) [b0; b1])
+          end
+      | tCase ci p (tApp h args) [br] =>
+          (* a match on a sig: the value by a let, the proof no value *)
+          let args' := map go args in
+          match (if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_sig) then er_row rows h args' else None), pparams p with
+          | Some u', [A; _] =>
+              if Nat.eqb (length (bcontext br)) 2 then
+                if tm_has_rel 1000 0 (bbody br) then tCase ci p (go (tApp h args)) [{| bcontext := bcontext br; bbody := under 2 (bbody br) |}]
+                else tLetIn anon_b u' A (under 1 (subst [er_dead] 0 (bbody br)))
+              else tCase ci p (go (tApp h args)) [{| bcontext := bcontext br; bbody := under (length (bcontext br)) (bbody br) |}]
+          | _, _ => tCase ci p (go (tApp h args)) [{| bcontext := bcontext br; bbody := under (length (bcontext br)) (bbody br) |}]
+          end
+      | tCase ci p (tApp h args) [b0; b1] =>
+          (* a test that gives a proof with its answer, the proofs not named *)
+          let args' := map go args in
+          match (if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_sumbool) then er_row rows h args' else None), y_case_bool with
+          | Some u', tLambda _ _ (tCase cib pb _ _) =>
+              if (if tm_has_rel 1000 0 (bbody b0) then true else tm_has_rel 1000 0 (bbody b1))
+              then tCase ci p (go (tApp h args)) (map (fun br => {| bcontext := bcontext br; bbody := under (length (bcontext br)) (bbody br) |}) [b0; b1])
+              else tCase cib {| pparams := pparams pb; puinst := puinst pb; pcontext := pcontext pb; preturn := preturn p |} u'
+                     [{| bcontext := []; bbody := go (subst10 (tRel 0) (bbody b0)) |};
+                      {| bcontext := []; bbody := go (subst10 (tRel 0) (bbody b1)) |}]
+          | _, _ => tCase ci p (go (tApp h args)) (map (fun br => {| bcontext := bcontext br; bbody := under (length (bcontext br)) (bbody br) |}) [b0; b1])
+          end
+      | tCase ci p c brs => tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := under (length (bcontext br)) (bbody br) |}) brs)
+      | tFix mfix k => tFix (map (fun df => {| dname := dname df; dtype := dtype df; rarg := rarg df; dbody := under (length mfix) (dbody df) |}) mfix) k
       | tProj p c => tProj p (go c)
       | _ => t
       end
@@ -6946,6 +7050,146 @@ Fixpoint bm_tr (fuel : nat) (Σ : global_env) (mp : modpath) (self d : nat) (t :
       | _ => None
       end
   end.
+(** (step 76) a function giving back a value and a proof: the value alone *)
+Fixpoint er_proj (fuel self d : nat) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := er_proj fuel self d in
+      match t with
+      | tApp (tConst k u) [A; B; tApp (tRel i) a] =>
+          if Kername.eqb k kn_proj1_sig && Nat.eqb i (self + d) then tApp (tRel i) (map go a)
+          else tApp (tConst k u) [A; B; tApp (tRel i) (map go a)]
+      | tApp f args => tApp (go f) (map go args)
+      | tLambda na a b => tLambda na a (er_proj fuel self (S d) b)
+      | tLetIn na v a b => tLetIn na (go v) a (er_proj fuel self (S d) b)
+      | tCase ci p c brs => tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := er_proj fuel self (d + length (bcontext br)) (bbody br) |}) brs)
+      | _ => t
+      end
+  end.
+Fixpoint er_tr (fuel : nat) (Σ : global_env) (mp : modpath) (sb : bool) (T : term) (self d : nat) (t : term) {struct fuel} : option term :=
+  match fuel with
+  | O => None
+  | S fuel =>
+      let go := er_tr fuel Σ mp sb T self in
+      match um_red 1000 Σ mp t with
+      | tConstruct _ _ _ => None
+      | tApp (tConstruct i k _) cargs =>
+          if Kername.eqb (inductive_mind i) (inductive_mind ind_sumbool) then
+            Some (if Nat.eqb k 0 then er_true else er_false)
+          else if Kername.eqb (inductive_mind i) (inductive_mind ind_sig) then
+            match cargs with
+            | [_; _; v; _] => Some (er_proj 100000 self d v)
+            | _ => None
+            end
+          else None
+      | tApp (tRel i) args as c => if Nat.eqb i (self + d) then Some c else None
+      | tApp (tConst k _) dargs =>
+          match dec_of k, rev dargs with
+          | Some mk, y :: x :: _ => if sb then Some (mk x y) else None
+          | _, _ => None
+          end
+      | tCase ci p (tApp (tRel i) args as c) [br] =>
+          (* the function's own call taken apart: its value by a let, the proof no value *)
+          if Nat.eqb i (self + d) && Nat.eqb (length (bcontext br)) 2 then
+            match pparams p with
+            | [A; _] => option_map (fun b => tLetIn anon_b c A b) (go (S d) (subst [er_dead] 0 (bbody br)))
+            | _ => None
+            end
+          else None
+      | tCase ci p (tApp (tRel i) args as c) [b0; b1] =>
+          if Nat.eqb i (self + d) then
+            match y_case_bool, go d (subst10 er_dead (bbody b0)), go d (subst10 er_dead (bbody b1)) with
+            | tLambda _ _ (tCase cib pb _ _), Some x, Some y =>
+                Some (tCase cib {| pparams := pparams pb; puinst := puinst pb; pcontext := pcontext pb; preturn := lift0 (length (pcontext pb)) (lift0 d T) |} c
+                        [{| bcontext := []; bbody := x |}; {| bcontext := []; bbody := y |}])
+            | _, _, _ => None
+            end
+          else None
+      | tCase ci p c brs =>
+          match opt_all (map (fun br => go (d + length (bcontext br)) (bbody br)) brs) with
+          | Some bs => Some (tCase ci (y_ret p (lift0 d T)) c (map (fun pb : branch term * term => {| bcontext := bcontext (fst pb); bbody := snd pb |}) (combine brs bs)))
+          | None => None
+          end
+      | tLetIn na v (tApp (tInd i0 _) _) (tCase ci p (tRel 0) [b0; b1]) =>
+          if sb && Kername.eqb (inductive_mind i0) (inductive_mind ind_sumbool) then
+            match y_case_bool, go d v, go d (subst10 er_dead (subst10 er_dead (bbody b0))), go d (subst10 er_dead (subst10 er_dead (bbody b1))) with
+            | tLambda _ _ (tCase cib pb _ _), Some v', Some x, Some y =>
+                Some (tCase cib {| pparams := pparams pb; puinst := puinst pb; pcontext := pcontext pb; preturn := lift0 (length (pcontext pb)) (lift0 d T) |} v'
+                        [{| bcontext := []; bbody := x |}; {| bcontext := []; bbody := y |}])
+            | _, _, _, _ => None
+            end
+          else None
+      | tLetIn na v ty b => option_map (fun b' => tLetIn na v ty b') (go (S d) b)
+      | _ => None
+      end
+  end.
+Definition er_rows (Σ : global_env) (mp : modpath) (root : kername) (kns : list kername) : list rprow :=
+  flat_map (fun kn =>
+    if if in_prog mp (fst kn) then negb (Kername.eqb kn root) else false then
+      match lookup_env Σ kn with
+      | Some (ConstantDecl cb) =>
+          let ty := al_t 1000 Σ mp (cst_type cb) in
+          let rt := ret_ty ty in
+          let info := match rt with
+                      | tApp (tInd i _) [A; P] =>
+                          if Kername.eqb (inductive_mind i) (inductive_mind ind_sig) then Some (false, A)
+                          else if Kername.eqb (inductive_mind i) (inductive_mind ind_sumbool) then Some (true, er_bool)
+                          else None
+                      | _ => None
+                      end in
+          match info with
+          | None => []
+          | Some (sb, T) =>
+              let ptys := removelast (prod_tys ty) in
+              let sl := [if sb then rp_sb else rp_sg] in
+              match cst_body cb with
+              | Some (tFix [d] 0) =>
+                  let '(tys, body) := lams (dbody d) in
+                  let n := length tys in
+                  if Nat.eqb n (length ptys) then
+                    match er_tr 1000 Σ mp sb T n 0 body with
+                    | Some b' =>
+                        [(tConst kn [], [], sl, mangle kn ^ "__e"%bs,
+                          {| dname := dname d; dtype := pis_of tys T; rarg := rarg d; dbody := lams_of tys b' |})]
+                    | None => []
+                    end
+                  else []
+              | Some (tFix _ _) | None => []
+              | Some b =>
+                  let '(tys, body) := lams b in
+                  let n := length tys in
+                  if Nat.eqb n (length ptys) then
+                    match er_tr 1000 Σ mp sb T 999 0 body with
+                    | Some b' =>
+                        [(tConst kn [], [], sl, mangle kn ^ "__e__n"%bs,
+                          {| dname := anon_b; dtype := pis_of tys T; rarg := rp_nofix; dbody := lams_of tys b' |})]
+                    | None => []
+                    end
+                  else []
+              end
+          end
+      | _ => []
+      end
+    else []) kns.
+Definition er_stmt (Σ : global_env) (mp : modpath) (r : rprow) : term :=
+  let '(h, _, sl, _, d0) := r in
+  let tys0 := fst (lams (dbody d0)) in
+  let m := length tys0 in
+  let rels := map (fun j => tRel (m - 1 - j)) (seq 0 m) in
+  let rt := match h with
+            | tConst k _ => match lookup_env Σ k with
+                            | Some (ConstantDecl cb) => ret_ty (al_t 1000 Σ mp (cst_type cb))
+                            | _ => tRel 0
+                            end
+            | _ => tRel 0
+            end in
+  match rt with
+  | tApp _ [A; P] =>
+      if rp_is_sg sl then pis_of tys0 (tApp y_eq [A; tApp (tConst (rp_name r) []) rels; tApp (tConst kn_proj1_sig []) [A; P; mkApps h rels]])
+      else pis_of tys0 (tApp y_eq [er_bool; tApp (tConst (rp_name r) []) rels; pf_beta sb_val [A; P; mkApps h rels]])
+  | _ => tRel 0
+  end.
 Definition um_rows (Σ : global_env) (mp : modpath) (root : kername) (kns : list kername) : list rprow :=
   flat_map (fun kn =>
     if if in_prog mp (fst kn) then negb (Kername.eqb kn root) else false then
@@ -7047,17 +7291,18 @@ Definition pm_add (Σ : global_env) : global_env :=
                         | None => {| universes := universes S; declarations := e :: declarations S; retroknowledge := retroknowledge S |}
                         end) (declarations pm_kit) Σ.
 Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env * bool :=
-  let rows := rp_topo Σ (rp_all Σ mp root ++ um_rows (conv_all Σ mp) mp root (snd (reach_go 1000 Σ mp root root ([], [])))) in
+  let kns0 := snd (reach_go 1000 Σ mp root root ([], [])) in
+  let rows := rp_topo Σ (rp_all Σ mp root ++ um_rows (conv_all Σ mp) mp root kns0 ++ er_rows (conv_all Σ mp) mp root kns0) in
   (* (step 69) what is made, its own calls of what is in their place written too; the statements *)
   let S0 := fold_left (fun S2 r =>
               let d' := rp_def r in
               add_decl (add_decl S2 (rp_name r) (dtype d')
-                         (if Nat.eqb (rarg d') rp_nofix then y_red 100000 (rp_sub 100000 rows (dbody d'))
-                          else tFix [{| dname := dname d'; dtype := dtype d'; rarg := rarg d'; dbody := y_red 100000 (rp_sub 100000 rows (dbody d')) |}] 0))
-                       (rq_name r) (tSort sProp) (rp_stmt r)) rows Σ in
+                         (if Nat.eqb (rarg d') rp_nofix then y_red 100000 (rp_sub 100000 rows (er_sub 100000 rows [] (dbody d')))
+                          else tFix [{| dname := dname d'; dtype := dtype d'; rarg := rarg d'; dbody := y_red 100000 (rp_sub 100000 rows (er_sub 100000 rows [] (dbody d'))) |}] 0))
+                       (rq_name r) (tSort sProp) (match r with (_, _, sl, _, _) => if rp_is_er sl then er_stmt Σ mp r else rp_stmt r end)) rows Σ in
   fold_left (fun st kn =>
     let '(S1, ch) := st in
-    if existsb (fun r : rprow => match r with (tConst k _, _, sl, _, _) => if if rp_is_um sl then true else rp_is_bm sl then Kername.eqb k kn else false | _ => false end) rows then st else
+    if existsb (fun r : rprow => match r with (tConst k _, _, sl, _, _) => if if rp_is_um sl then true else if rp_is_bm sl then true else rp_is_er sl then Kername.eqb k kn else false | _ => false end) rows then st else
     if in_prog mp (fst kn) then
       match lookup_env S1 kn with
       | Some (ConstantDecl cb) =>
@@ -7067,7 +7312,7 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
               let ty0 := al_t 1000 Σ mp (cst_type cb) in
               let b0x := mo_t 100000 Σ mp (lu_t 100000 Σ (al_t 100000 Σ mp b00)) in
               (* (step 69) its calls of what is read in another form *)
-              let b0 := y_red 100000 (rp_sub 100000 rows (um_inl 100000 Σ mp b0x)) in
+              let b0 := y_red 100000 (rp_sub 100000 rows (er_sub 100000 rows [] (um_inl 100000 Σ mp b0x))) in
               let r0 := match rows with [] => false | _ => negb (teq 100000 b0 b0x) end in
               let c1 := if teq 100000 ty0 (cst_type cb) then negb (teq 100000 b0 b00) else true in
               (* (step 63) a binder's type a redex, from a motive, a cast: the same up to beta *)

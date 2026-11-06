@@ -1,0 +1,20 @@
+(* values given back with a proof: a sig, a sumbool, read as the value alone; functions made by tactics, a type's equality by decide equality.  The answer is worked out apart (see .expect). *)
+Inductive color := Red | Green | Blue.
+Definition cdec (x y : color) : {x = y} + {x <> y}.
+Proof. decide equality. Defined.
+Definition clamp (x : int) : {y : int | y = x \/ y = 0}.
+Proof. destruct (x <? 0) eqn:E; [exists 0; right; reflexivity | exists x; left; reflexivity]. Defined.
+Fixpoint fnd (k : nat) (i v : int) (t : mem) : {True} + {True} :=
+  match k with O => right I | S m => if rd 0 i t =? v then left I else fnd m (i + 1) v t end.
+Fixpoint sumc (k : nat) (i : int) (t : mem) : {y : int | True} :=
+  match k with
+  | O => exist _ 0 I
+  | S m => match sumc m (i + 1) t with exist y _ => exist _ (y + proj1_sig (clamp (rd 0 i t - 6))) I end
+  end.
+Definition solve (a b : int) (s : mem) : int :=
+  proj1_sig (sumc (kq_nat 12) 0 s) * 100 + (if fnd (kq_nat 12) 0 b s then 10 else 20)
+  + (if fnd (kq_nat 12) 0 a s then 1 else 2)
+  + (if cdec (if a <? b then Red else Green) Green then 1000000 else 2000000).
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve 12 7 (kq_input 0).

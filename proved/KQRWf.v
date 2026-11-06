@@ -9,6 +9,7 @@ From Corelib Require Import Numbers.Cyclic.Int63.CarryType.
 From Stdlib Require Sint63 Uint63.
 From Stdlib Require Arith.Compare_dec Arith.PeanoNat.
 From KQC Require KQMAuto KQPrim.
+From Stdlib Require Eqdep_dec.
 
 Section W.
 Variables (A : Type) (B : Type) (m : A -> nat) (wf : well_founded (MR lt m)).
@@ -308,19 +309,47 @@ Ltac kq_guard :=
   end.
 (** (step 69) a program's lemmas of what is read in another form: [kitc.py] sets it *)
 Ltac kq_rw := fail.
+(** (step 76) what a program's rows name, written out: a hook [kitc.py] sets *)
+Ltac kq_unf := idtac.
+(** (step 76) a function made by tactics: [destruct t eqn:E] leaves a match on [t] applied to [eq_refl], its branches' proofs naming [t], so that [t] cannot be taken apart in the goal; it is told apart beside it *)
+Lemma convoy_true : forall (t : bool) (T : Type) (f : t = true -> T) (g : t = false -> T) (e : t = true),
+  (match t as b return t = b -> T with true => f | false => g end) eq_refl = f e.
+Proof.
+  intros t T f g e. revert f g e. destruct t; intros f g e; [| discriminate e].
+  rewrite (Eqdep_dec.UIP_refl_bool true e). reflexivity.
+Qed.
+Lemma convoy_false : forall (t : bool) (T : Type) (f : t = true -> T) (g : t = false -> T) (e : t = false),
+  (match t as b return t = b -> T with true => f | false => g end) eq_refl = g e.
+Proof.
+  intros t T f g e. revert f g e. destruct t; intros f g e; [discriminate e |].
+  rewrite (Eqdep_dec.UIP_refl_bool false e). reflexivity.
+Qed.
+Lemma bool_cases : forall t : bool, {t = true} + {t = false}.
+Proof. intros [|]; [left | right]; reflexivity. Defined.
+Ltac kq_convoy :=
+  match goal with
+  | |- context [(match ?t with true => ?f | false => ?g end) (@eq_refl _ _)] =>
+      let e := fresh "kqe" in
+      destruct (bool_cases t) as [e | e]; [rewrite (convoy_true t _ f g e) | rewrite (convoy_false t _ f g e)]
+  end.
 (** (step 61) a fixpoint with its own call under a choice in an operand, and the same with the choice floated out: equal at each counter, test by test *)
 Ltac own_step IH :=
-  repeat (cbn beta iota zeta delta [fst snd];
+  repeat (cbn beta iota zeta delta [fst snd proj1_sig]; kq_unf;
           first [ prim_rw
                 | kq_guard
                 | kq_rw
                 | progress (rewrite ?IH)
                 | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
                 | match goal with |- context [match ?c with pair _ _ => _ end] => lazymatch c with context [match _ with _ => _ end] => fail | PrimInt63.diveucl_21 _ _ _ => fail | _ => destruct c end end
+                | kq_convoy
+                | match goal with |- context [match ?c with exist _ _ _ => _ end] => destruct c end
+                | match goal with |- context [if ?c then _ else _] => lazymatch c with context [match _ with _ => _ end] => fail | _ => let e := fresh "kqe" in destruct c eqn:e end end
+                | match goal with |- context [if ?c then _ else _] => match c with context [match ?v with _ => _ end] => is_var v; destruct v end end
                 | match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
                 | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
                 | match goal with |- context [match ?c with pair _ _ => _ end] => destruct c end
-                | reflexivity ]).
+                | reflexivity
+                | match goal with |- context [match ?c with _ => _ end] => is_var c; destruct c end ]).
 
 (** (step 61) a fixpoint with its own call on a counter deeper than the predecessor, and a budget function above it: equal at every budget above the counter *)
 Ltac deep_step IH pr :=
@@ -336,13 +365,18 @@ Ltac deep_step IH pr :=
 
 Definition kq_no_ih : True := I.
 Ltac own_step0 :=
-  repeat (cbn beta iota zeta delta [fst snd];
+  repeat (cbn beta iota zeta delta [fst snd proj1_sig]; kq_unf;
           first [ prim_rw
                 | kq_guard
                 | kq_rw
                 | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
                 | match goal with |- context [match ?c with pair _ _ => _ end] => lazymatch c with context [match _ with _ => _ end] => fail | PrimInt63.diveucl_21 _ _ _ => fail | _ => destruct c end end
+                | kq_convoy
+                | match goal with |- context [match ?c with exist _ _ _ => _ end] => destruct c end
+                | match goal with |- context [if ?c then _ else _] => lazymatch c with context [match _ with _ => _ end] => fail | _ => let e := fresh "kqe" in destruct c eqn:e end end
+                | match goal with |- context [if ?c then _ else _] => match c with context [match ?v with _ => _ end] => is_var v; destruct v end end
                 | match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
                 | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
                 | match goal with |- context [match ?c with pair _ _ => _ end] => destruct c end
-                | reflexivity ]).
+                | reflexivity
+                | match goal with |- context [match ?c with _ => _ end] => is_var c; destruct c end ]).

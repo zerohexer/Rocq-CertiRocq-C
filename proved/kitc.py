@@ -879,6 +879,9 @@ def reflect(name, entry, prog, no_proof):
     # among the rewrites of what follows
     rrs = [(m, h) for m, h in mts if m.endswith("__rq__wy")]
     rrn = []
+    rrw = []
+    if rrs:
+        t += "Ltac KQRWf.kq_unf ::= try unfold KQRReify.kq_sb2b.\n"
     # (step 72) what the tactic rewrites stays folded when the helpers are unfolded
     keepf = " ".join(sorted({"KQ.KQRun.kq_nat"} | {x for m, h in rrs for x in (h, m[:-len("__rq__wy")] + "__rp__wy") if x}
                             | {f[0] for f in fs if f[0] in fix1} | {f[0].rsplit(".", 1)[-1] + "__wy" for f in fs if f[0].rsplit(".", 1)[-1] + "__wy" in made}))
@@ -887,11 +890,16 @@ def reflect(name, entry, prog, no_proof):
         unf = " ".join(x for x in [h, F] if x)
         unfc = ", ".join(x for x in [h, F] if x)
         if m.endswith("__n__rq__wy"):
+            # (step 76) a function giving back a proof: itself, by the name its row is made of
+            of = m[:-len("__e__n__rq__wy")].replace("''", "\0").replace("'_", ".").replace("\0", "'") if m.endswith("__e__n__rq__wy") else ""
+            unfc += f"; try unfold {of}" if of else ""
             t += (f"Lemma {name}_rr{j} : {m}.\nProof. unfold {m}. intros; unfold {unfc}; first [solve [KQRWf.own_step0] | solve [cbn; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0]]. Qed.\n")
         else:
             t += (f"Lemma {name}_rr{j} : {m}.\nProof. unfold {m}. fix IH 1. intros kqn; destruct kqn as [|kqn]; intros; cbn [{unf}]; first [solve [KQRWf.own_step IH] | solve [cbn; KQRWf.own_step IH] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step IH]]. Qed.\n")
         rrn.append(f"{name}_rr{j}")
-        t += "Ltac KQRWf.kq_rw ::= progress (rewrite " + ", ".join("?" + x for x in rrn) + ").\n"
+        # (step 76) rewriting compares up to unfolding: such a lemma only where its function is in the goal, or it would turn the operation back
+        rrw.append(f"try (match goal with |- context [{F}] => rewrite ?{name}_rr{j} end)" if m.endswith("__e__rq__wy") or m.endswith("__e__n__rq__wy") else f"rewrite ?{name}_rr{j}")
+        t += "Ltac KQRWf.kq_rw ::= progress (" + "; ".join(rrw) + ").\n"
     yf = {f[0]: f[0].rsplit(".", 1)[-1] + "__wy" for f in fs if f[0].rsplit(".", 1)[-1] + "__wy" in made}
     for j, f in enumerate(fs):
         if f[0] in yf:

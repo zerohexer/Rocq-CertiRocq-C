@@ -72,7 +72,6 @@ DESIGN_CELLS = {
 }
 # gaps whose refusal message is shared with another category: classified by name
 BY_NAME = {
-  "A_n_sig_result": "a value holding a proof, given back by a function: a sig",
   "A_rp_poly_measure": "a measure recursion polymorphic in a type",
   "A_c2_nat_gcd": "a function of the library on counters that recurses or gives functions to a recursion: gcd, log2, sqrt, land, shiftr, testbit, b2n",
   "A_c2_nat_log2": "a function of the library on counters that recurses or gives functions to a recursion: gcd, log2, sqrt, land, shiftr, testbit, b2n",
@@ -88,10 +87,6 @@ BY_NAME = {
   "A_q_mem_record": "a value and a memory given back together by a recursion or a loop, the value not one number",
   "A_q_rec_vtable_rec": "a record of functions or a class's instance given to a recursive function",
   "A_q_cl_fold": "a record of functions or a class's instance given to a recursive function",
-  "A_q_sig_ret": "a value holding a proof, given back by a function: a sig, a sumbool",
-  "A_q_sig_rec": "a value holding a proof, given back by a function: a sig, a sumbool",
-  "A_q_sumbool_ret": "a value holding a proof, given back by a function: a sig, a sumbool",
-  "A_q_enum_dec": "a value holding a proof, given back by a function: a sig, a sumbool",
   "A_q_nat_ret_len": "a function giving back a counter, a counter as a field",
   "A_q_nat_ret_acc": "a function giving back a counter, a counter as a field",
   "A_q_nat_field": "a function giving back a counter, a counter as a field",
@@ -110,8 +105,10 @@ BY_NAME = {
   "A_t_d_trans": "a test that shows a < c only together with another",
   "A_s_helper_out": "a divs in a helper, the test that rules the case out in its caller",
   "A_s_given_lam": "a primitive Rocq's axioms only relate, given as a function to a recursive function: under the binder no equation reaches",
+  "A_e_sig_field": "a value and a proof as a field of what a function gives back",
+  "A_e_sig_nat": "a counter given back with a proof",
+  "A_e_sig_param": "a value and a proof as a parameter",
   "A_l_ack": "a fixpoint inside a fixpoint that gives back a function",
-  "A_l_dec_own": "a function of the program giving a proof with its answer: a sumbool",
   "A_l_dec_proof_used": "a proof a test gives, named by what follows",
   "A_l_fix_mut": "a local mutual fixpoint",
   "A_l_nat_ret_same": "a counter given back by a recursive function",
