@@ -2622,6 +2622,230 @@ addA('c2_nat_shiftr', "", 'ff (Nat.shiftr n 1) a',
 addA('c2_nat_testbit', "", 'if Nat.testbit n 1 then a else b',
      '')
 
+# programs written as one writes Rocq, with no thought of the reader: a third probe (step 71)
+addA('q_mon_seq', "", 'fst ((x <- rdm 0 a ;; y <- rdm 0 b ;; ret (x + y)) s)',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\n')
+addA('q_mon_write', "", 'fst ((x <- rdm 0 a ;; _ <- wrm 0 b x ;; y <- rdm 0 b ;; ret (x + y)) s)',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\n')
+addA('q_mon_def', "", 'fst (prog a b s)',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\nDefinition prog (i j : int) : M int := x <- rdm 0 i ;; _ <- wrm 0 j (x + 1) ;; rdm 0 j.\n')
+addA('q_mon_if', "", 'fst (prog a b s)',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\nDefinition prog (i j : int) : M int := x <- rdm 0 i ;; if x <? j then ret x else (_ <- wrm 0 i j ;; ret j).\n')
+addA('q_mon_rec', "", 'fst (loop n a s)',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\nFixpoint loop (k : nat) (i : int) : M int := match k with O => ret i | S m => _ <- wrm 0 i i ;; loop m (i + 1) end.\n')
+addA('q_mon_rec_nontail', "", 'fst (loop n a s)',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\nFixpoint loop (k : nat) (i : int) : M int := match k with O => ret 0 | S m => x <- rdm 0 i ;; r <- loop m (i + 1) ;; ret (x + r) end.\n')
+addA('q_mon_mem', "", 'rd 0 a (snd (loop n a s))',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\nFixpoint loop (k : nat) (i : int) : M unit := match k with O => ret tt | S m => _ <- wrm 0 i i ;; loop m (i + 1) end.\n')
+addA('q_mon_two', "", 'fst (p2 a s)',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\nDefinition p1 (i : int) : M int := x <- rdm 0 i ;; ret (x + 1).\nDefinition p2 (i : int) : M int := y <- p1 i ;; z <- p1 (i + 1) ;; ret (y * z).\n')
+addA('q_st_tuple', "", 'fst (iter n (a, b))',
+     'Definition step (st : int * int) : int * int := let (x, y) := st in (y, x + y).\nFixpoint iter (k : nat) (st : int * int) : int * int := match k with O => st | S m => iter m (step st) end.\n')
+addA('q_st_iter', "", 'fst (Nat.iter n step (a, b))',
+     'Definition step (st : int * int) : int * int := let (x, y) := st in (y, x + y).\n')
+addA('q_st_mem_iter', "", 'rd 0 a (snd (Nat.iter n step (a, s)))',
+     'Definition step (st : int * mem) : int * mem := let (i, t) := st in (i + 1, upd 0 i i t).\n')
+addA('q_sm_step', "", 'out (step (step Idle a) b)',
+     'Inductive state := Idle | Busy (x : int) | Done (x y : int).\nDefinition step (st : state) (v : int) : state := match st with Idle => Busy v | Busy x => Done x v | Done x y => Idle end.\nDefinition out (st : state) : int := match st with Idle => 0 | Busy x => x | Done x y => x + y end.\n')
+addA('q_sm_run', "", 'out (run n Idle a s)',
+     'Inductive state := Idle | Busy (x : int) | Done (x y : int).\nDefinition step (st : state) (v : int) : state := match st with Idle => Busy v | Busy x => Done x v | Done x y => Idle end.\nDefinition out (st : state) : int := match st with Idle => 0 | Busy x => x | Done x y => x + y end.\nFixpoint run (k : nat) (st : state) (i : int) (t : mem) : state := match k with O => st | S m => run m (step st (rd 0 i t)) (i + 1) t end.\n')
+addA('q_sm_eq', "", 'if isidle (Busy a) then a else b',
+     'Inductive state := Idle | Busy (x : int) | Done (x y : int).\nDefinition isidle (st : state) : bool := match st with Idle => true | _ => false end.\n')
+addA('q_enum_scheme', "", 'if color_beq (if a <? b then Red else Green) Blue then a else b',
+     'Inductive color := Red | Green | Blue.\nScheme Equality for color.\n')
+addA('q_enum_dec', "", 'if color_eq_dec (if a <? b then Red else Green) Blue then a else b',
+     'Inductive color := Red | Green | Blue.\nScheme Equality for color.\n')
+addA('q_enum_many', "", 'val (next (if a <? b then D2 else D7))',
+     'Inductive d := D0 | D1 | D2 | D3 | D4 | D5 | D6 | D7.\nDefinition next (x : d) : d := match x with D0 => D1 | D1 => D2 | D2 => D3 | D3 => D4 | D4 => D5 | D5 => D6 | D6 => D7 | D7 => D0 end.\nDefinition val (x : d) : int := match x with D0 | D1 | D2 => 1 | D3 => 2 | _ => 3 end.\n')
+addA('q_enum_rec', "", 'go2 n D0 a',
+     'Inductive d := D0 | D1 | D2.\nDefinition next (x : d) : d := match x with D0 => D1 | D1 => D2 | D2 => D0 end.\nFixpoint go2 (k : nat) (x : d) (v : int) : int := match k with O => v | S m => go2 m (next x) (match x with D0 => v + 1 | D1 => v * 2 | D2 => v - 1 end) end.\n')
+addA('q_pat_pair_opt', "", 'match (if a <? b then Some a else None), a <? 3 with Some x, true => x | Some x, false => x + 1 | None, _ => b end',
+     '')
+addA('q_pat_bools', "", 'match a <? b, b <? a with true, _ => a | _, true => b | _, _ => 0 end',
+     '')
+addA('q_pat_nat_deep', "", 'match n with 0 => a | 1 => b | 2 => a + b | _ => a - b end',
+     '')
+addA('q_pat_triple', "", "let '(p, q, r) := t3 a in p * q + r",
+     'Definition t3 (x : int) : int * int * int := (x, x + 1, x + 2).\n')
+addA('q_pat_nest_rec', "", "let '(mk2 u v, w) := (mk2 a b, a) in u + v + w",
+     'Record r2 := mk2 { x2 : int; y2 : int }.\n')
+addA('q_pat_or', "", 'match a <? b, n with true, O | false, S _ => a | _, _ => b end',
+     '')
+addA('q_rec_update', "", 'px (mv (mkpt a b) 1) + py (mv (mkpt a b) 2)',
+     'Record pt := mkpt { px : int; py : int }.\nDefinition mv (p : pt) (d : int) : pt := {| px := px p + d; py := py p |}.\n')
+addA('q_rec_nested', "", 'len (mkseg (mkpt a b) (mkpt b a))',
+     'Record pt := mkpt { px : int; py : int }.\nRecord seg := mkseg { p1 : pt; p2 : pt }.\nDefinition len (q : seg) : int := px (p2 q) - px (p1 q).\n')
+addA('q_rec_nested_rec', "", 'px (p1 (gr n (mkseg (mkpt a b) (mkpt b a))))',
+     'Record pt := mkpt { px : int; py : int }.\nRecord seg := mkseg { p1 : pt; p2 : pt }.\nFixpoint gr (k : nat) (q : seg) : seg := match k with O => q | S m => gr m (mkseg (p2 q) (mkpt (px (p1 q) + 1) (py (p2 q)))) end.\n')
+addA('q_rec_vtable', "", 'op2 myops (op1 myops a) b',
+     'Record ops := mkops { op1 : int -> int; op2 : int -> int -> int }.\nDefinition myops : ops := mkops (fun x => x + 1) (fun x y => x * y).\n')
+addA('q_rec_vtable_param', "", 'use myops a',
+     'Record ops := mkops { op1 : int -> int; op2 : int -> int -> int }.\nDefinition use (o : ops) (x : int) : int := op2 o (op1 o x) x.\nDefinition myops : ops := mkops (fun x => x + 1) (fun x y => x * y).\n')
+addA('q_rec_vtable_rec', "", 'use n (mkops (fun x => x + b)) a',
+     'Record ops := mkops { op1 : int -> int }.\nFixpoint use (k : nat) (o : ops) (x : int) : int := match k with O => x | S m => use m o (op1 o x) end.\n')
+addA('q_rec_prim', "", 'pa (sw (mkpp a b))',
+     'Set Primitive Projections.\nRecord pp := mkpp { pa : int; pb : int }.\nUnset Primitive Projections.\nDefinition sw (p : pp) : pp := mkpp (pb p) (pa p).\n')
+addA('q_rec_prim_rec', "", 'pa (sw n (mkpp a b))',
+     'Set Primitive Projections.\nRecord pp := mkpp { pa : int; pb : int }.\nUnset Primitive Projections.\nFixpoint sw (k : nat) (p : pp) : pp := match k with O => p | S m => sw m (mkpp (pb p) (pa p)) end.\n')
+addA('q_rec_param_type', "", 'unbox (mkbox (a + b))',
+     'Record box (T : Type) := mkbox { unbox : T }.\nArguments mkbox {T}.\nArguments unbox {T}.\n')
+addA('q_rec_param_rec', "", 'unbox (f n (mkbox a))',
+     'Record box (T : Type) := mkbox { unbox : T }.\nArguments mkbox {T}.\nArguments unbox {T}.\nFixpoint f (k : nat) (x : box int) : box int := match k with O => x | S m => f m (mkbox (unbox x + 1)) end.\n')
+addA('q_fn_partial', "", 'let g := add a in g b + g 1',
+     'Definition add (x y : int) : int := x + y.\n')
+addA('q_fn_compose', "", 'comp (fun x => x + 1) (comp (fun x => x * 2) (fun x => x - a)) b',
+     'Definition comp (f g : int -> int) (x : int) : int := f (g x).\n')
+addA('q_fn_returned', "", 'mk a b + mk b a',
+     'Definition mk (d : int) : int -> int := fun x => x + d.\n')
+addA('q_fn_returned_if', "", 'mk (a <? b) a',
+     'Definition mk (c : bool) : int -> int := if c then (fun x => x + 1) else (fun x => x * 2).\n')
+addA('q_fn_pair', "", 'let fg := (fun x : int => x + 1, fun x : int => x * 2) in fst fg a + snd fg b',
+     '')
+addA('q_fn_flip', "", 'flip PrimInt63.sub a b',
+     'Definition flip {A B C : Type} (f : A -> B -> C) (y : B) (x : A) : C := f x y.\n')
+addA('q_fn_const_id', "", 'idf (cst a b) + cst (idf b) true',
+     'Definition idf {A : Type} (x : A) : A := x.\nDefinition cst {A B : Type} (x : A) (_ : B) : A := x.\n')
+addA('q_fn_prim', "", 'PrimInt63.add a b + (if PrimInt63.ltb a b then 1 else 0)',
+     '')
+addA('q_fn_op_given', "", 'foldg n PrimInt63.add a b + foldg n PrimInt63.mul a b',
+     'Fixpoint foldg (k : nat) (f : int -> int -> int) (acc i : int) : int := match k with O => acc | S m => foldg m f (f acc i) (i + 1) end.\n')
+addA('q_cl_monoid', "", '@sum3 int add_m a b a + @sum3 int mul_m a b a',
+     "Class Monoid (T : Type) := { unit' : T; op : T -> T -> T }.\nInstance add_m : Monoid int := { unit' := 0; op := PrimInt63.add }.\nInstance mul_m : Monoid int := { unit' := 1; op := PrimInt63.mul }.\nDefinition sum3 {T} `{Monoid T} (x y z : T) : T := op x (op y (op z unit')).\n")
+addA('q_cl_fold', "", 'rep n a',
+     "Class Monoid (T : Type) := { unit' : T; op : T -> T -> T }.\nInstance add_m : Monoid int := { unit' := 0; op := PrimInt63.add }.\nFixpoint rep {T} `{Monoid T} (k : nat) (x : T) : T := match k with O => unit' | S m => op x (rep m x) end.\n")
+addA('q_cl_eqb', "", 'if same a b && same (a <? 1) (b <? 1) then a else b',
+     "Class Eqb (T : Type) := { eqb' : T -> T -> bool }.\nInstance eq_int : Eqb int := { eqb' := PrimInt63.eqb }.\nInstance eq_bool : Eqb bool := { eqb' := Bool.eqb }.\nDefinition same {T} `{Eqb T} (x y : T) : bool := eqb' x y.\n")
+addA('q_cl_coerce', "", '((a <? b) : int) + 1',
+     "Definition b2i' (c : bool) : int := if c then 1 else 0.\nCoercion b2i' : bool >-> int.\n")
+addA('q_univ_poly', "", 'pid a + pid b',
+     'Polymorphic Definition pid {A : Type} (x : A) : A := x.\n')
+addA('q_univ_poly_rec', "", 'prep n a',
+     'Polymorphic Fixpoint prep {A : Type} (k : nat) (x : A) : A := match k with O => x | S m => prep m x end.\n')
+addA('q_def_tactic', "", 'f a',
+     'Definition f (x : int) : int. Proof. exact (x + 1). Defined.\n')
+addA('q_def_refine', "", 'snd (f a)',
+     'Definition f (x : int) : int * int. Proof. refine (x, _). exact (x + 2). Defined.\n')
+addA('q_def_destruct', "", 'f (a <? b) a',
+     'Definition f (c : bool) (x : int) : int. Proof. destruct c. exact x. exact (x + 1). Defined.\n')
+addA('q_def_induct', "", 'f n a',
+     'Definition f (k : nat) (x : int) : int. Proof. induction k as [|m IH]. exact x. exact (IH + 1). Defined.\n')
+addA('q_sec_var', "", 'lp b n a',
+     'Section S.\nVariable d : int.\nDefinition add_d (x : int) : int := x + d.\nFixpoint lp (k : nat) (x : int) : int := match k with O => x | S m => lp m (add_d x) end.\nEnd S.\n')
+addA('q_sec_ctx', "", 'lp (fun x => x + b) n a',
+     'Section S.\nContext {T : Type} (f : T -> T).\nFixpoint lp (k : nat) (x : T) : T := match k with O => x | S m => lp m (f x) end.\nEnd S.\n')
+addA('q_impl_types', "", 'mx a b',
+     'Implicit Types x y : int.\nDefinition mx x y := if x <? y then y else x.\n')
+addA('q_sig_param', "", 'val (exist _ 1 one_pos) + a',
+     'Definition pos_int := { x : int | (0 <? x) = true }.\nDefinition val (p : pos_int) : int := proj1_sig p.\nLemma one_pos : (0 <? 1) = true. Proof. reflexivity. Qed.\n')
+addA('q_sig_ret', "", 'proj1_sig (clamp a)',
+     'Definition clamp (x : int) : { y : int | (y <? 0) = false \\/ True }.\nProof. exists (if x <? 0 then 0 else x). right. exact I. Defined.\n')
+addA('q_sig_rec', "", 'proj1_sig (lp n a)',
+     'Fixpoint lp (k : nat) (x : int) : { y : int | True } := match k with O => exist _ x I | S m => lp m (x + 1) end.\n')
+addA('q_proof_arg', "", 'sdiv a 2 two_nz',
+     'Definition sdiv (x y : int) (h : (y =? 0) = false) : int := x / y.\nLemma two_nz : (2 =? 0) = false. Proof. reflexivity. Qed.\n')
+addA('q_sumbool_ret', "", "if lt_dec' a b then a else b",
+     "Definition lt_dec' (x y : int) : {(x <? y) = true} + {(x <? y) = false}.\nProof. destruct (x <? y); [left | right]; reflexivity. Defined.\n")
+addA('q_option_bind', "", 'match obind (safe a b) (fun v => safe v 2) with Some r => r | None => 0 end',
+     'Definition obind {A B} (o : option A) (f : A -> option B) : option B := match o with Some x => f x | None => None end.\nDefinition safe (x y : int) : option int := if y =? 0 then None else Some (x / y).\n')
+addA('q_option_rec', "", 'match find n a s with Some i => i | None => b end',
+     'Fixpoint find (k : nat) (i : int) (t : mem) : option int := match k with O => None | S m => if rd 0 i t =? 7 then Some i else find m (i + 1) t end.\n')
+addA('q_option_default', "", 'odflt a (if a <? b then Some b else None)',
+     'Definition odflt (d : int) (o : option int) : int := match o with Some x => x | None => d end.\n')
+addA('q_sum_result', "", 'match thn (chk a) (fun v => chk (v - b)) with Ok v => v | Err c => c end',
+     'Inductive res := Ok (v : int) | Err (code : int).\nDefinition chk (x : int) : res := if x <? 0 then Err 1 else Ok x.\nDefinition thn (r : res) (f : int -> res) : res := match r with Ok v => f v | Err c => Err c end.\n')
+addA('q_sum_result_rec', "", 'match lp n a s with Ok v => v | Err c => c end',
+     'Inductive res := Ok (v : int) | Err (code : int).\nFixpoint lp (k : nat) (x : int) (t : mem) : res := match k with O => Ok x | S m => if rd 0 x t <? 0 then Err x else lp m (x + 1) t end.\n')
+addA('q_list_fold', "", 'fold_left (fun acc x => acc + x) [a; b; 1] 0',
+     'From Stdlib Require Import List.\nImport ListNotations.\n')
+addA('q_list_table', "", 'fold_left (fun acc x => acc * x) tbl a',
+     'From Stdlib Require Import List.\nImport ListNotations.\nDefinition tbl : list int := [1; 2; 3; 4].\n')
+addA('q_list_rec_given', "", 'sum [a; b] 0',
+     'From Stdlib Require Import List.\nImport ListNotations.\nFixpoint sum (l : list int) (acc : int) : int := match l with [] => acc | x :: r => sum r (acc + x) end.\n')
+addA('q_list_map2', "", 'fold_right PrimInt63.add 0 (map (fun x => x * 2) [a; b])',
+     'From Stdlib Require Import List.\nImport ListNotations.\n')
+addA('q_tree_lit', "", 'sumt (Node (Leaf a) (Node (Leaf b) (Leaf 1)))',
+     'Inductive tree := Leaf (x : int) | Node (l r : tree).\nFixpoint sumt (t : tree) : int := match t with Leaf x => x | Node l r => sumt l + sumt r end.\n')
+addA('q_string_lit', "", 'slen "abc"%string + a',
+     'From Stdlib Require Import String.\nFixpoint slen (x : string) : int := match x with EmptyString => 0 | String _ r => 1 + slen r end.\n')
+addA('q_ascii_code', "", 'Uint63.of_nat (nat_of_ascii "a"%char) + a',
+     'From Stdlib Require Import Ascii.\n')
+addA('q_byte_lit', "", 'bv x41 + a',
+     'From Stdlib Require Import Strings.Byte.\nDefinition bv (x : byte) : int := match x with x41 => 1 | _ => 0 end.\n')
+addA('q_parray_get', "", 'PArray.get (PArray.make 3 a) 0 + b',
+     'From Stdlib Require Import PArray.\n')
+addA('q_float_lit', "", 'if PrimFloat.ltb 1.0%float 2.0%float then a else b',
+     'From Stdlib Require Import Floats.\n')
+addA('q_op_notations', "", '((a + b) * (a - b)) / 2 + (a mod 3)',
+     '')
+addA('q_op_bits', "", '((a land b) lor (a lxor 7)) << 1 >> 1',
+     '')
+addA('q_op_opp', "", '- a + Uint63.opp b',
+     '')
+addA('q_op_lnot', "", 'PrimInt63.lxor a (-1) + 1',
+     '')
+addA('q_op_succ', "", 'Uint63.succ a + Uint63.pred b',
+     '')
+addA('q_op_max_int', "", 'if a =? Uint63.max_int then b else a',
+     '')
+addA('q_op_bit', "", 'if Uint63.bit a 3 then a else b',
+     '')
+addA('q_op_b2i', "", 'Uint63.b2i (a <? b) + 1',
+     '')
+addA('q_op_sint_cmp', "", 'if Sint63.ltb a b then a else if Sint63.leb b a then b else 0',
+     '')
+addA('q_op_sint_div', "", 'Sint63.div a 2 + Sint63.rem b 3',
+     '')
+addA('q_op_sint_abs', "", 'Sint63.abs a + Sint63.asr b 1',
+     '')
+addA('q_op_sint_scope', "", '((a * b) / 2)%sint63',
+     '')
+addA('q_op_uint_scope', "", '((a * b) / 2)%uint63',
+     '')
+addA('q_op_eqb_sym', "", 'if andb (a =? b) (negb (b =? a)) then a else b',
+     '')
+addA('q_op_cast_int', "", '((a + b : int) * 2)%uint63',
+     '')
+addA('q_op_lit_hex', "", '(0x10 + a)%uint63',
+     '')
+addA('q_mem_helper_chain', "", 'rd 0 a (inc a (inc b (inc a s)))',
+     'Definition put (i v : int) (t : mem) : mem := upd 0 i v t.\nDefinition inc (i : int) (t : mem) : mem := put i (rd 0 i t + 1) t.\n')
+addA('q_mem_fun_comp', "", 'rd 0 a (seq (put a 1) (put b 2) s)',
+     'Definition put (i v : int) (t : mem) : mem := upd 0 i v t.\nDefinition seq (f g : mem -> mem) (t : mem) : mem := g (f t).\n')
+addA('q_mem_iter', "", 'rd 0 a (Nat.iter n (upd 0 a b) s)',
+     '')
+addA('q_mem_fold_given', "", 'rd 0 a (each n a (fun i t => upd 0 i (rd 0 i t + b) t) s)',
+     'Fixpoint each (k : nat) (i : int) (f : int -> mem -> mem) (t : mem) : mem := match k with O => t | S m => each m (i + 1) f (f i t) end.\n')
+addA('q_mem_block_tbl', "", 'rdt a s + rdt b s',
+     'Definition tb : int := 2.\nDefinition rdt (i : int) (t : mem) : int := rd tb i t.\n')
+addA('q_mem_ret_triple', "", "let '(u, v, t2) := rw a s in u + v + rd 0 v t2",
+     'Definition rw (i : int) (t : mem) : int * int * mem := (rd 0 i t, i + 1, upd 0 i 0 t).\n')
+addA('q_mem_rec_triple', "", "let '(u, v, t2) := rw n a s in u + v + rd 0 a t2",
+     "Fixpoint rw (k : nat) (i : int) (t : mem) : int * int * mem := match k with O => (i, 0, t) | S m => let '(u, v, t2) := rw m (i + 1) (upd 0 i i t) in (u, v + 1, t2) end.\n")
+addA('q_mem_opt_ret', "", 'let (o, t2) := tk a s in match o with Some v => v + rd 0 a t2 | None => b end',
+     'Definition tk (i : int) (t : mem) : option int * mem := if rd 0 i t =? 0 then (None, t) else (Some (rd 0 i t), upd 0 i 0 t).\n')
+addA('q_mem_record', "", 'rd 0 a (mm (lp n (mkst a s)))',
+     'Record st := mkst { cnt : int; mm : mem }.\nFixpoint lp (k : nat) (x : st) : st := match k with O => x | S j => lp j (mkst (cnt x + 1) (upd 0 (cnt x) 1 (mm x))) end.\n')
+addA('q_prim_rec_num', "", 'f n (mkpp a b)',
+     'Set Primitive Projections.\nRecord pp := mkpp { pa : int; pb : int }.\nUnset Primitive Projections.\nFixpoint f (k : nat) (p : pp) : int := match k with O => pa p | S m => f m (mkpp (pb p) (pa p)) end.\n')
+addA('q_prim_ret', "", 'pa (f a) + pb (f b)',
+     'Set Primitive Projections.\nRecord pp := mkpp { pa : int; pb : int }.\nUnset Primitive Projections.\nDefinition f (x : int) : pp := mkpp x (x + 1).\n')
+addA('q_prim_ret_rec', "", 'pa (f n a)',
+     'Set Primitive Projections.\nRecord pp := mkpp { pa : int; pb : int }.\nUnset Primitive Projections.\nFixpoint f (k : nat) (x : int) : pp := match k with O => mkpp x x | S m => f m (x + 1) end.\n')
+addA('q_prim_nontail', "", 'let v := f n a in pa v + pb v',
+     'Set Primitive Projections.\nRecord pp := mkpp { pa : int; pb : int }.\nUnset Primitive Projections.\nFixpoint f (k : nat) (x : int) : pp := match k with O => mkpp x x | S m => let r := f m (x + 1) in mkpp (pb r) (pa r + 1) end.\n')
+addA('q_prim_nest', "", 'h2 (mkpp a b)',
+     'Set Primitive Projections.\nRecord pp := mkpp { pa : int; pb : int }.\nUnset Primitive Projections.\nDefinition sw (p : pp) : pp := mkpp (pb p) (pa p).\nDefinition h2 (p : pp) : int := pa (sw (sw p)).\n')
+addA('q_nat_ret_len', "", 'Uint63.of_nat (cnt n a s)',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => 0 | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('q_nat_ret_acc', "", 'Uint63.of_nat (cnt n a 0)',
+     'Fixpoint cnt (k : nat) (i : int) (acc : nat) : nat := match k with O => acc | S m => cnt m (i + 1) (if i =? 0 then acc else S acc) end.\n')
+addA('q_nat_field', "", 'Uint63.of_nat (ct (bump (mkcn n a)))',
+     'Record cn := mkcn { ct : nat; vl : int }.\nDefinition bump (c : cn) : cn := mkcn (S (ct c)) (vl c).\n')
+addA('q_nat_pair_ret', "", 'let (q, r) := sp n in if Nat.eqb r 0 then a else Uint63.of_nat q',
+     'Definition sp (k : nat) : nat * nat := (Nat.div k 2, Nat.modulo k 2).\n')
+addA('q_divmod', "", 'Uint63.of_nat (fst (Nat.divmod n 3 0 3))',
+     '')
+
 def write(outdir):
     os.makedirs(outdir, exist_ok=True)
     rows = []

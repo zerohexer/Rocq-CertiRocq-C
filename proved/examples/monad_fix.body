@@ -1,0 +1,34 @@
+(* a state monad over the memory, as a functional program is written: a procedure that fills, a recursion that sums, a test in the
+   monad; a table and a tree written in the text, worked out.  fill: cells 0 .. 4 of block 1 are 1 3 5 7 9, it gives 5.  clamp: cell 4 is
+   9, above 6: written 6, it gives 6.  sum: 1 + 3 + 5 + 7 + 6 = 22.  The table: 3 + 5 + 7 = 15.  The tree: 1 + 2 + 3 = 6.
+   5 * 10000 + 6 * 1000 + 22 + 15 + 6 = 56043. *)
+From Stdlib Require Import List.
+Import ListNotations.
+Definition M (A : Type) : Type := mem -> A * mem.
+Definition ret {A : Type} (x : A) : M A := fun t => (x, t).
+Definition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t') := m t in f x t'.
+Definition rdm (h i : int) : M int := fun t => (rd h i t, t).
+Definition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).
+Notation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).
+Fixpoint fill (k : nat) (i v : int) : M int :=
+  match k with
+  | O => ret i
+  | S m => _ <- wrm 1 i v ;; fill m (i + 1) (v + 2)
+  end.
+Fixpoint sum (k : nat) (i : int) : M int :=
+  match k with
+  | O => ret 0
+  | S m => x <- rdm 1 i ;; r <- sum m (i + 1) ;; ret (x + r)
+  end.
+Definition clamp (i lim : int) : M int :=
+  x <- rdm 1 i ;;
+  if lim <? x then (_ <- wrm 1 i lim ;; ret lim) else ret x.
+Definition tbl : list int := [3; 5; 7].
+Inductive tree := Leaf (x : int) | Node (l r : tree).
+Fixpoint sumt (t : tree) : int := match t with Leaf x => x | Node l r => sumt l + sumt r end.
+Definition solve (a : int) (s : mem) : int :=
+  fst ((e <- fill 5 a 1 ;; c <- clamp 4 6 ;; t <- sum 5 0 ;;
+        ret (e * 10000 + c * 1000 + t + fold_left (fun acc y => acc + y) tbl a + sumt (Node (Leaf 1) (Node (Leaf 2) (Leaf 3))))) s).
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve 0 (kq_input 0).

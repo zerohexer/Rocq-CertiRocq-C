@@ -3441,6 +3441,7 @@ Fixpoint consts (fuel : nat) (t : term) (acc : list kername) : list kername :=
       | tLetIn _ b ty body => consts fuel body (consts fuel ty (consts fuel b acc))
       | tCase _ p c brs => fold_left (fun a br => consts fuel (bbody br) a) brs (consts fuel c acc)
       | tFix mfix _ => fold_left (fun a d => consts fuel (dbody d) a) mfix acc
+      | tProj _ c => consts fuel c acc
       | _ => acc
       end
   end.
@@ -4123,6 +4124,15 @@ Fixpoint body_rtys (fuel : nat) (Σ : global_env) (hb : kername -> option term) 
       | _ => st
       end
   end.
+(** (step 71) a type made from types *)
+Fixpoint ty_fun (fuel : nat) (t : term) {struct fuel} : bool :=
+  match fuel with O => false | S fuel => match t with tProd _ _ b => ty_fun fuel b | tSort _ => true | _ => false end end.
+Fixpoint al_beta (args : list term) (t : term) {struct args} : term :=
+  match args, t with
+  | [], _ => t
+  | a :: r, tLambda _ _ b => al_beta r (subst10 a b)
+  | _, _ => mkApps t args
+  end.
 (** (step 68) a name of the program's for a type, [Definition cell := int]: its definition in its place, in every type and argument *)
 Fixpoint al_t (fuel : nat) (Σ : global_env) (mp : modpath) (t : term) {struct fuel} : term :=
   match fuel with
@@ -4144,6 +4154,18 @@ Fixpoint al_t (fuel : nat) (Σ : global_env) (mp : modpath) (t : term) {struct f
       | tProd na a b => tProd na (go a) (go b)
       | tLambda na a b => tLambda na (go a) (go b)
       | tLetIn na v a b => tLetIn na (go v) (go a) (go b)
+      | tApp (tConst kn u) args =>
+          (* (step 71) a name for a type function, applied: [M A] *)
+          if in_prog mp (fst kn) then
+            match lookup_env Σ kn with
+            | Some (ConstantDecl cb) =>
+                match cst_body cb with
+                | Some b => if ty_fun 100 (cst_type cb) then go (al_beta args b) else tApp (tConst kn u) (map go args)
+                | None => tApp (tConst kn u) (map go args)
+                end
+            | _ => tApp (tConst kn u) (map go args)
+            end
+          else tApp (tConst kn u) (map go args)
       | tApp f args => tApp (go f) (map go args)
       | tCase ci p c brs =>
           tCase ci {| pparams := map go (pparams p); puinst := puinst p; pcontext := pcontext p; preturn := go (preturn p) |} (go c)
@@ -5025,7 +5047,7 @@ Fixpoint pf_beta (b : term) (args : list term) : term :=
   match b, args with
   | tLambda _ _ c, a :: r => pf_beta (subst10 a c) r
   | _, [] => b
-  | _, _ => tApp b args
+  | _, _ => mkApps b args
   end.
 Fixpoint pf_unf (fuel : nat) (Σ : global_env) (mp : modpath) (t : term) {struct fuel} : term :=
   match fuel with
@@ -5492,9 +5514,9 @@ Definition deep_body (b : term) : option (def term) :=
       if Nat.eqb (rarg d) 0 then
         let '(tys, body) := lams (dbody d) in
         match tys, body with
-        | _ :: _, tCase _ _ (tRel c) [_; b1] =>
+        | _ :: _, tCase cid _ (tRel c) [_; b1] =>
             let n := length tys in
-            if Nat.eqb c (n - 1) then
+            if Nat.eqb c (n - 1) && Kername.eqb (inductive_mind (ci_ind cid)) (inductive_mind ind_nat) then
               if deep_call 3000 (n + length (bcontext b1)) 0 (bbody b1) then Some d else None
             else None
         | _, _ => None
@@ -5523,15 +5545,16 @@ Definition deep_make (Σ : global_env) (kn : kername) : option pfg :=
 Definition conv_def (Σ : global_env) (mp : modpath) (d : def term) : option (def term) :=
   let '(tys, body0) := lams (dbody d) in
   let body := body0 in
-  let extra := skipn (length tys) (removelast (prod_tys (dtype d))) in
+  let dT := al_t 1000 Σ mp (dtype d) in
+  let extra := skipn (length tys) (removelast (prod_tys dT)) in
   let k := length extra in
   let n := length tys in
   let rels := map (fun i => tRel (k - 1 - i)) (seq 0 k) in
   let mk (ci : case_info) (p : predicate term) (c : nat) (brs : list (branch term)) (args : list term) :=
       if Nat.eqb c (n + k - 1 - rarg d) then
-        Some {| dname := dname d; dtype := dtype d; rarg := rarg d;
+        Some {| dname := dname d; dtype := dT; rarg := rarg d;
                 dbody := lams_of (tys ++ extra)
-                  (tCase ci {| pparams := pparams p; puinst := puinst p; pcontext := pcontext p; preturn := eq_strip (length args) (preturn p) |} (tRel c)
+                  (tCase ci {| pparams := pparams p; puinst := puinst p; pcontext := pcontext p; preturn := al_t 1000 Σ mp (eq_strip (length args) (preturn p)) |} (tRel c)
                          (map (fun br => {| bcontext := bcontext br; bbody := pf_beta (bbody br) (map (lift0 (length (bcontext br))) args) |}) brs)) |}
       else None in
   match lift0 k body with
@@ -5822,6 +5845,11 @@ Fixpoint y_kn (fuel : nat) (t : term) {struct fuel} : term :=
       | _ => t
       end
   end.
+Definition y_on_nat (d : def term) : bool :=
+  match nth_error (fst (lams (dbody d))) (rarg d) with
+  | Some (tInd i _) => Kername.eqb (inductive_mind i) (inductive_mind ind_nat)
+  | _ => false
+  end.
 Definition y_fix (d : def term) : option term :=
   let '(tys, body) := lams (dbody d) in
   match body with
@@ -5875,7 +5903,7 @@ Definition conv_all (Σ : global_env) (mp : modpath) : global_env :=
         match lookup_env S kn with
         | Some (ConstantDecl cb) =>
             match cst_body cb with
-            | Some b => match conv_fix Σ mp b with Some b' => add_decl S kn (cst_type cb) b' | None => S end
+            | Some b => match conv_fix Σ mp b with Some b' => add_decl S kn (al_t 1000 Σ mp (cst_type cb)) b' | None => S end
             | None => S
             end
         | _ => S
@@ -6001,6 +6029,21 @@ Fixpoint lu_prod (fuel : nat) (t : term) {struct fuel} : bool :=
   end.
 Definition lu_list_ty (kn : kername) (Σ : global_env) : bool :=
   match lookup_env Σ kn with Some (ConstantDecl cb) => lu_prod 100 (cst_type cb) | _ => false end.
+Definition lu_data (i : inductive) : bool := negb (Kername.eqb (inductive_mind i) (inductive_mind ind_nat)).
+(** a constant that is a value of a type of data, written in the text *)
+Definition lu_cdata (kn : kername) (Σ : global_env) : bool :=
+  match lookup_env Σ kn with
+  | Some (ConstantDecl cb) =>
+      match cst_type cb with
+      | tInd i _ | tApp (tInd i _) _ =>
+          if lu_data i then
+            if Kername.eqb (inductive_mind i) (inductive_mind ind_bool) then false else
+            true
+          else false
+      | _ => false
+      end
+  | _ => false
+  end.
 Fixpoint lu_red (fuel : nat) (Σ : global_env) (t : term) {struct fuel} : term :=
   match fuel with
   | O => t
@@ -6017,10 +6060,23 @@ Fixpoint lu_red (fuel : nat) (Σ : global_env) (t : term) {struct fuel} : term :
             end
           else
             match body_of Σ kn with
+            | Some (tFix [d] 0 as fx) =>
+                match nth_error args (rarg d) with
+                | Some a =>
+                    match lu_red fuel Σ a with
+                    | tConstruct i _ _ | tApp (tConstruct i _ _) _ =>
+                        if lu_data i then lu_red fuel Σ (mkApps fx args) else t
+                    | _ => t
+                    end
+                | None => t
+                end
             | Some (tFix _ _) | None => t
             | Some b => if lu_list_ty kn Σ then lu_red fuel Σ (mkApps b args) else t
             end
-      | tConst kn _ => if lib_list kn then match body_of Σ kn with Some b => lu_red fuel Σ b | None => t end else t
+      | tConst kn _ =>
+          if lib_list kn then match body_of Σ kn with Some b => lu_red fuel Σ b | None => t end
+          else if lu_cdata kn Σ then match body_of Σ kn with Some b => lu_red fuel Σ b | None => t end
+          else t
       | tApp (tFix [d] 0 as fx) args =>
           match nth_error args (rarg d) with
           | Some a =>
@@ -6077,6 +6133,17 @@ Fixpoint lu_stuck (fuel : nat) (t : term) {struct fuel} : bool :=
       | _ => false
       end
   end.
+(** a fixpoint given a value of data, written or named *)
+Definition lu_fix_lit (kn : kername) (args : list term) (Σ : global_env) : bool :=
+  match body_of Σ kn with
+  | Some (tFix [d] 0) =>
+      match nth_error args (rarg d) with
+      | Some (tConstruct i _ _) | Some (tApp (tConstruct i _ _) _) => lu_data i
+      | Some (tConst c _) => lu_cdata c Σ
+      | _ => false
+      end
+  | _ => false
+  end.
 Fixpoint lu_t (fuel : nat) (Σ : global_env) (t : term) {struct fuel} : term :=
   match fuel with
   | O => t
@@ -6084,7 +6151,7 @@ Fixpoint lu_t (fuel : nat) (Σ : global_env) (t : term) {struct fuel} : term :=
       let go := lu_t fuel Σ in
       match t with
       | tApp (tConst kn u) args =>
-          if if lib_list kn then true else lu_list_ty kn Σ then
+          if if lib_list kn then true else if lu_list_ty kn Σ then true else lu_fix_lit kn args Σ then
             let r := lu_full 1000 Σ (tApp (tConst kn u) (map go args)) in
             if lu_stuck 100000 r then tApp (tConst kn u) (map go args) else r
           else tApp (tConst kn u) (map go args)
@@ -6096,6 +6163,58 @@ Fixpoint lu_t (fuel : nat) (Σ : global_env) (t : term) {struct fuel} : term :=
       | _ => t
       end
   end.
+Definition mo_beta (args : list term) (t : term) : term := al_beta args t.
+(** (step 71) a helper of the program that takes a function: written out, the same up to delta and beta; what it applies may then be a choice *)
+Fixpoint mo_fun (fuel : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => false
+  | S fuel => match t with tProd _ (tProd _ _ _) _ => true | tProd _ _ b => mo_fun fuel b | _ => false end
+  end.
+Fixpoint mo_t (fuel : nat) (Σ : global_env) (mp : modpath) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := mo_t fuel Σ mp in
+      match t with
+      | tApp (tConst kn u) args =>
+          if in_prog mp (fst kn) then
+            match lookup_env Σ kn with
+            | Some (ConstantDecl cb) =>
+                match cst_body cb with
+                | Some b =>
+                    if (match b with tFix _ _ => false | _ => if mo_fun 100 (al_t 1000 Σ mp (cst_type cb)) then true else match snd (lams b) with tCase _ _ _ _ => Nat.ltb (length (fst (lams b))) (length args) | _ => false end end)
+                    then go (mo_beta args (al_t 100000 Σ mp b))
+                    else tApp (tConst kn u) (map go args)
+                | None => tApp (tConst kn u) (map go args)
+                end
+            | _ => tApp (tConst kn u) (map go args)
+            end
+          else tApp (tConst kn u) (map go args)
+      | tApp (tLambda _ _ _ as f) args => go (mo_beta args f)
+      | tApp f args => tApp (go f) (map go args)
+      | tLambda na a b => tLambda na a (go b)
+      | tLetIn na v a b => tLetIn na (go v) a (go b)
+      | tCase ci p c brs =>
+          let c1 := match c with
+                    | tApp (tConst kn _) args =>
+                        if in_prog mp (fst kn) then
+                          match body_of Σ kn with
+                          | Some b => match snd (lams b) with
+                                      | tCase _ _ _ _ =>
+                                          let w := mo_beta args b in
+                                          if y_conb 100 w then w else c
+                                      | _ => c
+                                      end
+                          | None => c
+                          end
+                        else c
+                    | _ => c
+                    end in
+          tCase ci p (go c1) (map (fun br => {| bcontext := bcontext br; bbody := go (bbody br) |}) brs)
+      | tFix mfix k => tFix (map (fun d => {| dname := dname d; dtype := dtype d; rarg := rarg d; dbody := go (dbody d) |}) mfix) k
+      | _ => t
+      end
+  end.
 (** (step 68) a function chosen by a match, applied *)
 Fixpoint fc_has (fuel : nat) (t : term) {struct fuel} : bool :=
   match fuel with
@@ -6103,6 +6222,7 @@ Fixpoint fc_has (fuel : nat) (t : term) {struct fuel} : bool :=
   | S fuel =>
       match t with
       | tApp (tCase _ _ _ _) _ => true
+      | tCase _ _ (tCase _ _ _ _ as c) _ => if y_conb 100 c then true else fc_has fuel c
       | tApp f args => if fc_has fuel f then true else existsb (fc_has fuel) args
       | tLambda _ _ b => fc_has fuel b
       | tLetIn _ v _ b => if fc_has fuel v then true else fc_has fuel b
@@ -6475,7 +6595,7 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
           | Some b00 =>
               (* (step 68) a program's name for a type, read as its definition, the same up to delta *)
               let ty0 := al_t 1000 Σ mp (cst_type cb) in
-              let b0x := lu_t 100000 Σ (al_t 100000 Σ mp b00) in
+              let b0x := mo_t 100000 Σ mp (lu_t 100000 Σ (al_t 100000 Σ mp b00)) in
               (* (step 69) its calls of what is read in another form *)
               let b0 := match rows with [] => b0x | _ => rp_sub 100000 rows b0x end in
               let r0 := match rows with [] => false | _ => negb (teq 100000 b0 b0x) end in
@@ -6491,6 +6611,7 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
               let wy (f' : term) := (add_decl (add_decl S1 (copy_mp, snd kn ^ "__wy"%bs) ty0 f') kn ty0 f', true) in
               match b with
               | tFix [d] 0 =>
+                  if negb (y_on_nat d) then st else
                   match y_fix d with
                   | Some f' => wy f'
                   | None => if p0 then wy b else if c0 then (add_decl S1 kn ty0 b, true) else st

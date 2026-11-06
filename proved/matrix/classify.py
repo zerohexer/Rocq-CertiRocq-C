@@ -13,6 +13,8 @@ import re, sys, collections
 # differs only in the cause.  The cells once listed here (option, sum, a list cell, a function in a pair, a function returned,
 # a dead memory let) build and take apart their value in place, so they are gaps.
 DESIGN_CELLS = {
+  # Rocq's primitive arrays are persistent: every version kept, a runtime behind the programmer's back (Rocq-C-solution.md §0.5, first reason); control: a memory, A_q_mem_helper_chain (step 71)
+  "A_q_parray_get",
   # a number that may need more than a word: a product of two counters, a power, a counter times a number or a sum past 2^63 (Rocq-C-solution.md §0.5, second reason); controls: A_c2_mul_r, A_c2_nat_pow_lit, A_c2_to_add (step 70)
   "A_c2_mul_vars", "A_c2_nat_square", "A_c2_nat_pow", "A_c2_mul_big", "A_c2_to_add_u",
   # two memory parameters both live: read from one, written in the other (Rocq-C-solution.md §0.5, third reason); control: A_rp_dead_first, one of them never read (step 69)
@@ -75,6 +77,22 @@ BY_NAME = {
   "A_c2_nat_b2n": "a function of the library on counters that recurses or gives functions to a recursion: gcd, log2, sqrt, land, shiftr, testbit, b2n",
   "A_c2_match_cnt": "a counter chosen by a match on a counter",
   "A_c2_min_clamp": "a counter clamped by a number: the bound of a min is not yet the smaller one",
+  "A_q_mon_mem": "a value and a memory given back together by a recursion or a loop, the value not one number",
+  "A_q_st_mem_iter": "a value and a memory given back together by a recursion or a loop, the value not one number",
+  "A_q_mem_rec_triple": "a value and a memory given back together by a recursion or a loop, the value not one number",
+  "A_q_mem_record": "a value and a memory given back together by a recursion or a loop, the value not one number",
+  "A_q_rec_vtable_rec": "a record of functions or a class's instance given to a recursive function",
+  "A_q_cl_fold": "a record of functions or a class's instance given to a recursive function",
+  "A_q_sig_ret": "a value holding a proof, given back by a function: a sig, a sumbool",
+  "A_q_sig_rec": "a value holding a proof, given back by a function: a sig, a sumbool",
+  "A_q_sumbool_ret": "a value holding a proof, given back by a function: a sig, a sumbool",
+  "A_q_enum_dec": "a value holding a proof, given back by a function: a sig, a sumbool",
+  "A_q_nat_ret_len": "a function giving back a counter, a counter as a field",
+  "A_q_nat_ret_acc": "a function giving back a counter, a counter as a field",
+  "A_q_nat_field": "a function giving back a counter, a counter as a field",
+  "A_q_divmod": "a function giving back a counter, a counter as a field",
+  "A_q_ascii_code": "a function giving back a counter, a counter as a field",
+  "A_q_float_lit": "floating point (§12.I)",
   "A_l_ack": "a fixpoint inside a fixpoint that gives back a function",
   "A_l_dec_own": "a function of the program giving a proof with its answer: a sumbool",
   "A_l_dec_proof_used": "a proof a test gives, named by what follows",
