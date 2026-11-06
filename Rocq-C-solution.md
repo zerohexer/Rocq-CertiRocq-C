@@ -5089,6 +5089,17 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   examples 44 / 44; corpus 36 / 36; the five kernels (13 / 12 / 13 / 14 / 13 s); **88 programs through the verified compiler, 0
   refused**; `check_trust.py`: trust unchanged.  Next: a procedure in a monad, a test in a monad.
 
+**Step 72, a procedure and a test in the monad (§0.5, §12.A) — the design (2026-11-06).**  What step 71 left of the monad: `M unit`, the procedure, and `M bool`, a function giving back a test and the memory, when they recurse or choose.  (Written out where it is used, a function with no test already is.)  A function giving back a number and a memory is a form `compile` takes (step 26), with no other value in it, and no conversion takes `unit * mem` or `bool * mem` to it.  Step 69's route does: a function of its own in its place, equal at every argument by induction.
+- *`M unit`*: `f args = (tt, f' args)`, `f'` giving back the memory.  Its body: `f`'s with the helpers written out, a pair's memory at its ends, the own call taken apart by a let of its memory.
+- *`M bool`*: `f args = let (x, t) := f' args in (x =? 1, t)`, `f'` giving back a number and the memory: 1 or 0 at its ends, a test of the number where its own call's boolean was used.
+- *Its callers*: rewritten as a row's are; `fst`, `snd` of such a call directly, a match on it by the floating of step 68, a pair's parts bound by lets on the way, the number first (`y_red`).
+- *A write and a test*: two tactics change, for all equations, both only after what they did before fails or where nothing was stuck: a pair taken apart before a test, since a test can name its parts on one side and the pair on the other; `fst`, `snd` reduced.
+- *By design*: both parts of two calls of such a function that writes at a moving index, from one memory: §0.5's third reason.  Control: one call.
+- *Left, each with its cell*: other values with a memory given back by a recursion: an enumeration (`A_m_e_enum_ret`), `option int`, a pair (`A_m_e_opt_ret`, `A_m_e_pair_ret`), which take more than the one number a function returns; a function named `p1` or `p2`, a token of the notations of MetaRocq, which every generated file imports: found by writing these cells (`A_m_e_name_p1`).
+- *Found on the way*: a line of the reifier's output broken after a parenthesis hid a made function from `kitc.py`'s pattern, by the length of the names.
+- *Cells*: 24, `A_m_*`.
+- *The acceptance*: `proved/examples/proc_fix`: a procedure that fills, a search giving back whether it found, a procedure with a test; the answer worked out apart: 150.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5273,7 +5284,8 @@ Pushed to the public repository up to `95e32a8` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 71 (a third probe of natural programs: the construct table 2736 of 2808, 25 by design, 46 gaps), the C, the gate |
+| (this commit) | §12.V: step 72's design -- a procedure, a test in a monad |
+| `3f2908e` | §12.V: step 71 (a third probe of natural programs: the construct table 2736 of 2808, 25 by design, 46 gaps), the C, the gate |
 | `95e32a8` | `proved/KQRReify.v` + `kitc.py` + `matrix` + `examples/monad_fix` step 71: a third probe: a state monad, fixpoints over a literal, primitive projections; 111 cells; `KQR.v` unchanged |
 | `bdc2431` | §12.V: step 71's design -- what a third probe of natural programs found |
 | `55d6105` | §12.V: step 70 (counters and numbers: the construct table 2641 of 2697, 24 by design, 31 gaps), the C, the gate; `proved/TRUSTED.txt`: three spellings |
