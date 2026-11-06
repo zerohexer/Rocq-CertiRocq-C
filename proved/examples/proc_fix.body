@@ -1,0 +1,25 @@
+(* a procedure and a test in the monad: fill writes cells 0 .. 4 of block 1: 1 3 5 7 9.  find gives whether a key is there: 5 is, 4 is not.
+   mark writes 50 where it finds 5.  100 + 0 + 50 = 150. *)
+Definition M (A : Type) : Type := mem -> A * mem.
+Definition ret {A : Type} (x : A) : M A := fun t => (x, t).
+Definition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t') := m t in f x t'.
+Definition rdm (h i : int) : M int := fun t => (rd h i t, t).
+Definition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).
+Notation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).
+Fixpoint fill (k : nat) (i v : int) : M unit :=
+  match k with
+  | O => ret tt
+  | S m => _ <- wrm 1 i v ;; fill m (i + 1) (v + 2)
+  end.
+Fixpoint find (k : nat) (i key : int) : M bool :=
+  match k with
+  | O => ret false
+  | S m => x <- rdm 1 i ;; if x =? key then ret true else find m (i + 1) key
+  end.
+Definition mark (i : int) : M unit := x <- rdm 1 i ;; if x =? 5 then wrm 1 i 50 else ret tt.
+Definition solve (a : int) (s : mem) : int :=
+  fst ((_ <- fill 5 a 1 ;; c <- find 5 a 5 ;; d <- find 5 a 4 ;; _ <- mark 2 ;; x <- rdm 1 2 ;;
+        ret ((if c then 100 else 0) + (if d then 10 else 0) + x)) s).
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve 0 (kq_input 0).

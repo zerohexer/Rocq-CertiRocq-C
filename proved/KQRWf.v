@@ -291,11 +291,12 @@ Ltac prim_rw :=
 Ltac kq_rw := fail.
 (** (step 61) a fixpoint with its own call under a choice in an operand, and the same with the choice floated out: equal at each counter, test by test *)
 Ltac own_step IH :=
-  repeat (cbn beta iota zeta;
+  repeat (cbn beta iota zeta delta [fst snd];
           first [ prim_rw
                 | kq_rw
                 | progress (rewrite ?IH)
                 | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
+                | match goal with |- context [match ?c with pair _ _ => _ end] => lazymatch c with context [match _ with _ => _ end] => fail | _ => destruct c end end
                 | match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
                 | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
                 | match goal with |- context [match ?c with pair _ _ => _ end] => destruct c end
@@ -315,10 +316,11 @@ Ltac deep_step IH pr :=
 
 Definition kq_no_ih : True := I.
 Ltac own_step0 :=
-  repeat (cbn beta iota zeta;
+  repeat (cbn beta iota zeta delta [fst snd];
           first [ prim_rw
                 | kq_rw
                 | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
+                | match goal with |- context [match ?c with pair _ _ => _ end] => lazymatch c with context [match _ with _ => _ end] => fail | _ => destruct c end end
                 | match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
                 | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
                 | match goal with |- context [match ?c with pair _ _ => _ end] => destruct c end

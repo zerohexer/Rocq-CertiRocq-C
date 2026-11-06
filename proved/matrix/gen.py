@@ -2846,6 +2846,56 @@ addA('q_nat_pair_ret', "", 'let (q, r) := sp n in if Nat.eqb r 0 then a else Uin
 addA('q_divmod', "", 'Uint63.of_nat (fst (Nat.divmod n 3 0 3))',
      '')
 
+# a function giving back unit or a boolean and a memory, read in another form (step 72)
+addA('m_u_loop', "", 'rd 0 a (snd (loop n a s))',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\nFixpoint loop (k : nat) (i : int) : M unit := match k with O => ret tt | S m => _ <- wrm 0 i i ;; loop m (i + 1) end.\n')
+addA('m_u_loop_bind', "", 'fst ((_ <- loop n a ;; x <- rdm 0 a ;; ret (x + 1)) s)',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\nFixpoint loop (k : nat) (i : int) : M unit := match k with O => ret tt | S m => _ <- wrm 0 i i ;; loop m (i + 1) end.\n')
+addA('m_u_loop_nontail', "", 'rd 0 a (snd (loop n a s))',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\nFixpoint loop (k : nat) (i : int) : M unit := match k with O => ret tt | S m => _ <- loop m (i + 1) ;; x <- rdm 0 i ;; wrm 0 (i + 1) x end.\n')
+addA('m_u_def', "", 'rd 0 a (snd (pr a b s))',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\nDefinition pr (i j : int) : M unit := x <- rdm 0 i ;; wrm 0 j (x + 1).\n')
+addA('m_u_def_if', "", 'rd 0 a (snd (pr a b s))',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\nDefinition pr (i j : int) : M unit := x <- rdm 0 i ;; if x <? j then wrm 0 j x else ret tt.\n')
+addA('m_u_two', "", 'rd 0 a (snd (q2 n a s))',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\nFixpoint q1 (k : nat) (i : int) : M unit := match k with O => ret tt | S m => _ <- wrm 0 i i ;; q1 m (i + 1) end.\nFixpoint q2 (k : nat) (i : int) : M unit := match k with O => ret tt | S m => _ <- q1 k i ;; q2 m (i + 2) end.\n')
+addA('m_u_plain', "", 'rd 0 a (snd (lp n a s))',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : unit * mem := match k with O => (tt, t) | S m => lp m (i + 1) (upd 0 i i t) end.\n')
+addA('m_u_plain_let', "", 'let (_, t2) := lp n a s in rd 0 a t2',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : unit * mem := match k with O => (tt, t) | S m => let (u, t1) := lp m (i + 1) t in (u, upd 0 i i t1) end.\n')
+addA('m_u_snd_rec', "", 'rd 0 a (snd (lp n a s))',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : unit * mem := match k with O => (tt, t) | S m => (tt, snd (lp m (i + 1) t)) end.\n')
+addA('m_u_test_rec', "", 'rd 0 a (snd (lp n a s))',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : unit * mem := match k with O => (tt, t) | S m => if rd 0 i t <? 3 then lp m (i + 1) t else (tt, upd 0 i 0 t) end.\n')
+addA('m_u_a6', "", 'rd 0 a (snd (prog a b s))',
+     'Definition prog (i j : int) (t : mem) : unit * mem := (tt, upd 0 i j t).\n')
+addA('m_b_find', "", 'if fst (find n a s) then a else b',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\nFixpoint find (k : nat) (i : int) : M bool := match k with O => ret false | S m => x <- rdm 0 i ;; if x =? 7 then ret true else find m (i + 1) end.\n')
+addA('m_b_find_bind', "", 'fst ((c <- find n a ;; if c then rdm 0 a else ret b) s)',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\nFixpoint find (k : nat) (i : int) : M bool := match k with O => ret false | S m => x <- rdm 0 i ;; if x =? 7 then ret true else find m (i + 1) end.\n')
+addA('m_b_nontail', "", 'if fst (all n a s) then a else b',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\nFixpoint all (k : nat) (i : int) : M bool := match k with O => ret true | S m => r <- all m (i + 1) ;; x <- rdm 0 i ;; ret (r && (x =? 7)) end.\n')
+addA('m_b_write', "", 'rd 0 a (snd (tas n a s))',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\nFixpoint tas (k : nat) (i : int) : M bool := match k with O => ret false | S m => x <- rdm 0 i ;; if x =? 0 then (_ <- wrm 0 i 1 ;; ret true) else tas m (i + 1) end.\n')
+addA('m_b_def', "", 'if fst (isz a s) then a else b',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\nDefinition isz (i : int) : M bool := x <- rdm 0 i ;; ret (x =? 0).\n')
+addA('m_b_def_if', "", 'let (c, t) := isz a s in if c then rd 0 a t else b',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\nDefinition isz (i : int) : M bool := x <- rdm 0 i ;; if x =? 0 then (_ <- wrm 0 i 1 ;; ret true) else ret false.\n')
+addA('m_b_plain', "", 'let (c, t2) := f n a s in if c then rd 0 a t2 else b',
+     'Fixpoint f (k : nat) (i : int) (t : mem) : bool * mem := match k with O => (true, t) | S m => if rd 0 i t =? 0 then (false, upd 0 i 1 t) else f m (i + 1) t end.\n')
+addA('m_b_two_calls', "", 'if fst (f n a s) then a else rd 0 a (snd (f n a s))',
+     'Fixpoint f (k : nat) (i : int) (t : mem) : bool * mem := match k with O => (true, t) | S m => if rd 0 i t =? 0 then (false, upd 0 i 1 t) else f m (i + 1) t end.\n')
+addA('m_e_enum', "", 'fst (lp n a s)',
+     'Inductive col := Red | Green.\nFixpoint lp (k : nat) (i : int) (t : mem) : int * mem := match k with O => (i, t) | S m => lp m (i + 1) (upd 0 i i t) end.\n')
+addA('m_e_enum_ret', "", 'match fst (lp n a s) with Red => a | Green => b end',
+     'Inductive col := Red | Green.\nFixpoint lp (k : nat) (i : int) (t : mem) : col * mem := match k with O => (Red, t) | S m => if rd 0 i t =? 0 then (Green, t) else lp m (i + 1) (upd 0 i i t) end.\n')
+addA('m_e_opt_ret', "", 'match fst (lp n a s) with Some v => v | None => b end',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (None, t) | S m => if rd 0 i t =? 0 then (Some i, t) else lp m (i + 1) (upd 0 i i t) end.\n')
+addA('m_e_pair_ret', "", 'fst (fst (lp n a s))',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : (int * int) * mem := match k with O => ((i, i), t) | S m => lp m (i + 1) (upd 0 i i t) end.\n')
+addA('m_e_name_p1', "", 'fst (p1 a s)',
+     'Definition M (A : Type) : Type := mem -> A * mem.\nDefinition ret {A : Type} (x : A) : M A := fun t => (x, t).\nDefinition bind {A B : Type} (m : M A) (f : A -> M B) : M B := fun t => let (x, t\') := m t in f x t\'.\nDefinition rdm (h i : int) : M int := fun t => (rd h i t, t).\nDefinition wrm (h i v : int) : M unit := fun t => (tt, upd h i v t).\nNotation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).\nFixpoint p2 (k : nat) (i : int) : M int := match k with O => ret i | S m => p2 m (i + 1) end.\nDefinition p1 (i : int) : M int := x <- p2 3 i ;; ret (x + 1).\n')
+
 def write(outdir):
     os.makedirs(outdir, exist_ok=True)
     rows = []

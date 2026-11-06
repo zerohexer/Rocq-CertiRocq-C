@@ -13,6 +13,8 @@ import re, sys, collections
 # differs only in the cause.  The cells once listed here (option, sum, a list cell, a function in a pair, a function returned,
 # a dead memory let) build and take apart their value in place, so they are gaps.
 DESIGN_CELLS = {
+  # two calls that write at a moving index, each from the memory before both (Rocq-C-solution.md §0.5, third reason); control: A_m_b_plain, one call (step 72)
+  "A_m_b_two_calls",
   # Rocq's primitive arrays are persistent: every version kept, a runtime behind the programmer's back (Rocq-C-solution.md §0.5, first reason); control: a memory, A_q_mem_helper_chain (step 71)
   "A_q_parray_get",
   # a number that may need more than a word: a product of two counters, a power, a counter times a number or a sum past 2^63 (Rocq-C-solution.md §0.5, second reason); controls: A_c2_mul_r, A_c2_nat_pow_lit, A_c2_to_add (step 70)
@@ -77,7 +79,6 @@ BY_NAME = {
   "A_c2_nat_b2n": "a function of the library on counters that recurses or gives functions to a recursion: gcd, log2, sqrt, land, shiftr, testbit, b2n",
   "A_c2_match_cnt": "a counter chosen by a match on a counter",
   "A_c2_min_clamp": "a counter clamped by a number: the bound of a min is not yet the smaller one",
-  "A_q_mon_mem": "a value and a memory given back together by a recursion or a loop, the value not one number",
   "A_q_st_mem_iter": "a value and a memory given back together by a recursion or a loop, the value not one number",
   "A_q_mem_rec_triple": "a value and a memory given back together by a recursion or a loop, the value not one number",
   "A_q_mem_record": "a value and a memory given back together by a recursion or a loop, the value not one number",
@@ -93,6 +94,10 @@ BY_NAME = {
   "A_q_divmod": "a function giving back a counter, a counter as a field",
   "A_q_ascii_code": "a function giving back a counter, a counter as a field",
   "A_q_float_lit": "floating point (§12.I)",
+  "A_m_e_enum_ret": "a value and a memory given back together by a recursion or a loop, the value not one number",
+  "A_m_e_opt_ret": "a value and a memory given back together by a recursion or a loop, the value not one number",
+  "A_m_e_pair_ret": "a value and a memory given back together by a recursion or a loop, the value not one number",
+  "A_m_e_name_p1": "a function named p1 or p2: a token of MetaRocq's notations, in the proof file",
   "A_l_ack": "a fixpoint inside a fixpoint that gives back a function",
   "A_l_dec_own": "a function of the program giving a proof with its answer: a sumbool",
   "A_l_dec_proof_used": "a proof a test gives, named by what follows",

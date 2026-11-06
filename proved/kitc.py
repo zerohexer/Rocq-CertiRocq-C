@@ -772,7 +772,7 @@ def reflect(name, entry, prog, no_proof):
     # the templates the copies come from (step 10); a local fixpoint's copy (kqlfix__cK, step 31) has no template constant
     # what the reifier made: each its name and the constant it is a copy or a wrapper of (step 51)
     mp = os.path.join(GEN, f"{name}_rmts.out")
-    mts = re.findall(r'\("([^"]*)"(?:%bs)?,\s*"([^"]*)"(?:%bs)?\)', open(mp).read()) if os.path.exists(mp) else []
+    mts = re.findall(r'\(\s*"([^"]*)"(?:%bs)?,\s*"([^"]*)"(?:%bs)?\)', open(mp).read()) if os.path.exists(mp) else []
     made = {m for m, _ in mts}
     iscp = lambda nm: nm in made and re.search(r"__c(\d+|blk)$", nm) is not None   # a copy, a block
     isw = lambda nm: nm in made and nm.endswith("__o")                              # a wrapper of a function that recurses (step 41)
@@ -890,14 +890,17 @@ def reflect(name, entry, prog, no_proof):
     # among the rewrites of what follows
     rrs = [(m, h) for m, h in mts if m.endswith("__rq__wy")]
     rrn = []
+    # (step 72) what the tactic rewrites stays folded when the helpers are unfolded
+    keepf = " ".join(sorted({"KQ.KQRun.kq_nat"} | {x for m, h in rrs for x in (h, m[:-len("__rq__wy")] + "__rp__wy") if x}
+                            | {f[0] for f in fs if f[0] in fix1} | {f[0].rsplit(".", 1)[-1] + "__wy" for f in fs if f[0].rsplit(".", 1)[-1] + "__wy" in made}))
     for j, (m, h) in enumerate(rrs):
         F = m[:-len("__rq__wy")] + "__rp__wy"
         unf = " ".join(x for x in [h, F] if x)
         unfc = ", ".join(x for x in [h, F] if x)
         if m.endswith("__n__rq__wy"):
-            t += (f"Lemma {name}_rr{j} : {m}.\nProof. unfold {m}. intros; unfold {unfc}; KQRWf.own_step0. Qed.\n")
+            t += (f"Lemma {name}_rr{j} : {m}.\nProof. unfold {m}. intros; unfold {unfc}; first [solve [KQRWf.own_step0] | solve [cbn; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0]]. Qed.\n")
         else:
-            t += (f"Lemma {name}_rr{j} : {m}.\nProof. unfold {m}. fix IH 1. intros kqn; destruct kqn as [|kqn]; intros; cbn [{unf}]; KQRWf.own_step IH. Qed.\n")
+            t += (f"Lemma {name}_rr{j} : {m}.\nProof. unfold {m}. fix IH 1. intros kqn; destruct kqn as [|kqn]; intros; cbn [{unf}]; first [solve [KQRWf.own_step IH] | solve [cbn; KQRWf.own_step IH] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step IH]]. Qed.\n")
         rrn.append(f"{name}_rr{j}")
         t += "Ltac KQRWf.kq_rw ::= progress (rewrite " + ", ".join("?" + x for x in rrn) + ").\n"
     yf = {f[0]: f[0].rsplit(".", 1)[-1] + "__wy" for f in fs if f[0].rsplit(".", 1)[-1] + "__wy" in made}
@@ -905,8 +908,8 @@ def reflect(name, entry, prog, no_proof):
         if f[0] in yf:
             W = yf[f[0]]
             t += (f"Lemma {name}_rqy{j} : KQR.eqC {f[1]} _ (KQR.eqN {kl(f)} {f[3]} _) {W} {f[0]}.\n"
-                  + (f"Proof. cbn [KQR.eqC KQR.eqN]. fix IH 1. intros kqn; destruct kqn as [|kqn]; intros; cbn [{W} {f[0]}]; first [solve [KQRWf.own_step IH] | solve [cbn; KQRWf.own_step IH]]. Qed.\n" if f[0] in fix1 else
-                     f"Proof. cbn [KQR.eqC KQR.eqN]. intros. unfold {W}, {f[0]}. first [solve [KQRWf.own_step0] | solve [cbn; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[KQ.KQRun.kq_nat]; KQRWf.own_step0]]. Qed.\n"))
+                  + (f"Proof. cbn [KQR.eqC KQR.eqN]. fix IH 1. intros kqn; destruct kqn as [|kqn]; intros; cbn [{W} {f[0]}]; first [solve [KQRWf.own_step IH] | solve [cbn; KQRWf.own_step IH] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step IH]]. Qed.\n" if f[0] in fix1 else
+                     f"Proof. cbn [KQR.eqC KQR.eqN]. intros. unfold {W}, {f[0]}. first [solve [KQRWf.own_step0] | solve [cbn; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0]]. Qed.\n"))
     t += "Strategy opaque [" + " ".join([f[0] for f in fs if not iswr(f[0])] + tmpls) + "].\n"   # a copy is unfolded first
     if not no_proof:
         for j, f in enumerate(fs):
