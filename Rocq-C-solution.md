@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **2825 of 2915, 55 gaps, 34 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **2861 of 2960, 57 gaps, 41 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -384,9 +384,9 @@ cell 0 of block 63 (the slot block), which the caller saves and restores (§1.4)
 A 63-bit number `n` is the 64-bit word `2n + 1`, the way the kit holds it.  Addition is `a + b - 1`, subtraction
 `a - b + 1`, the orders are C's orders on the words (signed ones through a cast), `land` and `lor` are the same on the words,
 `lxor` is `(a ^ b) | 1`, a shift amount or a divisor is `w >> 1`.  No mask is needed.  Division by zero, a shift of 63 or more
-and the signed remainder are tested first, so the C has no undefined behaviour.  Lemmas: `KQTArith.v`, `KQLSigned.v`.  One fact
-Rocq's integer axioms leave open — the smallest number divided by -1 is the smallest number — is stated as `divs_min_neg1`
-(Rocq's own computation agrees).
+and the signed remainder are tested first, so the C has no undefined behaviour.  Lemmas: `KQTArith.v`, `KQLSigned.v`.  What
+Rocq's integer axioms leave open, the smallest number divided by -1, is no fact here: the instruction means `kq_divs`, whose
+definition says it (step 74).
 
 `u64`: a record of two numbers (`w_lo`, the low 63 bits, and `w_hi`, the bit above) with primitive projections; meaning
 `u64_val`; every operation is `w64_op o a b`, one KQL instruction (`Ew64`) whose C packs the halves into one
@@ -570,7 +570,7 @@ changes no wide cell, the trace records it); a proof about a program holds for e
 
 ### 1.10 What is trusted, exactly
 
-`Print Assumptions kit_function_correct` (`ASSUME=1 proved/make.sh`): Rocq's 63-bit integer axioms; `divs_min_neg1`; the kit's
+`Print Assumptions kit_function_correct` (`ASSUME=1 proved/make.sh`): Rocq's 63-bit integer axioms; the kit's
 memory primitives `KQRun.rd` / `upd` / `kq_size` / `mem` and `KQSpec.real_laws`; classical axioms CompCert uses.  No admits.
 Outside the proofs: the loader that fills the tables, the driver in `kitc.py`, the printer, clang, and the C bodies of the
 machine operations with the laws the theorem assumes of them.  The per-program statements add nothing: the translator's output
@@ -1678,7 +1678,7 @@ through `ccomp`) → **G** → **M** → **J**; **F**, **I** and **N** when thei
 **T. What is assumed, down to what has no definition except the machine (owner, 2026-11-06; D29, F66).**
 - ~~*`head0`, `tail0`, the high half of `mulc`, `diveucl_21`*~~ — **done, step 73**: ordinary Rocq functions in `KQRun.v`, proved equal to the primitive from Rocq's axioms alone (`proved/KQPrim.v`); for `diveucl_21` where `a < c`, and for `c <= a` Rocq's axioms say nothing: three written numbers are computed, a test in the text rules the case out, otherwise refused with that reason.
 - *`hw_copy`, `hw_fill`, `hw_cmp`, `kq_grow`*: marked `audit`.  Each has a definition (what it does to a memory): proved as Rocq functions where that is possible, and what stays is said with its reason.
-- *`divs_min_neg1`* (`proved/KQTArith.v`, class `rocq`): the same shape as `diveucl_21`, older.  How many programs depend on it with a variable divisor is measured and brought to the owner before anything changes.
+- ~~*`divs_min_neg1`*~~ — **done, step 74**: `Bdivs` means `kq_divs`, which says what the smallest number over -1 is by its definition; `/` needs no test, and a written-out `divs` where the text rules the case out.
 - *The printer, clang, the loader, the driver*: §12.H, unless the owner wants them sooner.
 Accepted when: no line of the classes `remove` and `audit` is left in `proved/TRUSTED.txt`, and §1.10 says so.
 
@@ -5151,6 +5151,21 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *`PrimInt63.divs`, `Sint63.div` written out*: equal to `kq_divs` where the text rules the case out: a written number, a test that shows the divisor is not -1 or the first number is not the smallest (`=?`, a sign test, through `negb`, `andb`, `orb`, `let`s): `test_shows`, `divs_at`, `kq_guard`, by the lemmas of `proved/KQPrim.v`, which rest on nothing but `eqb_correct` and the kernel's computation.  Otherwise refused, with that reason and what to write: a pin and a control.
 - *Cells*: 45, `A_s_*`.
 
+**Step 74 done (2026-11-06): the signed quotient: `divs_min_neg1` taken away.**  Built as designed:
+- *`KQRun.v`*: `kq_divs`; `zdiv` uses it.
+- *`proved/KQL.v`, `KQTArith.v`*: `Bdivs` means `kq_divs`; `divs_t` and `eqb_zero_divs` proved from `div_spec` and that definition.  `proved/TRUSTED.txt` loses the axiom: `proved/` holds no axiom of ours about Rocq's numbers any more.
+- *`proved/KQPrim.v`*: `kq_divs_r`, `kq_divs_l` and their forms for `=?` the other way round and for the sign tests, each a test taken apart and the kernel's computation at the one number.
+- *The reader*: `pm_eval`, `divs_at`; `test_shows` for `=?`, `<?`, `<=?` against 0.  `kq_divs` is read as `Bdivs`, and a written-out `divs` only through `pm_sub`.  `KQRWf.v`: `kq_guard`, `kq_part`.
+- *The walk* (`KQMTrans.v`): `kq_divs` as `Bdivs`.  A written-out `PrimInt63.divs` is no longer translated by it: it is retired, behind `--walk`.
+- *What is refused that was read*: nothing among the gate's programs.  `sdiv` is the only one that names `PrimInt63.divs`, each time with a written divisor (`7`, `0 - 3`).  `/` needs no test.
+- *Cells*: 45 more: 36 proved; `A_s_none`, `_sint_none`, `_lit_min`, `_lit_m1`, `_else`, `_other`, `_test_unrelated` by design, the reason and the controls `A_s_test_pos`, `A_s_lit_b`, `A_s_slash_var` in their own text; `A_s_helper_out`, `A_s_given_lam` gaps.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62; step 73's files / these): `HWP_kernel` 2.61 / 2.63 s, `HWP_own` 2.01 / 2.01, `HWP_irqnow` 1.74 / 1.75 — the same.
+- The C: the 81 programs byte-identical.  The construct table (on `c79685b`): **2861 of 2960 through the verified compiler**, 41
+  by design, 57 gaps, 1 not Rocq (was 2825 of 2915: 36 of the 45 new cells read, 7 by design, 2 gaps).  The gate on `c79685b`, the
+  walk switched off: `make.sh` `core-ok`; examples 45 / 45; corpus 36 / 36; the five kernels (13 / 13 / 13 / 15 / 14 s); **89
+  programs through the verified compiler, 0 refused**; `check_trust.py`: the tree and the gate's list as `proved/TRUSTED.txt` now
+  says, which has lost `divs_min_neg1` twice.  Next: the bytes in bulk as ordinary functions.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5331,11 +5346,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `9f620a8` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `c79685b` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 74's design -- the signed quotient: divs_min_neg1 taken away |
+| (this commit) | §12.V: step 74 (`divs_min_neg1` gone: the construct table 2861 of 2960, 41 by design, 57 gaps), the C, the gate |
+| `c79685b` | `KQRun.v` + `proved/KQL.v` + `KQTArith.v` + `KQMTrans.v` + `KQPrim.v` + `KQRReify.v` + `KQRWf.v` + `TRUSTED.txt` + `matrix` step 74: the signed quotient as `kq_divs`, proved; `divs_min_neg1` taken away; 45 cells |
+| `db25b11` | §12.V: step 74's design -- the signed quotient: divs_min_neg1 taken away |
 | `bf35eb1` | §12.V: step 73 (`head0`, `tail0`, `mulc`, `diveucl_21` proved: the construct table 2825 of 2915, 34 by design, 55 gaps), the C, the gate; F67, F68 |
 | `9f620a8` | `KQRun.v` + `hw/kq_hw.h` + `proved/KQPrim.v` + `KQL.v` + `KQLGen.v` + `KQMSem.v` + `KQRReify.v` + `KQRWf.v` + `kitc.py` + `TRUSTED.txt` + `matrix` + `examples/mach_fix` step 73: `head0`, `tail0`, the high half of `mulc`, `diveucl_21` as ordinary functions, proved from Rocq's own axioms; five operations and their C bodies removed; 83 cells |
 | `8f3a57d` | §12.V: step 73's design -- head0, tail0, the high half of mulc, diveucl_21 as ordinary functions, proved |
