@@ -62,7 +62,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **2502 of 2552, 31 gaps, 18 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **2534 of 2578, 24 gaps, 19 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -4978,6 +4978,19 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Cells*: 26, `A_rp_*`: the parameter at each position, three memories, every result sort, the caller a fixpoint, what is called also read so; `T` a pair, a boolean, a memory, a record, an `option`, two instances, two type parameters, a helper; the pin, both memories live.  `A_par_mem2_dead_moved`, `_dead_other`, `_dead_pair_param`, `_hand_on_pair_param`, `_lfix_dead`, `_tmpl_dead`, `A_l_poly_rec`, `_nofun`, gaps before, read.
 - *The acceptance*: `proved/examples/poly_fix`: the answer worked out apart: 1072003.
 
+**Step 69 done (2026-11-05): a function read in another form, its callers told by a lemma.**  Built as designed, with `KQR.v` unchanged:
+- *The reader*: `dead_slots`, `rp_occ`, `rp_own`, `rp_def`, `rp_stmt`, `rp_match`, `rp_sub`, `rp_apps`, `rp_rows_of`, `rp_all`, `rp_topo` (each row after what it names), in `y_all`; `y_rows` in the order made; `real_copies` through a product; `rec_info2` of the form read.
+- *`KQRWf.v`*: `kq_rw`, a hook in `own_step`, `own_step0`, `deep_step`.
+- *`kitc.py`*: the lemmas, in order, the hook set after each.
+- *The acceptance*: `proved/examples/poly_fix`: proved, built, 1072003.
+- *Cells*: 26 more: 24 proved, `A_rp_dead_live_control` by design, `A_rp_poly_measure` a gap; `A_par_mem2_dead_moved`, `_dead_other`, `_dead_pair_param`, `_hand_on_pair_param`, `_lfix_dead`, `_tmpl_dead`, `A_l_poly_rec`, `_nofun`, gaps before, read.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the trees without their generated files, F62; step 68's files / these): `HWP_kernel` 2.60 / 2.59 s, `HWP_own` 1.98 / 1.97, `HWP_irqnow` 1.70 / 1.71 — the same.  The first version marked a definition with no fixpoint by a `rarg` of 1000000, a `nat`: a million cells in every load of the reifier, 17 MB and 2% on each kernel, found by the timing (F64 again); 999.
+- The C: the 76 programs before byte-identical, the new example through the verified compiler.  The construct table (on
+  `a89c37b`): **2534 of 2578 through the verified compiler**, 19 by design, 24 gaps, 1 not Rocq (was 2502 of 2552: the 24 of the
+  26 new cells read, 1 by design, 1 gap; 8 gaps before read).  The gate on `a89c37b`, the walk switched off: `make.sh` `core-ok`;
+  examples 42 / 42; corpus 36 / 36; the five kernels (13 / 13 / 13 / 14 / 14 s); **86 programs through the verified compiler, 0
+  refused**; the trusted base as step 65 left it, four of its names to be taken away (F66, §12.T).  Next: counters and numbers.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5153,11 +5166,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `304ee51` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `a89c37b` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 69's design -- a function read in another form, its callers told by a lemma |
+| (this commit) | §12.V: step 69 (a function read in another form, its callers told by a lemma: the construct table 2534 of 2578, 19 by design, 24 gaps), the C, the gate |
+| `a89c37b` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix` + `examples/poly_fix` step 69: a function read in another form, its callers told by a lemma; 26 cells; `KQR.v` unchanged |
+| `309e6b6` | §12.V: step 69's design -- a function read in another form, its callers told by a lemma |
 | `b45dfe3` | §12.V: step 68 (what Rocq's libraries and ordinary text spell otherwise: the construct table 2502 of 2552, 18 by design, 31 gaps), the C, the gate |
 | `304ee51` | `proved/KQRReify.v` + `KQRWf.v` + `matrix` + `examples/lib2_fix` step 68: what Rocq's libraries and ordinary text spell otherwise; 87 cells; `KQR.v` unchanged |
 | `a1f392f` | §12.V: step 68's design -- type aliases, the library's recursors, Rocq's lists written in the text, tests with a proof |
