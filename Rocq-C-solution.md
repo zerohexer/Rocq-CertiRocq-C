@@ -5241,6 +5241,17 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   programs through the verified compiler, 0 refused**; `check_trust.py`: `trust unchanged`.  Next: a value of several numbers and
   a memory given back by a recursion.
 
+**Step 78, a value of several numbers and a memory given back by a recursion (§3.5, §12.A) — the design (2026-11-07).**  `lp : nat -> int -> mem -> option int * mem`, an error monad over the memory, a result record and the memory: the reader takes a number and a memory, the record of step 13 with no memory written, nothing else.
+- *The form*: a function of its own in the function's place (step 69's route), giving back the value's first number and the memory with the value's other numbers in the cells of the slot block, `f' args = match f args with (v, t) => (x0 v, upd 63 0 (x1 v) (upd 63 1 (x2 v) t)) end`.  The numbers of a value: its tag if it has several constructors, then the fields of the one it is, each laid out the same way down to numbers.
+- *A call*: the cells the value goes through are saved, the numbers read after it, the cells written back, cell 0 first, as a record's caller does (D16): `let o_j := rd 63 j t in match f' .. t with (x0, t') => let x_j := rd 63 (j - 1) t' in let t1 := (written back) in K`, the value built again from its numbers where it is used.
+- *What that rests on*: writing the cells back gives the memory back only if the function leaves them alone.  A lemma per function: `rd 63 j (snd (f args)) = rd 63 j s`, by induction from the memory's laws, first of every recursive function of the program that gives a memory (`KQRWf.fr_*`, one for each operation).  `upd_upd` and `upd_rd_id` do the rest, cell 0 first: D27's commuting law is not needed.  No new axiom: the laws are `real_laws`.
+- *Room*: a cell holds what was written only where the block has room, so the equations hold under `W <= kq_len 63 + 1`, `W` the program's largest value, which `KQR.slot_room` gives once the value's type is in the table: a made function names it.  `KQR.callee_ok_eqr`: the theorem takes `slot_room` as its premise, so an equation may too.
+- *What it may write*: a block whose number is written, or a definition of one, and is not 63; what writes no wide cell; a helper's body read with its arguments in place.  A write to the slot block, a block number not written, what has no law (`kq_in`, `kq_out`, `hw_call`, `hw_run`, `hw_code_sync`) leave the function unread, its reasons said: gaps with their cells.
+- *The places*: the call last, followed by more, twice, a tail call of another such function (taken apart and given back), a choice of pairs taken apart (in each branch), a `let` of the pair; the counter at any place, the memory at any place; each caller's form.
+- *The C*: a program with no such function: byte-identical.
+- *The acceptance*: `proved/examples/vals_fix`: a value of three numbers with several constructors, a record of three after a call that is not the last step, the slot block's cells written by the caller read back after both; the answer worked out apart: 1785.
+- *Cells*: 78, `A_v_*`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5425,7 +5436,8 @@ Pushed to the public repository up to `3d8a0a5` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 77 (a value and a memory written out: the construct table 2988 of 3105, 43 by design, 73 gaps), the C, the gate; F72; `examples.sh` counts no binary left by an earlier run |
+| (this commit) | §12.V: step 78's design -- a value of several numbers and a memory given back by a recursion |
+| `3d2398a` | §12.V: step 77 (a value and a memory written out: the construct table 2988 of 3105, 43 by design, 73 gaps), the C, the gate; F72; `examples.sh` counts no binary left by an earlier run |
 | `67c0d1a` | `proved/KQRReify.v` + `kitc.py` + `matrix` + `examples/drv_fix` step 77: a fourth probe: a value and a memory written out, a program's own notations; 87 cells |
 | `3d8a0a5` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` step 77: a projection floated into a choice is no conversion: by the equation |
 | `94fb392` | §12.V: step 77's design -- what a fourth probe found: a value and a memory written out |
