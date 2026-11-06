@@ -44,7 +44,6 @@ axiom hw/Runtime.v:hw_irq_take  # hw
 axiom hw/Runtime.v:hw_sym  # hw
 axiom hw/User.v:hw_user  # hw
 axiom hw/User.v:hw_userf  # hw
-axiom proved/KQTArith.v:divs_min_neg1  # rocq
 
 hwop HLoad  # hw
 hwop HStore  # hw
@@ -138,7 +137,6 @@ assumption KQRun.upd
 assumption KQRun.upd32
 assumption KQSpec.hw_trace
 assumption KQSpec.real_laws
-assumption KQTArith.divs_min_neg1
 assumption PrimFloat.float
 assumption PrimInt63.add
 assumption PrimInt63.asr

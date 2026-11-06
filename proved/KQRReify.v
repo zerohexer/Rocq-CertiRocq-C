@@ -86,6 +86,8 @@ Definition kn_upd32 := kn_of <% KQ.KQRun.upd32 %>.
 Definition kn_int := kn_of <% PrimInt63.int %>.
 Definition kn_mem := kn_of <% KQ.KQRun.mem %>.
 Definition kn_kq_nat := kn_of <% KQ.KQRun.kq_nat %>.
+(** (step 74) the machine's signed quotient, as the kit says it *)
+Definition kn_kq_divs := kn_of <% KQ.KQRun.kq_divs %>.
 Definition kn_andb := kn_of <% andb %>.
 Definition kn_orb := kn_of <% orb %>.
 Definition kn_negb := kn_of <% negb %>.
@@ -164,7 +166,7 @@ Definition binop_v (s : ident) : option binop :=
   if s == "add" then Some Badd else if s == "sub" then Some Bsub else if s == "mul" then Some Bmul
   else if s == "land" then Some Bland else if s == "lor" then Some Blor else if s == "lxor" then Some Blxor
   else if s == "lsl" then Some Blsl else if s == "lsr" then Some Blsr else if s == "asr" then Some Basr
-  else if s == "div" then Some Bdiv else if s == "mod" then Some Bmod else if s == "divs" then Some Bdivs
+  else if s == "div" then Some Bdiv else if s == "mod" then Some Bmod
   else if s == "mods" then Some Bmods else None.
 
 Definition cmp_v (s : ident) : option cmpop :=
@@ -1191,7 +1193,7 @@ Definition bind_first (mk : bool) (ot : option term) (ctx : list cent) (t : term
         if teq 1000 u c then (tVar "kq_v"%bs, hs) else
         match u with
         | tApp (tConst kn _ as f) args =>
-            let num_op := eq_mp (fst kn) prim_mp in
+            let num_op := eq_mp (fst kn) prim_mp || Kername.eqb kn kn_kq_divs in
             let '(args', hs') := fold_left (fun acc a => let '(l, h) := acc in
                                    if occ 1000 c a then let '(a', h') := skel fu c a h in (l ++ [a'], h')
                                    else if num_op && memv a then (l ++ [tVar ("kq_h"%bs ^ string_of_nat (length h))], h ++ [a])
@@ -1298,8 +1300,8 @@ Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option 
         | [z] => option_map (fun v => SInt (Uint63.of_Z v)) (z_lit z)
         | _ => None
         end
-      else if eq_mp (fst kn) prim_mp then
-        match binop_v (snd kn), args with
+      else if eq_mp (fst kn) prim_mp || Kername.eqb kn kn_kq_divs then
+        match (if Kername.eqb kn kn_kq_divs then Some Bdivs else binop_v (snd kn)), args with
         | Some o, [a; b] =>
             match reify fuel ctx a, reify fuel ctx b with Some x, Some y => Some (SOp o x y) | _, _ => None end
         | _, _ =>
@@ -3569,7 +3571,7 @@ Definition reach (fuel : nat) (Σ : global_env) (mp : modpath) (root kn : kernam
     4-byte cells; a 64-bit operation is one instruction; a budget ([kq_nat]) is a counter of its own *)
 Definition helper_of (Σ : global_env) (mp : modpath) (fns : list kername) (kn : kername) : option term :=
   if Kername.eqb kn kn_fst || Kername.eqb kn kn_snd then body_of Σ kn else
-  if Kername.eqb kn kn_rd8 || Kername.eqb kn kn_upd8 || Kername.eqb kn kn_w64_op || Kername.eqb kn kn_kq_nat
+  if Kername.eqb kn kn_rd8 || Kername.eqb kn kn_upd8 || Kername.eqb kn kn_w64_op || Kername.eqb kn kn_kq_nat || Kername.eqb kn kn_kq_divs
      || existsb (Kername.eqb kn) fns then None
   else if in_prog mp (fst kn) then
     (* its fixpoints local ones (step 31): each read as a copy where it is applied *)
@@ -4603,7 +4605,7 @@ Fixpoint lift_pm (fuel : nat) (mp : modpath) (base : string) (rq : option term) 
                 (l ++ [{| bcontext := bcontext br; bbody := bb |}], a')) brs ([], acc1) in
           (tCase ci p c' brs', acc2)
       | tApp f args =>
-          let rq' := match f with tConst kn _ => if eq_mp (fst kn) prim_mp then Some (tConst kn_int []) else None | _ => None end in
+          let rq' := match f with tConst kn _ => if eq_mp (fst kn) prim_mp || Kername.eqb kn kn_kq_divs then Some (tConst kn_int []) else None | _ => None end in
           let '(args', acc') := fold_left (fun st a =>
                 let '(l, ac) := st in
                 let '(a', ac') := lift_pm fuel mp base rq' ctx ac a in (l ++ [a'], ac')) args ([], acc) in
@@ -5735,7 +5737,7 @@ Definition y_anon : aname := {| binder_name := nAnon; binder_relevance := Releva
 Definition y_small (t : term) : bool :=
   match t with
   | tRel _ | tInt _ | tConstruct _ _ _ => true
-  | tApp (tConst k _) [tRel _; tInt _] => eq_mp (fst k) prim_mp
+  | tApp (tConst k _) [tRel _; tInt _] => eq_mp (fst k) prim_mp || Kername.eqb k kn_kq_divs
   | _ => false
   end.
 Fixpoint y_red (fuel : nat) (t : term) {struct fuel} : term :=
@@ -6309,13 +6311,54 @@ Definition y_case_bool := <% fun b : bool => if b then O else O %>.
 Definition kn_d21 := kn_of <% PrimInt63.diveucl_21 %>.
 Definition kn_ltb := kn_of <% PrimInt63.ltb %>.
 Definition kn_leb := kn_of <% PrimInt63.leb %>.
+(** (step 74) [divs a b]: Rocq's axioms say what it is except at the smallest number over -1.  A written number, worked out *)
+Definition kn_divs := kn_of <% PrimInt63.divs %>.
+Definition kn_ltsb := kn_of <% PrimInt63.ltsb %>.
+Definition kn_lesb := kn_of <% PrimInt63.lesb %>.
+Definition kn_eqb := kn_of <% PrimInt63.eqb %>.
+Fixpoint pm_eval (fuel : nat) (t : term) {struct fuel} : option PrimInt63.int :=
+  match fuel with
+  | O => None
+  | S fuel =>
+      match t with
+      | tInt i => Some i
+      | tApp (tConst k _) [x; y] =>
+          if eq_mp (fst k) prim_mp then
+            match pm_eval fuel x, pm_eval fuel y with
+            | Some a, Some b =>
+                if String.eqb (snd k) "add"%bs then Some (PrimInt63.add a b)
+                else if String.eqb (snd k) "sub"%bs then Some (PrimInt63.sub a b)
+                else if String.eqb (snd k) "mul"%bs then Some (PrimInt63.mul a b)
+                else if String.eqb (snd k) "lsl"%bs then Some (PrimInt63.lsl a b)
+                else None
+            | _, _ => None
+            end
+          else None
+      | _ => None
+      end
+  end.
+Definition pm_is (t : term) (v : PrimInt63.int) : bool :=
+  match pm_eval 20 t with Some x => PrimInt63.eqb x v | None => false end.
+Definition v_m1 : PrimInt63.int := 9223372036854775807%uint63.
+Definition v_mn : PrimInt63.int := 4611686018427387904%uint63.
+Definition v_0 : PrimInt63.int := 0%uint63.
+(** a pair [(x, tag_nm1)]: [x] is shown not to be -1; [(x, tag_nmn)]: not the smallest number *)
+Definition tag_nm1 := tConst kn_andb [].
+Definition tag_nmn := tConst kn_orb [].
+Definition shows_signed (x : term) : list (term * term) := [(x, tag_nm1); (x, tag_nmn)].
 Fixpoint test_shows (fuel : nat) (pol : bool) (t : term) {struct fuel} : list (term * term) :=
   match fuel with
   | O => []
   | S fuel =>
       match t with
       | tApp (tConst k _) [x; y] =>
-          if Kername.eqb k kn_ltb then (if pol then [(x, y)] else [])
+          if Kername.eqb k kn_eqb then
+            (if pol then [] else
+             (if pm_is y v_m1 then [(x, tag_nm1)] else []) ++ (if pm_is y v_mn then [(x, tag_nmn)] else [])
+             ++ (if pm_is x v_m1 then [(y, tag_nm1)] else []) ++ (if pm_is x v_mn then [(y, tag_nmn)] else []))
+          else if Kername.eqb k kn_ltsb || Kername.eqb k kn_lesb then
+            (if pol then (if pm_is x v_0 then shows_signed y else []) else (if pm_is y v_0 then shows_signed x else []))
+          else if Kername.eqb k kn_ltb then (if pol then [(x, y)] else [])
           else if Kername.eqb k kn_leb then (if pol then [] else [(y, x)])
           else if Kername.eqb k kn_andb then (if pol then test_shows fuel true x ++ test_shows fuel true y else [])
           else if Kername.eqb k kn_orb then (if pol then [] else test_shows fuel false x ++ test_shows fuel false y)
@@ -6354,6 +6397,20 @@ Definition d21_at (e : list (option term)) (g : list (term * term)) (a b c : ter
       if PrimInt63.ltb x z then pf_beta d21_kit [a; b; c] else tApp (tConst kn_d21 []) [a; b; c]
   | _, _, _ => if same then pf_beta d21_kit [a; b; c] else tApp (tConst kn_d21 []) [a; b; c]
   end.
+Definition divs_kit := <% fun a b : PrimInt63.int => KQ.KQRun.kq_divs a b %>.
+(** what the program's text has at [divs a b]: a written number that rules the case out, or both written, or a test: the kit's function; else itself, and the program is refused with that reason *)
+Definition divs_at (e : list (option term)) (g : list (term * term)) (a b : term) : term :=
+  let a' := pm_norm 100 e a in
+  let b' := pm_norm 100 e b in
+  let shown := fun x tg => existsb (fun p => teq 1000 (fst p) x && teq 1000 (snd p) tg) g in
+  let lit_a := match pm_eval 20 a' with Some v => Some (negb (PrimInt63.eqb v v_mn)) | None => None end in
+  let lit_b := match pm_eval 20 b' with Some v => Some (negb (PrimInt63.eqb v v_m1)) | None => None end in
+  let ok := match lit_a, lit_b with
+            | Some _, Some _ => true
+            | Some true, _ | _, Some true => true
+            | _, _ => shown a' tag_nmn || shown b' tag_nm1
+            end in
+  if ok then pf_beta divs_kit [a; b] else tApp (tConst kn_divs []) [a; b].
 Definition pm_ctx (n : nat) (e : list (option term)) : list (option term) := List.repeat None n ++ e.
 Fixpoint pm_sub (fuel : nat) (e : list (option term)) (g : list (term * term)) (t : term) {struct fuel} : term :=
   match fuel with
@@ -6370,6 +6427,11 @@ Fixpoint pm_sub (fuel : nat) (e : list (option term)) (g : list (term * term)) (
           if Kername.eqb k kn_d21 then
             match args' with
             | [a; b; c] => d21_at e g a b c
+            | _ => tApp (tConst k u) args'
+            end
+          else if Kername.eqb k kn_divs then
+            match args' with
+            | [a; b] => divs_at e g a b
             | _ => tApp (tConst k u) args'
             end
           else
@@ -6412,7 +6474,7 @@ Fixpoint pm_sub (fuel : nat) (e : list (option term)) (g : list (term * term)) (
       end
   end.
 Definition pm_has (t : term) : bool :=
-  existsb (fun k => if Kername.eqb k kn_d21 then true else match pm_of k with Some _ => true | None => match dec_of k with Some _ => true | None => false end end) (consts 10000 t []).
+  existsb (fun k => if Kername.eqb k kn_d21 || Kername.eqb k kn_divs then true else match pm_of k with Some _ => true | None => match dec_of k with Some _ => true | None => false end end) (consts 10000 t []).
 (** a body's choices over known constructors floated out: for a function with no fixpoint *)
 Definition y_nf (T b : term) : term :=
   let '(tys, body) := lams b in lams_of tys (y_tail 1000 1000000 T body).
@@ -7253,7 +7315,7 @@ Definition add_s (x : string) (l : list string) : list string := if existsb (fun
 
 (** the constants the syntax reads: the integer operations and comparisons, [rd], [upd], the program's functions *)
 Definition known_const (fns : list kername) (kn : kername) : bool :=
-  (eq_mp (fst kn) prim_mp && (match binop_v (snd kn), cmp_v (snd kn) with None, None => false | _, _ => true end))
+  Kername.eqb kn kn_kq_divs || (eq_mp (fst kn) prim_mp && (match binop_v (snd kn), cmp_v (snd kn) with None, None => false | _, _ => true end))
   || Kername.eqb kn kn_rd || Kername.eqb kn kn_upd || Kername.eqb kn kn_rd32 || Kername.eqb kn kn_upd32 || Kername.eqb kn kn_rd8 || Kername.eqb kn kn_upd8
   || Kername.eqb kn kn_kq_nat || existsb (Kername.eqb kn) fns || Kername.eqb kn kn_ksize || Kername.eqb kn kn_w64_op
   || existsb (fun e => Kername.eqb (fst (fst e)) kn) hw_table || existsb (fun e => Kername.eqb (fst (fst e)) kn) hwf_table
@@ -7439,6 +7501,8 @@ Definition why_fun (Σ : global_env) (hb : kername -> option term) (tc : kername
                               (fold_left (fun a t => consts 10000 t a) texts []) r4 in
           let r4 := if existsb (Kername.eqb kn_d21) (fold_left (fun a t => consts 10000 t a) texts [])
                     then add_s "diveucl_21 a b c with nothing showing a < c: Rocq's axioms say nothing there, so nothing says what it computes (Rocq-C-solution.md 0.5, fourth reason); test a <? c around it" r4 else r4 in
+          let r4 := if existsb (Kername.eqb kn_divs) (fold_left (fun a t => consts 10000 t a) texts [])
+                    then add_s "divs a b with nothing showing it is not the smallest number over -1: Rocq's axioms say nothing there, so nothing says what it computes (Rocq-C-solution.md 0.5, fourth reason); test the divisor or use /, which says what it is" r4 else r4 in
           let r4 := if existsb (Kername.eqb kn_c_pow) (fold_left (fun a t => consts 10000 t a) texts [])
                     then add_s "a power of a counter: a number that may need more than a word (Rocq-C-solution.md 0.5, second reason)" r4 else r4 in
           let r4 := if existsb (Kername.eqb kn_c_mul) (fold_left (fun a t => consts 10000 t a) texts [])

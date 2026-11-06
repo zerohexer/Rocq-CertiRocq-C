@@ -453,28 +453,36 @@ Proof.
   apply up_t. rewrite (phi_sZ (PrimInt63.mods a b)), Sint63Axioms.mod_spec. reflexivity.
 Qed.
 
-(** What Rocq leaves open and its own computation settles: the smallest number divided by -1.  [Sint63Axioms.div_spec]
-    excludes it; the quotient 2^62 does not fit, and [vm_compute] gives the smallest number back
-    (tests: [Eval vm_compute in Sint63.to_Z (divs min_int (0 - 1))]).  Assumed here as the one fact about the primitive. *)
-Axiom divs_min_neg1 : forall x y : i63, Sint63.to_Z x = - 2 ^ 62 -> Sint63.to_Z y = -1 ->
-  Sint63.to_Z (PrimInt63.divs x y) = - 2 ^ 62.
-
+(** What Rocq leaves open: the smallest number over -1.  [Sint63Axioms.div_spec] excludes it, so [Bdivs] means [kq_divs], which says
+    what it is; the C gives that, since the quotient 2^62 does not fit and tagging wraps it to the smallest number. *)
 Lemma sZ_min : Sint63.to_Z Sint63Axioms.min_int = - 2 ^ 62.
 Proof. reflexivity. Qed.
 
+Lemma kq_divs_ne : forall a b : i63, (Sint63.to_Z a <> - 2 ^ 62 \/ Sint63.to_Z b <> -1) -> KQ.KQRun.kq_divs a b = PrimInt63.divs a b.
+Proof.
+  intros a b H. unfold KQ.KQRun.kq_divs.
+  destruct (PrimInt63.eqb a 4611686018427387904%uint63) eqn:Ea; [| reflexivity].
+  destruct (PrimInt63.eqb b 9223372036854775807%uint63) eqn:Eb; [| reflexivity].
+  apply Uint63.eqb_spec in Ea. apply Uint63.eqb_spec in Eb. subst a b. exfalso. destruct H as [H | H]; apply H; reflexivity.
+Qed.
+
 Lemma divs_t : forall a b : i63,
   Int64.or (Int64.shl (Int64.divs (Int64.shr (tg a) Int64.one) (Int64.shr (tg b) Int64.one)) Int64.one) Int64.one
-  = tg (PrimInt63.divs a b).
+  = tg (KQ.KQRun.kq_divs a b).
 Proof.
   intros a b. rewrite !shr1s_t. unfold Int64.divs.
   pose proof (sZ_bound a). pose proof (sZ_bound b).
   rewrite !signed_small by lia.
-  apply up_t. rewrite (phi_sZ (PrimInt63.divs a b)).
+  apply up_t.
   destruct (Z.eq_dec (Sint63.to_Z b) (-1)) as [Hb | Hb].
   - destruct (Z.eq_dec (Sint63.to_Z a) (- 2 ^ 62)) as [Ha | Ha].
-    + rewrite (divs_min_neg1 a b Ha Hb), Ha, Hb. reflexivity.
-    + rewrite Sint63Axioms.div_spec by (left; rewrite sZ_min; exact Ha). reflexivity.
-  - rewrite Sint63Axioms.div_spec by (right; exact Hb). reflexivity.
+    + assert (Ea : a = 4611686018427387904%uint63) by (apply Sint63.to_Z_inj; rewrite Ha; reflexivity).
+      assert (Eb : b = 9223372036854775807%uint63) by (apply Sint63.to_Z_inj; rewrite Hb; reflexivity).
+      subst a b. reflexivity.
+    + rewrite kq_divs_ne by (left; exact Ha). rewrite (phi_sZ (PrimInt63.divs a b)).
+      rewrite Sint63Axioms.div_spec by (left; rewrite sZ_min; exact Ha). reflexivity.
+  - rewrite kq_divs_ne by (right; exact Hb). rewrite (phi_sZ (PrimInt63.divs a b)).
+    rewrite Sint63Axioms.div_spec by (right; exact Hb). reflexivity.
 Qed.
 
 (** the guards: the tagged word of a number against a literal *)
@@ -536,9 +544,10 @@ Proof.
   apply Sint63.to_Z_inj. rewrite Sint63Axioms.mod_spec. change (Sint63.to_Z 0%uint63) with 0. apply Zrem_0_r.
 Qed.
 
-Lemma eqb_zero_divs : forall a b : i63, PrimInt63.eqb b 0%uint63 = true -> PrimInt63.divs a b = 0%uint63.
+Lemma eqb_zero_divs : forall a b : i63, PrimInt63.eqb b 0%uint63 = true -> KQ.KQRun.kq_divs a b = 0%uint63.
 Proof.
   intros a b H. apply Uint63.eqb_spec in H. subst b.
+  rewrite kq_divs_ne by (right; discriminate).
   apply Sint63.to_Z_inj. rewrite Sint63Axioms.div_spec by (right; discriminate).
   change (Sint63.to_Z 0%uint63) with 0. rewrite Zquot.Zquot_0_r. reflexivity.
 Qed.

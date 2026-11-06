@@ -96,7 +96,7 @@ Definition binop_sem (o : binop) (a b : i63) : i63 :=
   | Blsr => PrimInt63.lsr a b
   | Basr => PrimInt63.asr a b
   | Bmods => PrimInt63.mods a b
-  | Bdivs => PrimInt63.divs a b
+  | Bdivs => KQ.KQRun.kq_divs a b
   end.
 
 Definition cmp_sem (c : cmpop) (a b : i63) : bool :=

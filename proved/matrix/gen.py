@@ -2846,6 +2846,97 @@ addA('q_nat_pair_ret', "", 'let (q, r) := sp n in if Nat.eqb r 0 then a else Uin
 addA('q_divmod', "", 'Uint63.of_nat (fst (Nat.divmod n 3 0 3))',
      '')
 
+# the signed quotient: what the text shows of the one case Rocq's axioms leave open (step 74)
+addA('s_slash_var', "", 'a / b',
+     '')
+addA('s_slash_lit', "", 'a / 7',
+     '')
+addA('s_slash_neg', "", 'a / (0 - 3)',
+     '')
+addA('s_mod_var', "", 'a mod b',
+     '')
+addA('s_slash_loop', "", 'lp n a b',
+     'Fixpoint lp (k : nat) (i c : int) : int := match k with O => i | S m => lp m (i / c) c end.\n')
+addA('s_lit_b', "", 'PrimInt63.divs a 7',
+     '')
+addA('s_lit_b_neg', "", 'PrimInt63.divs a (0 - 3)',
+     '')
+addA('s_lit_a', "", 'PrimInt63.divs 7 b',
+     '')
+addA('s_lit_both', "", 'PrimInt63.divs 42 5',
+     '')
+addA('s_lit_min_m1', "", 'PrimInt63.divs (PrimInt63.lsl 1 62) (0 - 1)',
+     '')
+addA('s_lit_let', "", 'let d := 7 in PrimInt63.divs a d',
+     '')
+addA('s_sint_lit', "", 'Sint63.div a 2',
+     '')
+addA('s_test_m1', "", 'if b =? (0 - 1) then 0 else PrimInt63.divs a b',
+     '')
+addA('s_test_m1_sym', "", 'if (0 - 1) =? b then 0 else PrimInt63.divs a b',
+     '')
+addA('s_test_pos', "", 'if 0 <? b then PrimInt63.divs a b else 0',
+     '')
+addA('s_test_nonneg', "", 'if 0 <=? b then PrimInt63.divs a b else 0',
+     '')
+addA('s_test_rlt', "", 'if b <? 0 then 0 else PrimInt63.divs a b',
+     '')
+addA('s_test_rle', "", 'if b <=? 0 then 0 else PrimInt63.divs a b',
+     '')
+addA('s_test_a_pos', "", 'if 0 <? a then PrimInt63.divs a b else 0',
+     '')
+addA('s_test_a_nonneg', "", 'if 0 <=? a then PrimInt63.divs a b else 0',
+     '')
+addA('s_test_a_rlt', "", 'if a <? 0 then 0 else PrimInt63.divs a b',
+     '')
+addA('s_test_a_min', "", 'if a =? (PrimInt63.lsl 1 62) then 0 else PrimInt63.divs a b',
+     '')
+addA('s_test_negb', "", 'if negb (b =? (0 - 1)) then PrimInt63.divs a b else 0',
+     '')
+addA('s_test_and', "", 'if (0 <? b) && (a <? 9) then PrimInt63.divs a b else 0',
+     '')
+addA('s_test_or', "", 'if (b =? (0 - 1)) || (a <? 9) then 0 else PrimInt63.divs a b',
+     '')
+addA('s_test_match', "", 'match 0 <? b with true => PrimInt63.divs a b | false => 0 end',
+     '')
+addA('s_test_let', "", 'let t := 0 <? b in if t then PrimInt63.divs a b else 0',
+     '')
+addA('s_test_let_arg', "", 'let d := b + 1 in if 0 <? d then PrimInt63.divs a d else 0',
+     '')
+addA('s_test_expr', "", 'if 0 <? b + 1 then PrimInt63.divs a (b + 1) else 0',
+     '')
+addA('s_test_read', "", 'let d := rd 0 a s in if 0 <? d then PrimInt63.divs b d else 0',
+     '')
+addA('s_test_write', "", 'if 0 <? b then rd 0 a (upd 0 a (PrimInt63.divs a b) s) else 0',
+     '')
+addA('s_sint_test', "", 'if 0 <? b then Sint63.div a b else 0',
+     '')
+addA('s_loop', "", 'lp n a b',
+     'Fixpoint lp (k : nat) (i c : int) : int := match k with O => i | S m => if 0 <? c then lp m (PrimInt63.divs i c) c else i end.\n')
+addA('s_nontail', "", 'lp n a b',
+     'Fixpoint lp (k : nat) (i c : int) : int := match k with O => 0 | S m => if 0 <? c then PrimInt63.divs i c + lp m (i + 1) c else 0 end.\n')
+addA('s_helper_in', "", 'k a b + k b a',
+     'Definition k (x y : int) : int := if 0 <? y then PrimInt63.divs x y else 0.\n')
+addA('s_helper_lit', "", 'k a + k b',
+     'Definition k (x : int) : int := PrimInt63.divs x 3.\n')
+addA('s_helper_out', "", 'if 0 <? b then k a b else 0',
+     'Definition k (x y : int) : int := PrimInt63.divs x y.\n')
+addA('s_given_lam', "", 'ap (fun x => PrimInt63.divs x 3) n a',
+     'Fixpoint ap (f : int -> int) (k : nat) (x : int) : int := match k with O => x | S m => ap f m (f x) end.\n')
+addA('s_none', "", 'PrimInt63.divs a b',
+     '')
+addA('s_sint_none', "", 'Sint63.div a b',
+     '')
+addA('s_lit_min', "", 'PrimInt63.divs (PrimInt63.lsl 1 62) b',
+     '')
+addA('s_lit_m1', "", 'PrimInt63.divs a (0 - 1)',
+     '')
+addA('s_else', "", 'if 0 <? b then 0 else PrimInt63.divs a b',
+     '')
+addA('s_other', "", 'if 0 <? b then PrimInt63.divs a (b + 1) else 0',
+     '')
+addA('s_test_unrelated', "", 'if a =? b then 0 else PrimInt63.divs a b',
+     '')
 # head0, tail0, mulc, diveucl_21: ordinary functions proved equal to the primitive (step 73)
 addA('t_h0_let', "", 'let x := PrimInt63.head0 a in x + b',
      '')

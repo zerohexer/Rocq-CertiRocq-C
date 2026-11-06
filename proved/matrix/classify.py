@@ -13,6 +13,8 @@ import re, sys, collections
 # differs only in the cause.  The cells once listed here (option, sum, a list cell, a function in a pair, a function returned,
 # a dead memory let) build and take apart their value in place, so they are gaps.
 DESIGN_CELLS = {
+  # divs with nothing ruling out the smallest number over -1: Rocq's axioms say nothing there, so nothing says what it computes (Rocq-C-solution.md §0.5, fourth reason); controls: A_s_test_pos, A_s_lit_b, and / : A_s_slash_var (step 74)
+  "A_s_none", "A_s_sint_none", "A_s_lit_min", "A_s_lit_m1", "A_s_else", "A_s_other", "A_s_test_unrelated",
   # diveucl_21 with nothing showing a < c, or shown the other way: Rocq's axioms say nothing there, so nothing says what it computes (Rocq-C-solution.md §0.5, fourth reason); controls: A_t_d_ltb, A_t_d_leb, A_t_d_lit_lt (step 73)
   "A_n_diveucl_21", "A_t_d_none", "A_t_d_lit_ge", "A_t_d_other", "A_t_d_signed", "A_t_d_else", "A_t_d_leb_then", "A_t_d_outside",
   # two calls that write at a moving index, each from the memory before both (Rocq-C-solution.md §0.5, third reason); control: A_m_b_plain, one call (step 72)
@@ -106,6 +108,8 @@ BY_NAME = {
   "A_t_t0_given_bare": "a primitive Rocq's axioms only relate, given as a function to a recursive function: under the binder no equation reaches",
   "A_t_d_helper_out": "a diveucl_21 in a helper, the test that shows a < c in its caller",
   "A_t_d_trans": "a test that shows a < c only together with another",
+  "A_s_helper_out": "a divs in a helper, the test that rules the case out in its caller",
+  "A_s_given_lam": "a primitive Rocq's axioms only relate, given as a function to a recursive function: under the binder no equation reaches",
   "A_l_ack": "a fixpoint inside a fixpoint that gives back a function",
   "A_l_dec_own": "a function of the program giving a proof with its answer: a sumbool",
   "A_l_dec_proof_used": "a proof a test gives, named by what follows",

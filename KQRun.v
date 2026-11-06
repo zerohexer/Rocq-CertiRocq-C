@@ -51,6 +51,10 @@ Definition zmax (a b : int) : int := if a <=? b then b else a.
 Definition zabs (a : int) : int := if a <? 0 then - a else a.
 Definition zopp (a : int) : int := - a.
 Definition zeven (a : int) : bool := (a land 1) =? 0.
+(* the machine's signed quotient: Rocq's axioms say what `divs` is except at the smallest number over -1, and here that is
+   the smallest number, by this definition (Rocq-C-solution.md §12.T) *)
+Definition kq_divs (a b : int) : int :=
+  if andb (PrimInt63.eqb a 4611686018427387904%uint63) (PrimInt63.eqb b 9223372036854775807%uint63) then a else PrimInt63.divs a b.
 (* Z rounds a quotient DOWN and gives the remainder the divisor's sign; the machine rounds toward 0.
    Both are COMPILED FROM THIS TEXT (the build writes them out at their uses, where the divisor is usually a number
    written in the program).  A number that is not negative, divided by one that is positive -- nearly every division
@@ -61,7 +65,7 @@ Definition zdiv (a0 b0 : int) : int :=
   let b := b0 in
   if andb (0 <=? a) (0 <? b) then PrimInt63.div a b
   else
-    let q := a / b in
+    let q := kq_divs a b in
     let r := a mod b in
     if r =? 0 then q
     else if r <? 0 then (if 0 <? b then q - 1 else q) else (if b <? 0 then q - 1 else q).

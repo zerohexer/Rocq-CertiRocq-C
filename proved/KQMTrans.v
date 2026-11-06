@@ -40,6 +40,7 @@ Definition kn_ksize := kn_of <% KQ.KQRun.kq_size %>.
 Definition kn_w64_op := kn_of <% KQ.KQRun.w64_op %>.
 Definition kn_kmem := kn_of <% KQ.KQRun.mem %>.
 Definition kn_kq_nat := kn_of <% KQ.KQRun.kq_nat %>.
+Definition kn_kq_divs := kn_of <% KQ.KQRun.kq_divs %>.
 Definition kn_int := kn_of <% PrimInt63.int %>.
 Definition kn_andb := kn_of <% andb %>.
 Definition kn_orb := kn_of <% orb %>.
@@ -157,7 +158,7 @@ Definition binop_of (s : ident) : option term :=
   else if s == "lsl" then Some <% Blsl %> else if s == "lsr" then Some <% Blsr %>
   else if s == "asr" then Some <% Basr %> else if s == "div" then Some <% Bdiv %>
   else if s == "mod" then Some <% Bmod %> else if s == "mods" then Some <% Bmods %>
-  else if s == "divs" then Some <% Bdivs %> else None.
+  else None.
 
 Definition cmp_of (s : ident) : option term :=
   if s == "eqb" then Some <% Ceq %> else if s == "ltb" then Some <% Clt %>
@@ -900,7 +901,7 @@ Definition call_args (f : finfo) (caps rest : list term) : list term :=
 
 (* a helper: a definition of the file or of KQRun.v that does not call itself, written out where it is used *)
 Definition helper_body (kn : kername) : option term :=
-  if Kername.eqb kn kn_w64_op then None   (* a 64-bit operation is one instruction: its definition is its meaning, not a helper *)
+  if Kername.eqb kn kn_w64_op || Kername.eqb kn kn_kq_divs then None   (* a 64-bit operation is one instruction: its definition is its meaning, not a helper *)
   else if eq_mp (fst kn) mp || eq_mp (fst kn) kit_mp || eq_mp (fst kn) uint63_mp then
     match find_fn kn with
     | Some _ => None
@@ -1101,8 +1102,8 @@ Fixpoint tr_int (fuel : nat) (Γ : list ent) (t : term) (s : st) (k : KA) {struc
               match e with EInt a => k a s | ENat a => k a s | _ => TErr "a field that is not a number" end)
         | _ => TErr "fst or snd"
         end
-      else if eq_mp (fst kn) prim_mp then
-        match binop_of (snd kn), args with
+      else if eq_mp (fst kn) prim_mp || Kername.eqb kn kn_kq_divs then
+        match (if Kername.eqb kn kn_kq_divs then Some <% Bdivs %> else binop_of (snd kn)), args with
         | Some o, [a; b] =>
             tr_int fuel Γ a s (fun A s => tr_int fuel Γ b s (fun B s =>
               let '(x, s) := fresh s in

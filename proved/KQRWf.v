@@ -277,17 +277,34 @@ Ltac prim_rw :=
                     ?Uint63Axioms.subc_def_spec, ?Uint63Axioms.subcarryc_def_spec, ?Uint63Axioms.diveucl_def_spec, ?Uint63Axioms.addmuldiv_def_spec;
             unfold Uint63Axioms.compare_def, Uint63Axioms.addc_def, Uint63Axioms.addcarryc_def, Uint63Axioms.subc_def, Uint63Axioms.subcarryc_def,
                    Uint63Axioms.diveucl_def, Uint63Axioms.addmuldiv_def, Uint63Axioms.addcarry).
-(** (step 73) [diveucl_21 a b c] where a test has shown [a < c], or the numbers are written: the kit's function *)
+(** (step 73) [diveucl_21 a b c] where a test has shown [a < c], or the numbers are written, and (step 74) [divs a b] where a test has shown it
+    is not the smallest number over -1, or a number is written: the kit's function *)
+Ltac kq_part := first [ match goal with |- context [PrimInt63.diveucl_21 _ _ _] => idtac end | match goal with |- context [PrimInt63.divs _ _] => idtac end ].
 Ltac kq_guard :=
+  kq_part;
   match goal with
-  | e : andb ?x ?y = true |- context [PrimInt63.diveucl_21 _ _ _] => apply Bool.andb_true_iff in e; destruct e
-  | e : orb ?x ?y = false |- context [PrimInt63.diveucl_21 _ _ _] => apply Bool.orb_false_iff in e; destruct e
-  | e : negb ?x = true |- context [PrimInt63.diveucl_21 _ _ _] => apply Bool.negb_true_iff in e
-  | e : negb ?x = false |- context [PrimInt63.diveucl_21 _ _ _] => apply Bool.negb_false_iff in e
+  | e : andb ?x ?y = true |- _ => apply Bool.andb_true_iff in e; destruct e
+  | e : orb ?x ?y = false |- _ => apply Bool.orb_false_iff in e; destruct e
+  | e : negb ?x = true |- _ => apply Bool.negb_true_iff in e
+  | e : negb ?x = false |- _ => apply Bool.negb_false_iff in e
   | e : PrimInt63.ltb ?a ?c = true |- context [PrimInt63.diveucl_21 ?a ?b ?c] => rewrite (KQPrim.kq_d21_eq a b c e)
   | e : PrimInt63.leb ?c ?a = false |- context [PrimInt63.diveucl_21 ?a ?b ?c] => rewrite (KQPrim.kq_d21_le a b c e)
   | |- context [PrimInt63.diveucl_21 ?a ?b ?c] => rewrite (KQPrim.kq_d21_eq a b c (eq_refl true))
-  | |- context [PrimInt63.diveucl_21 _ _ _] => match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
+  | e : PrimInt63.eqb ?b _ = false |- context [PrimInt63.divs ?a ?b] => rewrite (KQPrim.kq_divs_r a b e)
+  | e : PrimInt63.eqb _ ?b = false |- context [PrimInt63.divs ?a ?b] => rewrite (KQPrim.kq_divs_reqs a b e)
+  | e : PrimInt63.ltsb _ ?b = true |- context [PrimInt63.divs ?a ?b] => rewrite (KQPrim.kq_divs_rlt a b e)
+  | e : PrimInt63.lesb _ ?b = true |- context [PrimInt63.divs ?a ?b] => rewrite (KQPrim.kq_divs_rle a b e)
+  | e : PrimInt63.ltsb ?b _ = false |- context [PrimInt63.divs ?a ?b] => rewrite (KQPrim.kq_divs_rglt a b e)
+  | e : PrimInt63.lesb ?b _ = false |- context [PrimInt63.divs ?a ?b] => rewrite (KQPrim.kq_divs_rgle a b e)
+  | e : PrimInt63.eqb ?a _ = false |- context [PrimInt63.divs ?a ?b] => rewrite (KQPrim.kq_divs_l a b e)
+  | e : PrimInt63.eqb _ ?a = false |- context [PrimInt63.divs ?a ?b] => rewrite (KQPrim.kq_divs_leqs a b e)
+  | e : PrimInt63.ltsb _ ?a = true |- context [PrimInt63.divs ?a ?b] => rewrite (KQPrim.kq_divs_llt a b e)
+  | e : PrimInt63.lesb _ ?a = true |- context [PrimInt63.divs ?a ?b] => rewrite (KQPrim.kq_divs_lle a b e)
+  | e : PrimInt63.ltsb ?a _ = false |- context [PrimInt63.divs ?a ?b] => rewrite (KQPrim.kq_divs_lglt a b e)
+  | e : PrimInt63.lesb ?a _ = false |- context [PrimInt63.divs ?a ?b] => rewrite (KQPrim.kq_divs_lgle a b e)
+  | |- context [PrimInt63.divs ?a ?b] => rewrite (KQPrim.kq_divs_r a b (eq_refl false))
+  | |- context [PrimInt63.divs ?a ?b] => rewrite (KQPrim.kq_divs_l a b (eq_refl false))
+  | |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e
   end.
 (** (step 69) a program's lemmas of what is read in another form: [kitc.py] sets it *)
 Ltac kq_rw := fail.

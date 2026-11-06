@@ -449,3 +449,64 @@ Proof.
   pose proof (to_Z_bounded l) as [L1 L2].
   rewrite Z.add_comm, Z_mod_plus_full. rewrite Z.mod_small; [reflexivity | lia].
 Qed.
+
+(** the signed quotient: [divs] is [kq_divs] where the text rules out the smallest number over -1 *)
+Notation kq_divs := KQRun.kq_divs.
+Notation m1 := 9223372036854775807%uint63.
+Notation mn := 4611686018427387904%uint63.
+Lemma kq_divs_r : forall a b, PrimInt63.eqb b m1 = false -> PrimInt63.divs a b = kq_divs a b.
+Proof. intros a b H. unfold KQRun.kq_divs. rewrite H. destruct (PrimInt63.eqb a mn); reflexivity. Qed.
+Lemma kq_divs_l : forall a b, PrimInt63.eqb a mn = false -> PrimInt63.divs a b = kq_divs a b.
+Proof. intros a b H. unfold KQRun.kq_divs. rewrite H. reflexivity. Qed.
+Lemma eqb_ne : forall x v, PrimInt63.eqb x v = true -> x = v.
+Proof. intros x v H. apply eqb_correct. exact H. Qed.
+Lemma kq_divs_reqs : forall a b, PrimInt63.eqb m1 b = false -> PrimInt63.divs a b = kq_divs a b.
+Proof.
+  intros a b H. apply kq_divs_r. destruct (PrimInt63.eqb b m1) eqn:E; [| reflexivity].
+  apply eqb_ne in E. subst b. exfalso. vm_compute in H. discriminate H.
+Qed.
+Lemma kq_divs_rlt : forall a b, PrimInt63.ltsb 0%uint63 b = true -> PrimInt63.divs a b = kq_divs a b.
+Proof.
+  intros a b H. apply kq_divs_r. destruct (PrimInt63.eqb b m1) eqn:E; [| reflexivity].
+  apply eqb_ne in E. subst b. exfalso. vm_compute in H. discriminate H.
+Qed.
+Lemma kq_divs_rle : forall a b, PrimInt63.lesb 0%uint63 b = true -> PrimInt63.divs a b = kq_divs a b.
+Proof.
+  intros a b H. apply kq_divs_r. destruct (PrimInt63.eqb b m1) eqn:E; [| reflexivity].
+  apply eqb_ne in E. subst b. exfalso. vm_compute in H. discriminate H.
+Qed.
+Lemma kq_divs_rglt : forall a b, PrimInt63.ltsb b 0%uint63 = false -> PrimInt63.divs a b = kq_divs a b.
+Proof.
+  intros a b H. apply kq_divs_r. destruct (PrimInt63.eqb b m1) eqn:E; [| reflexivity].
+  apply eqb_ne in E. subst b. exfalso. vm_compute in H. discriminate H.
+Qed.
+Lemma kq_divs_rgle : forall a b, PrimInt63.lesb b 0%uint63 = false -> PrimInt63.divs a b = kq_divs a b.
+Proof.
+  intros a b H. apply kq_divs_r. destruct (PrimInt63.eqb b m1) eqn:E; [| reflexivity].
+  apply eqb_ne in E. subst b. exfalso. vm_compute in H. discriminate H.
+Qed.
+Lemma kq_divs_leqs : forall a b, PrimInt63.eqb mn a = false -> PrimInt63.divs a b = kq_divs a b.
+Proof.
+  intros a b H. apply kq_divs_l. destruct (PrimInt63.eqb a mn) eqn:E; [| reflexivity].
+  apply eqb_ne in E. subst a. exfalso. vm_compute in H. discriminate H.
+Qed.
+Lemma kq_divs_llt : forall a b, PrimInt63.ltsb 0%uint63 a = true -> PrimInt63.divs a b = kq_divs a b.
+Proof.
+  intros a b H. apply kq_divs_l. destruct (PrimInt63.eqb a mn) eqn:E; [| reflexivity].
+  apply eqb_ne in E. subst a. exfalso. vm_compute in H. discriminate H.
+Qed.
+Lemma kq_divs_lle : forall a b, PrimInt63.lesb 0%uint63 a = true -> PrimInt63.divs a b = kq_divs a b.
+Proof.
+  intros a b H. apply kq_divs_l. destruct (PrimInt63.eqb a mn) eqn:E; [| reflexivity].
+  apply eqb_ne in E. subst a. exfalso. vm_compute in H. discriminate H.
+Qed.
+Lemma kq_divs_lglt : forall a b, PrimInt63.ltsb a 0%uint63 = false -> PrimInt63.divs a b = kq_divs a b.
+Proof.
+  intros a b H. apply kq_divs_l. destruct (PrimInt63.eqb a mn) eqn:E; [| reflexivity].
+  apply eqb_ne in E. subst a. exfalso. vm_compute in H. discriminate H.
+Qed.
+Lemma kq_divs_lgle : forall a b, PrimInt63.lesb a 0%uint63 = false -> PrimInt63.divs a b = kq_divs a b.
+Proof.
+  intros a b H. apply kq_divs_l. destruct (PrimInt63.eqb a mn) eqn:E; [| reflexivity].
+  apply eqb_ne in E. subst a. exfalso. vm_compute in H. discriminate H.
+Qed.
