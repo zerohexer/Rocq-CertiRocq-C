@@ -13,6 +13,8 @@ import re, sys, collections
 # differs only in the cause.  The cells once listed here (option, sum, a list cell, a function in a pair, a function returned,
 # a dead memory let) build and take apart their value in place, so they are gaps.
 DESIGN_CELLS = {
+  # a number that may need more than a word: a product of two counters, a power, a counter times a number or a sum past 2^63 (Rocq-C-solution.md §0.5, second reason); controls: A_c2_mul_r, A_c2_nat_pow_lit, A_c2_to_add (step 70)
+  "A_c2_mul_vars", "A_c2_nat_square", "A_c2_nat_pow", "A_c2_mul_big", "A_c2_to_add_u",
   # two memory parameters both live: read from one, written in the other (Rocq-C-solution.md §0.5, third reason); control: A_rp_dead_first, one of them never read (step 69)
   "A_rp_dead_live_control",
   # arithmetic on Z: an unbounded number as a value (Rocq-C-solution.md §0.5, second reason); control: A_l_z_arith_ctrl, the same on int (step 68)
@@ -62,10 +64,17 @@ DESIGN_CELLS = {
 }
 # gaps whose refusal message is shared with another category: classified by name
 BY_NAME = {
-  "A_n_nat_even": "a library function on a counter beyond S, +, pred, min, max, sub, div2: even, mul",
-  "A_n_nat_mul": "a library function on a counter beyond S, +, pred, min, max, sub, div2: even, mul",
   "A_n_sig_result": "a value holding a proof, given back by a function: a sig",
   "A_rp_poly_measure": "a measure recursion polymorphic in a type",
+  "A_c2_nat_gcd": "a function of the library on counters that recurses or gives functions to a recursion: gcd, log2, sqrt, land, shiftr, testbit, b2n",
+  "A_c2_nat_log2": "a function of the library on counters that recurses or gives functions to a recursion: gcd, log2, sqrt, land, shiftr, testbit, b2n",
+  "A_c2_nat_sqrt": "a function of the library on counters that recurses or gives functions to a recursion: gcd, log2, sqrt, land, shiftr, testbit, b2n",
+  "A_c2_nat_land": "a function of the library on counters that recurses or gives functions to a recursion: gcd, log2, sqrt, land, shiftr, testbit, b2n",
+  "A_c2_nat_shiftr": "a function of the library on counters that recurses or gives functions to a recursion: gcd, log2, sqrt, land, shiftr, testbit, b2n",
+  "A_c2_nat_testbit": "a function of the library on counters that recurses or gives functions to a recursion: gcd, log2, sqrt, land, shiftr, testbit, b2n",
+  "A_c2_nat_b2n": "a function of the library on counters that recurses or gives functions to a recursion: gcd, log2, sqrt, land, shiftr, testbit, b2n",
+  "A_c2_match_cnt": "a counter chosen by a match on a counter",
+  "A_c2_min_clamp": "a counter clamped by a number: the bound of a min is not yet the smaller one",
   "A_l_ack": "a fixpoint inside a fixpoint that gives back a function",
   "A_l_dec_own": "a function of the program giving a proof with its answer: a sumbool",
   "A_l_dec_proof_used": "a proof a test gives, named by what follows",

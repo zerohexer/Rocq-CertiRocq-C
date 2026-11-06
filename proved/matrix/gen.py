@@ -2382,6 +2382,246 @@ for mm, e, sort in itertools.product(YMEM, YE, ["int", "bool", "record"]):
     addY(mm, e, sort)
 
 # ---------------------------------------------------------------- write
+# a counter as a number, a number as a counter, times a written number, div, mod, even, odd (step 70)
+addA('c2_of_arg', "", 'ff n (Uint63.of_Z (Z.of_nat n))',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_of_nat_notation', "", 'a + Uint63.of_nat n',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_of_op', "", 'Uint63.of_Z (Z.of_nat n) * a + b',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_of_let', "", 'let v := Uint63.of_Z (Z.of_nat n) in v + v',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_of_rd', "", 'rd 0 (Uint63.of_Z (Z.of_nat n)) s',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_of_upd', "", 'rd 0 a (upd 0 (Uint63.of_Z (Z.of_nat n)) (Uint63.of_Z (Z.of_nat n)) s)',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_of_test', "", 'if Uint63.of_Z (Z.of_nat n) <? a then a else b',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_of_pred', "", 'match n with O => a | S m => Uint63.of_Z (Z.of_nat m) end',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_of_S', "", 'Uint63.of_Z (Z.of_nat (S n))',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_of_add', "", 'Uint63.of_Z (Z.of_nat (n + 2))',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_of_pair', "", 'fst (Uint63.of_Z (Z.of_nat n), a) + snd (b, Uint63.of_Z (Z.of_nat n))',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_of_loop', "", 'lp n a',
+     'From Stdlib Require Import ZArith.\nFixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (x + Uint63.of_Z (Z.of_nat j)) end.\n')
+addA('c2_of_loop_mem', "", 'rd 0 a (lp n s)',
+     'From Stdlib Require Import ZArith.\nFixpoint lp (k : nat) (t : mem) : mem := match k with O => t | S j => lp j (upd 0 (Uint63.of_Z (Z.of_nat j)) (Uint63.of_Z (Z.of_nat k)) t) end.\n')
+addA('c2_of_nontail', "", 'lp n',
+     'From Stdlib Require Import ZArith.\nFixpoint lp (k : nat) : int := match k with O => 0 | S j => Uint63.of_Z (Z.of_nat k) + lp j end.\n')
+addA('c2_of_helper', "", 'tw n + a',
+     'From Stdlib Require Import ZArith.\nDefinition tw (k : nat) : int := Uint63.of_Z (Z.of_nat k) * 2.\n')
+addA('c2_of_field', "", 'f1 (mk3 (Uint63.of_Z (Z.of_nat n)) a b)',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_lit_pos', "", 'Uint63.of_Z 5 + a',
+     'From Stdlib Require Import ZArith.\nOpen Scope Z_scope.\n')
+addA('c2_lit_zero', "", 'Uint63.of_Z 0 + a',
+     'From Stdlib Require Import ZArith.\nOpen Scope Z_scope.\n')
+addA('c2_lit_neg', "", 'Uint63.of_Z (-3) + a',
+     'From Stdlib Require Import ZArith.\nOpen Scope Z_scope.\n')
+addA('c2_lit_big', "", 'Uint63.of_Z 1000000007 + a',
+     'From Stdlib Require Import ZArith.\nOpen Scope Z_scope.\n')
+addA('c2_lit_helper', "", 'base + a',
+     'From Stdlib Require Import ZArith.\nDefinition base : int := Uint63.of_Z 7%Z.\n')
+addA('c2_to_arg', "", 'ff (Z.to_nat (Sint63.to_Z a)) b',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_to_arg_u', "", 'ff (Z.to_nat (Uint63.to_Z a)) b',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_to_arg_notation', "", 'ff (Uint63.to_nat a) b',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_to_test', "", 'if Nat.ltb (Z.to_nat (Sint63.to_Z a)) 3 then a else b',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_to_test_u', "", 'if Nat.eqb (Uint63.to_nat a) 3 then a else b',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_to_let', "", 'let k := Z.to_nat (Sint63.to_Z a) in ff k b + ff k a',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_to_let_u', "", 'let k := Uint63.to_nat a in if Nat.ltb k 2 then a else b',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_to_match', "", 'match Z.to_nat (Sint63.to_Z a) with O => b | S j => ff j b end',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_to_match_u', "", 'match Uint63.to_nat a with O => b | S j => a end',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_to_of', "", 'Uint63.of_Z (Z.of_nat (Z.to_nat (Sint63.to_Z a)))',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_to_of_u', "", 'Uint63.of_nat (Uint63.to_nat a)',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_to_loop', "", 'lp (Z.to_nat (Sint63.to_Z a)) b',
+     'From Stdlib Require Import ZArith.\nFixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (x + 1) end.\n')
+addA('c2_to_min', "", 'ff (Nat.min (Z.to_nat (Sint63.to_Z a)) n) b',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_to_min_u', "", 'ff (Nat.min (Uint63.to_nat a) n) b',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_to_add', "", 'ff (Z.to_nat (Sint63.to_Z a) + n) b',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_to_inner', "", 'lp n a',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (ff (Z.to_nat (Sint63.to_Z x)) x) end.\n')
+addA('c2_mul_l', "", 'ff (Nat.mul 2 n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_mul_r', "", 'ff (Nat.mul n 2) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_mul_star', "", 'ff (2 * n)%nat a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_mul_star_r', "", 'ff (n * 3)%nat a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_mul_zero_l', "", 'ff (Nat.mul 0 n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_mul_zero_r', "", 'ff (Nat.mul n 0) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_mul_one', "", 'ff (Nat.mul 1 n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_mul_test', "", 'if Nat.ltb (Nat.mul 3 n) 7 then a else b',
+     '')
+addA('c2_mul_let', "", 'let k := Nat.mul 2 n in ff k a + ff k b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_mul_nest', "", 'ff (Nat.mul 2 (S n + 1)) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_mul_nest2', "", 'ff (Nat.mul 2 (Nat.mul 3 n)) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_mul_of', "", 'Uint63.of_Z (Z.of_nat (Nat.mul 4 n))',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_mul_rec', "", 'lp n a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (ff (Nat.mul 2 j) x) end.\n')
+addA('c2_mul_vars_control', "", 'ff (Nat.mul 2 n + n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_mul_vars', "", 'ff (Nat.mul n n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_div_arg', "", 'ff (Nat.div n 3) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_div_slash', "", 'ff (n / 2)%nat a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_mod_arg', "", 'ff (Nat.modulo n 3) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_mod_percent', "", 'ff (Nat.modulo (S n) 5) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_div_zero', "", 'ff (Nat.div n 0) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_mod_zero', "", 'ff (Nat.modulo n 0) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_div_var', "", 'ff (Nat.div n (S n)) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_mod_test', "", 'if Nat.eqb (Nat.modulo n 2) 0 then a else b',
+     '')
+addA('c2_div_let', "", 'let k := Nat.div n 2 in ff k a + ff k b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_div_match', "", 'match Nat.div n 2 with O => a | S q => ff q b end',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_mod_match', "", 'match Nat.modulo n 2 with O => a | S _ => b end',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_div_rec', "", 'lp n a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (ff (Nat.modulo j 4) x) end.\n')
+addA('c2_div_of', "", 'Uint63.of_Z (Z.of_nat (Nat.div n 7))',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_even_if', "", 'if Nat.even n then a else b',
+     '')
+addA('c2_odd_if', "", 'if Nat.odd n then a else b',
+     '')
+addA('c2_even_let', "", 'let e := Nat.even n in if e then a else b',
+     '')
+addA('c2_even_and', "", 'if Nat.even n && (a <? b) then a else b',
+     '')
+addA('c2_even_or', "", 'if orb (a <? b) (Nat.odd n) then a else b',
+     '')
+addA('c2_even_not', "", 'if negb (Nat.even n) then a else b',
+     '')
+addA('c2_even_val', "", 'kb (Nat.even n) a',
+     'Definition kb (c : bool) (x : int) : int := if c then x else x + 1.\n')
+addA('c2_odd_val', "", 'kb (Nat.odd n) a',
+     'Definition kb (c : bool) (x : int) : int := if c then x else x + 1.\n')
+addA('c2_even_ret', "", 'if ev n then a else b',
+     'Definition ev (k : nat) : bool := Nat.even (S k).\n')
+addA('c2_even_tail', "", 'lp n a',
+     'Fixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => if Nat.even j then lp j (x + 1) else lp j x end.\n')
+addA('c2_even_nontail', "", 'lp n',
+     'Fixpoint lp (k : nat) : int := match k with O => 0 | S j => (if Nat.odd k then 1 else 2) + lp j end.\n')
+addA('c2_even_mem', "", 'rd 0 a (lp n a b s)',
+     'Fixpoint lp (k : nat) (x y : int) (t : mem) : mem := match k with O => t | S j => lp j x y (if Nat.even j then upd 0 x y t else t) end.\n')
+addA('c2_even_add', "", 'if Nat.even (n + n) then a else b',
+     '')
+addA('c2_even_div2', "", 'if Nat.even (Nat.div2 n) then a else b',
+     '')
+addA('c2_even_of', "", 'if Nat.even (Uint63.to_nat a) then a else b',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_even_loop', "", 'ev n a',
+     'Fixpoint ev (k : nat) (x : int) : int := if Nat.even k then x else match k with O => x | S j => ev j (x + 1) end.\n')
+addA('c2_even_field', "", 'if fst (Nat.even n, a) then a else b',
+     '')
+addA('c2_ar_min', "", 'ff (Nat.min n 3) a',
+     'From Stdlib Require Import Arith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_ar_max', "", 'ff (Nat.max n 3) a',
+     'From Stdlib Require Import Arith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_ar_sub', "", 'ff (Nat.sub n 3) a',
+     'From Stdlib Require Import Arith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_ar_div2', "", 'ff (Nat.div2 n) a',
+     'From Stdlib Require Import Arith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_ar_mul', "", 'ff (Nat.mul 2 n) a',
+     'From Stdlib Require Import Arith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_ar_div', "", 'ff (Nat.div n 2) a',
+     'From Stdlib Require Import Arith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_ar_mod', "", 'ff (Nat.modulo n 2) a',
+     'From Stdlib Require Import Arith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_ar_add', "", 'ff (Nat.add n 2) a',
+     'From Stdlib Require Import Arith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_ar_pred', "", 'ff (Nat.pred n) a',
+     'From Stdlib Require Import Arith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_ar_eqb', "", 'if Nat.eqb n 2 then a else b',
+     'From Stdlib Require Import Arith.\n')
+addA('c2_ar_ltb', "", 'if Nat.ltb n 2 then a else b',
+     'From Stdlib Require Import Arith.\n')
+addA('c2_ar_leb', "", 'if Nat.leb n 2 then a else b',
+     'From Stdlib Require Import Arith.\n')
+addA('c2_ar_even', "", 'if Nat.even n then a else b',
+     'From Stdlib Require Import Arith.\n')
+addA('c2_ar_odd', "", 'if Nat.odd n then a else b',
+     'From Stdlib Require Import Arith.\n')
+addA('c2_ar_rec', "", 'lp n a',
+     'From Stdlib Require Import Arith.\nFixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => if Nat.even (Nat.min j 3) then lp j (x + 1) else lp j x end.\n')
+addA('c2_mul_big', "", 'ff (Nat.mul 1000 n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_to_add_u', "", 'ff (Uint63.to_nat a + n) b',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_choice', "", 'ff (if a <? b then n else 3) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_choice_let', "", 'let k : nat := if a <? b then n else 3%nat in ff k a + ff k b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_choice_rec', "", 'lp n n a',
+     'Fixpoint lp (k m : nat) (x : int) : int := match k with O => x | S j => lp j (if x <? 3 then m else 2) (x + 1) end.\n')
+addA('c2_choice_nest', "", 'ff (Nat.min (if a <? b then n else 3) (if b <? a then 1 else n)) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_match_cnt', "", 'ff (match n with O => 1 | S m => m end) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_choice_test', "", 'if Nat.ltb (if a <? b then n else 3) 2 then a else b',
+     '')
+addA('c2_choice_of', "", 'Uint63.of_Z (Z.of_nat (if a <? b then n else 3))',
+     'From Stdlib Require Import ZArith.\n')
+addA('c2_nat_pow_lit', "", 'ff (Nat.pow 2 3) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_min_clamp', "", 'ff (Nat.mul 3 (Nat.min (Uint63.to_nat a) 1000)) b',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_nat_double', "", 'ff (Nat.double n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_nat_succ', "", 'ff (Nat.succ n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_nat_b2n', "", 'ff (Nat.b2n (a <? b)) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_nat_square', "", 'ff (Nat.square n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_nat_pow', "", 'ff (Nat.pow 2 n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_nat_log2', "", 'ff (Nat.log2 n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_nat_sqrt', "", 'ff (Nat.sqrt n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_nat_gcd', "", 'ff (Nat.gcd n 6) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_nat_land', "", 'ff (Nat.land n 6) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_nat_shiftr', "", 'ff (Nat.shiftr n 1) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('c2_nat_testbit', "", 'if Nat.testbit n 1 then a else b',
+     '')
+
 def write(outdir):
     os.makedirs(outdir, exist_ok=True)
     rows = []

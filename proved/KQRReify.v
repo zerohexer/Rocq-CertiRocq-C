@@ -55,7 +55,8 @@ Definition lib_open (kn : kername) : bool :=
     "bool_rect"%bs; "bool_rec"%bs; "bool_ind"%bs; "prod_rect"%bs; "prod_rec"%bs; "prod_ind"%bs; "option_rect"%bs; "option_rec"%bs; "option_map"%bs;
     "sum_rect"%bs; "sum_rec"%bs; "unit_rect"%bs; "unit_rec"%bs; "prod_curry"%bs; "prod_uncurry"%bs]
   else if String.eqb f "Logic"%bs then existsb (String.eqb (snd kn)) ["eq_rect"%bs; "eq_rec"%bs; "eq_ind"%bs; "eq_rect_r"%bs; "eq_rec_r"%bs]
-  else if String.eqb f "Nat"%bs then existsb (String.eqb (snd kn)) ["iter"%bs; "even"%bs; "odd"%bs]
+  else if String.eqb f "Nat"%bs then existsb (String.eqb (snd kn)) ["iter"%bs; "even"%bs; "odd"%bs; "double"%bs; "succ"%bs; "b2n"%bs; "square"%bs; "shiftr"%bs; "one"%bs; "zero"%bs; "two"%bs]
+  else if String.eqb f "PeanoNat"%bs then String.eqb (snd kn) "b2n"%bs
   else if String.eqb f "Specif"%bs then existsb (String.eqb (snd kn)) ["proj1_sig"%bs; "sumbool_rect"%bs; "sumbool_rec"%bs]
   else false.
 (** a constant of the program: of the root's module first (the common case, one comparison), else of any file not a library's
@@ -101,6 +102,18 @@ Definition kn_c_min := kn_of <% Nat.min %>.
 Definition kn_c_max := kn_of <% Nat.max %>.
 Definition kn_c_sub := kn_of <% Nat.sub %>.
 Definition kn_c_div2 := kn_of <% Nat.div2 %>.
+(* (step 70) *)
+Definition kn_c_mul := kn_of <% Nat.mul %>.
+Definition kn_c_div := kn_of <% Nat.div %>.
+Definition kn_c_mod := kn_of <% Nat.modulo %>.
+Definition kn_c_even := kn_of <% Nat.even %>.
+Definition kn_c_odd := kn_of <% Nat.odd %>.
+Definition kn_c_pow := kn_of <% Nat.pow %>.
+Definition kn_zton := kn_of <% Z.to_nat %>.
+Definition kn_zofn := kn_of <% Z.of_nat %>.
+Definition kn_s2z := kn_of <% Sint63.to_Z %>.
+Definition kn_u2z := kn_of <% Uint63.to_Z %>.
+Definition kn_ofz := kn_of <% Uint63.of_Z %>.
 Definition ncmp_v (kn : kername) : option cmpop :=
   if Kername.eqb kn kn_nat_eqb then Some Ceq else if Kername.eqb kn kn_nat_ltb then Some Clt
   else if Kername.eqb kn kn_nat_leb then Some Cle else None.
@@ -288,6 +301,24 @@ Fixpoint cnt_lit (t : term) : bool :=
   | _ => false
   end.
 
+(** (step 70) the number a counter written as [O] / [S ..] is; a [Z] written in the program *)
+Fixpoint cnt_val (t : term) : nat :=
+  match t with tApp (tConstruct _ 1 _) [c] => S (cnt_val c) | _ => O end.
+Fixpoint cnt_term (n : nat) : scnt := match n with O => CO | S m => CS (cnt_term m) end.
+Fixpoint pos_lit (t : term) : option positive :=
+  match t with
+  | tConstruct i 2 _ => if String.eqb (snd (inductive_mind i)) "positive"%bs then Some xH else None
+  | tApp (tConstruct i 0 _) [p] => if String.eqb (snd (inductive_mind i)) "positive"%bs then option_map xI (pos_lit p) else None
+  | tApp (tConstruct i 1 _) [p] => if String.eqb (snd (inductive_mind i)) "positive"%bs then option_map xO (pos_lit p) else None
+  | _ => None
+  end.
+Definition z_lit (t : term) : option Z :=
+  match t with
+  | tConstruct i 0 _ => if String.eqb (snd (inductive_mind i)) "Z"%bs then Some 0%Z else None
+  | tApp (tConstruct i 1 _) [p] => if String.eqb (snd (inductive_mind i)) "Z"%bs then option_map Zpos (pos_lit p) else None
+  | tApp (tConstruct i 2 _) [p] => if String.eqb (snd (inductive_mind i)) "Z"%bs then option_map Zneg (pos_lit p) else None
+  | _ => None
+  end.
 (** an argument put in where its parameter stands: a variable, a number, a constant or a constructor written in the program *)
 Definition plain_arg (t : term) : bool :=
   match t with tRel _ | tInt _ | tConst _ _ | tConstruct _ _ _ => true | _ => cnt_lit t end.
@@ -1262,7 +1293,14 @@ Fixpoint reify (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option 
   | tInt n => Some (SInt n)
   | tConst kn _ => match hb kn with Some b => reify fuel ctx b | None => None end
   | tApp (tConst kn _) args =>
-      if eq_mp (fst kn) prim_mp then
+      (* (step 70) a counter as a number; a number written as a [Z] *)
+      if Kername.eqb kn kn_ofz then
+        match args with
+        | [tApp (tConst k _) [c]] => if Kername.eqb k kn_zofn then option_map SOfC (reify_c fuel ctx c) else None
+        | [z] => option_map (fun v => SInt (Uint63.of_Z v)) (z_lit z)
+        | _ => None
+        end
+      else if eq_mp (fst kn) prim_mp then
         match binop_v (snd kn), args with
         | Some o, [a; b] =>
             match reify fuel ctx a, reify fuel ctx b with Some x, Some y => Some (SOp o x y) | _, _ => None end
@@ -1431,7 +1469,36 @@ with reify_c (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sc
       else if Kername.eqb kn kn_c_sub then
         match args with [a; b] => match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (CSub x y) | _, _ => None end | _ => None end
       else if Kername.eqb kn kn_c_div2 then match args with [c] => option_map CDiv2 (reify_c fuel ctx c) | _ => None end
+      (* (step 70) *)
+      else if Kername.eqb kn kn_c_mul then
+        match args with
+        | [a; b] => if cnt_lit a then option_map (CMulK true (cnt_val a)) (reify_c fuel ctx b)
+                    else if cnt_lit b then option_map (CMulK false (cnt_val b)) (reify_c fuel ctx a) else None
+        | _ => None end
+      else if Kername.eqb kn kn_c_div then
+        match args with [a; b] => match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (CDivN x y) | _, _ => None end | _ => None end
+      else if Kername.eqb kn kn_c_mod then
+        match args with [a; b] => match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (CModN x y) | _, _ => None end | _ => None end
+      else if Kername.eqb kn kn_c_pow then
+        match args with
+        | [a; b] => if cnt_lit a && cnt_lit b then
+                      let v := Nat.pow (cnt_val a) (cnt_val b) in
+                      if Nat.leb v 4096 then Some (cnt_term v) else None
+                    else None
+        | _ => None end
+      else if Kername.eqb kn kn_zton then
+        match args with
+        | [tApp (tConst k _) [e]] => if Kername.eqb k kn_s2z then option_map CToNat (reify fuel ctx e)
+                                     else if Kername.eqb k kn_u2z then option_map CToNatU (reify fuel ctx e) else None
+        | _ => None end
       else match hb kn with Some b => reify_c fuel ctx (wout b args) | None => None end
+  | tCase ci p c0 [b0; b1] =>
+      if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_bool) then
+        match reify_b fuel ctx c0, reify_c fuel ctx (bbody b0), reify_c fuel ctx (bbody b1) with
+        | Some b, Some x, Some y => Some (CIf b x y)
+        | _, _, _ => None
+        end
+      else None
   | _ => None
   end
   end
@@ -1690,7 +1757,11 @@ with reify_b (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sb
         end in
       let args := args0 in
       match args with
-      | [a] => if Kername.eqb kn kn_negb then option_map BNot (reify_b fuel ctx a) else helper tt
+      | [a] => if Kername.eqb kn kn_negb then option_map BNot (reify_b fuel ctx a)
+               (* (step 70) *)
+               else if Kername.eqb kn kn_c_even then option_map BEven (reify_c fuel ctx a)
+               else if Kername.eqb kn kn_c_odd then option_map (fun c => BNot (BEven c)) (reify_c fuel ctx a)
+               else helper tt
       | [a; b] =>
           if Kername.eqb kn kn_andb then
             match reify_b fuel ctx a, reify_b fuel ctx b with Some x, Some y => Some (BAnd x y) | _, _ => None end
@@ -3097,6 +3168,7 @@ Fixpoint cl_e (B : Z) (bs : list cbe) (e : sexp) {struct e} : list site :=
   | SLetB b e => cl_b B bs b ++ cl_e B bs e
   | SLetC c e => cl_c B bs c ++ cl_e B (clet B bs c) e
   | SLetR x e | SMatchR x e | SSplitR _ x e => cl_r B bs x ++ cl_e B bs e
+  | SOfC c => cl_c B bs c
   | SHwf _ args => cl_es B bs args
   | SSize h => cl_e B bs h
   end
@@ -3108,7 +3180,7 @@ with cl_es (B : Z) (bs : list cbe) (es : sexps) {struct es} : list site :=
   | SConsR x r => cl_r B bs x ++ cl_es B bs r
   end
 with cl_c (B : Z) (bs : list cbe) (c : scnt) {struct c} : list site :=
-  match c with CVar _ | CO => [] | CS c | KQR.CPred c | CDiv2 c => cl_c B bs c | CAdd a b | CMin a b | CMax a b | CSub a b => cl_c B bs a ++ cl_c B bs b | CNat e => cl_e B bs e end
+  match c with CVar _ | CO => [] | CS c | KQR.CPred c | CDiv2 c | CMulK _ _ c => cl_c B bs c | CAdd a b | CMin a b | CMax a b | CSub a b | CDivN a b | CModN a b => cl_c B bs a ++ cl_c B bs b | CNat e | CToNat e | CToNatU e => cl_e B bs e | CIf b x y => cl_b B bs b ++ cl_c B bs x ++ cl_c B bs y end
 with cl_cs (B : Z) (bs : list cbe) (cs : scnts) {struct cs} : list site :=
   match cs with CNil => [] | CCons c r => cl_c B bs c ++ cl_cs B bs r end
 with cl_b (B : Z) (bs : list cbe) (b : sbool) {struct b} : list site :=
@@ -3127,6 +3199,7 @@ with cl_b (B : Z) (bs : list cbe) (b : sbool) {struct b} : list site :=
   | BxLetC c x => cl_c B bs c ++ cl_b B (clet B bs c) x
   | BxLetR y x | BxMatchR y x | BxSplitR _ y x => cl_r B bs y ++ cl_b B bs x
   | BOfRec y => cl_r B bs y
+  | BEven c => cl_c B bs c
   end
 with cl_r (B : Z) (bs : list cbe) (x : srec) {struct x} : list site :=
   match x with
@@ -6657,6 +6730,8 @@ Definition known_const (fns : list kername) (kn : kername) : bool :=
   || Kername.eqb kn kn_andb || Kername.eqb kn kn_orb || Kername.eqb kn kn_negb
   || match ncmp_v kn with Some _ => true | None => false end || Kername.eqb kn kn_nat_pred || Kername.eqb kn kn_nat_add
   || Kername.eqb kn kn_c_min || Kername.eqb kn kn_c_max || Kername.eqb kn kn_c_sub || Kername.eqb kn kn_c_div2
+  || Kername.eqb kn kn_c_mul || Kername.eqb kn kn_c_div || Kername.eqb kn kn_c_mod || Kername.eqb kn kn_c_even || Kername.eqb kn kn_c_odd
+  || Kername.eqb kn kn_zton || Kername.eqb kn kn_zofn || Kername.eqb kn kn_s2z || Kername.eqb kn kn_u2z || Kername.eqb kn kn_ofz
   || Kername.eqb kn kn_int || Kername.eqb kn kn_mem.     (* as type arguments *)
 
 Definition head_name (t : term) : string :=
@@ -6780,7 +6855,7 @@ Definition why_fun (Σ : global_env) (hb : kername -> option term) (tc : kername
   (fns bad : list kername) (callees : list (kername * sig)) (kn : kername) : list string :=
   if match read_fun Σ hb tc rt callees kn with Some _ => true | None => false end then
     ["read, but not well formed: a recursive call given counters that no weights keep from growing (a counter grown by"
-     ^ " itself or by the first counter: it would have no bound, or whose weighted sums can pass 2^62 at the counters given), a call given fewer"
+     ^ " itself or by the first counter: it would have no bound, or whose weighted sums can pass 2^63 at the counters given), a call given fewer"
      ^ " arguments than its function takes, a counter more than 2^20 successors deep, a let of a counter grown by S over a"
      ^ " variable (above the function's bound), or a call of a number function that writes the memory, or of the function"
      ^ " itself when it writes, inside an expression (not yet: the caller's memory would not be the text's)"]
@@ -6832,6 +6907,10 @@ Definition why_fun (Σ : global_env) (hb : kername -> option term) (tc : kername
                                           | _ => a
                                           end)
                               (fold_left (fun a t => consts 10000 t a) texts []) r4 in
+          let r4 := if existsb (Kername.eqb kn_c_pow) (fold_left (fun a t => consts 10000 t a) texts [])
+                    then add_s "a power of a counter: a number that may need more than a word (Rocq-C-solution.md 0.5, second reason)" r4 else r4 in
+          let r4 := if existsb (Kername.eqb kn_c_mul) (fold_left (fun a t => consts 10000 t a) texts [])
+                    then add_s "a product of two counters, neither written in the program: a number that may need more than a word (Rocq-C-solution.md 0.5, second reason)" r4 else r4 in
           match r4 with [] => ["a construct in a place not read (not classified)"] | _ => r4 end
       | None => ["no body"]
       end
@@ -8371,7 +8450,7 @@ Check (eq_refl : map (fun x => snd x) x36_src = [FPlain
               (SMatchR (RLetC (CAdd (CVar 0) (CVar 0))
                           (RMatchCnt 0 0 (RMk 0 (SCons (SVar 1) (SCons (SVar 0) SNil))) (RMk 0 (SCons (SVar 0) (SCons (SVar 1) SNil)))))
                  (SOp Bsub (SVar 0) (SVar 1)))))))]).
-Check (eq_refl : map (fun x => sb (snd (fst x))) x36_src = [Some own_bound]).
+Check (eq_refl : map (fun x => sb (snd (fst x))) x36_src = [None]).
 Section X36.
 #[local] Instance x36_recs : RecTypes | 0 :=
   mkrecs (fun _ => (i63 * i63)%type) (fun _ => mkrops 2 None (fun l => (nth 0 l 0%uint63, nth 1 l 0%uint63)) (fun P v k => match v with (a, b) => k [a; b] end)) (fun _ => (0%uint63, 0%uint63)).

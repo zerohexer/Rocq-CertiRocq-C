@@ -1,0 +1,24 @@
+(* counters and numbers: a machine number as a loop's count, a counter as an index and as a value, a counter times a number,
+   div, mod, even, a counter chosen by a test.  evens: the cells 3 j + 1 at the even j below 10: 1 + 7 + 13 + 19 + 25 = 65.
+   With a = 0, n = 17: 65 + 100 * 5 + 1000 * 2 + 10000 * 17 + 1000000 * 7 + 10000000 * 3 = 37172565. *)
+From Stdlib Require Import ZArith.
+Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.
+Fixpoint fill (k : nat) (s : mem) : mem :=
+  match k with
+  | O => s
+  | S j => fill j (upd 1 (Uint63.of_Z (Z.of_nat j)) (Uint63.of_nat (Nat.mul 3 j) + 1) s)
+  end.
+Fixpoint evens (k : nat) (acc : int) (s : mem) : int :=
+  match k with
+  | O => acc
+  | S j => evens j (if Nat.even j then acc + rd 1 (Uint63.of_nat j) s else acc) s
+  end.
+Definition solve (a : int) (s : mem) : int :=
+  let n := Uint63.to_nat (a + 17) in
+  let t := fill 10 s in
+  evens (Z.to_nat (Sint63.to_Z (a + 10))) 0 t
+    + ff (Nat.div n 3) a * 100 + ff (Nat.modulo n 5) a * 1000 + ff (if a <? 2 then n else 3%nat) a * 10000
+    + ff (Z.to_nat (Sint63.to_Z (a - 5))) 7 * 1000000 + Uint63.of_Z 3%Z * 10000000.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve 0 (kq_input 0).
