@@ -27,7 +27,7 @@ about completeness while known unread places have no cell.  (`CLAUDE.md` in the 
 **WHAT MAY BE ASSUMED IS STRICT TOO (owner, 2026-11-06).**  Everything that has a definition other than the machine is proved.  A CPU having
 an instruction for something does not make it hardware.  `proved/TRUSTED.txt` lists what is assumed; a chain and a push stop on any difference
 from it (`proved/check_trust.py`), and a change to it goes to the owner (§0.3, §13.9, D29, F66).  **Today the proof ends at Clight**: the
-printer, clang, the loader and the driver are not proved (§12.H), and five operations of step 65 are C bodies nobody proved, being removed (§12.T).
+printer, clang, the loader and the driver are not proved (§12.H).  Step 65's five operations are gone (step 73); `divs_min_neg1` and the copy, the fill and the compare of bytes are next (§12.T).
 
 **What exists and works (all verified on the final tree, 2026-10-29/30):**
 
@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **2756 of 2832, 49 gaps, 26 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **2825 of 2915, 55 gaps, 34 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -907,7 +907,7 @@ finite checklist against what freestanding C offers, not an open question:
 | `int8/16/32_t`, `uint8/16/32_t` arithmetic with C's wrap-around | a library over `int` with masks and sign extension (`sx32` exists) | **library to write** |
 | loads and stores of 8, 16, 32, 64 bits | `Ekld8`/`Ekst8`, `rd16`/`upd16` (two bytes), `Ekld32`/`Ekst32`, `Ekld`/`Ekst`, views | proved |
 | `volatile`, atomics, fences, `memcpy`, `memset`, `memcmp` | `Ehw` machine operations | laws, C bodies assumed; `memcpy`, `memset`, `memcmp` have a definition, so they are on the list as `audit` (§12.T) |
-| `__builtin_popcount`, `clz`, `ctz`, `bswap`, rotate | Rocq functions, proved (`head0`, `tail0`: §12.T) | a single instruction only as a case of the generator's proof, measured; never as a machine operation (F66) |
+| `__builtin_popcount`, `clz`, `ctz`, `bswap`, rotate | Rocq functions, proved (`head0`, `tail0`: step 73) | a single instruction only as a case of the generator's proof, measured; never as a machine operation (F66) |
 | `malloc`, `free` | a library on growing blocks | proved library |
 | `float`, `double` | — | hosted, not started |
 | `setjmp`/`longjmp`, variadic functions, `alloca` | — | not planned (not needed by freestanding programs written this way) |
@@ -1655,6 +1655,8 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F62 | The reifier's step was timed in two trees whose directories differ in size: `coqc` scans every directory `-R` and `-Q` give it, and the working tree holds every cell's generated files and the cells themselves (234 MB against 101 MB), so a file that loads only MetaRocq takes 0.80 s there against 0.73 s.  The 0.04–0.08 s the records of steps 44 continued to 48 put on the libraries' loading (and on the reifier's tests) was this.  Timed in copies of both trees without those directories, step 44 continued's files against step 48's: `HWP_kernel` 2.50 / 2.52 s, `HWP_own` 1.93 / 1.95, `HWP_irqnow` 1.63 / 1.64 — the same.  The timing now makes those copies. |
 | F63 | §0.5's third refusal took its example from a fixed difference: `let t := upd .. s in .. t .. s ..` differs from `s` in one cell, whose old value a variable keeps and puts back, as a C programmer does; `A_par_write_two` (step 47, one cell named in the callee's text) is the same.  Only two versions differing in cells whose number comes from the data need a copy (found by step 49's design, 2026-11-03) | §0.5's third refusal worded by the size of the difference, as values are (F35); the fixed side gets cells (gaps), a pin and a control show the side from the data (step 49) |
 | F64 | `&&` and `||` are functions: under `vm_compute` both sides are evaluated, and a scan written `is_pm ty && pm_bare 100000 0 body` walked the whole body at every let, a fuel literal of 100000 built each time, quadratic on a long chain of lets.  The first version of step 48 continued's `has_pm_let` cost 27% on the kernels' reifier step (`HWP_kernel` 2.36 to 3.00 s), found by the timing before its commit (2026-11-04) | the test written with `if`, the cheap one first: back to 2.38 s.  The same as F58: a test the reifier runs often goes cheapest first, and only `if` makes that an order |
+| F68 | A program's own file (`Require`d by its text) was compiled again only when older than its source, not than the kit, so after `KQRun.v` changed the program failed once on Rocq's inconsistent assumptions and `kitc.py` wrote no C; the comparison showed `none`, at steps 65 and 73 | `build_user_files` counts the kit's `.vo` |
+| F67 | A budget written as `S (S ..)` makes a conversion unroll the fixpoint: both sides reduce on the constructor, and with two branches in each round the comparison is exponential.  `reflexivity` on `(fix go ..) 63 c 0 a b = kq_d21_go 63 c 0 a b` did not end, nor `rewrite` of a term holding it, with the fixpoints' bodies identical | a written budget is `kq_nat 63`, opaque to a conversion (D18); a lemma about it is stated with the budget a variable, and the number put in with `exact` |
 | F66 | **Step 65 was wrong, and is recorded, not reverted silently.**  It put `head0`, `tail0`, the high half of `mulc` and `diveucl_21` behind `hwf_law` as five machine operations whose C bodies were written here (`hw/kq_hw.h`), and landed it without the owner's decision, against §0.3, §0.9 and §13.9.  The reasoning was false: its design says Rocq's axioms "only relate these", "so no definition stands in for them", while relating them is enough to prove a definition equal.  Nothing stopped it: §0.3 worded what is assumed as "what an instruction does", and CPUs have `clz`; §0.9 read as if a machine operation with a law were no new assumption, though the law's model says nothing about the C; §2.1 and §12.O offered these as "single instructions" and §13.4 had a recipe with no proof of the body; the chain printed the difference in the trusted base and carried on, and the record wrote it up; the table counted those cells as proved.  It is F36's drift: an easier route written up as the design.  Also found while answering it: Rocq's kernel gives `head0 0 = tail0 0 = 63` and `diveucl_21 a b c = (0, 0)` when `c <= a` (`vm_compute`), which the axioms do not say.  The first follows from computing at 0, the second cannot be stated for variables | §0.3's test, D29, `proved/TRUSTED.txt`, `proved/check_trust.py` in the chains and in a push hook, §13.4, §13.8; the operations proved and removed by §12.T.  If a construct costs no proof work, find what is carrying it |
 | F65 | §0.5 said three refusals, and a function behind a module's `:` is not one of them and not a gap: the kernel holds no body for it, Rocq cannot run it, and `denote s = f` has nothing to unfold.  The same for an `Axiom` and a `Parameter`.  Refused only with its short name until now, as if it were something not read.  And `kitc.py` looked for `kq_shared` in the body's own text alone, so a list of shared blocks in another file would have meant no check of them, silently (found by step 51's design, 2026-11-04) | a fourth refusal in §0.5 with its own reason, which names `<:`; `kq_shared` looked for wherever the program's text is, with the refusal of a plain access pinned from a module and from a file |
 | F38 | MetaRocq's formal evaluation (`EWcbvEval.eval`, `PCUICWcbvEval`) has rules for primitive values only, none for primitive operations: `PrimInt63.add` has no body, `eval_delta` cannot fire, every program here is stuck in it | the verified compiler is built by reflection over our own syntax instead (D26, §1.12) (read in the image's MetaRocq sources, 2026-10-30) |
@@ -1674,8 +1676,7 @@ through `ccomp`) → **G** → **M** → **J**; **F**, **I** and **N** when thei
 **Q** is dropped (D26).
 
 **T. What is assumed, down to what has no definition except the machine (owner, 2026-11-06; D29, F66).**
-- *`head0`, `tail0`, the high half of `mulc`*: ordinary Rocq functions in `KQRun.v`, proved equal to the primitive from Rocq's axioms alone, read through step 64's route.  `FHead0`, `FTail0`, `FMulHi`, their C bodies and their lines in `proved/TRUSTED.txt` go.
-- *`diveucl_21`*: the same when `a < c`: `FDiv21Q`, `FDiv21R` go.  For `c <= a` Rocq's axioms say nothing: a literal is computed, a test in the text rules the case out, otherwise refused with that reason and a cell with its control.  No fact is added.
+- ~~*`head0`, `tail0`, the high half of `mulc`, `diveucl_21`*~~ — **done, step 73**: ordinary Rocq functions in `KQRun.v`, proved equal to the primitive from Rocq's axioms alone (`proved/KQPrim.v`); for `diveucl_21` where `a < c`, and for `c <= a` Rocq's axioms say nothing: three written numbers are computed, a test in the text rules the case out, otherwise refused with that reason.
 - *`hw_copy`, `hw_fill`, `hw_cmp`, `kq_grow`*: marked `audit`.  Each has a definition (what it does to a memory): proved as Rocq functions where that is possible, and what stays is said with its reason.
 - *`divs_min_neg1`* (`proved/KQTArith.v`, class `rocq`): the same shape as `diveucl_21`, older.  How many programs depend on it with a variable divisor is measured and brought to the owner before anything changes.
 - *The printer, clang, the loader, the driver*: §12.H, unless the owner wants them sooner.
@@ -5125,6 +5126,25 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Speed*: `head0` and `tail0` are six tests where they were one instruction; measured against the instruction.  A faster form may come later as a case of the generator's proof, never as a machine operation.
 - *Cells*: 83, `A_t_*`: `head0`, `tail0` in every place of a number, `mulc` as a pair, `diveucl_21` under each test, recursion included; pins: nothing shown, the test the other way, another pair of numbers, a signed test.
 
+**Step 73 done (2026-11-06): `head0`, `tail0`, the high half of `mulc`, `diveucl_21` as ordinary functions, proved.**  Built as designed:
+- *`proved/KQPrim.v`*: `kq_mulc_def`, `kq_h0_eq`, `kq_t0_eq` at every argument, `kq_d21_eq`, `kq_d21_le` where `a < c`; `make.sh` with `ASSUME=1` prints what each rests on: Rocq's own integer axioms, nothing else.  A written budget of 63 made a conversion unroll 63 rounds with two branches each, and `reflexivity` never ended; `kq_nat 63` is opaque to a conversion, as every written budget is (F67).
+- *The kit*: `kq_mh`, `kq_h0`, `kq_t0`, `kq_d21`, `kq_d21g`.  `kq_d21g` is a fixpoint, read as a function of the program's by its name.  What a program does not name is not in what Rocq quotes of it, so the reader carries the kit's bodies (`pm_kit`, `pm_add`).
+- *The reader*: `test_shows`, `pm_norm`, `d21_at`; `pm_sub` carries the tests around a place and the `let`s it stands under.  A function given as an argument stays as it is: no equation reaches under its binder, and the first version read those cells and then failed the proof.
+- *`KQRWf.v`*: `kq_guard`; a pair of `diveucl_21` is not taken apart before the test around it.
+- *`kitc.py`*: a program's own files are compiled again when the kit is newer than they are.  `modules` gave no C after `KQRun.v` changed, at steps 65 and 73, both found by the comparison of the C: its file's `.vo` was older than the kit's (F68).
+- *Removed*: `FHead0`, `FTail0`, `FMulHi`, `FDiv21Q`, `FDiv21R`, their five C bodies, `kq_mulhi`, `kq_div21q`, `kq_div21r`, `HW_PRIM`.  `proved/TRUSTED.txt` loses those ten lines and the short names `head0`, `tail0`, `mulc`, `diveucl_21`, and gains `Uint63Axioms.head0_spec`, `tail0_spec`, `mulc_spec`, `diveucl_21_spec`, Rocq's own, which `KQPrim.v` rests on: a change to the list, reported to the owner, what they asked for.
+- *`mach_fix`*: its text tests `1 <? b` around its `diveucl_21`: proved, built, 5302306, as before.
+- *Cells*: 83 more: 70 proved; `A_t_d_none`, `_lit_ge`, `_other`, `_signed`, `_else`, `_leb_then`, `_outside` by design, the reason and the control `A_t_d_ltb` in their own text; `A_t_d_helper_out`, `_trans`, `A_t_h0_given_lam`, `_given_bare`, `A_t_t0_given_lam`, `_given_bare` gaps.  `A_n_diveucl_21`, read since step 65, is by design now: it was read on an assumption.
+- *What it costs*: a loop of 10^8 rounds on one pinned core, the fastest of three runs, the same answers (the control, a shift: 17.5 / 17.4 ms; step 72's files / these): `head0` 71.5 / 256.8 ms, `tail0` 36.7 / 259.5 ms, the high half of `mulc` 104.2 / 208.4 ms; `diveucl_21` over 10^6 rounds 89.9 / 87.6 ms.  So `head0` and `tail0` are six tests, about 2.4 ns each where the instruction was under 1 ns.  That is the price of no unproved C here; a faster form may come as a case of the generator's proof (§12.O), never as an operation of the machine.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62; step 72's files / these): `HWP_kernel` 2.63 / 2.64 s, `HWP_own` 2.02 / 2.01, `HWP_irqnow` 1.75 / 1.75 — the same.
+- The C: the 80 programs before the same but for the five declarations they never used, compared with those stripped; `mach_fix`
+  tests first, its answer the same.  The construct table (on `9f620a8`): **2825 of 2915 through the verified compiler**, 34 by
+  design, 55 gaps, 1 not Rocq (was 2756 of 2832: 70 of the 83 new cells read, 7 by design, 6 gaps; `A_n_diveucl_21` by design).
+  The gate on `9f620a8`, the walk switched off: `make.sh` `core-ok`; examples 45 / 45; corpus 36 / 36; the five kernels (13 / 13 /
+  13 / 14 / 13 s); **89 programs through the verified compiler, 0 refused**; `check_trust.py`: the tree and the gate's list as
+  `proved/TRUSTED.txt` now says, which has lost ten lines of the machine and four short names and gained four of Rocq's own
+  axioms.  Next: the signed quotient: `divs_min_neg1` taken away.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5305,11 +5325,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `dcf40e2` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `9f620a8` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 73's design -- head0, tail0, the high half of mulc, diveucl_21 as ordinary functions, proved |
+| (this commit) | §12.V: step 73 (`head0`, `tail0`, `mulc`, `diveucl_21` proved: the construct table 2825 of 2915, 34 by design, 55 gaps), the C, the gate; F67, F68 |
+| `9f620a8` | `KQRun.v` + `hw/kq_hw.h` + `proved/KQPrim.v` + `KQL.v` + `KQLGen.v` + `KQMSem.v` + `KQRReify.v` + `KQRWf.v` + `kitc.py` + `TRUSTED.txt` + `matrix` + `examples/mach_fix` step 73: `head0`, `tail0`, the high half of `mulc`, `diveucl_21` as ordinary functions, proved from Rocq's own axioms; five operations and their C bodies removed; 83 cells |
+| `8f3a57d` | §12.V: step 73's design -- head0, tail0, the high half of mulc, diveucl_21 as ordinary functions, proved |
 | `858221d` | §12.V: step 72 (a procedure, a test in a monad: the construct table 2756 of 2832, 26 by design, 49 gaps), the C, the gate |
 | `dcf40e2` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix` + `examples/proc_fix` step 72: a procedure and a test in a monad; 24 cells; `KQR.v` unchanged |
 | `2d66f8a` | §12.V: step 72's design -- a procedure, a test in a monad |
