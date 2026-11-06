@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **2736 of 2808, 46 gaps, 25 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **2756 of 2832, 49 gaps, 26 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -5100,6 +5100,21 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Cells*: 24, `A_m_*`.
 - *The acceptance*: `proved/examples/proc_fix`: a procedure that fills, a search giving back whether it found, a procedure with a test; the answer worked out apart: 150.
 
+**Step 72 done (2026-11-06): a procedure and a test in the monad.**  Built as designed, with `KQR.v` unchanged:
+- *The reader*: a row's mark among its slots (`rp_um`, `rp_bm`, `rp_real`); `um_red`, `um_tr`, `um_snd`, `bm_tr`, `bm_snd_fst`, `um_rows`; `um_plain`, `um_inl`: what has no test written out in place; `bm_part`; in `y_red`, a match on known parts and the parts of a let; the floating goes on after a reduction.
+- *`KQRWf.v`*: `own_step`, `own_step0`: `fst`, `snd` reduced, a pair taken apart before a test.
+- *`kitc.py`*: a row's statement tried three ways, as an equation is since step 71, what is rewritten left folded (`keepf`); the pattern on the reifier's list allows a line broken after a parenthesis.
+- *The acceptance*: `proved/examples/proc_fix`: proved, built, 150.
+- *Cells*: 24 more: 19 proved; `A_m_b_two_calls` by design; `A_m_e_enum_ret`, `_opt_ret`, `_pair_ret`, `_name_p1` gaps; `A_q_mon_mem`, a gap before, read.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, in copies of the trees without their generated files, F62; step 71's files / these): `HWP_kernel` 2.72 / 2.73 s, `HWP_own` 2.08 / 2.10, `HWP_irqnow` 1.81 / 1.83 — the same..
+- The C: 79 of the 80 programs before byte-identical; `mach_fix` differs in its driver alone, which no longer sets up the slot
+  block: the form read holds no pair, and its function's C is the same; the new example through the verified compiler.  The
+  construct table (on `dcf40e2`): **2756 of 2832 through the verified compiler**, 26 by design, 49 gaps, 1 not Rocq (was 2736 of
+  2808: 19 of the 24 new cells read, 1 by design, 4 gaps; `A_q_mon_mem` read).  The gate on `dcf40e2`, the walk switched off:
+  `make.sh` `core-ok`; examples 45 / 45; corpus 36 / 36; the five kernels (13 / 13 / 13 / 14 / 14 s); **89 programs through the
+  verified compiler, 0 refused**; `check_trust.py`: trust unchanged.  Next: what is assumed, §12.T: the five operations of step 65
+  proved and removed.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5280,11 +5295,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `95e32a8` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `dcf40e2` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 72's design -- a procedure, a test in a monad |
+| (this commit) | §12.V: step 72 (a procedure, a test in a monad: the construct table 2756 of 2832, 26 by design, 49 gaps), the C, the gate |
+| `dcf40e2` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + `matrix` + `examples/proc_fix` step 72: a procedure and a test in a monad; 24 cells; `KQR.v` unchanged |
+| `2d66f8a` | §12.V: step 72's design -- a procedure, a test in a monad |
 | `3f2908e` | §12.V: step 71 (a third probe of natural programs: the construct table 2736 of 2808, 25 by design, 46 gaps), the C, the gate |
 | `95e32a8` | `proved/KQRReify.v` + `kitc.py` + `matrix` + `examples/monad_fix` step 71: a third probe: a state monad, fixpoints over a literal, primitive projections; 111 cells; `KQR.v` unchanged |
 | `bdc2431` | §12.V: step 71's design -- what a third probe of natural programs found |
