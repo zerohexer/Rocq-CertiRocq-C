@@ -208,10 +208,43 @@ Axiom hw_aload    : int -> int -> int -> int -> mem -> mem.     (* hw_aload w a 
 Axiom hw_astore   : int -> int -> int -> mem -> mem.            (* hw_astore w a v: an atomic store (release), w = 1, 2, 4 *)
 Axiom hw_astore64 : int -> int -> int -> mem -> mem.            (* hw_astore64 a lo hi *)
 Axiom hw_fence    : int -> mem -> mem.                          (* 0: a full fence; 1: acquire; 2: release *)
-(* BYTES in bulk (C's memmove, memset, memcmp) *)
-Axiom hw_copy : int -> int -> int -> mem -> mem.                (* hw_copy d src n: n bytes from src to d (they may overlap) *)
-Axiom hw_fill : int -> int -> int -> mem -> mem.                (* hw_fill d b n: n bytes b at d *)
-Axiom hw_cmp  : int -> int -> int -> int -> int -> mem -> mem.  (* hw_cmp x y n h i: -1, 0 or 1 into cell i, as memcmp *)
+(* BYTES in bulk (C's memmove, memset, memcmp): loops over the byte loads and stores, nothing assumed of their own
+   (Rocq-C-solution.md §12.T).  A byte read goes through a cell of a wide block, as every load does. *)
+Fixpoint hw_copy_up (k : nat) (d x h i : int) (s : mem) {struct k} : mem :=
+  match k with
+  | O => s
+  | S k' => let s1 := hw_load 1 x h i s in hw_copy_up k' (PrimInt63.add d 1) (PrimInt63.add x 1) h i (hw_store 1 d (rd h i s1) s1)
+  end.
+Fixpoint hw_copy_down (k : nat) (d x h i : int) (s : mem) {struct k} : mem :=
+  match k with
+  | O => s
+  | S k' => let s1 := hw_load 1 x h i s in hw_copy_down k' (PrimInt63.sub d 1) (PrimInt63.sub x 1) h i (hw_store 1 d (rd h i s1) s1)
+  end.
+(* hw_copy d src n h i: n bytes from src to d (they may overlap), each through cell i of block h; from the top when d is inside the source *)
+Definition hw_copy (d x n h i : int) (s : mem) : mem :=
+  if andb (PrimInt63.ltb (PrimInt63.sub d x) n) (negb (PrimInt63.eqb d x))
+  then hw_copy_down (kq_nat n) (PrimInt63.sub (PrimInt63.add d n) 1) (PrimInt63.sub (PrimInt63.add x n) 1) h i s
+  else hw_copy_up (kq_nat n) d x h i s.
+Fixpoint hw_fill_go (k : nat) (d b : int) (s : mem) {struct k} : mem :=
+  match k with
+  | O => s
+  | S k' => hw_fill_go k' (PrimInt63.add d 1) b (hw_store 1 d b s)
+  end.
+(* hw_fill d b n: n bytes b at d *)
+Definition hw_fill (d b n : int) (s : mem) : mem := hw_fill_go (kq_nat n) d b s.
+Fixpoint hw_cmp_go (k : nat) (x y h i : int) (s : mem) {struct k} : mem :=
+  match k with
+  | O => upd h i 0 s
+  | S k' =>
+      let s1 := hw_load 1 y h (PrimInt63.add i 1) (hw_load 1 x h i s) in
+      let p := rd h i s1 in
+      let q := rd h (PrimInt63.add i 1) s1 in
+      if PrimInt63.ltb p q then upd h i 9223372036854775807%uint63 s1
+      else if PrimInt63.ltb q p then upd h i 1 s1
+      else hw_cmp_go k' (PrimInt63.add x 1) (PrimInt63.add y 1) h i s1
+  end.
+(* hw_cmp x y n h i: -1, 0 or 1 into cell i, as memcmp; the bytes go through cells i and i + 1 *)
+Definition hw_cmp (x y n h i : int) (s : mem) : mem := hw_cmp_go (kq_nat n) x y h i s.
 (* CODE at an address (a function pointer): a routine of the firmware, of a loader, of another program *)
 Axiom hw_call : int -> int -> int -> int -> mem -> mem.         (* hw_call a x h i: the function at address a called with
                                                                    x; its result (the low 63 bits) into cell i *)

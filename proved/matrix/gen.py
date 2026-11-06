@@ -2846,6 +2846,49 @@ addA('q_nat_pair_ret', "", 'let (q, r) := sp n in if Nat.eqb r 0 then a else Uin
 addA('q_divmod', "", 'Uint63.of_nat (fst (Nat.divmod n 3 0 3))',
      '')
 
+# the bytes in bulk: functions of the kit over the byte loads and stores (step 75)
+addA('h_fill', "", 'rd 0 a (hw_fill 268435456 7 b s)',
+     '')
+addA('h_fill_var', "", 'rd 0 a (hw_fill a b 16 s)',
+     '')
+addA('h_copy', "", 'rd 0 a (hw_copy a b 8 0 1 s)',
+     '')
+addA('h_copy_var', "", 'rd 0 a (hw_copy a b (rd 0 0 s) 0 1 s)',
+     '')
+addA('h_copy_cell', "", 'rd a b (hw_copy a b 8 a b s)',
+     '')
+addA('h_cmp', "", 'rd 0 1 (hw_cmp a b 8 0 1 s)',
+     '')
+addA('h_cmp_var', "", 'rd 0 1 (hw_cmp a b (a + b) 0 1 s)',
+     '')
+addA('h_let', "", 'let t := hw_copy a b 8 0 1 s in rd 0 1 t',
+     '')
+addA('h_chain', "", 'rd 0 1 (hw_copy a b 8 0 1 (hw_fill a 7 16 s))',
+     '')
+addA('h_two', "", 'let t := hw_fill a 7 16 s in let u := hw_copy a b 8 0 1 t in hw_load_kq a u',
+     'Definition hw_load_kq (x : int) (t : mem) : int := rd 0 1 (hw_load 1 x 0 1 t).\n')
+addA('h_test', "", 'let t := hw_cmp a b 8 0 1 s in if rd 0 1 t =? 0 then rd 0 2 t else b',
+     '')
+addA('h_choice', "", 'let t := if a <? b then hw_fill a 7 16 s else hw_fill b 7 16 s in rd 0 0 t',
+     '')
+addA('h_choice_two', "", 'let t := if a <? b then hw_copy a b 8 0 1 s else hw_fill b 7 16 s in rd 0 0 t',
+     '')
+addA('h_helper', "", 'rd 0 0 (clr a (clr b s))',
+     'Definition clr (x : int) (t : mem) : mem := hw_fill x 0 16 t.\n')
+addA('h_helper_cmp', "", 'if same a b s then a else b',
+     'Definition same (x y : int) (t : mem) : bool := rd 0 1 (hw_cmp x y 8 0 1 t) =? 0.\n')
+addA('h_loop', "", 'rd 0 a (lp n a s)',
+     'Fixpoint lp (k : nat) (x : int) (t : mem) : mem := match k with O => t | S m => lp m (x + 16) (hw_fill x 0 16 t) end.\n')
+addA('h_loop_copy', "", 'rd 0 a (lp n a s)',
+     'Fixpoint lp (k : nat) (x : int) (t : mem) : mem := match k with O => t | S m => lp m (x + 16) (hw_copy x (x + 8) 8 0 1 t) end.\n')
+addA('h_loop_cmp', "", 'lp n a s',
+     'Fixpoint lp (k : nat) (x : int) (t : mem) : int := match k with O => 0 | S m => let u := hw_cmp x (x + 8) 8 0 1 t in rd 0 1 u + lp m (x + 16) u end.\n')
+addA('h_match', "", 'rd 0 0 (match n with O => s | S _ => hw_fill a 0 8 s end)',
+     '')
+addA('h_monad', "", 'fst (wrm a s)',
+     'Definition wrm (x : int) (t : mem) : int * mem := let u := hw_fill x 0 8 t in (rd 0 0 u, u).\n')
+addA('h_unit', "", 'rd 0 0 (snd (wru a s))',
+     'Definition wru (x : int) (t : mem) : unit * mem := (tt, hw_fill x 0 8 t).\n')
 # the signed quotient: what the text shows of the one case Rocq's axioms leave open (step 74)
 addA('s_slash_var', "", 'a / b',
      '')

@@ -1,0 +1,22 @@
+(* the bytes in bulk: ordinary functions over the byte loads and stores, on a page of memory that stands for a device.  The answer is worked out apart (see .expect). *)
+Fixpoint sum8 (k : nat) (x acc : int) (t : mem) : int :=
+  match k with
+  | O => acc
+  | S m => let t1 := hw_load 1 x 0 1 t in sum8 m (x + 1) (acc * 3 + rd 0 1 t1) t1
+  end.
+Definition solve (a b : int) (s : mem) : int :=
+  let p := 268435456 in
+  let s1 := hw_fill p a 16 s in
+  let s2 := hw_store 1 (p + 3) b s1 in
+  let s3 := hw_copy (p + 2) p 8 0 1 s2 in
+  let s4 := hw_copy p (p + 1) 4 0 1 s3 in
+  let s5 := hw_cmp p (p + 1) 8 0 2 s4 in
+  let r1 := rd 0 2 s5 in
+  let s6 := hw_cmp (p + 1) p 8 0 2 s5 in
+  let r2 := rd 0 2 s6 in
+  let s7 := hw_cmp p p 8 0 2 s6 in
+  let r3 := rd 0 2 s7 in
+  sum8 (kq_nat 16) p 0 s7 * 1000 + (r1 + 1) * 100 + (r2 + 1) * 10 + (r3 + 1).
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve 12 7 (kq_input 0).

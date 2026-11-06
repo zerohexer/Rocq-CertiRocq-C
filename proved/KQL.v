@@ -28,7 +28,7 @@ Definition bud (n : i63) : i63 := if PrimInt63.lesb n 0%uint63 then 0%uint63 els
 
 (** The machine's operations (KQRun.v, hw/kq_hw.h): a device access, an atomic, a fence, bytes in bulk, code at an address.
     Each takes the memory and gives it back; what one reads goes into a cell of a wide block. *)
-Inductive hwop := HLoad | HStore | HStore64 | HAtomic | HAtomic64 | HCas | HCas64 | HALoad | HAStore | HAStore64 | HFence | HCopy | HFill | HCmp | HCall | HRun | HCodeSync | HIrqTake | HUser | HGrow.
+Inductive hwop := HLoad | HStore | HStore64 | HAtomic | HAtomic64 | HCas | HCas64 | HALoad | HAStore | HAStore64 | HFence | HCall | HRun | HCodeSync | HIrqTake | HUser | HGrow.
 (** the machine's numbers that need no memory: the address of a narrow block, what the runtime knows *)
 Inductive hwfop := FAddr | FIrqInfo | FIrqEntry | FCpuCode | FSym | FUser.
 Definition hw_arity (o : hwop) : nat :=
@@ -44,9 +44,6 @@ Definition hw_arity (o : hwop) : nat :=
   | HAStore => 3
   | HAStore64 => 3
   | HFence => 1
-  | HCopy => 3
-  | HFill => 3
-  | HCmp => 5
   | HCall => 4
   | HRun => 10
   | HCodeSync => 2

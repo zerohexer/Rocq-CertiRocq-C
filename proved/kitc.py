@@ -306,9 +306,6 @@ unsigned long long f91007(unsigned long long a0, unsigned long long a1, unsigned
 unsigned long long f91008(unsigned long long a0, unsigned long long a1, unsigned long long a2) { kq_hw_astore(a0, a1, a2, KQ_V(0)); return 1ULL; }
 unsigned long long f91009(unsigned long long a0, unsigned long long a1, unsigned long long a2) { kq_hw_astore64(a0, a1, a2, KQ_V(0)); return 1ULL; }
 unsigned long long f91010(unsigned long long a0) { kq_hw_fence(a0, KQ_V(0)); return 1ULL; }
-unsigned long long f91011(unsigned long long a0, unsigned long long a1, unsigned long long a2) { kq_hw_copy(a0, a1, a2, KQ_V(0)); return 1ULL; }
-unsigned long long f91012(unsigned long long a0, unsigned long long a1, unsigned long long a2) { kq_hw_fill(a0, a1, a2, KQ_V(0)); return 1ULL; }
-unsigned long long f91013(unsigned long long a0, unsigned long long a1, unsigned long long a2, unsigned long long a3, unsigned long long a4) { kq_hw_cmp(a0, a1, a2, a3, a4, KQ_V(0)); return 1ULL; }
 unsigned long long f91014(unsigned long long a0, unsigned long long a1, unsigned long long a2, unsigned long long a3) { kq_hw_call(a0, a1, a2, a3, KQ_V(0)); return 1ULL; }
 unsigned long long f91015(unsigned long long a0, unsigned long long a1, unsigned long long a2, unsigned long long a3, unsigned long long a4, unsigned long long a5, unsigned long long a6, unsigned long long a7, unsigned long long a8, unsigned long long a9) { kq_hw_run(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, KQ_V(0)); return 1ULL; }
 unsigned long long f91016(unsigned long long a0, unsigned long long a1) { kq_hw_code_sync(a0, a1, KQ_V(0)); return 1ULL; }

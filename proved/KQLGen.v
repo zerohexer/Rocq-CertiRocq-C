@@ -103,9 +103,6 @@ Definition hwid (o : hwop) : ident :=
   | HAStore => 91008
   | HAStore64 => 91009
   | HFence => 91010
-  | HCopy => 91011
-  | HFill => 91012
-  | HCmp => 91013
   | HCall => 91014
   | HRun => 91015
   | HCodeSync => 91016
@@ -127,9 +124,6 @@ Definition hwname (o : hwop) : String.string :=
   | HAStore => "kq_hw_astore"
   | HAStore64 => "kq_hw_astore64"
   | HFence => "kq_hw_fence"
-  | HCopy => "kq_hw_copy"
-  | HFill => "kq_hw_fill"
-  | HCmp => "kq_hw_cmp"
   | HCall => "kq_hw_call"
   | HRun => "kq_hw_run"
   | HCodeSync => "kq_hw_code_sync"
@@ -138,7 +132,7 @@ Definition hwname (o : hwop) : String.string :=
   | HGrow => "kq_hw_grow"
   end%string.
 
-Definition hw_all : list hwop := [HLoad; HStore; HStore64; HAtomic; HAtomic64; HCas; HCas64; HALoad; HAStore; HAStore64; HFence; HCopy; HFill; HCmp; HCall; HRun; HCodeSync; HIrqTake; HUser; HGrow].
+Definition hw_all : list hwop := [HLoad; HStore; HStore64; HAtomic; HAtomic64; HCas; HCas64; HALoad; HAStore; HAStore64; HFence; HCall; HRun; HCodeSync; HIrqTake; HUser; HGrow].
 
 (** the operations are external functions: C bodies, written once (hw/kq_hw.h), that the theorem assumes obey KQSpec *)
 Definition hw_ef (o : hwop) : external_function :=

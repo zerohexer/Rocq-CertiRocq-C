@@ -40,7 +40,7 @@ Definition model : ops :=
         (fun w a o n h i s => mupd h i 0 (mupd h (i + 1) 0 s))
         (fun a ol oh nl nh h i s => mupd h i 0 (mupd h (i + 1) 0 (mupd h (i + 2) 0 s)))
         maload (fun w a v s => s) (fun a lo hi s => s) (fun k s => tr (EvFence k) s)
-        (fun d x n s => s) (fun d b n s => s) (fun x y n h i s => mupd h i 0 s) (fun a x h i s => s)
+        (fun a x h i s => s)
         (fun h => 0) T.
 
 (* ---- the memory of the model *)
@@ -136,7 +136,7 @@ Qed.
 Theorem model_laws : laws model.
 Proof.
   constructor; cbn [Rd Upd Len Size Grow Rd32 Upd32 Len32 Load Store Store64 Atomic Atomic64 Cas Cas64 ALoad AStore AStore64
-                    Fence Copy Fill Cmp Call Addr Trace model].
+                    Fence Call Addr Trace model].
   - intro h. unfold mlen. destruct ((0 <=? h) && (h <? 4)); reflexivity.
   - intro h. unfold mlen32. destruct ((0 <=? h) && (h <? 8)); reflexivity.
   - intros h i s N0 L. unfold mrd, okc. unfold nonneg2 in N0. rewrite N0, (lt_of_le_false _ _ L). reflexivity.
@@ -208,17 +208,10 @@ Proof.
   - intros a ol oh nl nh h i h' i' s O1 O2 O3.
     rewrite (mrd_upd_other _ _ _ _ _ _ O1), (mrd_upd_other _ _ _ _ _ _ O2). apply mrd_upd_other, O3.
   - intros. rewrite !mrd32_upd. reflexivity.
-  (* fences, bytes in bulk *)
+  (* fences *)
   - reflexivity.
   - reflexivity.
   - reflexivity.
-  - reflexivity.
-  - reflexivity.
-  - reflexivity.
-  - reflexivity.
-  - intros. cbn zeta. rewrite mrd_upd0_same. reflexivity.
-  - intros x y n h i h' i' s O. apply mrd_upd_other, O.
-  - intros. apply mrd32_upd.
   (* sizes *)
   - intros h s. apply msize_ge.
   - intros h s H. apply le_Z in H. unfold msize, mlen.
@@ -254,9 +247,6 @@ Proof.
   - intros. rewrite !Z_upd. reflexivity.
   - intros. rewrite !Z_upd. reflexivity.
   - reflexivity.
-  - reflexivity.
-  - reflexivity.
-  - intros. rewrite Z_upd. reflexivity.
 Qed.
 
 Theorem laws_satisfiable : exists m : ops, laws m.

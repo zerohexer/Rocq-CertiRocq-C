@@ -1,7 +1,7 @@
 # What is assumed.  proved/check_trust.py compares this list with the tree and with the gate's Print Assumptions; a difference stops a chain and a push.
 # Adding a line is the owner's decision (Rocq-C-solution.md §13.9).  Removing one is what the work is for.
 # hw: only the machine defines it.  mem: the abstract memory, its laws proved for a model.  env: what the program is given by the loader and the driver.
-# rocq: a fact Rocq's own axioms leave open.  audit: not plainly hardware, to be checked.  remove: logic, to be proved and taken off this list.
+# audit: not plainly hardware, to be checked.  remove: logic, to be proved and taken off this list.  None of these two classes is left (step 75).
 
 axiom KQBound.v:kq_len  # mem
 axiom KQBound.v:kq_len32  # mem
@@ -14,17 +14,14 @@ axiom KQRun.v:hw_atomic64  # hw
 axiom KQRun.v:hw_call  # hw
 axiom KQRun.v:hw_cas  # hw
 axiom KQRun.v:hw_cas64  # hw
-axiom KQRun.v:hw_cmp  # audit
 axiom KQRun.v:hw_code_sync  # hw
-axiom KQRun.v:hw_copy  # audit
 axiom KQRun.v:hw_fence  # hw
-axiom KQRun.v:hw_fill  # audit
 axiom KQRun.v:hw_load  # hw
 axiom KQRun.v:hw_run  # hw
 axiom KQRun.v:hw_store  # hw
 axiom KQRun.v:hw_store64  # hw
 axiom KQRun.v:kq_arg  # env
-axiom KQRun.v:kq_grow  # audit
+axiom KQRun.v:kq_grow  # env: the allocator under the memory's tables, with the loader and the driver (Rocq-C-solution.md §12.H)
 axiom KQRun.v:kq_in  # env
 axiom KQRun.v:kq_input  # env
 axiom KQRun.v:kq_out  # env
@@ -56,15 +53,12 @@ hwop HALoad  # hw
 hwop HAStore  # hw
 hwop HAStore64  # hw
 hwop HFence  # hw
-hwop HCopy  # audit
-hwop HFill  # audit
-hwop HCmp  # audit
 hwop HCall  # hw
 hwop HRun  # hw
 hwop HCodeSync  # hw
 hwop HIrqTake  # hw
 hwop HUser  # hw
-hwop HGrow  # audit
+hwop HGrow  # env: as kq_grow
 
 hwfop FAddr  # hw
 hwfop FIrqInfo  # hw
@@ -82,12 +76,9 @@ cbody kq_hw_atomic64  # hw
 cbody kq_hw_call  # hw
 cbody kq_hw_cas  # hw
 cbody kq_hw_cas64  # hw
-cbody kq_hw_cmp  # audit
 cbody kq_hw_code_sync  # hw
-cbody kq_hw_copy  # audit
 cbody kq_hw_cpu_code  # hw
 cbody kq_hw_fence  # hw
-cbody kq_hw_fill  # audit
 cbody kq_hw_irq_entry  # hw
 cbody kq_hw_irq_info  # hw
 cbody kq_hw_irq_take  # hw
@@ -118,11 +109,8 @@ assumption KQRun.hw_atomic64
 assumption KQRun.hw_call
 assumption KQRun.hw_cas
 assumption KQRun.hw_cas64
-assumption KQRun.hw_cmp
 assumption KQRun.hw_code_sync
-assumption KQRun.hw_copy
 assumption KQRun.hw_fence
-assumption KQRun.hw_fill
 assumption KQRun.hw_load
 assumption KQRun.hw_run
 assumption KQRun.hw_store

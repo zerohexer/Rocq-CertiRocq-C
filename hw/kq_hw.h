@@ -110,20 +110,6 @@ KQ_HW value kq_hw_fence(value k, value s) {
                      default: __atomic_thread_fence(__ATOMIC_SEQ_CST); }
   return s;
 }
-// ---- bytes in bulk
-KQ_HW value kq_hw_copy(value d, value src, value n, value s) {
-  long k = KQ_N(n); if (k <= 0 || kq_hw_wide(KQ_A(d), (uintptr_t) k)) return s;
-  KQ_BAR(); __builtin_memmove((void *) KQ_A(d), (const void *) KQ_A(src), (size_t) k); KQ_BAR(); return s;
-}
-KQ_HW value kq_hw_fill(value d, value b, value n, value s) {
-  long k = KQ_N(n); if (k <= 0 || kq_hw_wide(KQ_A(d), (uintptr_t) k)) return s;
-  KQ_BAR(); __builtin_memset((void *) KQ_A(d), (int) KQ_N(b), (size_t) k); KQ_BAR(); return s;
-}
-KQ_HW value kq_hw_cmp(value x, value y, value n, value h, value i, value s) {
-  long k = KQ_N(n); int r = 0; KQ_BAR();
-  if (k > 0) r = __builtin_memcmp((const void *) KQ_A(x), (const void *) KQ_A(y), (size_t) k);
-  return kq_hw_put(h, i, r < 0 ? -1 : r > 0, s);
-}
 // ---- code at an address
 KQ_HW value kq_hw_call(value a, value x, value h, value i, value s) {
   KQ_BAR(); uint64_t r = ((uint64_t (*)(uint64_t)) KQ_A(a))((uint64_t) KQ_N(x)); KQ_BAR();

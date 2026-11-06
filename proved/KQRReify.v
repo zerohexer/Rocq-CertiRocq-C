@@ -146,8 +146,7 @@ Definition hw_table : list (kername * hwop * nat) :=
     (kn_of <% KQ.KQRun.hw_atomic64 %>, HAtomic64, 6); (kn_of <% KQ.KQRun.hw_cas %>, HCas, 6);
     (kn_of <% KQ.KQRun.hw_cas64 %>, HCas64, 7); (kn_of <% KQ.KQRun.hw_aload %>, HALoad, 4);
     (kn_of <% KQ.KQRun.hw_astore %>, HAStore, 3); (kn_of <% KQ.KQRun.hw_astore64 %>, HAStore64, 3);
-    (kn_of <% KQ.KQRun.hw_fence %>, HFence, 1); (kn_of <% KQ.KQRun.hw_copy %>, HCopy, 3);
-    (kn_of <% KQ.KQRun.hw_fill %>, HFill, 3); (kn_of <% KQ.KQRun.hw_cmp %>, HCmp, 5);
+    (kn_of <% KQ.KQRun.hw_fence %>, HFence, 1);
     (kn_of <% KQ.KQRun.hw_call %>, HCall, 4); (kn_of <% KQ.KQRun.hw_run %>, HRun, 10);
     (kn_of <% KQ.KQRun.hw_code_sync %>, HCodeSync, 2); (kn_of <% KQ.hw.Runtime.hw_irq_take %>, HIrqTake, 2);
     (kn_of <% KQ.hw.User.hw_user %>, HUser, 5); (kn_of <% KQ.KQRun.kq_grow %>, HGrow, 2) ].
@@ -3536,9 +3535,10 @@ Fixpoint is_w (t : term) : bool :=
   | _ => false
   end.
 (** (step 73) the kit's division of two digits by one: a recursive function like the program's *)
-Definition kn_kq_d21g : kername := kn_of <% KQ.KQRun.kq_d21g %>.
+Definition kn_kit_fns : list kername :=
+  [kn_of <% KQ.KQRun.kq_d21g %>; kn_of <% KQ.KQRun.hw_copy_up %>; kn_of <% KQ.KQRun.hw_copy_down %>; kn_of <% KQ.KQRun.hw_fill_go %>; kn_of <% KQ.KQRun.hw_cmp_go %>].
 Definition is_fn (Σ : global_env) (mp : modpath) (root kn : kername) : bool :=
-  Kername.eqb kn root || eq_mp (fst kn) copy_mp || Kername.eqb kn kn_kq_d21g
+  Kername.eqb kn root || eq_mp (fst kn) copy_mp || existsb (Kername.eqb kn) kn_kit_fns
   || (match body_of Σ kn with Some b => is_w b | None => false end)
   || (in_prog mp (fst kn) && (match lookup_env Σ (copy_mp, snd kn ^ "__wy"%bs) with Some _ => true | None => false end
                             || match body_of Σ kn with Some (tFix _ _) => true | _ => false end || big_def Σ kn

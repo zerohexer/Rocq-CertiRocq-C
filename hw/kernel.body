@@ -151,7 +151,7 @@ Definition t_atom (s : mem) : mem :=
 (* ---- BYTES IN BULK: 16 bytes of 171 at byte 64, copied to byte 96, read back as two 64-bit words *)
 Definition t_bulk (s : mem) : mem :=
   let a := hw_addr RAM in
-  let s1 := hw_load 8 (a + 104) W 39 (hw_load 8 (a + 96) W 37 (hw_copy (a + 96) (a + 64) 16 (hw_fill (a + 64) 171 16 s))) in
+  let s1 := hw_load 8 (a + 104) W 39 (hw_load 8 (a + 96) W 37 (hw_copy (a + 96) (a + 64) 16 W 3 (hw_fill (a + 64) 171 16 s))) in
   let ok := (rd W 37 s1 =? 2880154539) && (rd W 38 s1 =? 2880154539) && (rd W 39 s1 =? 2880154539) && (rd W 40 s1 =? 2880154539) in
   let s2 := upd R 15 (if ok then 0 else 1) s1 in
   line 98 117 108 107 (rd R 15 s2) s2.

@@ -41,8 +41,6 @@ Record ops := mkOps {
   ALoad : int -> int -> int -> int -> M -> M;
   AStore : int -> int -> int -> M -> M;  AStore64 : int -> int -> int -> M -> M;
   Fence : int -> M -> M;
-  Copy : int -> int -> int -> M -> M;  Fill : int -> int -> int -> M -> M;
-  Cmp : int -> int -> int -> int -> int -> M -> M;
   Call : int -> int -> int -> int -> M -> M;
   Addr : int -> int;
   Trace : M -> list hw_ev }.
@@ -137,18 +135,10 @@ Record laws : Prop := {
   cas64_rd   : forall a ol oh nl nh h i h' i' s, other h i h' i' = true -> other h (i + 1) h' i' = true -> other h (i + 2) h' i' = true ->
                  Rd m h' i' (Cas64 m a ol oh nl nh h i s) = Rd m h' i' s;
   cas64_rd32 : forall a ol oh nl nh h i h' i' s, clear a 8 -> Rd32 m h' i' (Cas64 m a ol oh nl nh h i s) = Rd32 m h' i' s;
-  (* ---- FENCES, BYTES IN BULK *)
+  (* ---- FENCES *)
   fence_rd    : forall k h i s, Rd m h i (Fence m k s) = Rd m h i s;
   fence_rd32  : forall k h i s, Rd32 m h i (Fence m k s) = Rd32 m h i s;
   fence_trace : forall k s, Trace m (Fence m k s) = Trace m s ++ [EvFence k];
-  copy_rd   : forall d x n h i s, Rd m h i (Copy m d x n s) = Rd m h i s;
-  copy_rd32 : forall d x n h i s, clear d n -> Rd32 m h i (Copy m d x n s) = Rd32 m h i s;
-  fill_rd   : forall d b n h i s, Rd m h i (Fill m d b n s) = Rd m h i s;
-  fill_rd32 : forall d b n h i s, clear d n -> Rd32 m h i (Fill m d b n s) = Rd32 m h i s;
-  cmp_val   : forall x y n h i s, cell h i s = true ->
-                let r := Rd m h i (Cmp m x y n h i s) in (r =? -1) || (r =? 0) || (r =? 1) = true;
-  cmp_rd    : forall x y n h i h' i' s, other h i h' i' = true -> Rd m h' i' (Cmp m x y n h i s) = Rd m h' i' s;
-  cmp_rd32  : forall x y n h i h' i' s, Rd32 m h' i' (Cmp m x y n h i s) = Rd32 m h' i' s;
   (* ---- SIZES: a block is never smaller than when the program started; only kq_grow changes a size, and it changes no
      cell (the new cells read 0, as they did outside the block), no narrow cell, nothing the devices saw *)
   len_size   : forall h s, (Len m h <=? Size m h s) = true;
@@ -173,16 +163,13 @@ Record laws : Prop := {
   size_atomic64 : forall op a lo hi h i h' s, Size m h' (Atomic64 m op a lo hi h i s) = Size m h' s;
   size_cas   : forall w a o n h i h' s, Size m h' (Cas m w a o n h i s) = Size m h' s;
   size_cas64 : forall a ol oh nl nh h i h' s, Size m h' (Cas64 m a ol oh nl nh h i s) = Size m h' s;
-  size_fence : forall k h' s, Size m h' (Fence m k s) = Size m h' s;
-  size_copy  : forall d x n h' s, Size m h' (Copy m d x n s) = Size m h' s;
-  size_fill  : forall d b n h' s, Size m h' (Fill m d b n s) = Size m h' s;
-  size_cmp   : forall x y n h i h' s, Size m h' (Cmp m x y n h i s) = Size m h' s
+  size_fence : forall k h' s, Size m h' (Fence m k s) = Size m h' s
 }.
 End Laws.
 
 (* THE REAL OPERATIONS, and the one axiom: they obey the laws *)
 Definition real : ops := mkOps mem rd upd kq_len kq_size kq_grow rd32 upd32 kq_len32 hw_load hw_store hw_store64 hw_atomic hw_atomic64
-                               hw_cas hw_cas64 hw_aload hw_astore hw_astore64 hw_fence hw_copy hw_fill hw_cmp hw_call
+                               hw_cas hw_cas64 hw_aload hw_astore hw_astore64 hw_fence hw_call
                                hw_addr hw_trace.
 Axiom real_laws : laws real.
 
