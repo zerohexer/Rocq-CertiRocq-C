@@ -288,9 +288,7 @@ other property of the operating system.
 
 ## What is trusted
 
-`Print Assumptions kit_function_correct` (`ASSUME=1 proved/make.sh`): Rocq's 63-bit integer axioms; one fact about
-signed division that Rocq's axioms leave open and its own computation settles, `divs_min_neg1` (the smallest number
-divided by -1 is the smallest number; `vm_compute` gives that); the kit's memory primitives `KQRun.rd` / `upd` /
+`Print Assumptions kit_function_correct` (`ASSUME=1 proved/make.sh`): Rocq's 63-bit integer axioms; the kit's memory primitives `KQRun.rd` / `upd` /
 `kq_size` / `mem` and `KQSpec.real_laws`; classical axioms CompCert uses.  No admits.
 Outside the proofs: the loader that fills the tables, the driver in `kitc.py`, the printer, clang, and the C bodies of
 the machine operations with the law `hw_law` that the theorem assumes of them.
