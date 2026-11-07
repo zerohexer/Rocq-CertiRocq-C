@@ -2846,6 +2846,103 @@ addA('q_nat_pair_ret', "", 'let (q, r) := sp n in if Nat.eqb r 0 then a else Uin
 addA('q_divmod', "", 'Uint63.of_nat (fst (Nat.divmod n 3 0 3))',
      '')
 
+# a memory in a record or a pair, at any place, as a result and as a parameter (step 80)
+addA('x_r_mid', "", 'let r := lp n a s in qa r + qb r + rd 0 a (qt r)',
+     'Record rq := mkq { qa : int; qt : mem; qb : int }.\nFixpoint lp (k : nat) (i : int) (t : mem) : rq := match k with O => mkq i t (i + 1) | S m => lp m (i + 1) (upd 0 i i t) end.\n')
+addA('x_r_first', "", 'let r := lp n a s in qa r + qb r + rd 0 a (qt r)',
+     'Record rq := mkq { qt : mem; qa : int; qb : int }.\nFixpoint lp (k : nat) (i : int) (t : mem) : rq := match k with O => mkq t i (i + 1) | S m => lp m (i + 1) (upd 0 i i t) end.\n')
+addA('x_r_num', "", 'let r := lp n a s in cnt r + rd 0 a (mm r)',
+     'Record st := mkst { cnt : int; mm : mem }.\nFixpoint lp (k : nat) (i : int) (t : mem) : st := match k with O => mkst i t | S m => lp m (i + 1) (upd 0 i i t) end.\n')
+addA('x_r_mem_only', "", 'rd 0 a (wt (lp n a s))',
+     'Record wm := mkw { wt : mem }.\nFixpoint lp (k : nat) (i : int) (t : mem) : wm := match k with O => mkw t | S m => lp m (i + 1) (upd 0 i i t) end.\n')
+addA('x_r_bool', "", 'let r := lp n a s in if qf r then qa r + rd 0 a (qt r) else 0',
+     'Record rq := mkq { qa : int; qf : bool; qt : mem }.\nFixpoint lp (k : nat) (i : int) (t : mem) : rq := match k with O => mkq i (i <? 3) t | S m => lp m (i + 1) (upd 0 i i t) end.\n')
+addA('x_r_data', "", 'let r := lp n a s in match qo r with Some v => v + rd 0 a (qt r) | None => 0 end',
+     'Record rq := mkq { qo : option int; qt : mem }.\nFixpoint lp (k : nat) (i : int) (t : mem) : rq := match k with O => mkq None t | S m => if rd 0 i t =? 0 then mkq (Some i) t else lp m (i + 1) (upd 0 i i t) end.\n')
+addA('x_r_ind', "", 'match lp n a s with W v t => v + rd 0 a t end',
+     'Inductive w := W (a : int) (t : mem).\nFixpoint lp (k : nat) (i : int) (t : mem) : w := match k with O => W i t | S m => lp m (i + 1) (upd 0 i i t) end.\n')
+addA('x_r_pattern', "", 'match lp n a s with mkm x y t => x + y + rd 0 a t end',
+     'Record rm := mkm { ra : int; rb : int; rt : mem }.\nFixpoint lp (k : nat) (i : int) (t : mem) : rm := match k with O => mkm i (i + 1) t | S m => lp m (i + 1) (upd 0 i i t) end.\n')
+addA('x_r_proj_one', "", 'ra (lp n a s)',
+     'Record rm := mkm { ra : int; rb : int; rt : mem }.\nFixpoint lp (k : nat) (i : int) (t : mem) : rm := match k with O => mkm i (i + 1) t | S m => lp m (i + 1) (upd 0 i i t) end.\n')
+addA('x_r_proj_mem', "", 'rd 0 a (rt (lp n a s))',
+     'Record rm := mkm { ra : int; rb : int; rt : mem }.\nFixpoint lp (k : nat) (i : int) (t : mem) : rm := match k with O => mkm i (i + 1) t | S m => lp m (i + 1) (upd 0 i i t) end.\n')
+addA('x_r_proj_two', "", 'ra (lp n a s) + rd 0 a (rt (lp n a s))',
+     'Record rm := mkm { ra : int; rb : int; rt : mem }.\nFixpoint lp (k : nat) (i : int) (t : mem) : rm := match k with O => mkm i (i + 1) t | S m => lp m (i + 1) (upd 0 i i t) end.\n')
+addA('x_r_after', "", 'match lp n a s with mkm x y t => x + y + rd 0 a t end',
+     'Record rm := mkm { ra : int; rb : int; rt : mem }.\nFixpoint lp (k : nat) (i : int) (t : mem) : rm := match k with O => mkm i (i + 1) t | S m => match lp m (i + 1) (upd 0 i i t) with mkm x y u => mkm (x + 1) y (upd 0 x y u) end end.\n')
+addA('x_r_after_proj', "", 'match lp n a s with mkm x y t => x + y + rd 0 a t end',
+     'Record rm := mkm { ra : int; rb : int; rt : mem }.\nFixpoint lp (k : nat) (i : int) (t : mem) : rm := match k with O => mkm i (i + 1) t | S m => let r := lp m (i + 1) (upd 0 i i t) in mkm (ra r + 1) (rb r) (upd 0 (ra r) (rb r) (rt r)) end.\n')
+addA('x_r_update', "", 'match lp n a s with mkm x y t => x + y + rd 0 a t end',
+     'Record rm := mkm { ra : int; rb : int; rt : mem }.\nDefinition bump (r : rm) : rm := mkm (ra r + 1) (rb r) (rt r).\nFixpoint lp (k : nat) (i : int) (t : mem) : rm := match k with O => mkm i (i + 1) t | S m => bump (lp m (i + 1) (upd 0 i i t)) end.\n')
+addA('x_r_in_loop', "", 'outer n a s',
+     "Record rm := mkm { ra : int; rb : int; rt : mem }.\nFixpoint lp (k : nat) (i : int) (t : mem) : rm := match k with O => mkm i (i + 1) t | S m => lp m (i + 1) (upd 0 i i t) end.\nFixpoint outer (j : nat) (a : int) (t : mem) : int := match j with O => rd 0 a t | S j' => match lp 3 a t with mkm x y u => outer j' (x + y) u end end.\n")
+addA('x_r_section', "", 'match lp b n a s with mkm x y t => x + y + rd 0 a t end',
+     'Record rm := mkm { ra : int; rb : int; rt : mem }.\nSection S.\nVariable c : int.\nFixpoint lp (k : nat) (i : int) (t : mem) : rm := match k with O => mkm i c t | S m => lp m (i + c) (upd 0 i c t) end.\nEnd S.\n')
+addA('x_r_local', "", 'match lp n a s with mkm x y t => x + y + rd 0 a t end',
+     'Record rm := mkm { ra : int; rb : int; rt : mem }.\nDefinition lp (k0 : nat) (i0 : int) (t0 : mem) : rm := let fix go (k : nat) (i : int) (t : mem) : rm := match k with O => mkm i i t | S m => go m (i + 1) (upd 0 i i t) end in go k0 i0 t0.\n')
+addA('x_r_block', "", 'match lp 1 n a s with mkm x y t => x + y + rd 1 a t end',
+     'Record rm := mkm { ra : int; rb : int; rt : mem }.\nFixpoint lp (h : int) (k : nat) (i : int) (t : mem) : rm := match k with O => mkm i i t | S m => lp h m (i + 1) (upd h i i t) end.\n')
+addA('x_r_helper', "", 'match lp n a s with mkm x y t => x + y + rd 0 a t end',
+     'Record rm := mkm { ra : int; rb : int; rt : mem }.\nDefinition mk (i : int) (t : mem) : rm := mkm i (i + 1) t.\nFixpoint lp (k : nat) (i : int) (t : mem) : rm := match k with O => mk i t | S m => lp m (i + 1) (upd 0 i i t) end.\n')
+addA('x_r_two_funcs', "", 'match lq n a s with mkm x y t => x + y + rd 0 a t end',
+     'Record rm := mkm { ra : int; rb : int; rt : mem }.\nFixpoint lp (k : nat) (i : int) (t : mem) : rm := match k with O => mkm i i t | S m => lp m (i + 1) (upd 0 i i t) end.\nFixpoint lq (k : nat) (i : int) (t : mem) : rm := match k with O => lp 2 i t | S m => match lp 3 i t with mkm x y u => lq m (x + y) u end end.\n')
+addA('x_f_num', "", 'match lp n a s with (t, v) => v + rd 0 a t end',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : mem * int := match k with O => (t, i) | S m => lp m (i + 1) (upd 0 i i t) end.\n')
+addA('x_f_num_fst', "", 'rd 0 a (fst (lp n a s))',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : mem * int := match k with O => (t, i) | S m => lp m (i + 1) (upd 0 i i t) end.\n')
+addA('x_f_num_snd', "", 'snd (lp n a s)',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : mem * int := match k with O => (t, i) | S m => lp m (i + 1) (upd 0 i i t) end.\n')
+addA('x_f_pair', "", 'match lp n a s with (t, (x, y)) => x + y + rd 0 a t end',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : mem * (int * int) := match k with O => (t, (i, i + 1)) | S m => lp m (i + 1) (upd 0 i i t) end.\n')
+addA('x_f_after', "", 'match lp n a s with (t, v) => v + rd 0 a t end',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : mem * int := match k with O => (t, i) | S m => let (u, v) := lp m (i + 1) (upd 0 i i t) in (upd 0 v v u, v + 1) end.\n')
+addA('x_f_bool', "", 'match lp n a s with (t, true) => rd 0 a t | (_, false) => 0 end',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : mem * bool := match k with O => (t, i <? 3) | S m => lp m (i + 1) (upd 0 i i t) end.\n')
+addA('x_f_three', "", 'match lp n a s with (x, t, y) => x + y + rd 0 a t end',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : int * mem * int := match k with O => (i, t, i + 1) | S m => lp m (i + 1) (upd 0 i i t) end.\n')
+addA('x_p_rec_rec', "", 'let r := lp n (mkst a s) in cnt r + rd 0 a (mm r)',
+     'Record st := mkst { cnt : int; mm : mem }.\nFixpoint lp (k : nat) (x : st) : st := match k with O => x | S j => lp j (mkst (cnt x + 1) (upd 0 (cnt x) 1 (mm x))) end.\n')
+addA('x_p_rec_num', "", 'lp n (mkst a s)',
+     'Record st := mkst { cnt : int; mm : mem }.\nFixpoint lp (k : nat) (x : st) : int := match k with O => cnt x + rd 0 0 (mm x) | S j => lp j (mkst (cnt x + 1) (upd 0 (cnt x) 1 (mm x))) end.\n')
+addA('x_p_rec_mem', "", 'rd 0 a (lp n (mkst a s))',
+     'Record st := mkst { cnt : int; mm : mem }.\nFixpoint lp (k : nat) (x : st) : mem := match k with O => mm x | S j => lp j (mkst (cnt x + 1) (upd 0 (cnt x) 1 (mm x))) end.\n')
+addA('x_p_rec_val', "", 'match lp n (mkst a s) with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Record st := mkst { cnt : int; mm : mem }.\nFixpoint lp (k : nat) (x : st) : option int * mem := match k with O => (Some (cnt x), mm x) | S j => lp j (mkst (cnt x + 1) (upd 0 (cnt x) 1 (mm x))) end.\n')
+addA('x_p_match', "", 'let r := lp n (mkst a s) in cnt r + rd 0 a (mm r)',
+     'Record st := mkst { cnt : int; mm : mem }.\nFixpoint lp (k : nat) (x : st) : st := match k with O => x | S j => match x with mkst c t => lp j (mkst (c + 1) (upd 0 c 1 t)) end end.\n')
+addA('x_p_after_ctr', "", 'let r := lp (mkst a s) n in cnt r + rd 0 a (mm r)',
+     'Record st := mkst { cnt : int; mm : mem }.\nFixpoint lp (x : st) (k : nat) : st := match k with O => x | S j => lp (mkst (cnt x + 1) (upd 0 (cnt x) 1 (mm x))) j end.\n')
+addA('x_p_other_param', "", 'let r := lp n b (mkst a s) in cnt r + rd 0 a (mm r)',
+     'Record st := mkst { cnt : int; mm : mem }.\nFixpoint lp (k : nat) (d : int) (x : st) : st := match k with O => x | S j => lp j d (mkst (cnt x + d) (upd 0 (cnt x) d (mm x))) end.\n')
+addA('x_p_helper_step', "", 'let r := lp n (mkst a s) in cnt r + rd 0 a (mm r)',
+     'Record st := mkst { cnt : int; mm : mem }.\nDefinition step (x : st) : st := mkst (cnt x + 1) (upd 0 (cnt x) 1 (mm x)).\nFixpoint lp (k : nat) (x : st) : st := match k with O => x | S j => lp j (step x) end.\n')
+addA('x_p_helper_init', "", 'let r := lp n (init a s) in cnt r + rd 0 a (mm r)',
+     'Record st := mkst { cnt : int; mm : mem }.\nDefinition init (a : int) (s : mem) : st := mkst a s.\nFixpoint lp (k : nat) (x : st) : st := match k with O => x | S j => lp j (mkst (cnt x + 1) (upd 0 (cnt x) 1 (mm x))) end.\n')
+addA('x_p_let_arg', "", 'let x := mkst a s in let r := lp n x in cnt r + rd 0 a (mm r)',
+     'Record st := mkst { cnt : int; mm : mem }.\nFixpoint lp (k : nat) (x : st) : st := match k with O => x | S j => lp j (mkst (cnt x + 1) (upd 0 (cnt x) 1 (mm x))) end.\n')
+addA('x_p_pair_rec', "", 'let (c, t) := lp n (a, s) in c + rd 0 a t',
+     'Fixpoint lp (k : nat) (x : int * mem) : int * mem := match k with O => x | S j => let (c, t) := x in lp j (c + 1, upd 0 c 1 t) end.\n')
+addA('x_p_pair_num', "", 'lp n (a, s)',
+     'Fixpoint lp (k : nat) (x : int * mem) : int := match k with O => fst x + rd 0 0 (snd x) | S j => lp j (fst x + 1, upd 0 (fst x) 1 (snd x)) end.\n')
+addA('x_p_pair_first', "", 'let (t, c) := lp n (s, a) in c + rd 0 a t',
+     'Fixpoint lp (k : nat) (x : mem * int) : mem * int := match k with O => x | S j => let (t, c) := x in lp j (upd 0 c 1 t, c + 1) end.\n')
+addA('x_p_opt_mem', "", 'match lp n (Some a, s) with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Fixpoint lp (k : nat) (x : option int * mem) : option int * mem := match k with O => x | S j => match x with (Some v, t) => lp j (Some (v + 1), upd 0 v v t) | (None, t) => (None, t) end end.\n')
+addA('x_p_var_caller', "", 'wrap n (mkst a s)',
+     'Record st := mkst { cnt : int; mm : mem }.\nFixpoint lp (k : nat) (x : st) : st := match k with O => x | S j => lp j (mkst (cnt x + 1) (upd 0 (cnt x) 1 (mm x))) end.\nDefinition wrap (n : nat) (x : st) : int := cnt (lp n x).\n')
+addA('x_p_var_rec', "", 'cnt (outer n (mkst a s))',
+     "Record st := mkst { cnt : int; mm : mem }.\nFixpoint lp (k : nat) (x : st) : st := match k with O => x | S j => lp j (mkst (cnt x + 1) (upd 0 (cnt x) 1 (mm x))) end.\nFixpoint outer (j : nat) (x : st) : st := match j with O => x | S j' => outer j' (lp 2 x) end.\n")
+addA('x_p_two_states', "", 'let r := lp n (mkst a s) (mkst b s) in cnt r + rd 0 a (mm r)',
+     'Record st := mkst { cnt : int; mm : mem }.\nFixpoint lp (k : nat) (x y : st) : st := match k with O => mkst (cnt x + cnt y) (mm y) | S j => lp j x (mkst (cnt y + 1) (upd 0 (cnt y) (rd 0 (cnt x) (mm x)) (mm y))) end.\n')
+addA('x_p_section', "", 'let r := lp b n (mkst a s) in cnt r + rd 0 a (mm r)',
+     'Record st := mkst { cnt : int; mm : mem }.\nSection S.\nVariable d : int.\nFixpoint lp (k : nat) (x : st) : st := match k with O => x | S j => lp j (mkst (cnt x + d) (upd 0 (cnt x) d (mm x))) end.\nEnd S.\n')
+addA('x_p_block', "", 'let r := lp 2 n (mkst a s) in cnt r + rd 2 a (mm r)',
+     'Record st := mkst { cnt : int; mm : mem }.\nFixpoint lp (h : int) (k : nat) (x : st) : st := match k with O => x | S j => lp h j (mkst (cnt x + 1) (upd h (cnt x) 1 (mm x))) end.\n')
+addA('x_p_non_rec', "", 'let r := step (mkst a s) in cnt r + rd 0 a (mm r)',
+     'Record st := mkst { cnt : int; mm : mem }.\nDefinition step (x : st) : st := mkst (cnt x + 1) (upd 0 (cnt x) 1 (mm x)).\n')
+addA('x_p_non_rec_pair', "", 'let (c, t) := step (a, s) in c + rd 0 a t',
+     'Definition step (x : int * mem) : int * mem := let (i, t) := x in (i + 1, upd 0 i i t).\n')
 # a value and a memory under parameters, from a local fix, a block's number given, the same call named twice (step 79)
 addA('w_b_two', "", 'match lp 0 1 n a s with (Some v, t) => v + rd 1 a t | (None, _) => 0 end',
      'Fixpoint lp (h j : int) (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => lp h j m (i + 1) (upd j i i (upd h i i t)) end.\n')

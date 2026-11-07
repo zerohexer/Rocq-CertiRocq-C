@@ -1,0 +1,20 @@
+(* a state holding the memory, as a parameter and as what is given back; a step of it, a function of its own *)
+Record st := mkst { cnt : int; sum : int; mm : mem }.
+Definition step (x : st) : st :=
+  mkst (cnt x + 1) (sum x + rd 0 (cnt x) (mm x)) (upd 1 (cnt x) (sum x) (mm x)).
+Fixpoint run (k : nat) (x : st) : st :=
+  match k with O => x | S j => run j (step x) end.
+(* the memory before the number, the call not the last step *)
+Fixpoint back (k : nat) (i : int) (t : mem) : mem * int :=
+  match k with
+  | O => (t, i)
+  | S m => let (u, v) := back m (i + 1) (upd 2 i i t) in (upd 2 v (v + rd 2 i u) u, v + 1)
+  end.
+Definition solve (n : nat) (a : int) (s : mem) : int :=
+  let r := run n (mkst a 0 s) in
+  match back 2 (cnt r) (mm r) with
+  | (t, v) => v + sum r * 3 + cnt r * 5 + rd 1 a t * 7 + rd 1 (a + 1) t * 11 + rd 2 (cnt r + 2) t * 13
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_arg 1) (kq_input 0).

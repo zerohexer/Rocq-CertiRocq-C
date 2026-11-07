@@ -443,7 +443,10 @@ Ltac vm_call_pair :=
 Ltac vm_case :=
   match goal with
   | e : fst ?c = _ |- context [fst ?c] => rewrite e
-  | |- context [match fst ?c with _ => _ end] => let e := fresh "kqe" in destruct (fst c) eqn:e
+  | |- context [match fst ?c with _ => _ end] =>
+      first [ let h := vm_head c in is_fix h
+            | lazymatch c with context [match _ with _ => _ end] => fail | _ => idtac end ];
+      let e := fresh "kqe" in destruct (fst c) eqn:e
   end.
 Ltac vm_slot :=
   first [ match goal with Hr : (_ <= Sint63.to_Z (KQ.KQBound.kq_len 63) + 1)%Z |- _ => rewrite (slot_eq _ Hr) by reflexivity end
@@ -461,6 +464,8 @@ Ltac vm_lit :=
     | true => change (PrimInt63.eqb x y) with true
     | false => change (PrimInt63.eqb x y) with false
     end end.
+(** a program's lemmas of a function read as a pair, for when what is known of the pair has been used: [kitc.py] sets it *)
+Ltac kq_rw2 := fail.
 Ltac kq_vm0 :=
   first [ rewrite KQMAuto.upd_upd_r
         | vm_restore
@@ -468,8 +473,12 @@ Ltac kq_vm0 :=
         | kq_fr
         | vm_lit
         | vm_call_pair
+        | kq_rw2
         | vm_case
-        | match goal with |- context [match ?c with _ => _ end] => is_var c; destruct c end ].
+        | match goal with |- context [match ?c with _ => _ end] => is_var c; destruct c end
+        | match goal with |- context [match ?c with _ => _ end] =>
+            lazymatch c with context [match _ with _ => _ end] => fail | _ => idtac end;
+            lazymatch type of c with bool => fail | nat => fail | _ => destruct c end end ].
 (** switched on by a program with such a function *)
 Ltac kq_vm := fail.
 (** a function that leaves the slot block alone, by induction on its counter: each end is [rd 63 j] of what it was given *)

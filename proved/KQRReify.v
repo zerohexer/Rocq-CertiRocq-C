@@ -678,6 +678,10 @@ Definition zeta_head (t : term) : option term :=
 (** a match on a pair built in place (step 23): its branch with the two parts bound by lets -- the same term up to iota and
     zeta; the parts' types the pair's parameters (a number, a memory, ...), as the readers of lets ask *)
 Definition ind_prod := ind_of <% prod %>.
+(** (step 80) its declaration *)
+MetaRocq Run (tmBind (tmQuoteInductive (inductive_mind ind_prod)) (tmDefinition "vm_prod_mib"%bs)).
+Definition vm_ind_unit := ind_of <% unit %>.
+MetaRocq Run (tmBind (tmQuoteInductive (inductive_mind vm_ind_unit)) (tmDefinition "vm_unit_mib"%bs)).
 Definition iota_pair (ci : case_info) (p : predicate term) (c : term) (br : branch term) : option term :=
   if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_prod) && Nat.eqb (length (bcontext br)) 2 then
     match c, pparams p with
@@ -6624,6 +6628,9 @@ Definition rp_is_bm (slots : list nat) : bool := existsb (Nat.eqb rp_bm) slots.
 (** (step 78) a row whose function gives back a value of several numbers and a memory: a call is written out where it is taken apart (below) *)
 Definition rp_vm : nat := 994.
 Definition rp_is_vm (slots : list nat) : bool := existsb (Nat.eqb rp_vm) slots.
+(** (step 80) a row whose function holds a memory in a record or a pair: what is in its place has the record's fields as parameters and gives back a pair *)
+Definition rp_qm : nat := 993.
+Definition rp_is_qm (slots : list nat) : bool := existsb (Nat.eqb rp_qm) slots.
 (** (step 76) a row whose function gives back a value and a proof: what is in its place the value alone, [f' args = proj1_sig (f args)],
     [f' args = if f args then true else false] *)
 Definition rp_sg : nat := 996.
@@ -6705,6 +6712,7 @@ Definition rp_match (rows : list rprow) (h : term) (args : list term) : option t
       let '(_, inst, slots0, _, d0) := r in
       let slots := rp_real slots0 in
       if rp_is_vm slots0 then None else
+      if rp_is_qm slots0 then None else
       if rp_is_um slots0 then
         if Nat.eqb (length args) (length (fst (lams (dbody d0)))) then Some (pf_beta um_pair [tApp (tConst (rp_name r) []) args]) else None else
       if rp_is_bm slots0 then
@@ -7031,6 +7039,37 @@ Fixpoint um_tr (fuel : nat) (Σ : global_env) (mp : modpath) (self d : nat) (t :
 Definition um_plain (Σ : global_env) (mp : modpath) (tys : list term) (t : term) : bool :=
   match um_red 1000 Σ mp t with tApp (tConstruct _ 0 _) _ => true | _ => false end.
 (** (step 77) a value that is not a number, a boolean or nothing, and a memory *)
+Definition vm_ind_of (T : term) : option (inductive * list term) :=
+  match T with tApp (tInd i _) ps => Some (i, ps) | tInd i _ => Some (i, []) | _ => None end.
+Definition vm_field (np : nat) (ps : list term) (k : nat) (d : context_decl) : term :=
+  match decl_type d with
+  | tRel r => if Nat.leb k r && Nat.ltb r (k + np) then nth (np - 1 - (r - k)) ps (tRel 0) else decl_type d
+  | ty => ty
+  end.
+(** (step 80) a type of one constructor holding exactly one memory: its inductive, its parameters, its fields' types, the memory's place *)
+Definition vm_sh (Σ : global_env) (T : term) : option (inductive * list term * list term * nat) :=
+  match vm_ind_of T with
+  | Some (i, ps) =>
+      match lookup_env Σ (inductive_mind i) with
+      | Some (InductiveDecl mib) =>
+          match ind_bodies mib with
+          | [oib] =>
+              match ind_ctors oib with
+              | [cb] =>
+                  let args := rev (cstr_args cb) in
+                  let fts := map (fun jd : nat * context_decl => vm_field (ind_npars mib) ps (fst jd) (snd jd)) (combine (seq 0 (length args)) args) in
+                  match filter (fun jt : nat * term => is_ty kn_mem (snd jt)) (combine (seq 0 (length fts)) fts) with
+                  | [jt] => Some (i, ps, fts, fst jt)
+                  | _ => None
+                  end
+              | _ => None
+              end
+          | _ => None
+          end
+      | _ => None
+      end
+  | None => None
+  end.
 Definition vm_ty (T : term) : bool :=
   match T with
   | tApp (tInd i _) [V; M] =>
@@ -7059,7 +7098,7 @@ Fixpoint um_inl (fuel : nat) (Σ : global_env) (mp : modpath) (t : term) {struct
                       | tApp (tConstruct _ 0 _) _ as r => r
                       | _ => dflt
                       end
-                    else if vm_ty (ret_ty ty) && Nat.eqb (length (removelast (prod_tys ty))) (length args') then um_red 1000 Σ mp dflt
+                    else if (if vm_ty (ret_ty ty) then true else if (match vm_sh Σ (ret_ty ty) with Some (i, _, fts, m) => negb (Kername.eqb (inductive_mind i) (inductive_mind ind_prod) && Nat.eqb m 1 && Nat.eqb (length fts) 2) | None => false end) then true else existsb (fun t => match vm_sh Σ t with Some _ => true | None => false end) (removelast (prod_tys ty))) && Nat.eqb (length (removelast (prod_tys ty))) (length args') then um_red 1000 Σ mp dflt
                     else dflt
                 end
             | _ => dflt
@@ -7218,13 +7257,6 @@ Fixpoint er_tr (fuel : nat) (Σ : global_env) (mp : modpath) (sb : bool) (T : te
     the value's first number and the memory with the others in the slot block; its caller saves those cells before the call, reads the
     numbers after it and writes the cells back, cell 0 first, as a record's caller does (D16).  That gives the memory back only if the
     function leaves the cells alone: a lemma per function, [rd 63 j] of what it gives back is [rd 63 j] of what it is given *)
-Definition vm_ind_of (T : term) : option (inductive * list term) :=
-  match T with tApp (tInd i _) ps => Some (i, ps) | tInd i _ => Some (i, []) | _ => None end.
-Definition vm_field (np : nat) (ps : list term) (k : nat) (d : context_decl) : term :=
-  match decl_type d with
-  | tRel r => if Nat.leb k r && Nat.ltb r (k + np) then nth (np - 1 - (r - k)) ps (tRel 0) else decl_type d
-  | ty => ty
-  end.
 Definition vm_lit (j : nat) : term := tInt (Uint63.of_Z (Z.of_nat j)).
 (** the numbers a value is: its tag if it has several constructors, then the fields of the one it is *)
 Fixpoint vm_flat (fuel : nat) (Σ : global_env) (T x : term) {struct fuel} : option (list term) :=
@@ -7345,6 +7377,12 @@ Fixpoint vm_bk (j k ofs : nat) (m : term) {struct k} : term :=
   | S k => vm_bk (S j) k (ofs - 1) (tApp (tConst kn_upd []) [tInt 63%uint63; vm_lit j; tRel ofs; m])
   end.
 Definition vm_ty_v (T : term) : option term := match T with tApp _ [V; _] => if vm_ty T then Some V else None | _ => None end.
+Definition vm_ty_q (T : term) : option term :=
+  match T with
+  | tApp (tInd i _) [V; M] =>
+      if Kername.eqb (inductive_mind i) (inductive_mind ind_prod) && is_ty kn_mem M && negb (is_ty kn_int V) then Some V else None
+  | _ => None
+  end.
 (** a call: [let t00 := its memory in let o_j := rd 63 j t00 in match call with (x0, t') => let x_j := rd 63 (j-1) t' in let t1 := written back in K] *)
 Definition vm_call (Σ : global_env) (W im : nat) (V R : term) (callee : list term -> term) (args : list term) (K : term) (ktr : nat -> term -> option term) : option term :=
   let k := W - 1 in
@@ -7372,11 +7410,13 @@ Definition vm_leaf (Σ : global_env) (V v m : term) : option term :=
   if small then
     match vm_flat 20 Σ V v with
     | Some (x0 :: r) => Some (bm_pair x0 (vm_wr 0 r m))
+    | Some [] => Some (bm_pair (vm_lit 0) m)
     | _ => None
     end
   else
     match vm_flat 20 Σ V (tRel 0) with
     | Some (x0 :: r) => Some (tLetIn anon_b v V (bm_pair x0 (vm_wr 0 r (lift0 1 m))))
+    | Some [] => Some (bm_pair (vm_lit 0) m)
     | _ => None
     end.
 (** what a function writes: a cell of a block whose number is written and is not the slot block's has a law; so has what writes no wide cell;
@@ -7534,26 +7574,22 @@ Definition vm_im (tys : list term) : option nat :=
   | Some jt => Some (fst jt)
   | None => None
   end.
-(** (step 79) the calls of such a function named by [fst], [snd] in what is worked out first *)
-Fixpoint vm_cand (fuel : nat) (isr : kername -> bool) (t : term) {struct fuel} : list (term * term * term) :=
+(** (step 79) the calls of such a function in what is worked out first; [sf] the function's own *)
+Fixpoint vm_cand (fuel : nat) (isr : kername -> bool) (sf : nat) (t : term) {struct fuel} : list term :=
   match fuel with
   | O => []
   | S fuel =>
-      let go := vm_cand fuel isr in
+      let go := vm_cand fuel isr sf in
       match t with
-      | tApp (tConst k _) args =>
-          (match args with
-           | [A; B; tApp (tConst h _) a2] =>
-               if (Kername.eqb k kn_fst || Kername.eqb k kn_snd) && isr h then [(A, B, tApp (tConst h []) a2)] else []
-           | _ => []
-           end) ++ flat_map go args
+      | tApp (tConst k _) args => (if isr k then [t] else []) ++ flat_map go args
+      | tApp (tRel i) args => (if Nat.eqb i sf then [t] else []) ++ flat_map go args
       | tApp f args => go f ++ flat_map go args
       | tCase _ _ c _ => go c
       | tLetIn _ v _ _ => go v
       | _ => []
       end
   end.
-(** how many times it is named, and [fst], [snd] of it replaced by the variables *)
+(** how many times it is named, and it replaced by the variable of a let around *)
 Fixpoint vm_occ (fuel : nat) (c : term) (d : nat) (t : term) {struct fuel} : nat :=
   match fuel with
   | O => 0
@@ -7561,10 +7597,7 @@ Fixpoint vm_occ (fuel : nat) (c : term) (d : nat) (t : term) {struct fuel} : nat
       let go := vm_occ fuel c in
       let sum := fold_left Nat.add in
       match t with
-      | tApp (tConst k _) [_; _; c1] as u =>
-          if (Kername.eqb k kn_fst || Kername.eqb k kn_snd) && teq 10000 c1 (lift0 d c) then 1
-          else match u with tApp _ args => sum (map (go d) args) 0 | _ => 0 end
-      | tApp f args => sum (map (go d) args) (go d f)
+      | tApp f args => if teq 10000 t (lift0 d c) then 1 else sum (map (go d) args) (go d f)
       | tLambda _ _ b => go (S d) b
       | tLetIn _ v _ b => go d v + go (S d) b
       | tCase _ _ x brs => sum (map (fun br => go (d + length (bcontext br)) (bbody br)) brs) (go d x)
@@ -7577,41 +7610,66 @@ Fixpoint vm_repl (fuel : nat) (c : term) (d : nat) (t : term) {struct fuel} : te
   | S fuel =>
       let go := vm_repl fuel c in
       match t with
-      | tApp (tConst k u) [A; B; c1] =>
-          if (Kername.eqb k kn_fst || Kername.eqb k kn_snd) && teq 10000 c1 (lift0 d c) then
-            (if Kername.eqb k kn_fst then tRel (d + 1) else tRel d)
-          else tApp (tConst k u) [go d A; go d B; go d c1]
-      | tApp f args => tApp (go d f) (map (go d) args)
+      | tApp f args => if teq 10000 t (lift0 (S d) c) then tRel d else tApp (go d f) (map (go d) args)
       | tLambda na a b => tLambda na a (go (S d) b)
       | tLetIn na v a b => tLetIn na (go d v) a (go (S d) b)
       | tCase ci p x brs => tCase ci p (go d x) (map (fun br => {| bcontext := bcontext br; bbody := go (d + length (bcontext br)) (bbody br) |}) brs)
       | _ => t
       end
   end.
-(** a let of what such a function gives back, in a function of known result: taken apart, the pair made where it is used bare *)
-Fixpoint vm_lets (fuel : nat) (isr : kername -> bool) (T t : term) {struct fuel} : term :=
+(** the fields of a value made, each a let, the numbers first, the memory last; [K] under the fields *)
+Definition vm_open (fts : list term) (m : nat) (vals : list term) (K : term) : term :=
+  let nf := length fts in
+  let ord := filter (fun j => negb (Nat.eqb j m)) (seq 0 nf) ++ [m] in
+  let big := filter (fun j => negb (y_small (nth j vals (tRel 0)))) ord in
+  let nl := length big in
+  let valof := fun j =>
+    match List.find (fun pq : nat * nat => Nat.eqb (snd pq) j) (combine (seq 0 nl) big) with
+    | Some pq => tRel (nl - 1 - fst pq)
+    | None => lift0 nl (nth j vals (tRel 0))
+    end in
+  let inner := subst (rev (map valof (seq 0 nf))) 0 (lift nl nf K) in
+  fold_right (fun pj acc =>
+    let j := snd pj in
+    tLetIn anon_b (lift0 (fst pj) (nth j vals (tRel 0))) (lift0 (fst pj) (nth j fts (tRel 0))) acc)
+    inner (combine (seq 0 nl) big).
+(** a let of what such a function gives back, in a function of known result: taken apart, the value made where it is used bare; a let of the value made is the value where it is used *)
+Fixpoint vm_lets (fuel : nat) (Σ : global_env) (isr : kername -> bool) (tyc : kername -> term) (sf : nat) (T t : term) {struct fuel} : term :=
   match fuel with
   | O => t
   | S fuel =>
-      let go := vm_lets fuel isr in
-      match List.find (fun e : term * term * term => Nat.ltb 1 (vm_occ 10000 (snd e) 0 t)) (vm_cand 10000 isr t), y_case_pair with
-      | Some (A, B, c), tLambda _ _ (tCase cip pp _ [brp]) =>
-          tCase cip {| pparams := [A; B]; puinst := puinst pp; pcontext := pcontext pp; preturn := lift0 (length (pcontext pp)) T |} c
-            [{| bcontext := bcontext brp; bbody := go (lift0 2 T) (vm_repl 10000 (lift0 2 c) 0 (lift0 2 t)) |}]
-      | _, _ =>
+      let go := vm_lets fuel Σ isr tyc in
+      match List.find (fun c => Nat.ltb 1 (vm_occ 10000 c 0 t)) (vm_cand 10000 isr sf t) with
+      | Some c =>
+          go sf T (tLetIn anon_b c (match c with tApp (tConst k _) _ => tyc k | _ => T end) (vm_repl 10000 c 0 (lift0 1 t)))
+      | None =>
       match t with
-      | tLambda na a b => tLambda na a (go (lift0 1 T) b)
-      | tFix [d] k => tFix [{| dname := dname d; dtype := dtype d; rarg := rarg d; dbody := go (lift0 1 T) (dbody d) |}] k
-      | tCase ci p c brs => tCase ci p c (map (fun br => let k := length (bcontext br) in {| bcontext := bcontext br; bbody := go (lift0 k T) (bbody br) |}) brs)
+      | tLambda na a b => tLambda na a (go (S sf) (lift0 1 T) b)
+      | tFix [d] k => tFix [{| dname := dname d; dtype := dtype d; rarg := rarg d; dbody := go (S sf) (lift0 1 T) (dbody d) |}] k
+      | tCase ci p c brs => tCase ci p c (map (fun br => let k := length (bcontext br) in {| bcontext := bcontext br; bbody := go (sf + k) (lift0 k T) (bbody br) |}) brs)
+      | tLetIn na (tApp (tConstruct i0 0 _) cargs as v) ty b =>
+          match vm_sh Σ ty with
+          | Some (i, ps, fts, m) =>
+              let nf := length fts in
+              go sf T (vm_open fts m (skipn (length ps) cargs)
+                         (subst10 (mkApps (tConstruct i 0 []) (map (lift0 nf) ps ++ map (fun j => tRel (nf - 1 - j)) (seq 0 nf))) (lift nf 1 b)))
+          | None => tLetIn na v ty (go (S sf) (lift0 1 T) b)
+          end
       | tLetIn na v ty b =>
-          match v, ty, y_case_pair with
-          | tApp (tConst k _) args, tApp _ [A; B], tLambda _ _ (tCase cip pp _ [brp]) =>
-              if isr k then
-                tCase cip {| pparams := [A; B]; puinst := puinst pp; pcontext := pcontext pp; preturn := lift0 (length (pcontext pp)) T |} v
-                  [{| bcontext := bcontext brp;
-                      bbody := go (lift0 2 T) (subst10 (tApp (tConstruct ind_prod 0 []) [lift0 2 A; lift0 2 B; tRel 1; tRel 0]) (lift 2 1 b)) |}]
-              else tLetIn na v ty (go (lift0 1 T) b)
-          | _, _, _ => tLetIn na v ty (go (lift0 1 T) b)
+          let callish := match v with
+                         | tApp (tConst k _) _ => isr k
+                         | tApp (tRel i) _ => Nat.eqb i sf
+                         | _ => false
+                         end in
+          match (if callish then vm_sh Σ ty else None) with
+          | Some (i, ps, fts, _) =>
+              let nf := length fts in
+              tCase {| ci_ind := i; ci_npar := length ps; ci_relevance := Relevant |}
+                    {| pparams := ps; puinst := []; pcontext := [anon_b]; preturn := lift0 1 T |} v
+                    [{| bcontext := repeat anon_b nf;
+                        bbody := go (sf + nf) (lift0 nf T)
+                                    (subst10 (mkApps (tConstruct i 0 []) (map (lift0 nf) ps ++ map (fun j => tRel (nf - 1 - j)) (seq 0 nf))) (lift nf 1 b)) |}]
+          | None => tLetIn na v ty (go (S sf) (lift0 1 T) b)
           end
       | _ => t
       end
@@ -7643,9 +7701,439 @@ Fixpoint vm_zfix (fuel : nat) (t : term) {struct fuel} : term :=
       | _ => t
       end
   end.
+Definition vm_unit := <% unit %>.
+Definition vm_tt := <% tt %>.
+Fixpoint vm_nest_t (l : list term) : term :=
+  match l with
+  | [] => vm_unit
+  | [x] => x
+  | x :: r => tApp (tInd ind_prod []) [x; vm_nest_t r]
+  end.
+Fixpoint vm_nest_v (l : list (term * term)) : term :=
+  match l with
+  | [] => vm_tt
+  | [x] => snd x
+  | x :: r => tApp (tConstruct ind_prod 0 []) [fst x; vm_nest_t (map fst r); snd x; vm_nest_v r]
+  end.
+Fixpoint vm_nest_g (l : list term) (v : term) (j : nat) : term :=
+  match l, j with
+  | [], _ => v
+  | [_], _ => v
+  | x :: r, O => tApp (tConst kn_fst []) [x; vm_nest_t r; v]
+  | x :: r, S j => vm_nest_g r (tApp (tConst kn_snd []) [x; vm_nest_t r; v]) j
+  end.
+Definition vm_drop (m : nat) (l : list term) : list term :=
+  map snd (filter (fun jt : nat * term => negb (Nat.eqb (fst jt) m)) (combine (seq 0 (length l)) l)).
+(** a program that names no pair has none in its environment *)
+Definition vm_with_prod (Σ : global_env) : global_env :=
+  match lookup_env Σ (inductive_mind ind_prod) with
+  | Some _ => Σ
+  | None => {| universes := universes Σ; declarations := (inductive_mind ind_prod, InductiveDecl vm_prod_mib) :: declarations Σ; retroknowledge := retroknowledge Σ |}
+  end.
+Definition vm_with_unit (Σ : global_env) : global_env :=
+  match lookup_env Σ (inductive_mind vm_ind_unit) with
+  | Some _ => Σ
+  | None => {| universes := universes Σ; declarations := (inductive_mind vm_ind_unit, InductiveDecl vm_unit_mib) :: declarations Σ; retroknowledge := retroknowledge Σ |}
+  end.
+(** the pair a value of that type is *)
+Definition vm_ptype (fts : list term) (m : nat) : term :=
+  tApp (tInd ind_prod []) [vm_nest_t (vm_drop m fts); tConst kn_mem []].
+Definition vm_pval (fts : list term) (m : nat) (vals : list term) : term :=
+  let nm := filter (fun e : nat * (term * term) => negb (Nat.eqb (fst e) m)) (combine (seq 0 (length fts)) (combine fts vals)) in
+  tApp (tConstruct ind_prod 0 []) [vm_nest_t (vm_drop m fts); tConst kn_mem []; vm_nest_v (map snd nm); nth m vals (tRel 0)].
+(** what a pair's two variables, [tRel 1] and [tRel 0], are of the fields, each in its place *)
+Definition vm_pvars (fts : list term) (m : nat) : list term :=
+  let nm := vm_drop m fts in
+  map (fun j => if Nat.eqb j m then tRel 0
+                else vm_nest_g nm (tRel 1) (if Nat.ltb j m then j else j - 1)) (seq 0 (length fts)).
+(** the case of a value of that type *)
+Definition vm_case_sh (i : inductive) (ps : list term) (nf : nat) (T c K : term) : term :=
+  tCase {| ci_ind := i; ci_npar := length ps; ci_relevance := Relevant |}
+        {| pparams := ps; puinst := []; pcontext := [anon_b]; preturn := lift0 1 T |} c
+        [{| bcontext := repeat anon_b nf; bbody := K |}].
+Definition vm_case_pr (A T c K : term) : term :=
+  vm_case_sh ind_prod [A; tConst kn_mem []] 2 T c K.
+(** a type that must be read as a pair: a record holding a memory, the memory first in a pair *)
+Definition vm_needs (Σ : global_env) (T : term) : bool :=
+  match vm_sh Σ T with
+  | Some (i, _, fts, m) => negb (Kername.eqb (inductive_mind i) (inductive_mind ind_prod) && Nat.eqb m 1 && Nat.eqb (length fts) 2)
+  | None => false
+  end.
+(** a parameter holding a memory: its fields, as parameters *)
+Definition vm_pflat (Σ : global_env) (T : term) : list term :=
+  match vm_sh Σ T with
+  | Some (_, _, fts, _) => fts
+  | None => [T]
+  end.
+Definition vm_qcand (Σ : global_env) (mp : modpath) (ty : term) : bool :=
+  let tys := removelast (prod_tys ty) in
+  if vm_needs Σ (ret_ty ty) then true
+  else existsb (fun t => match vm_sh Σ t with Some _ => true | None => false end) tys.
+(** the arguments of a call, a value holding a memory given as its fields: written as its constructor, or None *)
+Fixpoint vm_qargs (Σ : global_env) (tys args : list term) {struct tys} : option (list term) :=
+  match tys, args with
+  | [], [] => Some []
+  | t :: tr, a :: ar =>
+      match vm_sh Σ t, vm_qargs Σ tr ar with
+      | Some (_, ps, fts, _), Some r =>
+          match a with
+          | tApp (tConstruct _ 0 _) cargs => if Nat.eqb (length cargs) (length ps + length fts) then Some (skipn (length ps) cargs ++ r) else None
+          | _ => None
+          end
+      | None, Some r => Some (a :: r)
+      | _, None => None
+      end
+  | _, _ => None
+  end.
+(** [fst], [snd] of a pair made, wherever they stand *)
+Fixpoint vm_fs (fuel : nat) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := vm_fs fuel in
+      match t with
+      | tApp (tConst k u) [A; B; p] =>
+          let p2 := go p in
+          if Kername.eqb k kn_fst then
+            match p2 with tApp (tConstruct _ 0 _) [_; _; a; _] => a | _ => tApp (tConst k u) [A; B; p2] end
+          else if Kername.eqb k kn_snd then
+            match p2 with tApp (tConstruct _ 0 _) [_; _; _; b] => b | _ => tApp (tConst k u) [A; B; p2] end
+          else tApp (tConst k u) [go A; go B; p2]
+      | tApp f args => tApp (go f) (map go args)
+      | tLambda na a b => tLambda na a (go b)
+      | tLetIn na v a b => tLetIn na (go v) a (go b)
+      | tCase ci p c brs => tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := go (bbody br) |}) brs)
+      | _ => t
+      end
+  end.
+(** under a fixpoint too *)
+Definition vm_yr (t : term) : term :=
+  match t with
+  | tFix [d] k => tFix [{| dname := dname d; dtype := dtype d; rarg := rarg d; dbody := y_red 100000 (vm_fs 100000 (y_red 100000 (dbody d))) |}] k
+  | _ => y_red 100000 (vm_fs 100000 (y_red 100000 t))
+  end.
+(** a projection of the program, one argument, on a constructor: its field *)
+Fixpoint vm_pj (fuel : nat) (Σ : global_env) (mp : modpath) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := vm_pj fuel Σ mp in
+      match t with
+      | tApp (tConst k u) [tApp (tConstruct _ _ _) _ as c] =>
+          if in_prog mp (fst k) then
+            match body_of Σ k with
+            | Some (tLambda _ _ (tCase _ _ _ _) as b) => go (y_red 10000 (al_beta [c] b))
+            | _ => tApp (tConst k u) [go c]
+            end
+          else tApp (tConst k u) [go c]
+      | tFix mfix k => tFix (map (fun df => {| dname := dname df; dtype := dtype df; rarg := rarg df; dbody := go (dbody df) |}) mfix) k
+      | tApp f args => tApp (go f) (map go args)
+      | tLambda na a b => tLambda na a (go b)
+      | tLetIn na v a b => tLetIn na (go v) a (go b)
+      | tCase ci p (tApp (tConstruct _ 0 _) cargs) [br] =>
+          match vm_sh Σ (match pparams p with [] => tInd (ci_ind ci) [] | ps => tApp (tInd (ci_ind ci) []) ps end) with
+          | Some (_, ps, fts, m) =>
+              if Nat.eqb (length (bcontext br)) (length fts) then
+                go (y_red 10000 (vm_open fts m (skipn (length ps) cargs) (bbody br)))
+              else t
+          | None => tCase ci p (tApp (tConstruct (ci_ind ci) 0 []) (map go cargs)) [{| bcontext := bcontext br; bbody := go (bbody br) |}]
+          end
+      | tCase ci p c brs => tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := go (bbody br) |}) brs)
+      | _ => t
+      end
+  end.
+(** the function's own calls and those of others read so: the arguments as fields; [own]: the function's own, at depth [self + d] *)
+Fixpoint vm_qcalls (fuel : nat) (Σ : global_env) (qs : list (kername * kername * list term)) (self : option (nat * list term)) (d : nat) (t : term) {struct fuel} : option term :=
+  match fuel with
+  | O => None
+  | S fuel =>
+      let go := vm_qcalls fuel Σ qs self in
+      let goa := fun d0 l => opt_all (map (go d0) l) in
+      match t with
+      | tApp (tRel i) args =>
+          match goa d args, self with
+          | Some a2, Some (n, tys) =>
+              if Nat.eqb i (n + d) then option_map (fun a3 => tApp (tRel i) a3) (vm_qargs Σ tys a2)
+              else Some (tApp (tRel i) a2)
+          | Some a2, None => Some (tApp (tRel i) a2)
+          | None, _ => None
+          end
+      | tApp (tConst k u) args =>
+          match goa d args with
+          | Some a2 =>
+              match List.find (fun e : kername * kername * list term => Kername.eqb (fst (fst e)) k) qs with
+              | Some (_, q, tys) => option_map (fun a3 => tApp (tConst q []) a3) (vm_qargs Σ tys a2)
+              | None => Some (tApp (tConst k u) a2)
+              end
+          | None => None
+          end
+      | tApp f args =>
+          match go d f, goa d args with
+          | Some f2, Some a2 => Some (tApp f2 a2)
+          | _, _ => None
+          end
+      | tLambda na a b => option_map (tLambda na a) (go (S d) b)
+      | tLetIn na v a b =>
+          match go d v, go (S d) b with
+          | Some v2, Some b2 => Some (tLetIn na v2 a b2)
+          | _, _ => None
+          end
+      | tCase ci p c brs =>
+          match go d c, opt_all (map (fun br => option_map (fun b2 => {| bcontext := bcontext br; bbody := b2 |}) (go (d + length (bcontext br)) (bbody br))) brs) with
+          | Some c2, Some b2s => Some (tCase ci p c2 b2s)
+          | _, _ => None
+          end
+      | _ => Some t
+      end
+  end.
+(** the result: a value holding a memory given back as the pair; a call of a function read so is taken apart as that pair *)
+Fixpoint vm_qtail (fuel : nat) (Σ : global_env) (mp : modpath) (qs : list (kername * kername * list term)) (sh : option (inductive * list term * list term * nat)) (self d : nat) (t : term) {struct fuel} : option term :=
+  match sh with
+  | None => Some t
+  | Some (i0, ps0, fts0, m0) =>
+  match fuel with
+  | O => None
+  | S fuel =>
+      let go := vm_qtail fuel Σ mp qs sh self in
+      let T' := vm_ptype fts0 m0 in
+      let nf0 := length fts0 in
+      match um_red 1000 Σ mp t with
+      | tApp (tConstruct i 0 _) args as c =>
+          if Kername.eqb (inductive_mind i) (inductive_mind i0) && Nat.eqb (length args) (length ps0 + nf0)
+          then Some (vm_pval fts0 m0 (skipn (length ps0) args)) else None
+      | tApp (tRel i) _ as c => if Nat.eqb i (self + d) then Some c else None
+      | tApp (tConst k _) _ as c => if existsb (fun e : kername * kername * list term => Kername.eqb (snd (fst e)) k) qs then Some c else None
+      | tCase ci p (tApp (tRel i) _ as c) [br] =>
+          if Nat.eqb i (self + d) && Nat.eqb (length (bcontext br)) nf0 then
+            let K1 := subst (rev (vm_pvars fts0 m0)) 0 (lift 2 nf0 (bbody br)) in
+            option_map (fun K2 => vm_case_pr (vm_nest_t (vm_drop m0 fts0)) T' c K2) (go (d + 2) K1)
+          else None
+      | tCase ci p (tApp (tConst k _) _ as c) [br] =>
+          (* another function read so *)
+          if existsb (fun e : kername * kername * list term => Kername.eqb (snd (fst e)) k) qs then
+            match vm_sh Σ (match pparams p with [] => tInd (ci_ind ci) [] | ps => tApp (tInd (ci_ind ci) []) ps end) with
+            | Some (_, _, fts, m) =>
+                if Nat.eqb (length (bcontext br)) (length fts) && vm_needs Σ (match pparams p with [] => tInd (ci_ind ci) [] | ps => tApp (tInd (ci_ind ci) []) ps end) then
+                  let K1 := subst (rev (vm_pvars fts m)) 0 (lift 2 (length fts) (bbody br)) in
+                  option_map (fun K2 => vm_case_pr (vm_nest_t (vm_drop m fts)) T' c K2) (go (d + 2) K1)
+                else
+                  option_map (fun b2 => tCase ci (y_ret p T') c [{| bcontext := bcontext br; bbody := b2 |}]) (go (d + length (bcontext br)) (bbody br))
+            | None => None
+            end
+          else
+            option_map (fun b2 => tCase ci (y_ret p T') c [{| bcontext := bcontext br; bbody := b2 |}]) (go (d + length (bcontext br)) (bbody br))
+      | tCase ci p c brs =>
+          match opt_all (map (fun br => option_map (fun b2 => {| bcontext := bcontext br; bbody := b2 |}) (go (d + length (bcontext br)) (bbody br))) brs) with
+          | Some b2s => Some (tCase ci (y_ret p T') c b2s)
+          | None => None
+          end
+      | tLetIn na v ty b => option_map (tLetIn na v ty) (go (S d) b)
+      | _ => None
+      end
+  end
+  end.
+(** a function read so: its fixpoint, parameters as fields, the pair as its result *)
+Definition vm_qdef (Σ : global_env) (mp : modpath) (qs : list (kername * kername * list term)) (ty b : term) : option (def term) :=
+  match vm_norm b with
+  | Some d =>
+      let '(tys, body) := lams (dbody d) in
+      let n := length tys in
+      let tys2 := flat_map (vm_pflat Σ) tys in
+      let n2 := length tys2 in
+      (* each parameter in the new context: its variable, or its constructor on its fields *)
+      let fix ps (l : list term) (off : nat) {struct l} : list term :=
+        match l with
+        | [] => []
+        | t :: r =>
+            match vm_sh Σ t with
+            | Some (i, pz, fts, _) =>
+                let nf := length fts in
+                tApp (tConstruct i 0 []) (pz ++ map (fun j => tRel (n2 - 1 - (off + j))) (seq 0 nf)) :: ps r (off + nf)
+            | None => tRel (n2 - 1 - off) :: ps r (S off)
+            end
+        end in
+      let vals := ps tys 0 in
+      let body1 := subst (rev vals) 0 (lift n2 n body) in
+      let res := ret_ty ty in
+      let isr0 := fun k => match lookup_env Σ k with
+                           | Some (ConstantDecl cb) =>
+                               if in_prog mp (fst k) then
+                                 let r := ret_ty (al_t 1000 Σ mp (cst_type cb)) in
+                                 match vm_sh Σ r with Some _ => true | None => false end
+                               else false
+                           | _ => false
+                           end in
+      let tyc0 := fun k => match lookup_env Σ k with
+                           | Some (ConstantDecl cb) => ret_ty (al_t 1000 Σ mp (cst_type cb))
+                           | _ => tRel 0
+                           end in
+      let body1b := y_red 100000 (vm_pj 10000 Σ mp (y_red 100000 body1)) in
+      let body1c := vm_unf 6 Σ mp body1b in
+      let body1d := vm_lets 10000 Σ isr0 tyc0 n2 res body1c in
+      let body2 := y_red 100000 (vm_pj 10000 Σ mp (y_red 100000 body1d)) in
+      let sh := if vm_needs Σ res then vm_sh Σ res else None in
+      let T' := match sh with Some (_, _, fts, m) => vm_ptype fts m | None => res end in
+      match vm_qcalls 100000 Σ qs (Some (n2, tys)) 0 body2 with
+      | Some body3 =>
+          match vm_qtail 1000 Σ mp qs sh n2 0 body3 with
+          | Some body4 =>
+              (* the counter's place among the fields *)
+              let ra := fold_left Nat.add (map (fun t => length (vm_pflat Σ t)) (firstn (rarg d) tys)) 0 in
+              Some {| dname := dname d; dtype := pis_of tys2 T'; rarg := ra; dbody := lams_of tys2 body4 |}
+          | None => None
+          end
+      | None => None
+      end
+  | None => None
+  end.
+(** the functions read so *)
+Definition vm_qs (Σ : global_env) (mp : modpath) (root : kername) (kns : list kername) : list (kername * kername * list term) :=
+  flat_map (fun kn =>
+    if if in_prog mp (fst kn) then negb (Kername.eqb kn root) else false then
+      match lookup_env Σ kn with
+      | Some (ConstantDecl cb) =>
+          let ty := al_t 1000 Σ mp (cst_type cb) in
+          match cst_body cb with
+          | Some b =>
+              match vm_norm b with
+              | Some d =>
+                  if vm_qcand Σ mp ty then
+                    [(kn, (copy_mp, mangle kn ^ "__q" ^ string_of_nat (fold_left Nat.add (map (fun t => length (vm_pflat Σ t)) (firstn (rarg d) (removelast (prod_tys ty)))) 0) ^ "__rp__wy"%bs), removelast (prod_tys ty))]
+                  else []
+              | None => []
+              end
+          | None => []
+          end
+      | _ => []
+      end
+    else []) kns.
+(** the rows of those, each after what it calls *)
+Definition vm_qrows (Σ : global_env) (mp : modpath) (qs : list (kername * kername * list term)) : list rprow :=
+  flat_map (fun e : kername * kername * list term =>
+    let '(kn, q, _) := e in
+    match lookup_env Σ kn with
+    | Some (ConstantDecl cb) =>
+        match cst_body cb with
+        | Some b =>
+            let ty := al_t 1000 Σ mp (cst_type cb) in
+            match vm_qdef Σ mp qs ty b with
+            | Some d' =>
+                [(tConst kn [], [], [rp_qm], mangle kn ^ "__q" ^ string_of_nat (rarg d'), d')]
+            | None => []
+            end
+        | None => []
+        end
+    | _ => []
+    end) qs.
+(** its statement: the function in its place at every argument is the function given those fields, as the pair *)
+Definition vm_qstmt (Σ : global_env) (mp : modpath) (r : rprow) : term :=
+  let '(h, _, _, _, d0) := r in
+  let tys0 := fst (lams (dbody d0)) in
+  let m := length tys0 in
+  let rels := map (fun j => tRel (m - 1 - j)) (seq 0 m) in
+  match h with
+  | tConst k _ =>
+      match lookup_env Σ k with
+      | Some (ConstantDecl cb) =>
+          let ty := al_t 1000 Σ mp (cst_type cb) in
+          let tys := removelast (prod_tys ty) in
+          let res := ret_ty ty in
+          let fix args (l : list term) (rs : list term) {struct l} : list term :=
+            match l with
+            | [] => []
+            | t :: tr =>
+                match vm_sh Σ t with
+                | Some (i, pz, fts, _) =>
+                    let nf := length fts in
+                    tApp (tConstruct i 0 []) (pz ++ firstn nf rs) :: args tr (skipn nf rs)
+                | None => hd (tRel 0) rs :: args tr (tl rs)
+                end
+            end in
+          let call := mkApps (tConst k []) (args tys rels) in
+          let F := tApp (tConst (rp_name r) []) rels in
+          if vm_needs Σ res then
+            match vm_sh Σ res with
+            | Some (i, pz, fts, mm) =>
+                let nf := length fts in
+                let T' := vm_ptype fts mm in
+                pis_of tys0 (tApp y_eq [T'; F;
+                  vm_case_sh i pz nf T' call (vm_pval fts mm (map (fun j => tRel (nf - 1 - j)) (seq 0 nf)))])
+            | None => tRel 0
+            end
+          else pis_of tys0 (tApp y_eq [res; F; call])
+      | _ => tRel 0
+      end
+  | _ => tRel 0
+  end.
+(** a call in a function's own text: read as the pair where it is taken apart *)
+Fixpoint vm_qsub (fuel : nat) (Σ : global_env) (mp : modpath) (qs : list (kername * kername * list term)) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := vm_qsub fuel Σ mp qs in
+      let q := fun k => List.find (fun e : kername * kername * list term => Kername.eqb (fst (fst e)) k) qs in
+      match t with
+      | tCase ci p (tApp (tConst k u) args) [br] =>
+          let args2 := map go args in
+          let dflt := tCase ci p (tApp (tConst k u) args2) [{| bcontext := bcontext br; bbody := go (bbody br) |}] in
+          match q k, vm_sh Σ (match pparams p with [] => tInd (ci_ind ci) [] | ps => tApp (tInd (ci_ind ci) []) ps end) with
+          | Some (_, qn, tys), Some (_, _, fts, m) =>
+              match vm_qargs Σ tys args2 with
+              | Some a3 =>
+                  let nf := length fts in
+                  let T := subst10 (tRel 0) (preturn p) in
+                  vm_case_pr (vm_nest_t (vm_drop m fts)) (lift0 0 T) (tApp (tConst qn []) a3)
+                     (subst (rev (vm_pvars fts m)) 0 (lift 2 nf (go (bbody br))))
+              | None => dflt
+              end
+          | _, _ => dflt
+          end
+      | tApp (tConst k u) [A; B; tApp (tConst f _) args] =>
+          let args2 := map go args in
+          match q f with
+          | Some (_, qn, tys) =>
+              if Kername.eqb k kn_fst || Kername.eqb k kn_snd then
+                match vm_qargs Σ tys args2, vm_sh Σ (tApp (tInd ind_prod []) [A; B]) with
+                | Some a3, Some (_, _, fts, m) =>
+                    let nm := vm_nest_t (vm_drop m fts) in
+                    let isf := Kername.eqb k kn_fst in
+                    vm_case_pr nm (if isf then A else B) (tApp (tConst qn []) a3)
+                      (if isf then (if Nat.eqb m 0 then tRel 0 else tRel 1) else (if Nat.eqb m 0 then tRel 1 else tRel 0))
+                | _, _ => tApp (tConst k u) [go A; go B; tApp (tConst f []) args2]
+                end
+              else tApp (tConst k u) [go A; go B; go (tApp (tConst f []) args)]
+          | None => tApp (tConst k u) [go A; go B; go (tApp (tConst f []) args)]
+          end
+      | tApp (tConst k u) [tApp (tConst f _) _ as c] =>
+          (* a field of what such a function gives back *)
+          match q f, body_of Σ k with
+          | Some _, Some (tLambda _ _ (tCase _ _ _ _) as b) => go (al_beta [c] b)
+          | _, _ => tApp (tConst k u) [go c]
+          end
+      | tApp (tConst k u) args =>
+          let args2 := map go args in
+          match q k with
+          | Some (_, qn, tys) =>
+              match vm_qargs Σ tys args2 with
+              | Some a3 => tApp (tConst qn []) a3
+              | None => tApp (tConst k u) args2
+              end
+          | None => tApp (tConst k u) args2
+          end
+      | tApp f args => tApp (go f) (map go args)
+      | tLambda na a b => tLambda na a (go b)
+      | tLetIn na v a b => tLetIn na (go v) a (go b)
+      | tCase ci p c brs => tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := go (bbody br) |}) brs)
+      | tFix mfix k => tFix (map (fun df => {| dname := dname df; dtype := dtype df; rarg := rarg df; dbody := go (dbody df) |}) mfix) k
+      | _ => t
+      end
+  end.
 (** a row of the function [h], of type [ty], whose fixpoint is [b] *)
 Definition vm_row (Σ : global_env) (mp : modpath) (h ty b : term) (st : string) : list rprow :=
-  match vm_ty_v (ret_ty ty), vm_norm b with
+  match (match h with
+         | tConst k _ => if eq_mp (fst k) copy_mp then vm_ty_q (ret_ty ty) else vm_ty_v (ret_ty ty)
+         | _ => vm_ty_v (ret_ty ty)
+         end), vm_norm b with
   | Some V, Some d =>
       let '(tys, body) := lams (dbody d) in
       let n := length tys in
@@ -7656,7 +8144,11 @@ Definition vm_row (Σ : global_env) (mp : modpath) (h ty b : term) (st : string)
                                  | Some (ConstantDecl cb) => vm_ty (ret_ty (al_t 1000 Σ mp (cst_type cb)))
                                  | _ => false
                                  end in
-            match vm_tr 1000 Σ mp V (length fl) im n 0 (vm_lets 10000 isr0 (ret_ty ty) body) with
+            let tyc0 := fun k => match lookup_env Σ k with
+                                 | Some (ConstantDecl cb) => ret_ty (al_t 1000 Σ mp (cst_type cb))
+                                 | _ => tRel 0
+                                 end in
+            match vm_tr 1000 Σ mp V (Nat.max 1 (length fl)) im n 0 (vm_lets 10000 Σ isr0 tyc0 100000 (ret_ty ty) body) with
             | Some b' =>
                 [(h, [], rp_vm :: map (Nat.add 900) (nodup Nat.eq_dec gs), st ^ "__v" ^ string_of_nat (rarg d),
                   {| dname := dname d; dtype := pis_of tys bm_num; rarg := rarg d; dbody := lams_of tys b' |})]
@@ -7810,7 +8302,7 @@ Definition vm_stmt (Σ : global_env) (mp : modpath) (r : rprow) : term :=
   let m := length tys0 in
   let rels := map (fun j => tRel (m - 1 - j)) (seq 0 m) in
   let V := match vm_h_ty Σ mp h with
-           | Some rt => match vm_ty_v rt with Some v => v | None => tRel 0 end
+           | Some rt => match vm_ty_q rt with Some v => v | None => tRel 0 end
            | None => tRel 0
            end in
   match vm_flat 20 Σ V (tRel 1), y_case_pair with
@@ -7819,6 +8311,11 @@ Definition vm_stmt (Σ : global_env) (mp : modpath) (r : rprow) : term :=
         tCase {| ci_ind := ci_ind cip; ci_npar := ci_npar cip; ci_relevance := ci_relevance cip |}
               {| pparams := [V; tConst kn_mem []]; puinst := puinst pp; pcontext := pcontext pp; preturn := lift0 (length (pcontext pp)) bm_num |}
               (pf_beta h rels) [{| bcontext := bcontext brp; bbody := bm_pair x0 (vm_wr 0 rest (tRel 0)) |}]]))
+  | Some [], tLambda _ _ (tCase cip pp _ [brp]) =>
+      pis_of tys0 (vm_pres m (rp_gds sl) (tApp y_eq [bm_num; tApp (tConst (rp_name r) []) rels;
+        tCase {| ci_ind := ci_ind cip; ci_npar := ci_npar cip; ci_relevance := ci_relevance cip |}
+              {| pparams := [V; tConst kn_mem []]; puinst := puinst pp; pcontext := pcontext pp; preturn := lift0 (length (pcontext pp)) bm_num |}
+              (pf_beta h rels) [{| bcontext := bcontext brp; bbody := bm_pair (vm_lit 0) (tRel 0) |}]]))
   | _, _ => tRel 0
   end.
 (** the lemma of a function that gives a memory: it leaves the slot block alone *)
@@ -7922,7 +8419,7 @@ Fixpoint vm_sub (fuel : nat) (Σ : global_env) (rows : list rprow) (gd : bool) (
       let info := fun (r : rprow) (V : term) =>
         let '(_, _, _, _, d0) := r in
         match vm_im (fst (lams (dbody d0))), vm_flat 20 Σ V (tRel 0) with
-        | Some im, Some fl => Some (im, length fl)
+        | Some im, Some fl => Some (im, Nat.max 1 (length fl))
         | _, _ => None
         end in
       let dflt_app := fun f args => tApp (go f) (map go args) in
@@ -8107,7 +8604,7 @@ Definition um_rows (Σ : global_env) (mp : modpath) (root : kername) (kns : list
     else []) kns.
 (** each after what it names *)
 Definition rp_topo (Σ : global_env) (rows : list rprow) : list rprow :=
-  let names := fun r => consts 10000 (if existsb (fun q : rprow => let '(_, _, sl, _, _) := q in rp_is_vm sl) rows then vm_sub 100000 Σ rows true (rp_sub 100000 rows (dbody (rp_def r))) else rp_sub 100000 rows (dbody (rp_def r))) [] in
+  let names := fun r => (match r with (tConst k0 _, _, _, _, _) => [k0] | _ => [] end) ++ consts 10000 (if existsb (fun q : rprow => let '(_, _, sl, _, _) := q in rp_is_vm sl) rows then vm_sub 100000 Σ rows true (rp_sub 100000 rows (dbody (rp_def r))) else rp_sub 100000 rows (dbody (rp_def r))) [] in
   let is_row := fun k => existsb (fun q => Kername.eqb k (rp_name q)) rows in
   let rd := map (fun r => (r, filter is_row (names r))) rows in
   let fix go (fu : nat) (todo : list (rprow * list kername)) (doneL : list rprow) {struct fu} : list rprow :=
@@ -8138,28 +8635,43 @@ Definition pm_add (Σ : global_env) : global_env :=
                         end) (declarations pm_kit) Σ.
 Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env * bool :=
   let kns0 := snd (reach_go 1000 Σ mp root root ([], [])) in
+  (* (step 80) a function holding a memory in a record or a pair: read as a pair, its fields as parameters; those made first *)
+  let qs0 := vm_qs (conv_all Σ mp) mp root kns0 in
+  let Σ := match qs0 with [] => Σ | _ => vm_with_unit (vm_with_prod Σ) end in
+  let qs := vm_qs (conv_all Σ mp) mp root kns0 in
+  let qrows := vm_qrows (conv_all Σ mp) mp qs in
+  let anyq := existsb (fun kn => if in_prog mp (fst kn) then
+                                   match lookup_env (conv_all Σ mp) kn with
+                                   | Some (ConstantDecl cb) => vm_qcand (conv_all Σ mp) mp (al_t 1000 Σ mp (cst_type cb))
+                                   | _ => false
+                                   end else false) kns0 in
+  let Σq := fold_left (fun S2 r =>
+              let d' := rp_def r in
+              add_decl S2 (rp_name r) (dtype d') (tFix [{| dname := dname d'; dtype := dtype d'; rarg := rarg d'; dbody := dbody d' |}] 0)) qrows (conv_all Σ mp) in
+  let kns1 := kns0 ++ map rp_name qrows in
   let lrows := vm_lf_rows (conv_all Σ mp) mp kns0 in
-  let vrows := vm_rows (conv_all Σ mp) mp root kns0 ++ lrows in
-  let rows := rp_topo Σ (rp_all Σ mp root ++ um_rows (conv_all Σ mp) mp root kns0 ++ er_rows (conv_all Σ mp) mp root kns0 ++ vrows) in
+  let vrows := vm_rows Σq mp root (filter (fun k => negb (existsb (fun e : kername * kername * list term => Kername.eqb (fst (fst e)) k) qs)) kns1) ++ lrows in
+  let rows := rp_topo Σ (rp_all Σ mp root ++ um_rows (conv_all Σ mp) mp root kns0 ++ er_rows (conv_all Σ mp) mp root kns0 ++ qrows ++ vrows) in
   (* (step 69) what is made, its own calls of what is in their place written too; the statements *)
   let S0 := fold_left (fun S2 r =>
               let d' := rp_def r in
+              let plain := match r with (_, _, sl, _, _) => rp_is_qm sl && existsb (fun q : rprow => match q with (tConst k _, _, _, _, _) => Kername.eqb k (rp_name r) | _ => false end) rows end in
               add_decl (add_decl S2 (rp_name r) (dtype d')
-                         (if Nat.eqb (rarg d') rp_nofix then y_red 100000 (vm_sub 100000 (conv_all Σ mp) rows true (rp_sub 100000 rows (er_sub 100000 rows [] (dbody d'))))
-                          else tFix [{| dname := dname d'; dtype := dtype d'; rarg := rarg d'; dbody := y_red 100000 (vm_sub 100000 (conv_all Σ mp) rows true (rp_sub 100000 rows (er_sub 100000 rows [] (dbody d')))) |}] 0))
-                       (rq_name r) (tSort sProp) (match r with (_, _, sl, _, _) => if rp_is_er sl then er_stmt Σ mp r else if rp_is_vm sl then vm_stmt (conv_all Σ mp) mp r else rp_stmt r end)) rows Σ in
+                         (if plain then tFix [d'] 0 else if Nat.eqb (rarg d') rp_nofix then y_red 100000 (vm_sub 100000 (conv_all Σ mp) rows true (rp_sub 100000 rows (er_sub 100000 rows [] (dbody d'))))
+                          else tFix [{| dname := dname d'; dtype := dtype d'; rarg := rarg d'; dbody := (if existsb (fun q : rprow => let '(_, _, sl, _, _) := q in rp_is_vm sl) rows then vm_yr else y_red 100000) (vm_sub 100000 (conv_all Σ mp) rows true (rp_sub 100000 rows (er_sub 100000 rows [] (dbody d')))) |}] 0))
+                       (rq_name r) (tSort sProp) (match r with (_, _, sl, _, _) => if rp_is_er sl then er_stmt Σ mp r else if rp_is_vm sl then vm_stmt Σq mp r else if rp_is_qm sl then vm_qstmt Σq mp r else rp_stmt r end)) rows Σ in
   (* (step 78) the lemmas that come first, each after what it calls; the values' types, for the slot block's room *)
   let S0 := match vrows with
             | [] => S0
             | _ =>
                 let S1 := fold_left (fun S2 e =>
                             let '(st, b, q, _) := e in
-                            add_decl S2 (vm_fq_name st b) (tSort sProp) q) (vm_fq_all (conv_all Σ mp) mp kns0 lrows) S0 in
+                            add_decl S2 (vm_fq_name st b) (tSort sProp) q) (vm_fq_all Σq mp (filter (fun k => negb (existsb (fun e : kername * kername * list term => Kername.eqb (fst (fst e)) k) qs)) kns1) lrows) S0 in
                 fold_left (fun S2 r =>
                   let '(h, _, _, st, _) := r in
-                  match vm_h_ty (conv_all Σ mp) mp h with
+                  match vm_h_ty Σq mp h with
                   | Some rt =>
-                      match vm_ty_v rt with
+                      match vm_ty_q rt with
                       | Some V =>
                           let tq := V :: vm_nested 20 (conv_all Σ mp) V in
                           add_decl S2 (copy_mp, st ^ "__t"%bs) (pis_of tq (tConst kn_int [])) (lams_of tq (vm_lit 0))
@@ -8170,7 +8682,7 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
             end in
   fold_left (fun st kn =>
     let '(S1, ch) := st in
-    if existsb (fun r : rprow => match r with (tConst k _, _, sl, _, _) => if if rp_is_um sl then true else if rp_is_bm sl then true else if rp_is_er sl then true else rp_is_vm sl then Kername.eqb k kn else false | _ => false end) rows then st else
+    if existsb (fun r : rprow => match r with (tConst k _, _, sl, _, _) => if if rp_is_um sl then true else if rp_is_bm sl then true else if rp_is_er sl then true else if rp_is_qm sl then true else rp_is_vm sl then Kername.eqb k kn else false | _ => false end) rows then st else
     if in_prog mp (fst kn) then
       match lookup_env S1 kn with
       | Some (ConstantDecl cb) =>
@@ -8180,7 +8692,7 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
               let ty0 := al_t 1000 Σ mp (cst_type cb) in
               let b0x := mo_t 100000 Σ mp (lu_t 100000 Σ (al_t 100000 Σ mp b00)) in
               (* (step 69) its calls of what is read in another form *)
-              let b0 := y_red 100000 (vm_sub 100000 (conv_all Σ mp) rows false (rp_sub 100000 rows (er_sub 100000 rows [] (match vrows with [] => vm_unf 6 Σ mp b0x | _ => vm_lets 100000 (vm_isr rows) (ret_ty ty0) (vm_zfix 100000 (vm_ginl 100000 (conv_all Σ mp) mp rows (vm_unf 6 Σ mp b0x))) end)))) in
+              let b0 := (if existsb (fun r : rprow => let '(_, _, sl, _, _) := r in rp_is_vm sl) rows then vm_yr else y_red 100000) (vm_sub 100000 (conv_all Σ mp) rows false (rp_sub 100000 rows (er_sub 100000 rows [] (match (if anyq then [] else vrows ++ qrows), anyq with [], false => vm_unf 6 Σ mp b0x | _, _ => vm_pj 100000 (conv_all Σ mp) mp (vm_yr (vm_qsub 100000 (conv_all Σ mp) mp qs (vm_lets 100000 (conv_all Σ mp) (fun k => if vm_isr rows k then true else existsb (fun e : kername * kername * list term => Kername.eqb (fst (fst e)) k) qs) (fun k => match lookup_env (conv_all Σ mp) k with Some (ConstantDecl cb) => ret_ty (al_t 1000 Σ mp (cst_type cb)) | _ => tRel 0 end) 100000 (ret_ty ty0) (vm_zfix 100000 (vm_ginl 100000 (conv_all Σ mp) mp rows (vm_unf 6 Σ mp b0x)))))) end)))) in
               let r0 := match rows with
                         | [] => if y_hasp 10000 b0x then y_fl 10000 (vm_unf 6 Σ mp b0x) else false
                         | _ => negb (teq 100000 b0 b0x)

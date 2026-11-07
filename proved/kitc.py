@@ -898,13 +898,15 @@ def reflect(name, entry, prog, no_proof):
     kqunm = lambda x: x.replace("''", "\0").replace("'_", ".").replace("\0", "'")
     fqs = [m for m, _ in mts if m.endswith("__fq__wy")]
     # (step 79) a local fix is no constant: its lemma is stated of the fix itself
-    kqfn = lambda x: "" if re.search(r"__l\d+(__v\d+)?$", x) else kqunm(x)
+    kqfn = lambda x: "" if re.search(r"__l\d+(__v\d+)?$", x) else kqunm(x).split("kqcopy.")[-1]
     fqf = [(m, kqfn(re.match(r"(.*)__f\d+__fq__wy$", m).group(1)), int(re.search(r"__f(\d+)__fq__wy$", m).group(1))) for m in fqs]
     vmr = any(re.search(r"__v\d+__rq__wy$", m) for m, _ in rrs)
+    qmr = any(re.search(r"__q\d+__rq__wy$", m) for m, _ in rrs)
+    rrw2 = []
     roomw = max([int(r[2]) for r in recs] + [1])
     roomR = f"({roomw} <= Sint63.to_Z (KQ.KQBound.kq_len 63) + 1)%Z" if roomw > 1 else "True"
     hrb = f"(Hr : {roomR}) " if vmr else ""
-    keepf = " ".join(sorted({"KQ.KQRun.kq_nat"} | {x for m, h in rrs for x in (h, m[:-len("__rq__wy")] + "__rp__wy") if x} | {f[1] for f in fqf if f[1]}
+    keepf = " ".join(sorted({"KQ.KQRun.kq_nat"} | {x for m, h in rrs for x in (h, m[:-len("__rq__wy")] + "__rp__wy") if x} | {f[1] for f in fqf if f[1]} | {x for x in (kqfn(re.match(r"(.*)__[vq]\d+__rq__wy$", m).group(1)) for m, _ in rrs if re.search(r"__[vq]\d+__rq__wy$", m)) if x}
                             | {f[0] for f in fs if f[0] in fix1} | {f[0].rsplit(".", 1)[-1] + "__wy" for f in fs if f[0].rsplit(".", 1)[-1] + "__wy" in made}))
     if vmr:
         if roomw > 1:
@@ -912,6 +914,7 @@ def reflect(name, entry, prog, no_proof):
             t += (f"Lemma {name}_room : @KQR.slot_room {inst} -> {roomR}.\nProof. intros H. exact (H {ri}%nat (proj1 (PeanoNat.Nat.ltb_lt 1%nat {roomw}%nat) eq_refl)). Qed.\n")
         else:
             t += f"Lemma {name}_room : @KQR.slot_room {inst} -> {roomR}.\nProof. intros _. exact Logic.I. Qed.\n"
+    if vmr or qmr:
         t += "Ltac KQRWf.kq_vm ::= KQRWf.kq_vm0.\n"
     for j, (m, fn, r) in enumerate(fqf):
         d0 = f"do {r} intro; " if r else ""
@@ -921,7 +924,7 @@ def reflect(name, entry, prog, no_proof):
     for j, (m, h) in enumerate(rrs):
         F = m[:-len("__rq__wy")] + "__rp__wy"
         # (step 78) what is read through the slot block: its statement names the function by what follows the row
-        h = kqfn(re.match(r"(.*)__v\d+__rq__wy$", m).group(1)) if re.search(r"__v\d+__rq__wy$", m) else h
+        h = kqfn(re.match(r"(.*)__[vq]\d+__rq__wy$", m).group(1)) if re.search(r"__[vq]\d+__rq__wy$", m) else h
         unf = " ".join(x for x in [h, F] if x)
         unfc = ", ".join(x for x in [h, F] if x)
         if m.endswith("__n__rq__wy"):
@@ -931,13 +934,18 @@ def reflect(name, entry, prog, no_proof):
             t += (f"Lemma {name}_rr{j} {hrb}: {m}.\nProof. unfold {m}. intros; unfold {unfc}; first [solve [KQRWf.own_step0] | solve [cbn; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0]]. Qed.\n")
         else:
             # (step 78) the counter of a function read through the slot block may stand anywhere
-            mv = re.search(r"__v(\d+)__rq__wy$", m)
+            mv = re.search(r"__[vq](\d+)__rq__wy$", m)
             rv = int(mv.group(1)) if mv else 0
             d0 = f"do {rv} intro; " if rv else ""
             t += (f"Lemma {name}_rr{j} {hrb}: {m}.\nProof. unfold {m}. fix IH {rv + 1}. {d0}intros kqn; destruct kqn as [|kqn]; intros; cbn [{unf}]; first [solve [KQRWf.own_step IH] | solve [cbn; KQRWf.own_step IH] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step IH]]. Qed.\n")
         rrn.append(f"{name}_rr{j}")
         # (step 76) rewriting compares up to unfolding: such a lemma only where its function is in the goal, or it would turn the operation back
         rrj = f"match goal with Hr : {roomR} |- _ => rewrite ?({name}_rr{j} Hr) by KQRWf.vm_side end" if vmr else f"rewrite ?{name}_rr{j}"
+        if re.search(r"__q\d+__rq__wy$", m):
+            # (step 80) read as a pair: what is known of the pair goes first
+            rrw2.append(rrj)
+            t += "Ltac KQRWf.kq_rw2 ::= progress (" + "; ".join(rrw2) + ").\n"
+            continue
         rrw.append(f"try (match goal with |- context [{F}] => {rrj} end)" if m.endswith("__e__rq__wy") or m.endswith("__e__n__rq__wy") else rrj)
         t += "Ltac KQRWf.kq_rw ::= progress (" + "; ".join(rrw) + ").\n"
     yf = {f[0]: f[0].rsplit(".", 1)[-1] + "__wy" for f in fs if f[0].rsplit(".", 1)[-1] + "__wy" in made}
