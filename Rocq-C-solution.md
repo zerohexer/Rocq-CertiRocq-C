@@ -5269,6 +5269,17 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   the five kernels (16 / 16 / 19 / 16 / 17 s); **93 programs through the verified compiler, 0 refused**; `check_trust.py`: `trust
   unchanged`.  Next: what is left of a value and a memory given back: a local fix, a section, what a recursion holds.
 
+**Step 79, a value and a memory from the other forms of recursion, a block's number given, the same call named twice (§3.5, §12.A) — the design (2026-11-07).**  Step 78's form for what its own cells left: completeness is strict.
+- *A fixpoint under parameters* (a Section's variable, `fun f => fix go ..`): one fixpoint of them all, its own call given them (`vm_norm`), the row and the frame lemma as step 78's, its counter's place counted after them.  Such a function keeps its name where it is called: it is not written out as a helper is.
+- *A local fix*: `let fix go .. in go ..`, `(fix go ..) ..`, in a function or a helper written out, naming what is around it: its row is of the fix itself, what it names abstracted (`lfix_key`, `vm_lfs`), one row per fix, its statements stated of the fix, so that what is known of it applies where the text has it.  A `let` of a fix is the fix where it is used; a match on a `let` has the `let` outside; a match on a choice of such pairs is in each branch (`vm_zfix`).
+- *A block's number as a parameter*: the frame lemma and the row's equation take that it is not 63 (`eqb h 63 = false`, its place among the slots a mark, `vm_fr` collecting it), the function's own call must hand it on, and a call must give a written number, a definition of one, or, in a row, a parameter of its own that is one too.  A helper with such a parameter, not recursive, is written out where it is called (`vm_ginl`).  Where nothing shows it is not 63: a gap with its cell; the program is refused with its reason.
+- *The same call named twice*: `fst (f x)` and `snd (f x)` from one memory are one call: taken apart once where the first is worked out, deeper if only a branch names it (`vm_cand`, `vm_occ`, `vm_repl`); in a function's own text and in a row's.  `fst (f x)` and `snd (f y)` from one memory are two versions: by design, a pin and its control.
+- *The proof*: rewriting takes a side goal, closed by what is written or what the lemma takes (`KQRWf.vm_side`).  A call of a fix is taken apart as a call of a function is; a variable matched is told apart before a pair with a match in it.  A last alternative for the caller's equation unfolds the program's functions too, for a function given that is read as a local fix.
+- *The C*: a program with no such function: byte-identical.
+- *Left*: a mutual block, a polymorphic recursion, a Program Fixpoint, the memory before the value in the pair, a memory in a record: gaps with their cells, next.
+- *The acceptance*: `proved/examples/sect_fix`: a Section's variable with a block given, a local fix, the same call named for its value and its memory; the answer worked out apart: 93.
+- *Cells*: 41, `A_w_*`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5453,7 +5464,8 @@ Pushed to the public repository up to `89fd65c` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 78 (a value of several numbers and a memory given back by a recursion: the construct table 3059 of 3183, 45 by design, 78 gaps, 9 gaps read), the C, the gate; F70, F71; D29, §12.H: the floor, the owner's |
+| (this commit) | §12.V: step 79's design -- what is left of a value and a memory given back |
+| `2e29a22` | §12.V: step 78 (a value of several numbers and a memory given back by a recursion: the construct table 3059 of 3183, 45 by design, 78 gaps, 9 gaps read), the C, the gate; F70, F71; D29, §12.H: the floor, the owner's |
 | `89fd65c` | `proved/KQR.v` + `KQRWf.v` + `KQRReify.v` + `kitc.py` + `matrix` + `examples/vals_fix` step 78: a value of several numbers and a memory given back by a recursion: through the slot block; 78 cells |
 | `3ffde58` | §12.V: step 78's design -- a value of several numbers and a memory given back by a recursion |
 | `3d2398a` | §12.V: step 77 (a value and a memory written out: the construct table 2988 of 3105, 43 by design, 73 gaps), the C, the gate; F72; `examples.sh` counts no binary left by an earlier run |
