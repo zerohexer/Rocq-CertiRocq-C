@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3294 of 3426, 78 gaps, 53 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3331 of 3464, 78 gaps, 54 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -5391,6 +5391,19 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The acceptance*: `proved/examples/cls_fix`: two instances of a class at a number and at a record, a class giving a boolean, a record of functions that reads and writes the memory, naming the caller's variable; the answer worked out apart: 4109666.
 - *Cells*: 38, `A_zc_*`.
 
+**Step 84, a class or a record of functions given to a recursive function — the result (2026-11-07).**  Built as designed:
+- *The reader*: `cl_ty`, `lead_cl`, `lead_inst` (a closed instance read as a type is); `cl_whnf`, `cl_proj`, `cl_beta`, `cl_red`, `cl_all`, `cl_s` (a method at a closed instance written out, in the rows and the text); `sp_sh`, `sp_uh`, `sp_pj` (a record of functions among a recursive function's parameters as its fields).  `KQR.v`, `KQRWf.v` unchanged.  *`kitc.py`*: a record over a type: its constructor takes the type.
+- *The acceptance*: `proved/examples/cls_fix`: proved, built, 4109666.
+- *Cells*: 38 more: 33 proved; `A_zc_r_gives_record` by design, with its control; gaps `A_zc_c_mutual`, `_r_mutual`, `_c_counter_late`, `_r_nested`.  Four gaps read: `A_p_class_rec`, `A_p_class_two`, `A_q_cl_fold`, `A_q_rec_vtable_rec`.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62, in clean copies of both trees; step 83's files / these): `HWP_kernel` 2.98 / 2.96 s, `HWP_own` 2.04 / 2.05, `HWP_irqnow` 1.72 / 1.71 — the same.
+- *Found by comparing the tables*: the first version bound a function given to a class's method by a `let` of a type that is not plainly a function, and `A_p_class_monad` stopped being read.  `cl_beta` puts a function in, as it does a variable; nothing but text is copied.  The gate and the table were run again.
+- The C: the 90 programs byte-identical, and `cls_fix`, new.  The construct table (on `413a349`): **3331 of 3464 through the
+  verified compiler**, 54 by design, 78 gaps, 1 not Rocq (was 3294 of 3426: 33 of the 38 new cells read, 1 by design, 4 gaps; 4
+  gaps read; a cell lost by the first version, read again).  The gate on `413a349`, the walk switched off: `make.sh` `core-ok`;
+  examples 55 / 55; corpus 36 / 36; the five kernels (15 / 15 / 18 / 14 / 15 s); **99 programs through the verified compiler, 0
+  refused**; `check_trust.py`: `trust unchanged`.  Next: what a fifth probe found: a memory inside an option, a helper's choice of
+  a value and a memory.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5571,11 +5584,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `95d192b` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `413a349` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 84's design -- a class's instance read as a type, a record of functions given to a recursive function |
+| (this commit) | §12.V: step 84 (a class or a record of functions given to a recursive function: the construct table 3331 of 3464, 54 by design, 78 gaps, 4 gaps read), the C, the gate |
+| `413a349` | `proved/KQRReify.v` step 84: a function given to a class's method is put in |
+| `248f2d4` | `proved/KQRReify.v` + `kitc.py` + `matrix` + `examples/cls_fix` step 84: a class or a record of functions given to a recursive function; 38 cells |
+| `02c4d50` | §12.V: step 84's design -- a class's instance read as a type, a record of functions given to a recursive function |
 | `5d67ece` | §12.V: step 83 (a counter a function gives back, used as a counter: the construct table 3294 of 3426, 53 by design, 78 gaps, 7 cells read), the C, the gate |
 | `95d192b` | `proved/KQR.v` + `KQRWf.v` + `KQRReify.v` + `kitc.py` + `matrix` + `examples/cuse_fix` step 83: a counter a function gives back, used as a counter; 70 cells |
 | `90820ee` | §12.V: step 83's design -- a counter expression as a counter, its bound proved by induction |
