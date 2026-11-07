@@ -464,6 +464,32 @@ Ltac vm_lit :=
     | true => change (PrimInt63.eqb x y) with true
     | false => change (PrimInt63.eqb x y) with false
     end end.
+(** (step 82) a counter as a number, at every counter: the machine's numbers are modulo [wB] *)
+Lemma nr_O : Uint63.of_Z (Z.of_nat 0) = 0%uint63.
+Proof. reflexivity. Qed.
+Lemma nr_S : forall n, Uint63.of_Z (Z.of_nat (S n)) = PrimInt63.add (Uint63.of_Z (Z.of_nat n)) 1%uint63.
+Proof.
+  intros n. apply Uint63.to_Z_inj. rewrite Uint63.add_spec, !Uint63.of_Z_spec.
+  rewrite Nat2Z.inj_succ. change (Uint63.to_Z 1%uint63) with 1%Z. unfold Z.succ. rewrite Z.add_mod_idemp_l by (compute; discriminate). reflexivity.
+Qed.
+Lemma nr_add : forall a b, Uint63.of_Z (Z.of_nat (a + b)) = PrimInt63.add (Uint63.of_Z (Z.of_nat a)) (Uint63.of_Z (Z.of_nat b)).
+Proof.
+  intros a b. apply Uint63.to_Z_inj. rewrite Uint63.add_spec, !Uint63.of_Z_spec.
+  rewrite Nat2Z.inj_add. apply Z.add_mod. compute; discriminate.
+Qed.
+Lemma nr_mul : forall a b, Uint63.of_Z (Z.of_nat (a * b)) = PrimInt63.mul (Uint63.of_Z (Z.of_nat a)) (Uint63.of_Z (Z.of_nat b)).
+Proof.
+  intros a b. apply Uint63.to_Z_inj. rewrite Uint63.mul_spec, !Uint63.of_Z_spec.
+  rewrite Nat2Z.inj_mul. apply Z.mul_mod. compute; discriminate.
+Qed.
+(** only as written: a function of the shape of [Nat.add] is [Nat.add] up to conversion *)
+Ltac kq_nr :=
+  match goal with
+  | |- context [Uint63.of_Z (Z.of_nat (S ?a))] => rewrite (nr_S a)
+  | |- context [Uint63.of_Z (Z.of_nat (Nat.add ?a ?b))] => rewrite (nr_add a b)
+  | |- context [Uint63.of_Z (Z.of_nat (Nat.mul ?a ?b))] => rewrite (nr_mul a b)
+  | |- context [Uint63.of_Z (Z.of_nat O)] => rewrite nr_O
+  end.
 (** a program's lemmas of a function read as a pair, for when what is known of the pair has been used: [kitc.py] sets it *)
 Ltac kq_rw2 := fail.
 Ltac kq_vm0 :=
@@ -472,6 +498,7 @@ Ltac kq_vm0 :=
         | vm_slot
         | kq_fr
         | vm_lit
+        | kq_nr
         | vm_call_pair
         | kq_rw2
         | vm_case
@@ -519,6 +546,20 @@ Ltac own_step IH :=
                 | reflexivity
                 | match goal with |- context [match ?c with _ => _ end] => is_var c; destruct c end ]).
 
+(** (step 82) a function giving back a counter, and the number in its place: its own call made a number on the right *)
+Ltac nr_step IH :=
+  repeat (cbn beta iota zeta delta [fst snd proj1_sig]; kq_unf;
+          first [ prim_rw
+                | kq_rw
+                | progress (rewrite <- ?IH)
+                | kq_vm
+                | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
+                | kq_convoy
+                | match goal with |- context [if ?c then _ else _] => lazymatch c with context [match _ with _ => _ end] => fail | _ => let e := fresh "kqe" in destruct c eqn:e end end
+                | match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
+                | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
+                | reflexivity
+                | match goal with |- context [match ?c with _ => _ end] => is_var c; destruct c end ]).
 (** (step 61) a fixpoint with its own call on a counter deeper than the predecessor, and a budget function above it: equal at every budget above the counter *)
 Ltac deep_step IH pr :=
   repeat (cbn beta iota zeta; pr;

@@ -2846,6 +2846,95 @@ addA('q_nat_pair_ret', "", 'let (q, r) := sp n in if Nat.eqb r 0 then a else Uin
 addA('q_divmod', "", 'Uint63.of_nat (fst (Nat.divmod n 3 0 3))',
      '')
 
+# a function giving back a counter, made a number where it is used (step 82)
+addA('z_n_arith', "", 'Uint63.of_nat (cnt n a s) * 2 + b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('z_n_index', "", 'rd 0 (Uint63.of_nat (cnt n a s)) s',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('z_n_write', "", 'rd 1 a (upd 1 a (Uint63.of_nat (cnt n a s)) s)',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('z_n_test', "", 'if Uint63.of_nat (cnt n a s) =? 3 then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('z_n_let', "", 'let c := Uint63.of_nat (cnt n a s) in c + c',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('z_n_twice', "", 'Uint63.of_nat (cnt n a s) + Uint63.of_nat (cnt n b s)',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('z_n_in_rec', "", 'outer n a s',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint outer (j : nat) (x : int) (t : mem) : int := match j with O => x | S m => outer m (x + Uint63.of_nat (cnt 3 x t)) t end.\n')
+addA('z_n_in_helper', "", 'wrap a s',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nDefinition wrap (a : int) (t : mem) : int := Uint63.of_nat (cnt 3 a t) + 1.\n')
+addA('z_n_after_write', "", 'let t := upd 0 a b s in Uint63.of_nat (cnt n a t) + rd 0 a t',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('z_n_lit_counter', "", 'Uint63.of_nat (cnt 5 a s)',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('z_s_two', "", 'Uint63.of_nat (tw n)',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S m => S (S (tw m)) end.\n')
+addA('z_s_lit', "", 'Uint63.of_nat (tw n)',
+     'Fixpoint tw (k : nat) : nat := match k with O => 7 | S m => S (tw m) end.\n')
+addA('z_s_var', "", 'Uint63.of_nat (tw n 3)',
+     'Fixpoint tw (k c : nat) : nat := match k with O => c | S m => S (tw m c) end.\n')
+addA('z_s_other_counter', "", 'Uint63.of_nat (tw n n)',
+     'Fixpoint tw (k c : nat) : nat := match k with O => c | S m => tw m c end.\n')
+addA('z_s_add', "", 'Uint63.of_nat (tw n)',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S m => 3 + tw m end.\n')
+addA('z_s_add_var', "", 'Uint63.of_nat (tw n 2)',
+     'Fixpoint tw (k c : nat) : nat := match k with O => O | S m => c + tw m c end.\n')
+addA('z_s_add_both', "", 'Uint63.of_nat (tw n)',
+     'Fixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
+addA('z_s_mul', "", 'Uint63.of_nat (tw n)',
+     'Fixpoint tw (k : nat) : nat := match k with O => 1 | S m => 2 * tw m end.\n')
+addA('z_s_match_counter', "", 'Uint63.of_nat (tw n)',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\n')
+addA('z_s_if_num', "", 'Uint63.of_nat (tw n a)',
+     'Fixpoint tw (k : nat) (i : int) : nat := match k with O => O | S m => if i =? 0 then tw m (i + 1) else S (tw m (i + 1)) end.\n')
+addA('z_s_let', "", 'Uint63.of_nat (tw n a)',
+     'Fixpoint tw (k : nat) (i : int) : nat := match k with O => O | S m => let r := i + 1 in S (tw m r) end.\n')
+addA('z_s_let_rec', "", 'Uint63.of_nat (tw n)',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S m => let r := tw m in S (S r) end.\n')
+addA('z_s_counter_second', "", 'Uint63.of_nat (tw a n)',
+     'Fixpoint tw (i : int) (k : nat) : nat := match k with O => O | S m => S (tw (i + 1) m) end.\n')
+addA('z_a_acc', "", 'Uint63.of_nat (tw n 0)',
+     'Fixpoint tw (k acc : nat) : nat := match k with O => acc | S m => tw m (S acc) end.\n')
+addA('z_a_acc_first', "", 'Uint63.of_nat (tw 0 n)',
+     'Fixpoint tw (acc k : nat) : nat := match k with O => acc | S m => tw (S acc) m end.\n')
+addA('z_a_acc_if', "", 'Uint63.of_nat (tw n 0 a)',
+     'Fixpoint tw (k acc : nat) (i : int) : nat := match k with O => acc | S m => tw m (if i =? 0 then acc else S acc) (i + 1) end.\n')
+addA('z_a_acc_add', "", 'Uint63.of_nat (tw n 1)',
+     'Fixpoint tw (k acc : nat) : nat := match k with O => acc | S m => tw m (acc + 2) end.\n')
+addA('z_a_acc_from_counter', "", 'Uint63.of_nat (tw n n)',
+     'Fixpoint tw (k acc : nat) : nat := match k with O => acc | S m => tw m (S acc) end.\n')
+addA('z_a_acc_read', "", 'Uint63.of_nat (tw n 0)',
+     'Fixpoint tw (k acc : nat) : nat := match k with O => acc | S m => match acc with O => tw m 1 | S q => tw m q end end.\n')
+addA('z_a_two_acc', "", 'Uint63.of_nat (tw n 0 1)',
+     'Fixpoint tw (k x y : nat) : nat := match k with O => x | S m => tw m y (S x) end.\n')
+addA('z_o_section', "", 'Uint63.of_nat (tw b n a)',
+     'Section S.\nVariable d : int.\nFixpoint tw (k : nat) (i : int) : nat := match k with O => O | S m => if i =? d then tw m (i + 1) else S (tw m (i + 1)) end.\nEnd S.\n')
+addA('z_o_local', "", 'tw n a',
+     'Definition tw (k0 : nat) (i0 : int) : int := let fix go (k : nat) (i : int) : nat := match k with O => O | S m => S (go m (i + 1)) end in Uint63.of_nat (go k0 i0).\n')
+addA('z_o_helper', "", 'Uint63.of_nat (hh n)',
+     'Definition hh (k : nat) : nat := S (S k).\n')
+addA('z_o_helper_call', "", 'Uint63.of_nat (hh n)',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S m => S (tw m) end.\nDefinition hh (k : nat) : nat := S (tw k).\n')
+addA('z_o_two_funcs', "", 'Uint63.of_nat (th n)',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S m => S (tw m) end.\nFixpoint th (k : nat) : nat := match k with O => tw 2 | S m => S (th m) end.\n')
+addA('z_o_two_funcs_add', "", 'Uint63.of_nat (th n)',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S m => S (tw m) end.\nFixpoint th (k : nat) : nat := match k with O => O | S m => tw m + th m end.\n')
+addA('z_o_mem_counter', "", 'match tw n a s with (c, t) => Uint63.of_nat c + rd 0 a t end',
+     'Fixpoint tw (k : nat) (i : int) (t : mem) : nat * mem := match k with O => (O, t) | S m => let (c, u) := tw m (i + 1) (upd 0 i i t) in (S c, u) end.\n')
+addA('z_o_pair_counter', "", 'Uint63.of_nat (fst (tw n a)) + snd (tw n a)',
+     'Fixpoint tw (k : nat) (i : int) : nat * int := match k with O => (O, i) | S m => tw m (i + 1) end.\n')
+addA('z_o_opt_counter', "", 'match tw n a with Some c => Uint63.of_nat c | None => 0 end',
+     'Fixpoint tw (k : nat) (i : int) : option nat := match k with O => None | S m => if i =? 0 then Some k else tw m (i + 1) end.\n')
+addA('z_u_counter_use', "", 'ff (cnt n a s) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('z_u_match', "", 'match cnt n a s with O => a | S _ => b end',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('z_u_leb', "", 'if Nat.leb (cnt n a s) 3 then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('z_u_eqb', "", 'if Nat.eqb (cnt n a s) 3 then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('z_u_zofnat', "", 'if (Z.of_nat (cnt n a s) <? 3)%Z then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
 # a proof as a parameter, a value with its proof as a parameter (step 81)
 addA('y_p_first', "", 'f I a',
      'Definition f (H : True) (x : int) : int := x + 1.\n')

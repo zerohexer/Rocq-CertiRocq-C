@@ -1,0 +1,19 @@
+(* counters given back, made numbers where they are used: the cells not 0 from i, by a recursion after the call; a count kept as a parameter; through a helper *)
+Fixpoint cnt (k : nat) (i : int) (t : mem) : nat :=
+  match k with
+  | O => O
+  | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t)
+  end.
+Fixpoint big (k acc : nat) (i : int) (t : mem) : nat :=
+  match k with
+  | O => acc
+  | S m => big m (if 9 <? rd 0 i t then S acc else acc) (i + 1) t
+  end.
+Definition both (k : nat) (i : int) (t : mem) : nat := S (cnt k i t + big k 0 i t).
+Definition solve (n : nat) (a : int) (s : mem) : int :=
+  let c := Uint63.of_nat (cnt n a s) in
+  let t := upd 1 0 c s in
+  c * 100 + Uint63.of_nat (big n 2 a t) * 10 + Uint63.of_nat (both n a t) + rd 1 0 t * 1000.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_arg 1) (kq_input 0).

@@ -6737,6 +6737,9 @@ Definition rp_gm : nat := 992.
 Definition rp_is_gm (slots : list nat) : bool := existsb (Nat.eqb rp_gm) slots.
 Definition rp_sp : nat := 991.
 Definition rp_is_sp (slots : list nat) : bool := existsb (Nat.eqb rp_sp) slots.
+(** (step 82) a row whose function gives back a counter: what is in its place the number it is, modulo the machine's *)
+Definition rp_nr : nat := 990.
+Definition rp_is_nr (slots : list nat) : bool := existsb (Nat.eqb rp_nr) slots.
 (** (step 72) a row whose function gives back a boolean and a memory, what is in its place a number and a memory *)
 Definition rp_bm : nat := 997.
 Definition rp_is_bm (slots : list nat) : bool := existsb (Nat.eqb rp_bm) slots.
@@ -6829,6 +6832,7 @@ Definition rp_match (rows : list rprow) (h : term) (args : list term) : option t
       if rp_is_vm slots0 then None else
       if rp_is_qm slots0 then None else
       if rp_is_sp slots0 then None else
+      if rp_is_nr slots0 then None else
       if rp_is_um slots0 then
         if Nat.eqb (length args) (length (fst (lams (dbody d0)))) then Some (pf_beta um_pair [tApp (tConst (rp_name r) []) args]) else None else
       if rp_is_bm slots0 then
@@ -8792,6 +8796,213 @@ Definition sp_stmt (Σ : global_env) (mp : modpath) (r : rprow) : term :=
       end
   | _ => tRel 0
   end.
+(** (step 82) a counter as a number: [Uint63.of_Z (Z.of_nat c)] *)
+Definition nr_of_z := <% Uint63.of_Z %>.
+Definition nr_ofn (c : term) : term := tApp nr_of_z [tApp (tConst kn_zofn []) [c]].
+Definition nr_nat_add := kn_of <% Nat.add %>.
+Definition nr_add := kn_of <% PrimInt63.add %>.
+Definition nr_mul := kn_of <% PrimInt63.mul %>.
+Definition nr_nat_mul := kn_of <% Nat.mul %>.
+(** a parameter holding a counter that is only handed on and given back: [acc]s, numbers *)
+Fixpoint nr_only (fuel : nat) (self v d : nat) (p : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      let go := nr_only fuel self v in
+      match t with
+      | tRel i => negb (Nat.eqb i (v + d))
+      | tApp (tRel f) args =>
+          if Nat.eqb f (self + d) then
+            forallb (fun ja : nat * term => if Nat.eqb (fst ja) p then true else go d p (snd ja)) (combine (seq 0 (length args)) args)
+          else negb (Nat.eqb f (v + d)) && forallb (go d p) args
+      | tApp f args => go d p f && forallb (go d p) args
+      | tLambda _ _ b => go (S d) p b
+      | tLetIn _ x _ b => go d p x && go (S d) p b
+      | tCase _ _ c brs => go d p c && forallb (fun br => go (d + length (bcontext br)) p (bbody br)) brs
+      | _ => true
+      end
+  end.
+(** where the function gives back: the parameter itself, or its own call, a number's work around them *)
+Fixpoint nr_tail_ok (fuel : nat) (Σ : global_env) (mp : modpath) (self v d : nat) (p : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      let go := nr_tail_ok fuel Σ mp self v in
+      match um_red 1000 Σ mp t with
+      | tRel i => true
+      | tApp (tConstruct _ 1 _) [e] => go d p e
+      | tApp (tRel f) args =>
+          if Nat.eqb f (self + d) then
+            forallb (fun ja : nat * term => if Nat.eqb (fst ja) p then true else nr_only 10000 self v d p (snd ja)) (combine (seq 0 (length args)) args)
+          else false
+      | tCase _ _ c brs => nr_only 10000 self v d p c && forallb (fun br => go (d + length (bcontext br)) p (bbody br)) brs
+      | tLetIn _ x _ b => nr_only 10000 self v d p x && go (S d) p b
+      | u => nr_only 10000 self v d p u
+      end
+  end.
+(** what a function giving back a counter is as a number; a counter among the variables a number, [accs] the rels of those that are numbers already *)
+Fixpoint nr_tr (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (self d : nat) (accs : list nat) (nv : list nat) (t : term) {struct fuel} : option term :=
+  match fuel with
+  | O => None
+  | S fuel =>
+      let go := nr_tr fuel Σ mp rows self d accs nv in
+      match um_red 1000 Σ mp t with
+      | tConstruct i 0 _ => if Kername.eqb (inductive_mind i) (inductive_mind ind_nat) then Some (vm_lit 0) else None
+      | tApp (tConstruct i 1 _) [e] =>
+          if Kername.eqb (inductive_mind i) (inductive_mind ind_nat)
+          then option_map (fun e2 => tApp (tConst nr_add []) [e2; vm_lit 1]) (go e) else None
+      | tRel r as c => if existsb (Nat.eqb r) nv then Some c else Some (nr_ofn c)
+      | tApp (tRel i) args as c =>
+          if Nat.eqb i (self + d) then
+            match opt_all (map (fun ja : nat * term =>
+                     if existsb (Nat.eqb (fst ja)) accs then go (snd ja) else Some (snd ja)) (combine (seq 0 (length args)) args)) with
+            | Some a2 => Some (tApp (tRel i) a2)
+            | None => None
+            end
+          else None
+      | tApp (tConst k _) args =>
+          if Kername.eqb k nr_nat_add then
+            match args with
+            | [a; b] =>
+                match go a, go b with
+                | Some x, Some y => Some (tApp (tConst nr_add []) [x; y])
+                | _, _ => None
+                end
+            | _ => None
+            end
+          else if Kername.eqb k nr_nat_mul then
+            match args with
+            | [a; b] =>
+                match go a, go b with
+                | Some x, Some y => Some (tApp (tConst nr_mul []) [x; y])
+                | _, _ => None
+                end
+            | _ => None
+            end
+          else
+            (* another function giving back a counter *)
+            match List.find (fun r : rprow => let '(h0, _, _, _, d0) := r in
+                               match h0 with
+                               | tConst k0 _ => Kername.eqb k0 k && Nat.eqb (length args) (length (fst (lams (dbody d0))))
+                               | _ => false
+                               end) rows with
+            | Some r =>
+                let ac2 := match r with (_, _, sl, _, _) => rp_gds sl end in
+                match opt_all (map (fun ja : nat * term =>
+                         if existsb (Nat.eqb (fst ja)) ac2 then go (snd ja) else Some (snd ja)) (combine (seq 0 (length args)) args)) with
+                | Some a2 => Some (tApp (tConst (rp_name r) []) a2)
+                | None => None
+                end
+            | None => None
+            end
+      | tCase ci p c brs =>
+          match opt_all (map (fun br => let k := length (bcontext br) in
+                                 option_map (fun b2 => {| bcontext := bcontext br; bbody := b2 |})
+                                 (nr_tr fuel Σ mp rows self (d + k) accs (map (Nat.add k) nv) (bbody br))) brs) with
+          | Some b2s => Some (tCase ci (y_ret p (tConst kn_int [])) c b2s)
+          | None => None
+          end
+      | tLetIn na v ty b =>
+          if is_nat ty then
+            match go v, nr_tr fuel Σ mp rows self (S d) accs (0 :: map S nv) b with
+            | Some v2, Some b2 => Some (tLetIn na v2 (tConst kn_int []) b2)
+            | _, _ => None
+            end
+          else option_map (tLetIn na v ty) (nr_tr fuel Σ mp rows self (S d) accs (map S nv) b)
+      | _ => None
+      end
+  end.
+Definition nr_rows (Σ : global_env) (mp : modpath) (root : kername) (kns : list kername) : list rprow :=
+  fold_left (fun rs kn =>
+    if if in_prog mp (fst kn) then negb (Kername.eqb kn root) else false then
+      match lookup_env Σ kn with
+      | Some (ConstantDecl cb) =>
+          let ty := al_t 1000 Σ mp (cst_type cb) in
+          if is_nat (ret_ty ty) then
+            match cst_body cb with
+            | Some b =>
+                match vm_norm b with
+                | Some d =>
+                    let '(tys, body) := lams (dbody d) in
+                    let n := length tys in
+                    if Nat.eqb n (length (removelast (prod_tys ty))) then
+                      let accs := filter (fun p => is_nat (nth p tys (tRel 0)) && negb (Nat.eqb p (rarg d))
+                                                   && nr_tail_ok 1000 Σ mp n (n - 1 - p) 0 p body) (seq 0 n) in
+                      let tys2 := map (fun jt : nat * term => if existsb (Nat.eqb (fst jt)) accs then tConst kn_int [] else snd jt) (combine (seq 0 n) tys) in
+                      match nr_tr 1000 Σ mp rs n 0 accs (map (fun p => n - 1 - p) accs) body with
+                      | Some b2 =>
+                          rs ++ [(tConst kn [], [], rp_nr :: map (Nat.add 900) accs, mangle kn ^ "__k" ^ string_of_nat (rarg d),
+                                  {| dname := dname d; dtype := pis_of tys2 (tConst kn_int []); rarg := rarg d; dbody := lams_of tys2 b2 |})]
+                      | None => rs
+                      end
+                    else rs
+                | None => rs
+                end
+            | None => rs
+            end
+          else rs
+      | _ => rs
+      end
+    else rs) kns [].
+Definition nr_stmt (Σ : global_env) (mp : modpath) (r : rprow) : term :=
+  let '(h, _, sl, _, d0) := r in
+  let tys0 := match h with
+              | tConst k _ => match lookup_env Σ k with
+                              | Some (ConstantDecl cb) => removelast (prod_tys (al_t 1000 Σ mp (cst_type cb)))
+                              | _ => []
+                              end
+              | _ => []
+              end in
+  let m := length tys0 in
+  let rels := map (fun j => tRel (m - 1 - j)) (seq 0 m) in
+  let accs := rp_gds sl in
+  let a2 := map (fun ja : nat * term => if existsb (Nat.eqb (fst ja)) accs then nr_ofn (snd ja) else snd ja) (combine (seq 0 m) rels) in
+  pis_of tys0 (tApp y_eq [tConst kn_int []; tApp (tConst (rp_name r) []) a2; nr_ofn (mkApps h rels)]).
+(** a counter a function gives back, made a number at once *)
+Fixpoint nr_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := nr_sub fuel Σ mp rows in
+      let row := fun (k : kername) (n : nat) =>
+        List.find (fun r : rprow => let '(h0, _, sl, _, d0) := r in
+                     if rp_is_nr sl then
+                       match h0 with
+                       | tConst k0 _ => Kername.eqb k0 k && Nat.eqb n (length (fst (lams (dbody d0))))
+                       | _ => false
+                       end
+                     else false) rows in
+      let dflt_app := fun f args => tApp (go f) (map go args) in
+      match t with
+      | tApp (tConst oz _) [tApp (tConst u _) [tApp (tConst k _) args]] =>
+          if Kername.eqb u kn_zofn && (match nr_of_z with tConst z0 _ => Kername.eqb oz z0 | _ => false end) then
+            match row k (length args) with
+            | Some r =>
+                let accs := match r with (_, _, sl, _, _) => rp_gds sl end in
+                tApp (tConst (rp_name r) [])
+                     (map (fun ja : nat * term => if existsb (Nat.eqb (fst ja)) accs then nr_ofn (go (snd ja)) else go (snd ja)) (combine (seq 0 (length args)) args))
+            | None =>
+                (* a helper of the program *)
+                if in_prog mp (fst k) then
+                  match body_of Σ k with
+                  | Some (tFix _ _) | None => t
+                  | Some _ =>
+                      match nr_tr 1000 Σ mp (filter (fun r : rprow => let '(_, _, sl, _, _) := r in rp_is_nr sl) rows) 100000 0 [] [] (tApp (tConst k []) (map go args)) with
+                      | Some u => u
+                      | None => t
+                      end
+                  end
+                else t
+            end
+          else tApp (tConst oz []) [go (tApp (tConst u []) [tApp (tConst k []) args])]
+      | tApp f args => dflt_app f args
+      | tLambda na a b => tLambda na a (go b)
+      | tLetIn na v a b => tLetIn na (go v) a (go b)
+      | tCase ci p c brs => tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := go (bbody br) |}) brs)
+      | tFix mfix k => tFix (map (fun df => {| dname := dname df; dtype := dtype df; rarg := rarg df; dbody := go (dbody df) |}) mfix) k
+      | _ => t
+      end
+  end.
 Definition er_rows (Σ : global_env) (mp : modpath) (root : kername) (kns : list kername) : list rprow :=
   flat_map (fun kn =>
     if if in_prog mp (fst kn) then negb (Kername.eqb kn root) else false then
@@ -8979,15 +9190,15 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
   let lrows := vm_lf_rows (conv_all Σ mp) mp kns0 in
   let srcs := map (fun e : kername * kername * list term => fst (fst e)) qs ++ flat_map (fun r : rprow => match r with (tConst k _, _, _, _, _) => [k] | _ => [] end) prows in
   let vrows := vm_rows Σq mp root (filter (fun k => negb (existsb (Kername.eqb k) srcs)) kns1) ++ lrows in
-  let rows := rp_topo Σ (rp_all Σ mp root ++ sp_rows (conv_all Σ mp) mp root kns0 ++ um_rows (conv_all Σ mp) mp root kns0 ++ er_rows (conv_all Σ mp) mp root kns0 ++ qrows ++ vrows) in
+  let rows := rp_topo Σ (rp_all Σ mp root ++ sp_rows (conv_all Σ mp) mp root kns0 ++ um_rows (conv_all Σ mp) mp root kns0 ++ er_rows (conv_all Σ mp) mp root kns0 ++ nr_rows (conv_all Σ mp) mp root kns0 ++ qrows ++ vrows) in
   (* (step 69) what is made, its own calls of what is in their place written too; the statements *)
   let S0 := fold_left (fun S2 r =>
               let d' := rp_def r in
               let plain := match r with (_, _, sl, _, _) => (if rp_is_qm sl then true else if rp_is_gm sl then true else rp_is_sp sl) && existsb (fun q : rprow => match q with (tConst k _, _, _, _, _) => Kername.eqb k (rp_name r) | _ => false end) rows end in
               add_decl (add_decl S2 (rp_name r) (dtype d')
-                         (if plain then tFix [d'] 0 else if Nat.eqb (rarg d') rp_nofix then y_red 100000 (vm_sub 100000 (conv_all Σ mp) rows true (rp_sub 100000 rows (er_sub 100000 rows [] (sp_sub 100000 (conv_all Σ mp) mp rows (dbody d')))))
-                          else tFix [{| dname := dname d'; dtype := dtype d'; rarg := rarg d'; dbody := (if existsb (fun q : rprow => let '(_, _, sl, _, _) := q in rp_is_vm sl) rows then vm_yr else y_red 100000) (vm_sub 100000 (conv_all Σ mp) rows true (rp_sub 100000 rows (er_sub 100000 rows [] (sp_sub 100000 (conv_all Σ mp) mp rows (dbody d'))))) |}] 0))
-                       (rq_name r) (tSort sProp) (match r with (_, _, sl, _, _) => if rp_is_er sl then er_stmt Σ mp r else if rp_is_vm sl then vm_stmt Σq mp r else if rp_is_qm sl then vm_qstmt Σq mp r else if rp_is_sp sl then sp_stmt (conv_all Σ mp) mp r else rp_stmt r end)) rows Σ in
+                         (if plain then tFix [d'] 0 else if Nat.eqb (rarg d') rp_nofix then y_red 100000 (vm_sub 100000 (conv_all Σ mp) rows true (rp_sub 100000 rows (er_sub 100000 rows [] (sp_sub 100000 (conv_all Σ mp) mp rows (nr_sub 100000 (conv_all Σ mp) mp rows (dbody d'))))))
+                          else tFix [{| dname := dname d'; dtype := dtype d'; rarg := rarg d'; dbody := (if existsb (fun q : rprow => let '(_, _, sl, _, _) := q in rp_is_vm sl) rows then vm_yr else y_red 100000) (vm_sub 100000 (conv_all Σ mp) rows true (rp_sub 100000 rows (er_sub 100000 rows [] (sp_sub 100000 (conv_all Σ mp) mp rows (nr_sub 100000 (conv_all Σ mp) mp rows (dbody d')))))) |}] 0))
+                       (rq_name r) (tSort sProp) (match r with (_, _, sl, _, _) => if rp_is_er sl then er_stmt Σ mp r else if rp_is_vm sl then vm_stmt Σq mp r else if rp_is_qm sl then vm_qstmt Σq mp r else if rp_is_sp sl then sp_stmt (conv_all Σ mp) mp r else if rp_is_nr sl then nr_stmt (conv_all Σ mp) mp r else rp_stmt r end)) rows Σ in
   (* (step 78) the lemmas that come first, each after what it calls; the values' types, for the slot block's room *)
   let S0 := match vrows with
             | [] => S0
@@ -9018,12 +9229,12 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
           | Some b00 =>
               (* (step 68) a program's name for a type, read as its definition, the same up to delta *)
               let ty0 := al_t 1000 Σ mp (cst_type cb) in
-              let b0x := mo_t 100000 Σ mp (lu_t 100000 Σ (al_t 100000 Σ mp b00)) in
+              let b0x := mo_t 100000 Σ mp (lu_t 100000 Σ (nr_sub 100000 (conv_all Σ mp) mp rows (al_t 100000 Σ mp b00))) in
               (* (step 69) its calls of what is read in another form *)
               let b0 := (if existsb (fun r : rprow => let '(_, _, sl, _, _) := r in rp_is_vm sl) rows then vm_yr else y_red 100000) (vm_sub 100000 (conv_all Σ mp) rows false (rp_sub 100000 rows (er_sub 100000 rows [] (sp_sub 100000 (conv_all Σ mp) mp rows (match (if anyq then [] else vrows ++ qrows), anyq with [], false => vm_unf 6 Σ mp b0x | _, _ => vm_pj 100000 (conv_all Σ mp) mp (vm_yr (vm_qsub 100000 (conv_all Σ mp) mp qs (vm_lets 100000 (conv_all Σ mp) (fun k => if vm_isr rows k then true else existsb (fun e : kername * kername * list term => Kername.eqb (fst (fst e)) k) qs) (fun k => match lookup_env (conv_all Σ mp) k with Some (ConstantDecl cb) => ret_ty (al_t 1000 Σ mp (cst_type cb)) | _ => tRel 0 end) 100000 (ret_ty ty0) (vm_zfix 100000 (vm_ginl 100000 (conv_all Σ mp) mp rows (vm_unf 6 Σ mp b0x)))))) end))))) in
               let r0 := match rows with
                         | [] => if y_hasp 10000 b0x then y_fl 10000 (vm_unf 6 Σ mp b0x) else false
-                        | _ => negb (teq 100000 b0 b0x)
+                        | _ => if negb (teq 100000 b0 b0x) then true else negb (teq 100000 (nr_sub 100000 (conv_all Σ mp) mp rows (al_t 100000 Σ mp b00)) (al_t 100000 Σ mp b00))
                         end in
               let c1 := if teq 100000 ty0 (cst_type cb) then negb (teq 100000 b0 b00) else true in
               (* (step 63) a binder's type a redex, from a motive, a cast: the same up to beta *)
@@ -9428,7 +9639,7 @@ Definition why_fun (Σ : global_env) (hb : kername -> option term) (tc : kername
           let sigr := match read_sig rt (map (fun i => nth i tys (tRel 0)) (canon_perm tys (match b with tFix [d] _ => Some (rarg d) | _ => None end)))
                                      (ret_ty ty), odd with
                       | Some _, _ => []
-                      | None, [] => ["two memories as parameters"]
+                      | None, [] => if Nat.ltb 1 (length (filter (is_ty kn_mem) tys)) then ["two memories as parameters"] else ["a counter given back"]
                       | None, x :: r => ["a parameter or result of type " ^ fold_left (fun a y => a ^ ", " ^ y) r x]
                       end in
           let r0 := if rec == "" then sigr else rec :: sigr in
