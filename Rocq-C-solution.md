@@ -5334,6 +5334,16 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   five kernels (16 / 17 / 20 / 16 / 17 s); **96 programs through the verified compiler, 0 refused**; `check_trust.py`: `trust
   unchanged`.  Next: a function giving back a counter, made a number where it is used.
 
+**Step 82, a function giving back a counter, made a number where it is used (§3.5, §12.A) — the design (2026-11-07).**  `cnt k i t : nat`, how many cells are not 0: natural, and `nat` is unary only in the logic.
+- *The form*: a function of its own in the function's place giving back the number, `F args = of_Z (Z.of_nat (f args))` at every argument, whatever the size: the machine's numbers are modulo `wB`, and `S`, `+`, `*` are homomorphic (`KQRWf.nr_S`, `nr_add`, `nr_mul`, from Rocq's own lemmas on `of_Z`).  No bound is needed, and none is assumed.
+- *Read*: `O`, `S`, a counter as a number (`SOfC`), its own call, a function of this kind, `Nat.add`, `Nat.mul`, a choice, a match, a let of a counter (a number then).  A parameter only handed on and given back (an accumulator) is a number too: `F k i (of_Z (Z.of_nat acc)) = of_Z (Z.of_nat (f k i acc))`.  A helper giving a counter is read in place.
+- *Where it applies*: a counter made a number at once, `Uint63.of_nat (f args)`.  That is where the number is the same.  Used as a counter, `Nat.leb (f args) 3`, `match f args with`, given to a recursion: the comparison is of the counter, and its number is the counter only below `wB`: a bound is needed: gaps with their cells, next.
+- *The proof*: the row's lemma from the text's side (`rewrite <-`): `of_Z (Z.of_nat (f ..))` to the row's call, whatever the accumulator's form; `kq_nr` only on `S`, `Nat.add`, `Nat.mul` as written, since a function of the shape of `Nat.add` is `Nat.add` up to conversion.
+- *The C*: a program with no such function: byte-identical.
+- *Left*: a counter in a pair, in an `option`, with a memory; a local fix; a recursion two steps down: gaps with their cells.
+- *The acceptance*: `proved/examples/cret_fix`: a count by recursion after the call, a count as a parameter, a helper over both; the answer worked out apart: 5548.
+- *Cells*: 44, `A_z_*`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5518,7 +5528,8 @@ Pushed to the public repository up to `6ce4511` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 81 (a proof as a parameter, a value with its proof as a parameter: the construct table 3189 of 3312, 49 by design, 73 gaps, 4 gaps read), the C, the gate |
+| (this commit) | §12.V: step 82's design -- a function giving back a counter, made a number where it is used |
+| `0284dba` | §12.V: step 81 (a proof as a parameter, a value with its proof as a parameter: the construct table 3189 of 3312, 49 by design, 73 gaps, 4 gaps read), the C, the gate |
 | `6ce4511` | `proved/KQRReify.v` step 81: a helper giving back a sig stays on its own route |
 | `0f4e425` | `proved/KQRReify.v` + `kitc.py` + `matrix` + `examples/prfp_fix` step 81: a proof as a parameter, a value with its proof as a parameter; 40 cells |
 | `543746b` | §12.V: step 81's design -- a proof as a parameter, a value with its proof as a parameter |
