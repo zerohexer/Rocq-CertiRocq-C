@@ -132,7 +132,7 @@ Definition w64_of (t : term) : option KQ.KQRun.w64op :=
   | tConstruct i k _ =>
       if Kername.eqb (inductive_mind i) (inductive_mind ind_w64op)
       then nth_error [KQ.KQRun.W_add; KQ.KQRun.W_sub; KQ.KQRun.W_mul; KQ.KQRun.W_and; KQ.KQRun.W_or; KQ.KQRun.W_xor;
-                      KQ.KQRun.W_shl; KQ.KQRun.W_shr; KQ.KQRun.W_ltu; KQ.KQRun.W_leu; KQ.KQRun.W_eq] k
+                      KQ.KQRun.W_shl; KQ.KQRun.W_shr; KQ.KQRun.W_ltu; KQ.KQRun.W_leu; KQ.KQRun.W_eq; KQ.KQRun.W_divu; KQ.KQRun.W_modu] k
       else None
   | _ => None
   end.
@@ -4820,14 +4820,16 @@ Fixpoint jn_tail (fuel : nat) (tab : list (kername * PrimInt63.int)) (t : term) 
       end
   end.
 (** the program's own functions, each after what it calls, as Rocq has them: the head of the environment, no look-up (F64) *)
+Fixpoint jn_in (m mp : modpath) : bool :=
+  if eq_mp m mp then true else match m with MPdot m' _ => jn_in m' mp | _ => false end.
 Definition jn_own (Σ : global_env) (mp : modpath) : list (kername * term) :=
   fold_left (fun a e =>
-    if if eq_mp (fst (fst e)) mp then true else eq_mp (fst (fst e)) copy_mp then
+    if if jn_in (fst (fst e)) mp then true else eq_mp (fst (fst e)) copy_mp then
       match snd e with
       | ConstantDecl cb => match cst_body cb with Some b => (fst e, b) :: a | None => a end
       | _ => a
       end
-    else a) (firstn 200 (declarations Σ)) [].
+    else a) (firstn 500 (declarations Σ)) [].
 (** the helpers written out, those with no fixpoint and not read as functions; the kit's two that test, three arms each *)
 Definition jn_tab (own : list (kername * term)) (read : list kername) : list (kername * PrimInt63.int) :=
   fold_left (fun t2 e =>
@@ -9545,6 +9547,19 @@ Definition nr_nat_add := kn_of <% Nat.add %>.
 Definition nr_add := kn_of <% PrimInt63.add %>.
 Definition nr_mul := kn_of <% PrimInt63.mul %>.
 Definition nr_nat_mul := kn_of <% Nat.mul %>.
+Fixpoint nr_grows (fuel : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => true
+  | S fuel =>
+      match t with
+      | tApp (tConst k _) args => Kername.eqb k nr_add || Kername.eqb k nr_mul || existsb (nr_grows fuel) args
+      | tApp f args => nr_grows fuel f || existsb (nr_grows fuel) args
+      | tLambda _ _ b => nr_grows fuel b
+      | tLetIn _ v _ b => nr_grows fuel v || nr_grows fuel b
+      | tCase _ _ c brs => nr_grows fuel c || existsb (fun br => nr_grows fuel (bbody br)) brs
+      | _ => false
+      end
+  end.
 (** a parameter holding a counter that is only handed on and given back: [acc]s, numbers *)
 Fixpoint nr_only (fuel : nat) (self v d : nat) (p : nat) (t : term) {struct fuel} : bool :=
   match fuel with
@@ -9730,7 +9745,7 @@ Fixpoint nr_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
                   | Some (tFix _ _) | None => t
                   | Some _ =>
                       match nr_tr 1000 Σ mp (filter (fun r : rprow => let '(_, _, sl, _, _) := r in rp_is_nr sl) rows) 100000 0 [] [] (tApp (tConst k []) (map go args)) with
-                      | Some u => u
+                      | Some u => if nr_grows 1000 u then t else u
                       | None => t
                       end
                   end
@@ -10652,7 +10667,7 @@ Fixpoint jn_cnt (fuel : nat) (zm zd : kername) (t : term) {struct fuel} : nat :=
       | tApp f args => fold_left (fun a x => (a + opd x + go x)%nat) args (go f)
       | tLambda _ _ b => go b
       | tLetIn _ v _ b => (opd v + go v + go b)%nat
-      | tCase _ _ c brs => fold_left (fun a br => (a + go (bbody br))%nat) brs (opd c + go c)%nat
+      | tCase _ _ c brs => fold_left (fun a br => (a + go (bbody br))%nat) brs (1 + opd c + go c)%nat
       | tFix mfix _ => fold_left (fun a d => (a + go (dbody d))%nat) mfix 0%nat
       | _ => 0%nat
       end
@@ -10660,13 +10675,13 @@ Fixpoint jn_cnt (fuel : nat) (zm zd : kername) (t : term) {struct fuel} : nat :=
 Definition jn_pre (Σ : global_env) (mp : modpath) : bool :=
   let zm := jn_kzm in
   let zd := jn_kzd in
-  Nat.leb 4 (fold_left (fun a e =>
-    if if eq_mp (fst (fst e)) mp then true else eq_mp (fst (fst e)) copy_mp then
+  Nat.leb 1 (fold_left (fun a e =>
+    if if jn_in (fst (fst e)) mp then true else eq_mp (fst (fst e)) copy_mp then
       match snd e with
       | ConstantDecl cb => match cst_body cb with Some b => (a + jn_cnt jn_fb zm zd b)%nat | None => a end
       | _ => a
       end
-    else a) (firstn 200 (declarations Σ)) 0%nat).
+    else a) (firstn 500 (declarations Σ)) 0%nat).
 Definition jn_add (Σ : global_env) : global_env := add_decl Σ jn_mark (tSort sProp) (tSort sProp).
 Definition jn_try (q : program) (r : list (kername * sig * fbody) * list (string * term)) : option (list (kername * sig * fbody) * list (string * term)) :=
   match q with

@@ -21,6 +21,8 @@ Definition w64_int (o : KQ.KQRun.w64op) (x y : Int64.int) : Int64.int :=
   | KQ.KQRun.W_ltu => if Int64.ltu x y then Int64.one else Int64.zero
   | KQ.KQRun.W_leu => if Int64.ltu y x then Int64.zero else Int64.one
   | KQ.KQRun.W_eq => if Int64.eq x y then Int64.one else Int64.zero
+  | KQ.KQRun.W_divu => if Int64.eq y Int64.zero then Int64.zero else Int64.divu x y
+  | KQ.KQRun.W_modu => if Int64.eq y Int64.zero then x else Int64.modu x y
   end.
 
 Lemma int64_range : forall x : Int64.int, 0 <= Int64.unsigned x < 2 ^ 64.
@@ -55,6 +57,12 @@ Proof.
   - unfold Int64.eq. destruct (zeq (Int64.unsigned x) (Int64.unsigned y)); cbn.
     + destruct (Z.eqb_spec (Int64.unsigned x) (Int64.unsigned y)); [ | contradiction]. reflexivity.
     + destruct (Z.eqb_spec (Int64.unsigned x) (Int64.unsigned y)); [contradiction | ]. reflexivity.
+  - destruct (Int64.eq y Int64.zero) eqn:E.
+    + apply Int64.same_if_eq in E. subst y. rewrite Int64.unsigned_zero, Zdiv_0_r. reflexivity.
+    + unfold Int64.divu. rewrite Int64.unsigned_repr_eq. reflexivity.
+  - destruct (Int64.eq y Int64.zero) eqn:E.
+    + apply Int64.same_if_eq in E. subst y. rewrite Int64.unsigned_zero, Zmod_0_r. symmetry. apply Z.mod_small. exact Rx.
+    + unfold Int64.modu. rewrite Int64.unsigned_repr_eq. reflexivity.
 Qed.
 
 (** the word of a pair of numbers *)

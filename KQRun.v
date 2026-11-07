@@ -279,7 +279,7 @@ Unset Primitive Projections.
 Definition u64_val (a : u64) : Z := Z.add (Uint63.to_Z (w_lo a)) (Z.mul (Z.pow 2%Z 63%Z) (Z.modulo (Uint63.to_Z (w_hi a)) 2%Z)).
 Definition u64_of_Z (z : Z) : u64 :=
   mk_u64 (Uint63.of_Z (Z.modulo z (Z.pow 2%Z 63%Z))) (Uint63.of_Z (Z.div (Z.modulo z (Z.pow 2%Z 64%Z)) (Z.pow 2%Z 63%Z))).
-Inductive w64op := W_add | W_sub | W_mul | W_and | W_or | W_xor | W_shl | W_shr | W_ltu | W_leu | W_eq.
+Inductive w64op := W_add | W_sub | W_mul | W_and | W_or | W_xor | W_shl | W_shr | W_ltu | W_leu | W_eq | W_divu | W_modu.
 Definition w64_z (o : w64op) (x y : Z) : Z :=
   match o with
   | W_add => Z.add x y
@@ -293,6 +293,8 @@ Definition w64_z (o : w64op) (x y : Z) : Z :=
   | W_ltu => if Z.ltb x y then 1%Z else 0%Z
   | W_leu => if Z.leb x y then 1%Z else 0%Z
   | W_eq => if Z.eqb x y then 1%Z else 0%Z
+  | W_divu => Z.div x y
+  | W_modu => Z.modulo x y
   end.
 (* sealed: the definition sits behind a Qed, so no conversion (the kernel's included) ever works an operation out; the
    meaning is the equation w64_op_unfold *)
@@ -314,6 +316,9 @@ Definition u64_xor (a b : u64) : u64 := w64_op W_xor a b.
 (* shift by n bits, n taken modulo 64 *)
 Definition u64_shl (a : u64) (n : int) : u64 := w64_op W_shl a (mk_u64 n 0%uint63).
 Definition u64_shr (a : u64) (n : int) : u64 := w64_op W_shr a (mk_u64 n 0%uint63).
+(* uint64_t's / and %: by 0 what Z's give, 0 and the number *)
+Definition u64_divu (a b : u64) : u64 := w64_op W_divu a b.
+Definition u64_modu (a b : u64) : u64 := w64_op W_modu a b.
 Definition u64_ltb (a b : u64) : bool := PrimInt63.eqb (w_lo (w64_op W_ltu a b)) 1%uint63.
 Definition u64_leb (a b : u64) : bool := PrimInt63.eqb (w_lo (w64_op W_leu a b)) 1%uint63.
 Definition u64_eqb (a b : u64) : bool := PrimInt63.eqb (w_lo (w64_op W_eq a b)) 1%uint63.

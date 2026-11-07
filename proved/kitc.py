@@ -1144,10 +1144,14 @@ def main():
         name = re.sub(r"[^A-Za-z0-9_]", "_", os.path.basename(path)[:-5])
         body = open(path).read()
         # a program that names a function of a library of lib/ gets the library's text in front of it, as compile.sh does
-        for pre, lib, mark in (("slab_", "Slab", "SLAB"), ("view_", "View", "VIEW"), ("(?:loop_|wfix)", "Loop", "LOOP")):
+        for pre, lib, mark in (("slab_", "Slab", "SLAB"), ("view_", "View", "VIEW"), ("(?:loop_|wfix)", "Loop", "LOOP"),
+                               (r"(?:(?:[ui](?:8|16|32)|i64)_[a-z]+|rot[lr](?:32|64)|bswap(?:16|32|64)|popcount(?:32|64)|clz(?:32|64)|ctz(?:32|64)|u64_mulhi)\b", "CInt", "CINT")):
             if re.search(r"\b" + pre, body) and f"(* {mark}-BEGIN *)" not in body:
                 lt = open(os.path.join(ROOT, "lib", lib + ".v")).read()
-                body = lt[lt.index(f"(* {mark}-BEGIN *)") + len(f"(* {mark}-BEGIN *)"):lt.index(f"(* {mark}-END *)")] + "\n" + body
+                text = lt[lt.index(f"(* {mark}-BEGIN *)") + len(f"(* {mark}-BEGIN *)"):lt.index(f"(* {mark}-END *)")]
+                if mark == "CINT":
+                    text = "Module KQCInt.\n" + text + "End KQCInt.\nImport KQCInt.\n"
+                body = text + "\n" + body
         prog, mt = split_main(body)
         err = build_user_files(body, path)
         if err:

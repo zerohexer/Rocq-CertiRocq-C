@@ -2846,6 +2846,263 @@ addA('q_nat_pair_ret', "", 'let (q, r) := sp n in if Nat.eqb r 0 then a else Uin
 addA('q_divmod', "", 'Uint63.of_nat (fst (Nat.divmod n 3 0 3))',
      '')
 
+# the integer types of C (step 88)
+addA('zg_u8_of', "", 'u8_of a',
+     '')
+addA('zg_u8_add', "", 'u8_add (u8_of a) (u8_of b)',
+     '')
+addA('zg_u8_sub', "", 'u8_sub (u8_of a) (u8_of b)',
+     '')
+addA('zg_u8_mul', "", 'u8_mul (u8_of a) (u8_of b)',
+     '')
+addA('zg_u8_div', "", 'u8_div (u8_of a) (u8_of b)',
+     '')
+addA('zg_u8_mod', "", 'u8_mod (u8_of a) (u8_of b)',
+     '')
+addA('zg_u8_and', "", 'u8_and (u8_of a) (u8_of b)',
+     '')
+addA('zg_u8_or', "", 'u8_or (u8_of a) (u8_of b)',
+     '')
+addA('zg_u8_xor', "", 'u8_xor (u8_of a) (u8_of b)',
+     '')
+addA('zg_u8_shl', "", 'u8_shl (u8_of a) (u8_of b)',
+     '')
+addA('zg_u8_shr', "", 'u8_shr (u8_of a) (u8_of b)',
+     '')
+addA('zg_u8_not', "", 'u8_not (u8_of a)',
+     '')
+addA('zg_u8_ltb', "", 'if u8_ltb (u8_of a) (u8_of b) then 1 else 0',
+     '')
+addA('zg_u8_leb', "", 'if u8_leb (u8_of a) (u8_of b) then 1 else 0',
+     '')
+addA('zg_i8_of', "", 'i8_of a',
+     '')
+addA('zg_i8_add', "", 'i8_add (i8_of a) (i8_of b)',
+     '')
+addA('zg_i8_sub', "", 'i8_sub (i8_of a) (i8_of b)',
+     '')
+addA('zg_i8_mul', "", 'i8_mul (i8_of a) (i8_of b)',
+     '')
+addA('zg_i8_div', "", 'i8_div (i8_of a) (i8_of b)',
+     '')
+addA('zg_i8_mod', "", 'i8_mod (i8_of a) (i8_of b)',
+     '')
+addA('zg_i8_and', "", 'i8_and (i8_of a) (i8_of b)',
+     '')
+addA('zg_i8_or', "", 'i8_or (i8_of a) (i8_of b)',
+     '')
+addA('zg_i8_xor', "", 'i8_xor (i8_of a) (i8_of b)',
+     '')
+addA('zg_i8_shl', "", 'i8_shl (i8_of a) (i8_of b)',
+     '')
+addA('zg_i8_shr', "", 'i8_shr (i8_of a) (i8_of b)',
+     '')
+addA('zg_i8_not', "", 'i8_not (i8_of a)',
+     '')
+addA('zg_i8_ltb', "", 'if i8_ltb (i8_of a) (i8_of b) then 1 else 0',
+     '')
+addA('zg_i8_leb', "", 'if i8_leb (i8_of a) (i8_of b) then 1 else 0',
+     '')
+addA('zg_u16_of', "", 'u16_of a',
+     '')
+addA('zg_u16_add', "", 'u16_add (u16_of a) (u16_of b)',
+     '')
+addA('zg_u16_sub', "", 'u16_sub (u16_of a) (u16_of b)',
+     '')
+addA('zg_u16_mul', "", 'u16_mul (u16_of a) (u16_of b)',
+     '')
+addA('zg_u16_div', "", 'u16_div (u16_of a) (u16_of b)',
+     '')
+addA('zg_u16_mod', "", 'u16_mod (u16_of a) (u16_of b)',
+     '')
+addA('zg_u16_and', "", 'u16_and (u16_of a) (u16_of b)',
+     '')
+addA('zg_u16_or', "", 'u16_or (u16_of a) (u16_of b)',
+     '')
+addA('zg_u16_xor', "", 'u16_xor (u16_of a) (u16_of b)',
+     '')
+addA('zg_u16_shl', "", 'u16_shl (u16_of a) (u16_of b)',
+     '')
+addA('zg_u16_shr', "", 'u16_shr (u16_of a) (u16_of b)',
+     '')
+addA('zg_u16_not', "", 'u16_not (u16_of a)',
+     '')
+addA('zg_u16_ltb', "", 'if u16_ltb (u16_of a) (u16_of b) then 1 else 0',
+     '')
+addA('zg_u16_leb', "", 'if u16_leb (u16_of a) (u16_of b) then 1 else 0',
+     '')
+addA('zg_i16_of', "", 'i16_of a',
+     '')
+addA('zg_i16_add', "", 'i16_add (i16_of a) (i16_of b)',
+     '')
+addA('zg_i16_sub', "", 'i16_sub (i16_of a) (i16_of b)',
+     '')
+addA('zg_i16_mul', "", 'i16_mul (i16_of a) (i16_of b)',
+     '')
+addA('zg_i16_div', "", 'i16_div (i16_of a) (i16_of b)',
+     '')
+addA('zg_i16_mod', "", 'i16_mod (i16_of a) (i16_of b)',
+     '')
+addA('zg_i16_and', "", 'i16_and (i16_of a) (i16_of b)',
+     '')
+addA('zg_i16_or', "", 'i16_or (i16_of a) (i16_of b)',
+     '')
+addA('zg_i16_xor', "", 'i16_xor (i16_of a) (i16_of b)',
+     '')
+addA('zg_i16_shl', "", 'i16_shl (i16_of a) (i16_of b)',
+     '')
+addA('zg_i16_shr', "", 'i16_shr (i16_of a) (i16_of b)',
+     '')
+addA('zg_i16_not', "", 'i16_not (i16_of a)',
+     '')
+addA('zg_i16_ltb', "", 'if i16_ltb (i16_of a) (i16_of b) then 1 else 0',
+     '')
+addA('zg_i16_leb', "", 'if i16_leb (i16_of a) (i16_of b) then 1 else 0',
+     '')
+addA('zg_u32_of', "", 'u32_of a',
+     '')
+addA('zg_u32_add', "", 'u32_add (u32_of a) (u32_of b)',
+     '')
+addA('zg_u32_sub', "", 'u32_sub (u32_of a) (u32_of b)',
+     '')
+addA('zg_u32_mul', "", 'u32_mul (u32_of a) (u32_of b)',
+     '')
+addA('zg_u32_div', "", 'u32_div (u32_of a) (u32_of b)',
+     '')
+addA('zg_u32_mod', "", 'u32_mod (u32_of a) (u32_of b)',
+     '')
+addA('zg_u32_and', "", 'u32_and (u32_of a) (u32_of b)',
+     '')
+addA('zg_u32_or', "", 'u32_or (u32_of a) (u32_of b)',
+     '')
+addA('zg_u32_xor', "", 'u32_xor (u32_of a) (u32_of b)',
+     '')
+addA('zg_u32_shl', "", 'u32_shl (u32_of a) (u32_of b)',
+     '')
+addA('zg_u32_shr', "", 'u32_shr (u32_of a) (u32_of b)',
+     '')
+addA('zg_u32_not', "", 'u32_not (u32_of a)',
+     '')
+addA('zg_u32_ltb', "", 'if u32_ltb (u32_of a) (u32_of b) then 1 else 0',
+     '')
+addA('zg_u32_leb', "", 'if u32_leb (u32_of a) (u32_of b) then 1 else 0',
+     '')
+addA('zg_i32_of', "", 'i32_of a',
+     '')
+addA('zg_i32_add', "", 'i32_add (i32_of a) (i32_of b)',
+     '')
+addA('zg_i32_sub', "", 'i32_sub (i32_of a) (i32_of b)',
+     '')
+addA('zg_i32_mul', "", 'i32_mul (i32_of a) (i32_of b)',
+     '')
+addA('zg_i32_div', "", 'i32_div (i32_of a) (i32_of b)',
+     '')
+addA('zg_i32_mod', "", 'i32_mod (i32_of a) (i32_of b)',
+     '')
+addA('zg_i32_and', "", 'i32_and (i32_of a) (i32_of b)',
+     '')
+addA('zg_i32_or', "", 'i32_or (i32_of a) (i32_of b)',
+     '')
+addA('zg_i32_xor', "", 'i32_xor (i32_of a) (i32_of b)',
+     '')
+addA('zg_i32_shl', "", 'i32_shl (i32_of a) (i32_of b)',
+     '')
+addA('zg_i32_shr', "", 'i32_shr (i32_of a) (i32_of b)',
+     '')
+addA('zg_i32_not', "", 'i32_not (i32_of a)',
+     '')
+addA('zg_i32_ltb', "", 'if i32_ltb (i32_of a) (i32_of b) then 1 else 0',
+     '')
+addA('zg_i32_leb', "", 'if i32_leb (i32_of a) (i32_of b) then 1 else 0',
+     '')
+addA('zg_rotl32', "", 'rotl32 a b',
+     '')
+addA('zg_rotr32', "", 'rotr32 a b',
+     '')
+addA('zg_rotl64', "", 'u64_to_int (rotl64 (u64_of_int a) b)',
+     '')
+addA('zg_rotr64', "", 'u64_to_int (rotr64 (u64_of_int a) b)',
+     '')
+addA('zg_bswap16', "", 'bswap16 a',
+     '')
+addA('zg_bswap32', "", 'bswap32 a',
+     '')
+addA('zg_popcount32', "", 'popcount32 a',
+     '')
+addA('zg_clz32', "", 'clz32 a',
+     '')
+addA('zg_ctz32', "", 'ctz32 a',
+     '')
+addA('zg_bswap64', "", 'u64_to_int (bswap64 (u64_of_int a))',
+     '')
+addA('zg_popcount64', "", 'popcount64 (u64_of_int a)',
+     '')
+addA('zg_clz64', "", 'clz64 (u64_of_int a)',
+     '')
+addA('zg_ctz64', "", 'ctz64 (u64_of_int a)',
+     '')
+addA('zg_u64_divu', "", 'u64_to_int (u64_divu (u64_of_int a) (u64_of_int b))',
+     '')
+addA('zg_u64_modu', "", 'u64_to_int (u64_modu (u64_of_int a) (u64_of_int b))',
+     '')
+addA('zg_u64_mulhi', "", 'u64_to_int (u64_mulhi (u64_of_int a) (u64_of_int b))',
+     '')
+addA('zg_i64_add', "", 'u64_to_int (i64_add (u64_of_int a) (u64_of_int b))',
+     '')
+addA('zg_i64_sub', "", 'u64_to_int (i64_sub (u64_of_int a) (u64_of_int b))',
+     '')
+addA('zg_i64_mul', "", 'u64_to_int (i64_mul (u64_of_int a) (u64_of_int b))',
+     '')
+addA('zg_i64_div', "", 'u64_to_int (i64_div (u64_of_int a) (u64_of_int b))',
+     '')
+addA('zg_i64_mod', "", 'u64_to_int (i64_mod (u64_of_int a) (u64_of_int b))',
+     '')
+addA('zg_i64_shr', "", 'u64_to_int (i64_shr (u64_of_int a) b)',
+     '')
+addA('zg_i64_ltb', "", 'if i64_ltb (u64_of_int a) (u64_of_int b) then 1 else 0',
+     '')
+addA('zg_i64_leb', "", 'if i64_leb (u64_of_int a) (u64_of_int b) then 1 else 0',
+     '')
+addA('zg_p_own_name', "", 'rotl32 a b',
+     'Definition rotl32 (x n : int) : int := x + n.\n')
+addA('zg_p_own_name_beside', "", 'rotl32 a b + u8_add a b',
+     'Definition rotl32 (x n : int) : int := x + n.\n')
+addA('zg_p_own_helper_name', "", 'u32_add (mx a) b',
+     'Definition mx (x : int) : int := x * 3.\nDefinition k (x : int) : int := x + 1.\n')
+addA('zg_p_many_idiv', "", 'i32_div a b + i32_div a (b + 1) + i32_div a (b + 2) + i32_div a (b + 3) + i32_div a (b + 4) + i32_div a (b + 5) + i32_div a (b + 6) + i32_div a (b + 7) + i32_div a (b + 8) + i32_div a (b + 9) + i32_div a (b + 10) + i32_div a (b + 11)',
+     '')
+addA('zg_p_many_imod', "", 'i8_mod a b * i16_mod a b + i32_mod a b * i8_div a b + i16_div a b * i32_div a b + i8_mod a (b + 1) * i16_mod a (b + 1) + i32_mod a (b + 1) * i8_div a (b + 1)',
+     '')
+addA('zg_p_many_i64', "", 'u64_to_int (i64_div (u64_of_int a) (u64_of_int b)) + u64_to_int (i64_mod (u64_of_int a) (u64_of_int b)) + u64_to_int (i64_div (u64_of_int b) (u64_of_int a)) + u64_to_int (i64_mod (u64_of_int b) (u64_of_int a))',
+     '')
+addA('zg_p_nested_rot', "", 'rotl32 (rotl32 (rotl32 (rotl32 (rotl32 a 1) 2) 3) 4) 5',
+     '')
+addA('zg_p_nested_i8', "", 'i8_add (i8_add (i8_add (i8_add (i8_add a b) b) b) b) b',
+     '')
+addA('zg_p_sha_round', "", 'let e := u32_of a in let f := u32_of b in let g := u32_add e f in let h := u32_xor e g in u32_add (u32_add h (u32_xor (u32_xor (rotr32 e 6) (rotr32 e 11)) (rotr32 e 25))) (u32_add (u32_xor (u32_and e f) (u32_and (u32_not e) g)) 1116352408)',
+     '')
+addA('zg_p_loop_u32', "", 'lp n (u32_of a) (u32_of b)',
+     'Fixpoint lp (k : nat) (x y : int) : int := match k with O => x | S m => lp m (u32_add (rotl32 x 5) y) (u32_xor y x) end.\n')
+addA('zg_p_loop_i32_nontail', "", 'lp n a',
+     'Fixpoint lp (k : nat) (x : int) : int := match k with O => x | S m => i32_add (lp m (i32_mul x 3)) (i32_of x) end.\n')
+addA('zg_p_loop_mem', "", 'rd 0 1 (lp n a s)',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : mem := match k with O => t | S m => lp m (u8_add i 1) (upd8 0 (u8_of i) (u8_of i) t) end.\n')
+addA('zg_p_loop_u64', "", 'u64_to_int (lp n (u64_of_int a) (u64_of_int b))',
+     'Fixpoint lp (k : nat) (x y : u64) : u64 := match k with O => x | S m => lp m (u64_divu (u64_add x y) (u64_add y (u64_of_int 1))) (u64_mulhi x y) end.\n')
+addA('zg_p_u64_given_back', "", 'u64_to_int (dv (u64_of_int a) (u64_of_int b))',
+     'Definition dv (x y : u64) : u64 := if u64_eqb y (u64_of_int 0) then x else u64_divu x y.\n')
+addA('zg_p_choice', "", 'if a <? b then u8_add a b else i8_div a b',
+     '')
+addA('zg_p_field', "", 'let r := mk3 (u8_add a b) (i8_sub a b) (u16_mul a b) in f1 r + f2 r + f3 r',
+     '')
+addA('zg_p_pair', "", 'let p := (u32_add a b, i32_sub a b) in fst p * snd p',
+     '')
+addA('zg_p_function_given', "", 'twice (u8_add a) b + twice (i32_mul 3) a',
+     '')
+addA('zg_p_bool_param', "", 'k (u8_ltb a b) (i8_leb a b)',
+     'Definition k (x y : bool) : int := if andb x y then 1 else 0.\n')
+addA('zg_p_memory_read', "", 'u8_add (rd 0 a s) (i32_mul (rd 0 b s) (rd8 0 a s))',
+     '')
 # a memory in a value of any data type; a sixth probe (step 87)
 addA('zf_h_user', "", 'match st1 a s with Ok v t => v + rd 0 a t | Err e => e end',
      'Inductive res := Ok (v : int) (t : mem) | Err (e : int).\nDefinition st1 (i : int) (t : mem) : res := if i =? 0 then Err 1 else Ok i (upd 0 i i t).\n')

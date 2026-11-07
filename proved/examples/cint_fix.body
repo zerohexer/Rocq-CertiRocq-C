@@ -1,0 +1,139 @@
+(* every operation of the integer types of C (lib/CInt.v) on every pair of a table of numbers: each result folded into one number *)
+Definition mx (acc x : int) : int := acc * 31 + x.
+Definition o8 (acc a b : int) : int :=
+  let r0 := mx acc (u8_of a) in
+  let r1 := mx r0 (i8_of a) in
+  let r2 := mx r1 (u8_add a b) in
+  let r3 := mx r2 (u8_sub a b) in
+  let r4 := mx r3 (u8_mul a b) in
+  let r5 := mx r4 (u8_and a b) in
+  let r6 := mx r5 (u8_or a b) in
+  let r7 := mx r6 (u8_xor a b) in
+  let r8 := mx r7 (u8_not a) in
+  let r9 := mx r8 (u8_shl a b) in
+  let r10 := mx r9 (u8_shr a b) in
+  let r11 := mx r10 (u8_div a b) in
+  let r12 := mx r11 (u8_mod a b) in
+  let r13 := mx r12 (if u8_ltb a b then 1 else 0) in
+  let r14 := mx r13 (if u8_leb a b then 1 else 0) in
+  let r15 := mx r14 (i8_add a b) in
+  let r16 := mx r15 (i8_sub a b) in
+  let r17 := mx r16 (i8_mul a b) in
+  let r18 := mx r17 (i8_and a b) in
+  let r19 := mx r18 (i8_or a b) in
+  let r20 := mx r19 (i8_xor a b) in
+  let r21 := mx r20 (i8_not a) in
+  let r22 := mx r21 (i8_shl a b) in
+  let r23 := mx r22 (i8_shr a b) in
+  let r24 := mx r23 (i8_div a b) in
+  let r25 := mx r24 (i8_mod a b) in
+  let r26 := mx r25 (if i8_ltb a b then 1 else 0) in
+  let r27 := mx r26 (if i8_leb a b then 1 else 0) in
+  r27.
+Definition o16 (acc a b : int) : int :=
+  let r0 := mx acc (u16_of a) in
+  let r1 := mx r0 (i16_of a) in
+  let r2 := mx r1 (u16_add a b) in
+  let r3 := mx r2 (u16_sub a b) in
+  let r4 := mx r3 (u16_mul a b) in
+  let r5 := mx r4 (u16_and a b) in
+  let r6 := mx r5 (u16_or a b) in
+  let r7 := mx r6 (u16_xor a b) in
+  let r8 := mx r7 (u16_not a) in
+  let r9 := mx r8 (u16_shl a b) in
+  let r10 := mx r9 (u16_shr a b) in
+  let r11 := mx r10 (u16_div a b) in
+  let r12 := mx r11 (u16_mod a b) in
+  let r13 := mx r12 (if u16_ltb a b then 1 else 0) in
+  let r14 := mx r13 (if u16_leb a b then 1 else 0) in
+  let r15 := mx r14 (i16_add a b) in
+  let r16 := mx r15 (i16_sub a b) in
+  let r17 := mx r16 (i16_mul a b) in
+  let r18 := mx r17 (i16_and a b) in
+  let r19 := mx r18 (i16_or a b) in
+  let r20 := mx r19 (i16_xor a b) in
+  let r21 := mx r20 (i16_not a) in
+  let r22 := mx r21 (i16_shl a b) in
+  let r23 := mx r22 (i16_shr a b) in
+  let r24 := mx r23 (i16_div a b) in
+  let r25 := mx r24 (i16_mod a b) in
+  let r26 := mx r25 (if i16_ltb a b then 1 else 0) in
+  let r27 := mx r26 (if i16_leb a b then 1 else 0) in
+  r27.
+Definition o32 (acc a b : int) : int :=
+  let r0 := mx acc (u32_of a) in
+  let r1 := mx r0 (i32_of a) in
+  let r2 := mx r1 (u32_add a b) in
+  let r3 := mx r2 (u32_sub a b) in
+  let r4 := mx r3 (u32_mul a b) in
+  let r5 := mx r4 (u32_and a b) in
+  let r6 := mx r5 (u32_or a b) in
+  let r7 := mx r6 (u32_xor a b) in
+  let r8 := mx r7 (u32_not a) in
+  let r9 := mx r8 (u32_shl a b) in
+  let r10 := mx r9 (u32_shr a b) in
+  let r11 := mx r10 (u32_div a b) in
+  let r12 := mx r11 (u32_mod a b) in
+  let r13 := mx r12 (if u32_ltb a b then 1 else 0) in
+  let r14 := mx r13 (if u32_leb a b then 1 else 0) in
+  let r15 := mx r14 (i32_add a b) in
+  let r16 := mx r15 (i32_sub a b) in
+  let r17 := mx r16 (i32_mul a b) in
+  let r18 := mx r17 (i32_and a b) in
+  let r19 := mx r18 (i32_or a b) in
+  let r20 := mx r19 (i32_xor a b) in
+  let r21 := mx r20 (i32_not a) in
+  let r22 := mx r21 (i32_shl a b) in
+  let r23 := mx r22 (i32_shr a b) in
+  let r24 := mx r23 (i32_div a b) in
+  let r25 := mx r24 (i32_mod a b) in
+  let r26 := mx r25 (if i32_ltb a b then 1 else 0) in
+  let r27 := mx r26 (if i32_leb a b then 1 else 0) in
+  r27.
+Definition owide (acc a b : int) : int :=
+  let X := u64_of_halves a b in
+  let Y := u64_of_halves b a in
+  let r0 := mx acc (rotl32 a b) in
+  let r1 := mx r0 (rotr32 a b) in
+  let r2 := mx r1 (u64_to_int (rotl64 X b)) in
+  let r3 := mx r2 (u64_to_int (rotr64 X b)) in
+  let r4 := mx r3 (bswap16 a) in
+  let r5 := mx r4 (bswap32 a) in
+  let r6 := mx r5 (u64_to_int (bswap64 X)) in
+  let r7 := mx r6 (popcount32 a) in
+  let r8 := mx r7 (popcount64 X) in
+  let r9 := mx r8 (clz32 a) in
+  let r10 := mx r9 (clz64 X) in
+  let r11 := mx r10 (ctz32 a) in
+  let r12 := mx r11 (ctz64 X) in
+  let r13 := mx r12 (u64_to_int (u64_divu X Y)) in
+  let r14 := mx r13 (u64_to_int (u64_modu X Y)) in
+  let r15 := mx r14 (u64_to_int (u64_mulhi X Y)) in
+  let r16 := mx r15 (u64_to_int (i64_add X Y)) in
+  let r17 := mx r16 (u64_to_int (i64_sub X Y)) in
+  let r18 := mx r17 (u64_to_int (i64_mul X Y)) in
+  let r19 := mx r18 (u64_to_int (i64_div X Y)) in
+  let r20 := mx r19 (u64_to_int (i64_mod X Y)) in
+  let r21 := mx r20 (u64_to_int (i64_shr X b)) in
+  let r22 := mx r21 (if i64_ltb X Y then 1 else 0) in
+  let r23 := mx r22 (if i64_leb X Y then 1 else 0) in
+  r23.
+Fixpoint inner (k : nat) (j n a acc : int) (s : mem) : int :=
+  match k with
+  | O => acc
+  | S m =>
+      if n <=? j then acc
+      else let b := rd 0 j s in
+           inner m (j + 1) n a (owide (o32 (o16 (o8 acc a b) a b) a b) a b) s
+  end.
+Fixpoint outer (k : nat) (i n acc : int) (s : mem) : int :=
+  match k with
+  | O => acc
+  | S m =>
+      if n <=? i then acc
+      else outer m (i + 1) n (inner (kq_nat n) 0 n (rd 0 i s) acc s) s
+  end.
+Definition solve (n : int) (s : mem) : int := PrimInt63.land (outer (kq_nat n) 0 n 0 s) 1152921504606846975.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve 32 (kq_input 0).

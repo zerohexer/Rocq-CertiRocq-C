@@ -1156,11 +1156,12 @@ Proof.
 Qed.
 
 Lemma eval_w64expr : forall o le m A B x y,
+  match o with KQ.KQRun.W_divu | KQ.KQRun.W_modu => False | _ => True end ->
   eval_expr ge empty_env le m A (Vlong x) -> eval_expr ge empty_env le m B (Vlong y) ->
   typeof A = tyl -> typeof B = tyl ->
   eval_expr ge empty_env le m (w64_expr o A B) (Vlong (w64_int o x y)).
 Proof.
-  intros o le m A B x y EA EB TA TB.
+  intros o le m A B x y NO EA EB TA TB.
   assert (EM : eval_expr ge empty_env le m (Ebinop Oand B (c64 63) tyl) (Vlong (Int64.and y (Int64.repr 63)))).
   { eapply eval_bin; [exact EB | apply eval_Econst_long | exact TB | reflexivity | ]. reflexivity. }
   destruct o; cbn [w64_expr w64_int].
@@ -1180,6 +1181,32 @@ Proof.
     simpl. unfold sem_cmp, sem_binarith. simpl. destruct (Int64.ltu y x); reflexivity.
   - econstructor; [eapply eval_bin; [exact EA | exact EB | exact TA | exact TB | reflexivity] | ].
     simpl. unfold sem_cmp, sem_binarith. simpl. destruct (Int64.eq x y); reflexivity.
+  - contradiction.
+  - contradiction.
+Qed.
+
+(** the first statement of a 64-bit operation: C's / and % are undefined at 0, the test around them says what is done there *)
+Lemma exec_w64set : forall o xl le m A B x y,
+  eval_expr ge empty_env le m A (Vlong x) -> eval_expr ge empty_env le m B (Vlong y) ->
+  typeof A = tyl -> typeof B = tyl ->
+  exec_stmt function_entry2 ge empty_env le m (w64_set o xl A B) E0 (PTree.set xl (Vlong (w64_int o x y)) le) m Out_normal.
+Proof.
+  intros o xl le m A B x y EA EB TA TB.
+  assert (EZ : eval_expr ge empty_env le m (cmpe Oeq B (c64 0)) (Val.of_bool (Int64.eq y Int64.zero))).
+  { eapply eval_bin; [exact EB | apply eval_Econst_long | exact TB | reflexivity | ].
+    simpl. unfold sem_cmp, sem_binarith. simpl. destruct (Int64.eq y (Int64.repr 0)); reflexivity. }
+  destruct o;
+    try (apply exec_Sset; apply (eval_w64expr _ le m A B x y); [exact I | exact EA | exact EB | exact TA | exact TB]).
+  - cbn [w64_set w64_int]. eapply exec_Sifthenelse; [exact EZ | apply bool_of | ].
+    destruct (Int64.eq y Int64.zero) eqn:E; cbn.
+    + apply exec_Sset. apply eval_Econst_long.
+    + apply exec_Sset. eapply eval_bin; [exact EA | exact EB | exact TA | exact TB | ].
+      simpl. unfold sem_div, sem_binarith. simpl. rewrite !cast_ll. rewrite E. reflexivity.
+  - cbn [w64_set w64_int]. eapply exec_Sifthenelse; [exact EZ | apply bool_of | ].
+    destruct (Int64.eq y Int64.zero) eqn:E; cbn.
+    + apply exec_Sset. exact EA.
+    + apply exec_Sset. eapply eval_bin; [exact EA | exact EB | exact TA | exact TB | ].
+      simpl. unfold sem_mod, sem_binarith. simpl. rewrite !cast_ll. rewrite E. reflexivity.
 Qed.
 
 
@@ -1233,7 +1260,7 @@ Proof.
     by (eapply eval_pack64; [exact EAL | apply typeof_atom | exact EAH | apply typeof_atom]).
   assert (EPB : eval_expr ge empty_env le m (pack64 (tr_atom bl) (tr_atom bh)) (Vlong PB))
     by (eapply eval_pack64; [exact EBL | apply typeof_atom | exact EBH | apply typeof_atom]).
-  assert (ER := eval_w64expr o le m _ _ PA PB EPA EPB eq_refl eq_refl).
+  assert (ER := exec_w64set o (tv xl) le m _ _ PA PB EPA EPB eq_refl eq_refl).
   set (R := w64_int o PA PB) in *.
   set (Zres := KQ.KQRun.w64_z o (KQ.KQRun.u64_val ra) (KQ.KQRun.u64_val rb)).
   assert (HR : Int64.unsigned R = Zres mod 2 ^ 64).
@@ -1244,7 +1271,7 @@ Proof.
   exists le3. split.
   - unfold tr_w64.
     change E0 with (E0 ** E0). eapply exec_Sseq_1 with (le1 := le1) (m1 := m).
-    + apply exec_Sset. exact ER.
+    + exact ER.
     + change E0 with (E0 ** E0). eapply exec_Sseq_1 with (le1 := le2) (m1 := m).
       * apply exec_Sset. unfold enc. rewrite <- (tag_part_hi R Zres HR).
         eapply eval_tagup; [ | left; reflexivity].

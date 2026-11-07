@@ -247,9 +247,18 @@ Definition w64_expr (o : KQ.KQRun.w64op) (A B : expr) : expr :=
   | KQ.KQRun.W_ltu => Ecast (Ebinop Olt A B tyb) tyl
   | KQ.KQRun.W_leu => Ecast (Ebinop Ole A B tyb) tyl
   | KQ.KQRun.W_eq => Ecast (Ebinop Oeq A B tyb) tyl
+  | KQ.KQRun.W_divu => Ebinop Odiv A B tyl
+  | KQ.KQRun.W_modu => Ebinop Omod A B tyl
+  end.
+(** C's / and % are undefined at 0, so a test around them; clang removes it where it knows the divisor *)
+Definition w64_set (o : KQ.KQRun.w64op) (xl : ident) (A B : expr) : statement :=
+  match o with
+  | KQ.KQRun.W_divu => Sifthenelse (cmpe Oeq B (c64 0)) (Sset xl (c64 0)) (Sset xl (Ebinop Odiv A B tyl))
+  | KQ.KQRun.W_modu => Sifthenelse (cmpe Oeq B (c64 0)) (Sset xl A) (Sset xl (Ebinop Omod A B tyl))
+  | _ => Sset xl (w64_expr o A B)
   end.
 Definition tr_w64 (o : KQ.KQRun.w64op) (xl xh : ident) (AL AH BL BH : expr) : statement :=
-  Ssequence (Sset xl (w64_expr o (pack64 AL AH) (pack64 BL BH)))
+  Ssequence (w64_set o xl (pack64 AL AH) (pack64 BL BH))
     (Ssequence (Sset xh (tagup (Ebinop Oshr (Etempvar xl tyl) (c64 63) tyl)))
                (Sset xl (tagup (Ebinop Oand (Etempvar xl tyl) (c64 m63) tyl)))).
 
