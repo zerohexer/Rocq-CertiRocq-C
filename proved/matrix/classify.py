@@ -39,6 +39,8 @@ DESIGN_CELLS = {
   "A_rp_dead_live_control",
   # arithmetic on Z: an unbounded number as a value (Rocq-C-solution.md §0.5, second reason); control: A_l_z_arith_ctrl, the same on int (step 68)
   "A_l_z_arith",
+  # a record of functions built anew at each round of a recursion, from the data: allocated behind the programmer's back (Rocq-C-solution.md §0.5, first reason); control: A_zc_r_capture, the same record the same throughout (step 84)
+  "A_zc_r_gives_record",
   # a counter that doubles at each round: 2^n from a written budget, a number past a word (§0.5, second reason); controls: A_zb_s_two, A_zb_a_acc, a bound linear in its counters (step 83)
   "A_zb_s_power", "A_zb_s_power_mul", "A_zb_a_acc_doubles",
   # a counter that a round adds a parameter to: n^2 from a written budget, a number past a word (§0.5, second reason); controls: A_zb_s_add, A_zb_s_two_funcs (step 83)
@@ -168,6 +170,10 @@ BY_NAME = {
   "A_zb_o_callee_grows": "a counter a function gives back, given to a function that makes its counter larger: to the check it is any machine number",
   "A_zb_o_counter_row_uses": "a function giving back a counter that uses another's as a counter",
   "A_zb_o_weights": "a counter a function gives back, used where the counters are held by weights",
+  "A_zc_c_mutual": "a class or a record of functions given to a mutual block",
+  "A_zc_r_mutual": "a class or a record of functions given to a mutual block",
+  "A_zc_c_counter_late": "a class given to a recursion, its type after the counter",
+  "A_zc_r_nested": "a record of functions inside a record, given to a recursion",
   "A_l_ack": "a fixpoint inside a fixpoint that gives back a function",
   "A_l_dec_proof_used": "a proof a test gives, named by what follows",
   "A_l_fix_mut": "a local mutual fixpoint",

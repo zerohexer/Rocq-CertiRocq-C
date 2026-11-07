@@ -2846,6 +2846,83 @@ addA('q_nat_pair_ret', "", 'let (q, r) := sp n in if Nat.eqb r 0 then a else Uin
 addA('q_divmod', "", 'Uint63.of_nat (fst (Nat.divmod n 3 0 3))',
      '')
 
+# a class or a record of functions given to a recursive function (step 84)
+addA('zc_c_method', "", 'mx n a b',
+     'Class Ord (A : Type) := { lt : A -> A -> bool }.\n#[export] Instance ord_int : Ord int := { lt := fun x y => x <? y }.\nFixpoint mx {A : Type} `{Ord A} (k : nat) (x y : A) : A := match k with O => x | S m => mx m (if lt x y then y else x) y end.\n')
+addA('zc_c_no_braces', "", 'mx n a b',
+     'Class Ord2 (A : Type) := lt2 : A -> A -> bool.\n#[export] Instance o2 : Ord2 int := fun x y => x <? y.\nFixpoint mx {A : Type} `{Ord2 A} (k : nat) (x y : A) : A := match k with O => x | S m => mx m (if lt2 x y then y else x) y end.\n')
+addA('zc_c_two_fields', "", 'rep n a',
+     "Class Monoid (T : Type) := { unit' : T; op : T -> T -> T }.\n#[export] Instance add_m : Monoid int := { unit' := 0; op := PrimInt63.add }.\nFixpoint rep {T} `{Monoid T} (k : nat) (x : T) : T := match k with O => unit' | S m => op x (rep m x) end.\n")
+addA('zc_c_two_instances', "", 'rep n a + @rep int mul_m n b',
+     "Class Monoid (T : Type) := { unit' : T; op : T -> T -> T }.\n#[export] Instance add_m : Monoid int := { unit' := 0; op := PrimInt63.add }.\n#[export] Instance mul_m : Monoid int | 5 := { unit' := 1; op := PrimInt63.mul }.\nFixpoint rep {T} `{Monoid T} (k : nat) (x : T) : T := match k with O => unit' | S m => op x (rep m x) end.\n")
+addA('zc_c_explicit', "", '@rep int add_m n a',
+     "Class Monoid (T : Type) := { unit' : T; op : T -> T -> T }.\n#[export] Instance add_m : Monoid int := { unit' := 0; op := PrimInt63.add }.\nFixpoint rep {T} `{Monoid T} (k : nat) (x : T) : T := match k with O => unit' | S m => op x (rep m x) end.\n")
+addA('zc_c_build', "", 'rep add_m n a',
+     "Class Monoid (T : Type) := { unit' : T; op : T -> T -> T }.\nDefinition add_m : Monoid int := Build_Monoid int 0 PrimInt63.add.\nFixpoint rep {T} (H : Monoid T) (k : nat) (x : T) : T := match k with O => @unit' T H | S m => @op T H x (rep H m x) end.\n")
+addA('zc_c_helper', "", 'twicef n a',
+     "Class Monoid (T : Type) := { unit' : T; op : T -> T -> T }.\n#[export] Instance add_m : Monoid int := { unit' := 0; op := PrimInt63.add }.\nFixpoint rep {T} `{Monoid T} (k : nat) (x : T) : T := match k with O => unit' | S m => op x (rep m x) end.\nDefinition twicef {T} `{Monoid T} (k : nat) (x : T) : T := op x (rep k x).\n")
+addA('zc_c_helper_two', "", 'rep2 n a',
+     "Class Monoid (T : Type) := { unit' : T; op : T -> T -> T }.\n#[export] Instance add_m : Monoid int := { unit' := 0; op := PrimInt63.add }.\nFixpoint rep {T} `{Monoid T} (k : nat) (x : T) : T := match k with O => unit' | S m => op x (rep m x) end.\nDefinition rep2 {T} `{Monoid T} (k : nat) (x : T) : T := rep k (rep k x).\n")
+addA('zc_c_rec_calls_rec', "", 'rr n a',
+     "Class Monoid (T : Type) := { unit' : T; op : T -> T -> T }.\n#[export] Instance add_m : Monoid int := { unit' := 0; op := PrimInt63.add }.\nFixpoint rep {T} `{Monoid T} (k : nat) (x : T) : T := match k with O => unit' | S m => op x (rep m x) end.\nFixpoint rr {T} `{Monoid T} (k : nat) (x : T) : T := match k with O => x | S m => rr m (rep 2 x) end.\n")
+addA('zc_c_section', "", 'rep n a',
+     "Class Monoid (T : Type) := { unit' : T; op : T -> T -> T }.\n#[export] Instance add_m : Monoid int := { unit' := 0; op := PrimInt63.add }.\nSection S.\nContext {T : Type} `{Monoid T}.\nFixpoint rep (k : nat) (x : T) : T := match k with O => unit' | S m => op x (rep m x) end.\nEnd S.\n")
+addA('zc_c_on_record', "", 'a2 (rep n (mk2 a b))',
+     "Record r2 := mk2 { a2 : int; b2 : int }.\nClass Monoid (T : Type) := { unit' : T; op : T -> T -> T }.\n#[export] Instance m2 : Monoid r2 := { unit' := mk2 0 0; op := fun x y => mk2 (a2 x + a2 y) (b2 x + b2 y) }.\nFixpoint rep {T} `{Monoid T} (k : nat) (x : T) : T := match k with O => unit' | S m => op x (rep m x) end.\n")
+addA('zc_c_on_bool', "", 'cnt n a b 0',
+     'Class Eq (T : Type) := { eqt : T -> T -> bool }.\n#[export] Instance e_int : Eq int := { eqt := PrimInt63.eqb }.\nFixpoint cnt {T} `{Eq T} (k : nat) (x y : T) (acc : int) : int := match k with O => acc | S m => cnt m x y (if eqt x y then acc + 1 else acc) end.\n')
+addA('zc_c_writes', "", 'rd 0 a (fill n a b s)',
+     'Class Wr (T : Type) := { wr : int -> T -> mem -> mem }.\n#[export] Instance w_int : Wr int := { wr := fun i v t => upd 0 i v t }.\nFixpoint fill {T} `{Wr T} (k : nat) (i : int) (v : T) (t : mem) : mem := match k with O => t | S m => fill m (i + 1) v (wr i v t) end.\n')
+addA('zc_c_reads', "", 'sum n a b s',
+     'Class Rd (T : Type) := { rdf : int -> mem -> T }.\n#[export] Instance r_int : Rd int := { rdf := fun i t => rd 0 i t }.\nFixpoint sum (k : nat) (i acc : int) (t : mem) : int := match k with O => acc | S m => sum m (i + 1) (acc + rdf i t) t end.\n')
+addA('zc_c_superclass', "", 'rp n a',
+     'Class Semi (T : Type) := { sop : T -> T -> T }.\nClass Mon (T : Type) `{Semi T} := { un : T }.\n#[export] Instance s_i : Semi int := { sop := PrimInt63.add }.\n#[export] Instance m_i : Mon int := { un := 0 }.\nFixpoint rp {T} `{Mon T} (k : nat) (x : T) : T := match k with O => un | S m => sop x (rp m x) end.\n')
+addA('zc_c_built_from', "", 'fst (@dflt (int * int) _) + a',
+     'Class Dflt (A : Type) := { dflt : A }.\n#[export] Instance d_int : Dflt int := { dflt := 7 }.\n#[export] Instance d_pair {A B} `{Dflt A} `{Dflt B} : Dflt (A * B) := { dflt := (dflt, dflt) }.\n')
+addA('zc_c_inst_param', "", 'cnt n (a, b) (b, a) 0',
+     'Class Eq (T : Type) := { eqt : T -> T -> bool }.\n#[export] Instance e_int : Eq int := { eqt := PrimInt63.eqb }.\n#[export] Instance e_pair {A B} `{Eq A} `{Eq B} : Eq (A * B) := { eqt := fun x y => eqt (fst x) (fst y) && eqt (snd x) (snd y) }.\nFixpoint cnt {T} `{Eq T} (k : nat) (x y : T) (acc : int) : int := match k with O => acc | S m => cnt m x y (if eqt x y then acc + 1 else acc) end.\n')
+addA('zc_c_counter_late', "", 'rep n a',
+     "Class Monoid (T : Type) := { unit' : T; op : T -> T -> T }.\n#[export] Instance add_m : Monoid int := { unit' := 0; op := PrimInt63.add }.\nFixpoint rep (k : nat) {T} `{Monoid T} (x : T) : T := match k with O => unit' | S m => op x (rep m x) end.\n")
+addA('zc_c_mutual', "", 'ev n a',
+     "Class Monoid (T : Type) := { unit' : T; op : T -> T -> T }.\n#[export] Instance add_m : Monoid int := { unit' := 0; op := PrimInt63.add }.\nFixpoint ev {T} `{Monoid T} (k : nat) (x : T) : T := match k with O => unit' | S m => op x (od m x) end\nwith od {T} `{Monoid T} (k : nat) (x : T) : T := match k with O => x | S m => ev m x end.\n")
+addA('zc_c_generic_inst', "", 'fst (rep n (a, b))',
+     "Class Monoid (T : Type) := { unit' : T; op : T -> T -> T }.\n#[export] Instance add_m : Monoid int := { unit' := 0; op := PrimInt63.add }.\n#[export] Instance add_p {A B} `{Monoid A} `{Monoid B} : Monoid (A * B) := { unit' := (unit', unit'); op := fun x y => (op (fst x) (fst y), op (snd x) (snd y)) }.\nFixpoint rep {T} `{Monoid T} (k : nat) (x : T) : T := match k with O => unit' | S m => op x (rep m x) end.\n")
+addA('zc_r_capture', "", 'use n (mkops (fun x => x + b)) a',
+     'Record ops := mkops { op1 : int -> int }.\nFixpoint use (k : nat) (o : ops) (x : int) : int := match k with O => x | S m => use m o (op1 o x) end.\n')
+addA('zc_r_closed', "", 'use n (mkops (fun x => x + 1)) a',
+     'Record ops := mkops { op1 : int -> int }.\nFixpoint use (k : nat) (o : ops) (x : int) : int := match k with O => x | S m => use m o (op1 o x) end.\n')
+addA('zc_r_const', "", 'use n my a',
+     'Record ops := mkops { op1 : int -> int }.\nFixpoint use (k : nat) (o : ops) (x : int) : int := match k with O => x | S m => use m o (op1 o x) end.\nDefinition my : ops := mkops (fun x => x + 1).\n')
+addA('zc_r_leading', "", 'use (mkops (fun x => x + b)) n a',
+     'Record ops := mkops { op1 : int -> int }.\nFixpoint use (o : ops) (k : nat) (x : int) : int := match k with O => x | S m => use o m (op1 o x) end.\n')
+addA('zc_r_num_field', "", 'use n (mkops b (fun x => x + 1)) a',
+     'Record ops := mkops { base : int; fa : int -> int }.\nFixpoint use (k : nat) (o : ops) (x : int) : int := match k with O => x + base o | S m => use m o (fa o x) end.\n')
+addA('zc_r_two_funcs', "", 'use n (mkops (fun x => x + 1) PrimInt63.mul) a',
+     'Record ops := mkops { fa : int -> int; fb : int -> int -> int }.\nFixpoint use (k : nat) (o : ops) (x : int) : int := match k with O => x | S m => use m o (fb o (fa o x) x) end.\n')
+addA('zc_r_unused_func', "", 'use n (mkops (fun x => x + 1) (fun x => x)) a',
+     'Record ops := mkops { fa : int -> int; fb : int -> int }.\nFixpoint use (k : nat) (o : ops) (x : int) : int := match k with O => x | S m => use m o (fa o x) end.\n')
+addA('zc_r_helper', "", 'use n (mkops (fun x => x + b)) a',
+     'Record ops := mkops { op1 : int -> int }.\nDefinition hlp (o : ops) (x : int) : int := op1 o x + 1.\nFixpoint use (k : nat) (o : ops) (x : int) : int := match k with O => x | S m => use m o (hlp o x) end.\n')
+addA('zc_r_let', "", 'let o := mkops (fun x => x + b) in use n o a',
+     'Record ops := mkops { op1 : int -> int }.\nFixpoint use (k : nat) (o : ops) (x : int) : int := match k with O => x | S m => use m o (op1 o x) end.\n')
+addA('zc_r_two_calls', "", 'use n (mkops (fun x => x + b)) a + use n (mkops (fun x => x * b)) a',
+     'Record ops := mkops { op1 : int -> int }.\nFixpoint use (k : nat) (o : ops) (x : int) : int := match k with O => x | S m => use m o (op1 o x) end.\n')
+addA('zc_r_helper_makes', "", 'use n (mk b) a',
+     'Record ops := mkops { op1 : int -> int }.\nFixpoint use (k : nat) (o : ops) (x : int) : int := match k with O => x | S m => use m o (op1 o x) end.\nDefinition mk (y : int) : ops := mkops (fun x => x + y).\n')
+addA('zc_r_writes', "", 'rd 0 a (run n (mkops (fun i t => upd 0 i b t)) a s)',
+     'Record ops := mkops { step : int -> mem -> mem }.\nFixpoint run (k : nat) (o : ops) (i : int) (t : mem) : mem := match k with O => t | S m => run m o (i + 1) (step o i t) end.\n')
+addA('zc_r_reads', "", 'sum n (mkops (fun i t => rd 0 i t)) a b s',
+     'Record ops := mkops { get : int -> mem -> int }.\nFixpoint sum (k : nat) (o : ops) (i acc : int) (t : mem) : int := match k with O => acc | S m => sum m o (i + 1) (acc + get o i t) t end.\n')
+addA('zc_r_gives_record', "", 'use n (mk b) a',
+     'Record ops := mkops { op1 : int -> int }.\nDefinition mk (y : int) : ops := mkops (fun x => x + y).\nFixpoint use (k : nat) (o : ops) (x : int) : int := match k with O => x | S m => use m (mk x) (op1 o x) end.\n')
+addA('zc_r_chosen', "", 'use n (if a <? b then mkops (fun x => x + 1) else mkops (fun x => x + 2)) a',
+     'Record ops := mkops { op1 : int -> int }.\nFixpoint use (k : nat) (o : ops) (x : int) : int := match k with O => x | S m => use m o (op1 o x) end.\n')
+addA('zc_r_in_pair', "", 'use n ((fun x => x + b), a) a',
+     'Fixpoint use (k : nat) (p : (int -> int) * int) (x : int) : int := match k with O => x + snd p | S m => use m p (fst p x) end.\n')
+addA('zc_r_mutual', "", 'ev n (mkops (fun x => x + b)) a',
+     'Record ops := mkops { op1 : int -> int }.\nFixpoint ev (k : nat) (o : ops) (x : int) : int := match k with O => x | S m => od m o (op1 o x) end\nwith od (k : nat) (o : ops) (x : int) : int := match k with O => x | S m => ev m o x end.\n')
+addA('zc_r_nested', "", 'use n (mkops (mki (fun x => x + 1)) (fun x => x + b)) a',
+     'Record ins := mki { g1 : int -> int }.\nRecord ops := mkops { inner : ins; fa : int -> int }.\nFixpoint use (k : nat) (o : ops) (x : int) : int := match k with O => x | S m => use m o (g1 (inner o) (fa o x)) end.\n')
 # a counter a function gives back, used as a counter (step 83)
 addA('zb_u_lt', "", 'if Nat.ltb (cnt n a s) n then a else b',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')

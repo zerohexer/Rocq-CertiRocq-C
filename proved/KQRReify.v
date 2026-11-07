@@ -6676,7 +6676,7 @@ Definition sp_sh (Σ : global_env) (T : term) : option (inductive * list term * 
                   let ft := fun j t => subst (rev ps) j t in
                   let fts := map (fun jt : nat * term => ft (fst jt) (snd jt)) (combine (seq 0 n) tys) in
                   let keep := filter (fun j => negb (prf_ty 100 Σ (nth j fts (tRel 0)))) (seq 0 n) in
-                  if Nat.eqb (length keep) n then None
+                  if if Nat.eqb (length keep) n then negb (existsb (fun t => match t with tProd _ _ _ => true | _ => false end) fts) else false then None
                   else if existsb (fun j => match nth j fts (tRel 0) with tConst _ _ | tInd _ _ | tApp (tInd _ _) _ => false | tRel _ => true | _ => false end) keep then None
                   else Some (i, ps, fts, keep)
               | _ => None
@@ -6720,10 +6720,49 @@ Definition prf_def (Σ : global_env) (d : def term) : option (def term * list na
   end.
 (** the type parameters a fixpoint starts with *)
 Fixpoint lead_sorts (t : term) : nat := match t with tLambda _ (tSort _) b => S (lead_sorts b) | _ => O end.
+(** (step 84) a class among the parameters after those types, or a record of functions: what is given, closed, is read as a type is: [Monoid T], [Ord T] *)
+Definition cl_ty (Σ : global_env) (t : term) : bool :=
+  match (match t with tApp f _ => f | _ => t end) with
+  | tInd i _ =>
+      match lookup_env Σ (inductive_mind i) with
+      | Some (InductiveDecl mib) =>
+          match ind_bodies mib with
+          | [oib] =>
+              match ind_ctors oib with
+              | [cb] =>
+                  (* with a function among its fields, or a record of the program's over a type *)
+                  if existsb (fun d => match decl_type d with tProd _ _ _ => true | _ => false end) (cstr_args cb) then true
+                  else if Nat.eqb (ind_npars mib) 0 then false
+                  else negb (Kername.eqb (inductive_mind i) (inductive_mind ind_prod))
+              | _ => false
+              end
+          | _ => false
+          end
+      | _ => false
+      end
+  | tConst k _ =>
+      (* a class of one method is its definition *)
+      match lookup_env Σ k with
+      | Some (ConstantDecl cb) =>
+          match cst_body cb with
+          | Some b => match snd (lams b) with tProd _ _ _ => true | _ => false end
+          | None => false
+          end
+      | _ => false
+      end
+  | _ => false
+  end.
+Fixpoint lead_cl (Σ : global_env) (t : term) : nat :=
+  match t with tLambda _ a b => if cl_ty Σ a then S (lead_cl Σ b) else O | _ => O end.
 Fixpoint skip_lam (k : nat) (t : term) : term :=
   match k, t with S k, tLambda _ _ b => skip_lam k b | _, _ => t end.
 Fixpoint skip_pi (k : nat) (t : term) : term :=
   match k, t with S k, tProd _ _ b => skip_pi k b | _, _ => t end.
+Definition lead_inst (Σ : global_env) (t : term) : nat :=
+  match lead_sorts t with
+  | O => O
+  | s => (s + lead_cl Σ (skip_lam s t))%nat
+  end.
 (** a definition with no fixpoint of its own: its body, marked by a [rarg] no fixpoint has *)
 Definition rp_nofix : nat := 999.
 (** a row: the function as the text names it, the types it is given, the slots dropped, the stem of what is made, its fixpoint *)
@@ -7013,7 +7052,7 @@ Definition rp_rows_of (Σ : global_env) (mp : modpath) (stem : string) (t : term
         if in_prog mp (fst k) then
           match body_of Σ k with
           | Some (tFix [d] 0) =>
-              match lead_sorts (dbody d) with
+              match lead_inst Σ (dbody d) with
               | O => rs
               | t0 =>
                   let inst := firstn t0 args in
@@ -7024,7 +7063,7 @@ Definition rp_rows_of (Σ : global_env) (mp : modpath) (stem : string) (t : term
               end
           | Some b =>
               (* a definition polymorphic in a type, its body naming a fixpoint that is *)
-              match lead_sorts b with
+              match lead_inst Σ b with
               | O => rs
               | t0 =>
                   let inst := firstn t0 args in
@@ -8615,6 +8654,13 @@ Fixpoint sp_pj (fuel : nat) (Σ : global_env) (mp : modpath) (t : term) {struct 
             | _ => tApp (tConst k u) [go c]
             end
           else tApp (tConst k u) [go c]
+      | tApp (tConst k u) ((tApp (tConstruct _ _ _) _ as c) :: rest) =>
+          if in_prog mp (fst k) then
+            match body_of Σ k with
+            | Some (tLambda _ _ (tCase _ _ _ _) as b) => go (tApp (al_beta [c] b) rest)
+            | _ => tApp (tConst k u) (go c :: map go rest)
+            end
+          else tApp (tConst k u) (go c :: map go rest)
       | tApp f args => tApp (go f) (map go args)
       | tLambda na a b => tLambda na a (go b)
       | tLetIn na v a b => tLetIn na (go v) a (go b)
@@ -8720,6 +8766,29 @@ Fixpoint sp_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
       | _ => t
       end
   end.
+Fixpoint sp_uh (fuel : nat) (Σ : global_env) (mp : modpath) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := sp_uh fuel Σ mp in
+      match t with
+      | tApp (tConst k u) args =>
+          let args2 := map go args in
+          if if in_prog mp (fst k) then
+               existsb (fun a => match a with tApp (tConstruct i _ _) _ => cl_ty Σ (tInd i []) | _ => false end) args2
+             else false
+          then match body_of Σ k with
+               | Some (tFix _ _) | None => tApp (tConst k u) args2
+               | Some _ => um_red 1000 Σ mp (tApp (tConst k u) args2)
+               end
+          else tApp (tConst k u) args2
+      | tApp f args => tApp (go f) (map go args)
+      | tLambda na a b => tLambda na a (go b)
+      | tLetIn na v a b => tLetIn na (go v) a (go b)
+      | tCase ci p c brs => tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := go (bbody br) |}) brs)
+      | _ => t
+      end
+  end.
 Definition sp_def (Σ : global_env) (mp : modpath) (rows : list rprow) (ty b : term) : option (def term) :=
   let isfix := match b with tFix _ _ => true | _ => false end in
   let d0 := match vm_norm b with
@@ -8729,6 +8798,10 @@ Definition sp_def (Σ : global_env) (mp : modpath) (rows : list rprow) (ty b : t
   match d0 with
   | Some d =>
       let '(tys, body) := lams (dbody d) in
+      (* a helper's record of functions is read where it is written out *)
+      if if if Nat.eqb (rarg d) rp_nofix then true else existsb (fun t => match t with tSort _ => true | _ => false end) tys then
+           existsb (fun t => match sp_sh Σ t with Some (_, _, fts, keep) => Nat.eqb (length keep) (length fts) | None => false end) tys
+         else false then None else
       if existsb (fun t => match sp_sh Σ t with Some _ => true | None => false end) tys then
         let n := length tys in
         let tys2 := sp_tys Σ tys in
@@ -8751,7 +8824,7 @@ Definition sp_def (Σ : global_env) (mp : modpath) (rows : list rprow) (ty b : t
           end in
         let self := if Nat.eqb (rarg d) rp_nofix then 100000 else n2 in
         let body1 := subst (rev (vs tys 0)) 0 (lift n2 n (prf_push 1000 (ret_ty (dtype d)) body)) in
-        let body2 := sp_red 100000 (sp_sub 100000 Σ mp rows (sp_own 100000 Σ tys self 0 (sp_red 100000 (sp_pj 10000 Σ mp (y_red 100000 body1))))) in
+        let body2 := sp_red 100000 (sp_sub 100000 Σ mp rows (sp_own 100000 Σ tys self 0 (sp_red 100000 (sp_pj 10000 Σ mp (sp_uh 10000 Σ mp (y_red 100000 body1)))))) in
         if sp_has_dead 100000 body2 then None
         else
           let ra := if Nat.eqb (rarg d) rp_nofix then rp_nofix
@@ -9499,8 +9572,93 @@ Fixpoint ends_nco (s : string) : bool :=
   if String.eqb s "__nco__wy"%bs then true else
   match s with String.EmptyString => false | String.String _ r => ends_nco r end.
 Definition nb_true := <% True %>.
+(** (step 84) a method at a closed instance is what the instance says, written out: the instance's definition unfolded, the field taken, what it is given put in *)
+Fixpoint cl_whnf (fuel : nat) (Σ : global_env) (mp : modpath) (t : term) {struct fuel} : option (list term) :=
+  match fuel with
+  | O => None
+  | S fuel =>
+      match t with
+      | tApp (tConstruct _ _ _) cargs => Some cargs
+      | tConst k _ => if in_prog mp (fst k) then match body_of Σ k with Some b => cl_whnf fuel Σ mp b | None => None end else None
+      | tApp (tConst k _) args =>
+          if in_prog mp (fst k) then
+            match body_of Σ k with
+            | Some (tFix _ _) | None => None
+            | Some b => cl_whnf fuel Σ mp (al_beta args b)
+            end
+          else None
+      | _ => None
+      end
+  end.
+(** the projections of such a record: how many it takes, the record's parameters, which field *)
+Definition cl_proj (Σ : global_env) (mp : modpath) (k : kername) : option (nat * nat * nat) :=
+  if in_prog mp (fst k) then
+    match body_of Σ k with
+    | Some b =>
+        let '(tys, body) := lams b in
+        match body with
+        | tCase ci _ (tRel 0) [br] =>
+            if cl_ty Σ (nth (Nat.pred (length tys)) tys (tRel 0)) then
+              match bbody br with
+              | tRel j => if Nat.ltb j (length (bcontext br)) then Some (length tys, ci_npar ci, (length (bcontext br) - 1 - j)%nat) else None
+              | _ => None
+              end
+            else None
+        | _ => None
+        end
+    | None => None
+    end
+  else None.
+(** what a method is given, once: a call under a method's two uses of its argument is one call in the text *)
+Fixpoint cl_beta (fuel : nat) (args : list term) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => mkApps t args
+  | S fuel =>
+      match args, t with
+      | [], _ => t
+      | a :: r, tLambda na ty b =>
+          match a with
+          | tRel _ | tConst _ _ | tInt _ | tConstruct _ _ _ => cl_beta fuel r (subst10 a b)
+          | _ => tLetIn na a ty (cl_beta fuel (map (lift0 1) r) b)
+          end
+      | _, _ => mkApps t args
+      end
+  end.
+Fixpoint cl_red (fuel : nat) (Σ : global_env) (mp : modpath) (cls : list (kername * (nat * nat * nat))) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := cl_red fuel Σ mp cls in
+      match t with
+      | tApp (tConst k u) args =>
+          match List.find (fun e => Kername.eqb (fst e) k) cls with
+          | Some e =>
+              let '(m, np, j) := snd e in
+              if Nat.leb m (length args) then
+                match cl_whnf 100 Σ mp (nth (Nat.pred m) args (tRel 0)) with
+                | Some cargs =>
+                    let f := nth (np + j) cargs (tRel 0) in
+                    go (match skipn m args with [] => f | rest => cl_beta 100 rest f end)
+                | None => tApp (tConst k u) (map go args)
+                end
+              else tApp (tConst k u) (map go args)
+          | None => tApp (tConst k u) (map go args)
+          end
+      | tApp f args => tApp (go f) (map go args)
+      | tLambda na a b => tLambda na a (go b)
+      | tLetIn na v a b => tLetIn na (go v) a (go b)
+      | tCase ci p c brs => tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := go (bbody br) |}) brs)
+      | tFix mfix k => tFix (map (fun df => {| dname := dname df; dtype := dtype df; rarg := rarg df; dbody := go (dbody df) |}) mfix) k
+      | _ => t
+      end
+  end.
+Definition cl_all (Σ : global_env) (mp : modpath) (kns : list kername) : list (kername * (nat * nat * nat)) :=
+  flat_map (fun k => match cl_proj Σ mp k with Some e => [(k, e)] | None => [] end) kns.
+Definition cl_s (Σ : global_env) (mp : modpath) (cls : list (kername * (nat * nat * nat))) (t : term) : term :=
+  match cls with [] => t | _ => cl_red 100000 Σ mp cls t end.
 Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env * bool :=
   let kns0 := snd (reach_go 1000 Σ mp root root ([], [])) in
+  let cls := cl_all (conv_all Σ mp) mp kns0 in
   (* (step 80) a function holding a memory in a record or a pair: read as a pair, its fields as parameters; those made first *)
   let qs0 := vm_qs (conv_all Σ mp) mp root kns0 in
   let Σ := match qs0 with [] => Σ | _ => vm_with_unit (vm_with_prod Σ) end in
@@ -9515,7 +9673,7 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
   let prows := filter (fun r : rprow => let '(_, _, sl, _, d0) := r in if rp_is_gm sl then negb (Nat.eqb (rarg d0) rp_nofix) else false) (rp_all Σ mp root) ++ filter (fun r : rprow => let '(_, _, _, _, d0) := r in negb (Nat.eqb (rarg d0) rp_nofix)) (sp_rows (conv_all Σ mp) mp root kns0) in
   let Σq := fold_left (fun S2 r =>
               let d' := rp_def r in
-              add_decl S2 (rp_name r) (dtype d') (tFix [{| dname := dname d'; dtype := dtype d'; rarg := rarg d'; dbody := dbody d' |}] 0)) (qrows ++ prows) (conv_all Σ mp) in
+              add_decl S2 (rp_name r) (dtype d') (tFix [{| dname := dname d'; dtype := dtype d'; rarg := rarg d'; dbody := cl_s (conv_all Σ mp) mp cls (dbody d') |}] 0)) (qrows ++ prows) (conv_all Σ mp) in
   let kns1 := kns0 ++ map rp_name (qrows ++ prows) in
   let lrows := vm_lf_rows (conv_all Σ mp) mp kns0 in
   let srcs := map (fun e : kername * kername * list term => fst (fst e)) qs ++ flat_map (fun r : rprow => match r with (tConst k _, _, _, _, _) => [k] | _ => [] end) prows in
@@ -9523,7 +9681,7 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
   let rows := rp_topo Σ (rp_all Σ mp root ++ sp_rows (conv_all Σ mp) mp root kns0 ++ um_rows (conv_all Σ mp) mp root kns0 ++ er_rows (conv_all Σ mp) mp root kns0 ++ nr_rows (conv_all Σ mp) mp root kns0 ++ qrows ++ vrows) in
   (* (step 69) what is made, its own calls of what is in their place written too; the statements *)
   let S0 := fold_left (fun S2 r =>
-              let d' := rp_def r in
+              let d' := let d0 := rp_def r in {| dname := dname d0; dtype := dtype d0; rarg := rarg d0; dbody := cl_s (conv_all Σ mp) mp cls (dbody d0) |} in
               let plain := match r with (_, _, sl, _, _) => (if rp_is_qm sl then true else if rp_is_gm sl then true else rp_is_sp sl) && existsb (fun q : rprow => match q with (tConst k _, _, _, _, _) => Kername.eqb k (rp_name r) | _ => false end) rows end in
               add_decl (add_decl S2 (rp_name r) (dtype d')
                          (if plain then tFix [d'] 0 else if Nat.eqb (rarg d') rp_nofix then y_red 100000 (vm_sub 100000 (conv_all Σ mp) rows true (rp_sub 100000 rows (er_sub 100000 rows [] (sp_sub 100000 (conv_all Σ mp) mp rows (nr_sub 100000 (conv_all Σ mp) mp rows (dbody d'))))))
@@ -9597,7 +9755,10 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
           | Some b00 =>
               (* (step 68) a program's name for a type, read as its definition, the same up to delta *)
               let ty0 := al_t 1000 Σ mp (cst_type cb) in
-              let b0n := nr_sub 100000 (conv_all Σ mp) mp rows (al_t 100000 Σ mp b00) in
+              let b0n := match cls with
+                         | [] => nr_sub 100000 (conv_all Σ mp) mp rows (al_t 100000 Σ mp b00)
+                         | _ => rp_sub 100000 rows (cl_s (conv_all Σ mp) mp cls (nr_sub 100000 (conv_all Σ mp) mp rows (al_t 100000 Σ mp b00)))
+                         end in
               let b0c := match nbt with [] => b0n | _ => nc_sub 100000 (conv_all Σ mp) mp rows nbt [] b0n end in
               let b0x := mo_t 100000 Σ mp (lu_t 100000 Σ b0c) in
               (* (step 69) its calls of what is read in another form *)

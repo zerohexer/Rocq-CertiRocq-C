@@ -627,11 +627,14 @@ def reflect(name, entry, prog, no_proof):
         def nested_rd(sh):
             def rd(nd): return f"({nd[0]} " + " ".join("0%uint63" if f == "i" else rd(f) for f in nd[1]) + ")"
             return rd(shape(sh))
-        def ro(cn, n, wd):
+        def ro(cn, n, wd, rty=""):
             if wd.startswith("N:"): return nested_ro(wd[2:].split("@")[0], int(n))
             n = int(n); xs = [f"x{q}" for q in range(n)]
             if not wd.strip():
-                mk = f"(fun l => {cn} " + " ".join(f"(nth {q}%nat l 0%uint63)" for q in range(n)) + ")" if n else f"(fun _ => {cn})"
+                # (step 84) a record over a type: its constructor takes the type
+                mt = re.match(r"\((\S+) (.*)\)$", rty) if rty else None
+                ce = f"@{cn} {mt.group(2)}" if mt else cn
+                mk = f"(fun l => {ce} " + " ".join(f"(nth {q}%nat l 0%uint63)" for q in range(n)) + ")" if n else f"(fun _ => {ce})"
                 lst = "".join(f"(cons {x} " for x in xs) + "nil" + ")" * n
                 return f"KQR.mkrops {n}%nat None {mk} (fun P v k => match v with {cn} {' '.join(xs)} => k {lst} end)"
             # a data type held as its tag and its fields (step 28): the constructor chosen by the tag, the fields after it
@@ -647,14 +650,15 @@ def reflect(name, entry, prog, no_proof):
             wl = "[" + "; ".join(map(str, ws)) + "]%nat"
             return (f"KQR.mkrops {n}%nat (Some {wl}) (fun l => {mk}) (fun P v k => match v with "
                     + " | ".join(arm(c) for c in range(len(cns))) + " end)")
-        def rd0(cn, n, wd):
+        def rd0(cn, n, wd, rty=""):
             if wd.startswith("N:"): return nested_rd(wd[2:].split("@")[0])
-            if not wd.strip(): return f"{cn}" + "".join(" 0%uint63" for _ in range(int(n)))
+            mt = re.match(r"\((\S+) (.*)\)$", rty) if rty else None
+            if not wd.strip(): return (f"@{cn} {mt.group(2)}" if mt else f"{cn}") + "".join(" 0%uint63" for _ in range(int(n)))
             return f"{cn.split()[0]}" + "".join(" 0%uint63" for _ in range(int(wd.split()[0])))
-        t_ro = " | ".join(f"{pat(j)} => {ro_new(j) if kind(j) else ro(cn, n, wd)}" for j, (ty, cn, n, wd) in enumerate(recs))
+        t_ro = " | ".join(f"{pat(j)} => {ro_new(j) if kind(j) else ro(cn, n, wd, ty)}" for j, (ty, cn, n, wd) in enumerate(recs))
         t += (f"Definition {name}_ro (i : nat) : KQR.rops ({name}_rt i) :=\n  match i as i0 return KQR.rops ({name}_rt i0) with {t_ro}\n"
               f"  | _ => KQR.mkrops 0%nat None (fun _ => tt) (fun P _ k => k nil) end.\n")
-        t_rd = " | ".join(f"{pat(j)} => {rd_new(j) if kind(j) else rd0(cn, n, wd)}" for j, (ty, cn, n, wd) in enumerate(recs))
+        t_rd = " | ".join(f"{pat(j)} => {rd_new(j) if kind(j) else rd0(cn, n, wd, ty)}" for j, (ty, cn, n, wd) in enumerate(recs))
         t += f"Definition {name}_rd (i : nat) : {name}_rt i := match i as i0 return {name}_rt i0 with {t_rd} | _ => tt end.\n"
         # the one-level match and constructor (step 43): a record holding records gives its number fields and its record fields
         # (each with its type), and is built from them; another record type: its match and its constructor

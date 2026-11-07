@@ -1,0 +1,30 @@
+(* classes given to a recursion, a record of functions: each read at what it is given *)
+Class Monoid (T : Type) := { unit' : T; op : T -> T -> T }.
+#[export] Instance add_m : Monoid int := { unit' := 0; op := PrimInt63.add }.
+Record pt := mkpt { px : int; py : int }.
+#[export] Instance pt_m : Monoid pt := { unit' := mkpt 0 0; op := fun x y => mkpt (px x + px y) (py x + py y) }.
+Fixpoint rep {T} `{Monoid T} (k : nat) (x : T) : T :=
+  match k with
+  | O => unit'
+  | S m => op x (rep m x)
+  end.
+Class Ord (A : Type) := { lt : A -> A -> bool }.
+#[export] Instance ord_int : Ord int := { lt := fun x y => x <? y }.
+Fixpoint mx {A : Type} `{Ord A} (k : nat) (x y : A) : A :=
+  match k with
+  | O => x
+  | S m => mx m (if lt x y then y else x) y
+  end.
+Record ops := mkops { step : int -> mem -> mem; get : int -> mem -> int }.
+Fixpoint run (k : nat) (o : ops) (i acc : int) (t : mem) : int :=
+  match k with
+  | O => acc
+  | S m => let v := get o i t in run m o (i + 1) (acc + v) (step o i t)
+  end.
+Definition solve (n : nat) (a : int) (s : mem) : int :=
+  let p := rep n (mkpt a 1) in
+  rep n a + px p * 10 + py p * 100 + mx n a 9 * 1000
+  + run n (mkops (fun i t => upd 1 i (a + i) t) (fun i t => rd 0 i t)) a 0 s * 100000.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_arg 1) (kq_input 0).
