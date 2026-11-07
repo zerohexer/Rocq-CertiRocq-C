@@ -5448,6 +5448,16 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   15 s); **101 programs through the verified compiler, 0 refused**; `check_trust.py`: `trust unchanged`.  Next: a memory in a
   value of any data type; a sixth probe.
 
+**Step 87, a memory in a value of any data type; a sixth probe (§3.1, §12.A) — the design (2026-11-07).**  A sixth probe, 30 programs in other styles: state and reader monads over records, a state machine over an enumeration, nested records, structures in memory, a linked list and a tree by pointers, a knapsack, a matrix product, strings, a DFS by mutual recursion, a class over a memory, functors, sections, a local function over a memory, a closure given to a loop, tables in lists, FNV over `u64`.  29 read as they stand.  Its one failure is step 85's construct in another type: an error monad over a `sum`.
+- *The form* (`gm_sh`, `gm_tr`, `gm_match`, `gm_fields`, `gm_arm`; `om_rows`, `om_stmt`, `om_sub` take it): a data type some constructors of which hold a memory, each at most one, a memory or a pair ending in one (`Ok (v : int) (t : mem) | Err (e : int)`, `int + (A * mem)`, a type of the program's, over a type or not).  A function of its own in the function's place gives back the value and the memory apart: the value is a sum of the constructors' other fields, each a tuple of them, the memory the one the constructor held or the newest in scope where it holds none.  The function is that one wrapped, at every argument, by induction, as in step 85: nothing depends on the memory where the value holds none, and no fact is added.
+- *A helper giving back such a value*: written out, and the match in each arm (`cf_on`, keyed by the whole type, so that `int + int` stays as it was).
+- *`vm_fq`*: a frame lemma only of a pair: `int + mem` looked like one.
+- *The environment*: `sum` put in where a program's value needs it and its text never names it (`vm_with_sum`), as `prod` and `unit`.
+- *The C*: a program with no such function: byte-identical.
+- *Left, with cells*: three constructors or more held through a recursion (`A_zf_r_three`): the value is a sum in a sum, and a match on it after the call is not reduced yet.
+- *The acceptance*: `proved/examples/resm_fix`: a fill by recursion over a helper in a type of the program's, a total in an error monad over a `sum`; the answer worked out apart: 75080.
+- *Cells*: 51: 21 `A_zf_*`, the probe's 30 `A_zq_*`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5632,7 +5642,8 @@ Pushed to the public repository up to `3ed96d9` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 86 (tests that cannot be moves, many in one expression: the construct table 3428 of 3563, 54 by design, 80 gaps, 2 gaps read), the C, the gate |
+| (this commit) | §12.V: step 87's design -- a memory in a value of any data type; a sixth probe |
+| `b7505f1` | §12.V: step 86 (tests that cannot be moves, many in one expression: the construct table 3428 of 3563, 54 by design, 80 gaps, 2 gaps read), the C, the gate |
 | `3ed96d9` | `proved/KQRReify.v` + `kitc.py` + `matrix` + `examples/jn_fix` step 86: tests that cannot be moves, many in one expression; 23 cells |
 | `f2c5463` | §12.V: step 86's design -- tests that cannot be moves, many in one expression |
 | `1a5ee67` | §12.V: step 85 (a memory inside an option, a helper's choice of a value and a memory: the construct table 3404 of 3540, 54 by design, 81 gaps, 2 gaps read), the C, the gate |
