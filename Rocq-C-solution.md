@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3146 of 3272, 76 gaps, 49 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3189 of 3312, 73 gaps, 49 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -5322,6 +5322,18 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The acceptance*: `proved/examples/prfp_fix`: all of these together; the answer worked out apart: 42.
 - *Cells*: 40, `A_y_*`.
 
+**Step 81, a proof as a parameter — the result (2026-11-07).**
+- *The reader*: `prf_ty`, `prf_push`, `prf_def`, marks 992 and 991 among a row's slots; `sp_sh`, `sp_get`, `sp_pj`, `sp_red`, `sp_args`, `sp_tys`, `sp_own`, `sp_def`, `sp_rows`, `sp_stmt`, `sp_sub`; `rp_all` reads a function's body on the rows before it; `y_all` makes those in such a place functions as it does step 80's.  `um_inl` writes out a helper giving such a value.  `KQR.v`, `KQRWf.v` unchanged.  *`kitc.py`*: a row `__g<n>` has its counter's place in its name.
+- *The acceptance*: `proved/examples/prfp_fix`: proved, built, 42.
+- *Cells*: 40 more: 39 proved; `A_y_p_section_unused` a gap.  Four gaps read: `A_p_proof_arg`, `A_p_proof_arg_rec`, `A_p_sig_arg`, `A_e_sig_param`.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62; step 80's files / these): `HWP_kernel` 2.97 / 2.99 s, `HWP_own` 2.04 / 2.02, `HWP_irqnow` 1.72 / 1.68 — the same.
+- *Lost, found by comparing this table with the last one*: 12 cells read since step 76 (`A_e_sig_arg`, `_sig_bool`, `_sig_calls`, `_sig_def`, `_sig_match`, `_sig_let`, `_sig_mem`, `_sig_spec_if`, `_sig_tactic`, `_sig_two`, `A_p_program_def`, `A_q_sig_ret`) were refused by the first version: a helper giving back a `sig` was written out, away from its own route.  Not a wrong proof, refused programs; put right in the commit after it, the table run again.
+- The C: the 87 programs byte-identical.  The construct table (on `6ce4511`): **3189 of 3312 through the verified compiler**, 49
+  by design, 73 gaps, 1 not Rocq (was 3146 of 3272: 39 of the 40 new cells read, 1 gap; 4 gaps read; 12 cells lost by the first
+  version, read again).  The gate on `6ce4511`, the walk switched off: `make.sh` `core-ok`; examples 52 / 52; corpus 36 / 36; the
+  five kernels (16 / 17 / 20 / 16 / 17 s); **96 programs through the verified compiler, 0 refused**; `check_trust.py`: `trust
+  unchanged`.  Next: a function giving back a counter, made a number where it is used.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5502,11 +5514,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `d9b85b2` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `6ce4511` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 81's design -- a proof as a parameter, a value with its proof as a parameter |
+| (this commit) | §12.V: step 81 (a proof as a parameter, a value with its proof as a parameter: the construct table 3189 of 3312, 49 by design, 73 gaps, 4 gaps read), the C, the gate |
+| `6ce4511` | `proved/KQRReify.v` step 81: a helper giving back a sig stays on its own route |
+| `0f4e425` | `proved/KQRReify.v` + `kitc.py` + `matrix` + `examples/prfp_fix` step 81: a proof as a parameter, a value with its proof as a parameter; 40 cells |
+| `543746b` | §12.V: step 81's design -- a proof as a parameter, a value with its proof as a parameter |
 | `e3613d8` | §12.V: step 80 (a memory in a record or a pair: the construct table 3146 of 3272, 49 by design, 76 gaps, 4 gaps read), the C, the gate |
 | `d9b85b2` | `proved/KQRWf.v` + `KQRReify.v` + `kitc.py` + `matrix` + `examples/stat_fix` step 80: a memory in a record or a pair, at any place; 48 cells |
 | `2b4f456` | §12.V: step 80's design -- a memory in a record or a pair, at any place |
