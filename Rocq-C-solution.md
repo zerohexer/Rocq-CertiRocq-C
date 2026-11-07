@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3428 of 3563, 80 gaps, 54 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3481 of 3614, 78 gaps, 54 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -338,7 +338,7 @@ make it stronger and are taken when their condition arises.
 |---|---|---|
 | Rocq function → KQL | `proved/KQMTrans.v` (a MetaRocq program) | per program: for each function the statement `runk P f args M (g xs M) M'`, proved by `kqm_auto` (`proved/KQMAuto.v`) and checked by the kernel.  **The translator is not trusted** |
 | KQL → Clight | `proved/KQLGen.v` | proved once, for every program: `sim` (`KQLProof.v`) for the arithmetic, `simk` (`KQM.v`) with the kit's memory; top theorem `kit_function_correct` (`KQMTop.v`) |
-| Clight → assembly | CompCert 3.17 | CompCert's pass theorems, composed in `KQLBack.v` (the measured builds use clang instead) |
+| Clight → assembly | clang (any C compiler) | not proved here (D30): the proof ends at Clight; a CompCert licence holder compiles the C with `ccomp` (`KQLBack.v` composes CompCert's pass theorems, outside the default build) |
 | Clight → C text | `proved/KQLPrint.v` | not proved: prints each Clight construct as the C that means the same; a choice between two atoms as the kit's `kq_sel_*` |
 | tables, driver | `proved/kitc.py`, `sup/v4/kq_io3.c` | trusted C: fills the memory tables from the loader's blocks and calls the entry function |
 | machine operations | `hw/kq_hw.h` | trusted C bodies of the external functions the generated code calls, assumed through `hw_law` / `hwf_law` |
@@ -1584,6 +1584,7 @@ Each with its reason.  Re-opening one needs a new fact, not a new preference.
 | D27 | **The memory law "writes to two different cells commute" may be added to `KQSpec.laws`** (proved for the model in `KQModel.v`, with functional extensionality as the other laws are), when the construct that needs it is built — results of more than two numbers through the slot block | it holds of every memory; it does not follow from the two existing equations (F43); one more statement assumed of the real memory, so the owner decided (2026-10-30: "go ahead") |
 | D28 | **Our own fork of Rocq carries the conversion memo** (rocq-prover/rocq#22309, backported to 9.1.1 as `rocq-fork/conv-memo-v9.1.1.patch`), not contributed upstream and not waited for.  It is a change to Rocq's kernel, so to the trusted base; the owner asked for it to be made sound and proved correct (§12.R) | measured: it removes F46 (a read-then-write chain of 100 steps checked in 0.003 s, 30 steps were over 120 s) with nothing else changed.  It is a **general** change (§0.7, §0.9 question 3), not a rule for some programs: memoization of the kernel's comparison within one conversion check, so that two shared subterms are compared once rather than once per path to them — the standard way to compare graphs with sharing, and what Lean's kernel does (F46: 13 ms at 1000 steps); it is not a store of results across runs (the table lives for one check and is dropped), and it is keyed to no construct or program.  Owner, 2026-10-31: "no need to patch upstream to them, we do our own upstream fork".  **Weighed against the alternative and chosen over it:** `Kq Definition` (the compiled function *defined as* `denote s` by our command, as `Program Definition` / `Equations` define theirs) adds nothing to the trusted base and needs no per-program check at all, but users write the command instead of `Definition`, the kernel checks "the C computes what you typed" only where the check is cheap, and users' own proofs that unfold a long read-then-write chain stay exponential; the fork keeps plain `Definition`, checks fidelity always in linear time and makes those proofs fast too, at the price of a patch under every proof.  The owner: "I will choose fork regardless unverified OCaml since it follows same as MetaRocq" — Rocq's kernel is unverified OCaml, and the project already relies on MetaRocq's OCaml quote, so an argued, model-proved, tested patch is the same class of trust |
 | D29 | **Only what has no definition except the machine is assumed.  About Rocq's primitives: Rocq's axioms and kernel and nothing more; where they are silent a closed term is computed, a test in the text rules the case out, otherwise a refusal with that reason.  `proved/TRUSTED.txt` is the list; a change to it is the owner's; a chain and a push stop on a difference** | owner, 2026-11-06: "I want everything verified"; "write them as ordinary Rocq functions and prove each equal to the primitive".  The goal already said so; step 65 went around it (F66), so the check is a program now, not a sentence.  **The floor, the owner's (2026-11-07):** Rocq's kernel and axioms, our fork's memo among them; the hardware, that it follows its manuals, since being right on every model of every ISA is impossible; the memory's laws and each architecture's boot and entry stubs.  Above that floor the aim is correctness on any ISA.  Past Clight is not the floor: the printer, clang, the loader and the driver are software, open at §12.H |
+| D30 | **The proof ends at Clight.  The C text is compiled by any C compiler; one who holds a CompCert licence compiles it with `ccomp`, and CompCert's theorem then carries it from its C to assembly.  CompCert's passes are not part of this work** | owner, 2026-11-08: "we are verified till Clight / C semantics, equivalence till assembly is CompCert, people who own CompCert can change our clang / GCC to CompCert".  What this work uses of CompCert is the definition of Clight (`Clight.v`, `Cop.v`, `Ctypes.v`, `common/`, `lib/`), dual-licensed under the LGPL; the passes are under a non-commercial licence.  A route through the passes, proved (`release_correct`) and run on all 59 examples on 2026-11-08, was set aside for that reason; the tree at Clight and the C text are still joined by the printer, which is checked, not proved |
 | D26 | **A verified compiler by reflection: a syntax `S` of the accepted fragment, its meaning `denote`, a compiler `compile : S -> KQL` proved once, the user's function reified into `S` by an untrusted reifier, and per program only the conversion check `denote s = f`.  The current translator with the walk stays as the fallback until `S` covers the table; emit-then-prove is the interim.  The walk is not converted to proofs built by construction (D25's plan dropped)** | the owner needs other people's programs compiled with zero proof time (2026-10-30); MetaRocq's formal evaluation has no rule for primitive operations, so a translator verified against it cannot even state our programs' runs and would add MetaRocq's quote and typing/erasure assumptions to the trust; reflection gives one theorem for every program of `S`, no search per program and nothing added to the trust (§1.12).  The owner, after the full comparison (§1.12, "the weighing"): "we are going with reflection" |
 
 ---
@@ -1722,10 +1723,11 @@ proved once, measured against C written the same way.
 lock's mutual exclusion, a queue); a ticket lock.
 
 **H. The tools the proof stops at.**  The theorem is about the Clight the generator makes.  "The driver" here is the C `main` `kitc.py` writes, which fills the tables and calls the entry: not a device driver and not tied to an ISA.  A device driver is an ordinary Rocq program on the machine operations.  The printer, clang, the loader that fills the
-tables, `kq_grow` and the driver are not proved, and the owner wants everything that is not the hardware verifiable (2026-11-06).  The
-way: release builds from that Clight through CompCert with no C text in between (`KQLBack.v` composes its passes), which leaves CompCert's
-own assumptions and its assembler; the loader and `kq_grow` as a case of the generator's proof or as Rocq on the primitives.  Until then,
-checks: the printed C compiled by CompCert's own front end (`ccomp`) and compared; UBSan builds of the corpus and examples.
+tables, `kq_grow` and the driver are not proved.  **The proof ends at Clight (D30, owner, 2026-11-08)**: the C text goes to any C compiler,
+and a holder of a CompCert licence uses `ccomp`, whose theorem carries it from CompCert's C to assembly (its own front end and assembler
+trusted).  Nothing of the default build uses CompCert's passes: `proved/KQLBack.v` is outside `make.sh` since step 88.  Left here: checks
+of the printed C against the Clight, in `proved/examples.sh` since step 91 (undefined behaviour trapped, `-O0`, `ccomp` where it is
+installed); the loader and `kq_grow` as a case of the generator's proof or as Rocq on the primitives.
 
 **I. Hosted features, when a program needs them:** `PrimFloat` as C `double`; system calls as primitives with a trace;
 declarations of C library functions as primitives with laws.
@@ -5458,6 +5460,17 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The acceptance*: `proved/examples/resm_fix`: a fill by recursion over a helper in a type of the program's, a total in an error monad over a `sum`; the answer worked out apart: 75080.
 - *Cells*: 51: 21 `A_zf_*`, the probe's 30 `A_zq_*`.
 
+**Step 87, a memory in a value of any data type; a sixth probe — the result (2026-11-07).**  Built as designed:
+- *The reader*: `gm_kf`, `gm_sh`, `gm_pty`, `gm_sty`, `gm_plain`, `gm_vs`, `gm_inj`, `gm_pack`, `gm_proj`, `gm_cases`, `gm_match`, `gm_fields`, `gm_arm`, `gm_tr`, `cf_holds`, `vm_with_sum`; `cf_on`, `cf_has`, `cf_fl`, `cf_lp`, `cf_red`, `vm_yr` given the program's such types; `om_rows`, `om_stmt`, `om_sub`, `vm_fq`, `um_inl` as designed.  `KQR.v`, `KQRWf.v`, `kitc.py` unchanged.
+- *The acceptance*: `proved/examples/resm_fix`: proved, built, 75080.
+- *Cells*: 51 more: 50 proved; `A_zf_r_three` a gap.  Three gaps read: `A_zd_d_res`, `A_zd_d_res_rec`, `A_zd_d_sum_rec`, step 85's.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62, in clean copies of both trees; step 86's files / these): `HWP_kernel` 3.10 / 3.08 s, `HWP_own` 2.11 / 2.12, `HWP_irqnow` 1.79 / 1.77: no difference.
+- The C: the 93 programs byte-identical.  The construct table (on `720c58c`): **3481 of 3614 through the verified compiler**, 54
+  by design, 78 gaps, 1 not Rocq (was 3428 of 3563: 50 of the 51 new cells read, 1 gap; 3 gaps read; no cell lost).  The gate on
+  `720c58c`, the walk switched off: `make.sh` `core-ok`; examples 58 / 58; corpus 36 / 36; the five kernels (15 / 15 / 18 / 15 /
+  16 s); **102 programs through the verified compiler, 0 refused**; `check_trust.py`: `trust unchanged`.  Next: the integer types
+  of C as ordinary functions, what each computes proved.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5638,11 +5651,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `3ed96d9` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `720c58c` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 87's design -- a memory in a value of any data type; a sixth probe |
+| (this commit) | §12.V: step 87 (a memory in a value of any data type: the construct table 3481 of 3614, 54 by design, 78 gaps, 3 gaps read), the C, the gate; D30, the proof ends at Clight |
+| `720c58c` | `proved/KQRReify.v` + `matrix` + `examples/resm_fix` step 87: a memory in a value of any data type; a sixth probe; 51 cells |
+| `9eccf19` | §12.V: step 87's design -- a memory in a value of any data type; a sixth probe |
 | `b7505f1` | §12.V: step 86 (tests that cannot be moves, many in one expression: the construct table 3428 of 3563, 54 by design, 80 gaps, 2 gaps read), the C, the gate |
 | `3ed96d9` | `proved/KQRReify.v` + `kitc.py` + `matrix` + `examples/jn_fix` step 86: tests that cannot be moves, many in one expression; 23 cells |
 | `f2c5463` | §12.V: step 86's design -- tests that cannot be moves, many in one expression |
