@@ -5291,6 +5291,17 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   19 / 16 / 16 s); **94 programs through the verified compiler, 0 refused**; `check_trust.py`: `trust unchanged`.  Next: a memory
   in a record or a pair, at any place.
 
+**Step 80, a memory in a record or a pair, at any place, as a result and as a parameter (§3.5, §12.A) — the design (2026-11-07).**  `Record st := { cnt : int; mm : mem }`, `step (x : st) : st`, `run (k : nat) (x : st) : st`, `mem * int`: a state written the way one writes it.
+- *The form*: a function of its own in the function's place (step 69's route), its parameters the fields of what holds the memory, its result the pair of steps 13 and 78, the value's numbers nested, the memory second.  `f' k c t = match f k (mkst c t) with mkst c' t' => (c', t') end`, by induction.  Then that function is read as any function is: a number and a memory, or through the slot block (step 78), a boolean and nothing there too.
+- *The text*: the parameter is its constructor on the fields, so a match, a field, a helper's text reduce (`vm_pj`, `vm_open`: the numbers first, the memory last); a helper holding such a value is written out; a let of such a value is its fields; a let of a call is taken apart; the same call named twice, through `fst`, `snd` or a field, in a function's own text or another's, is one call (`vm_cand`, `vm_occ`, `vm_repl`, now on the call itself).
+- *The call*: a value holding a memory given as a parameter is written as its constructor where it is given.  A variable given to a call: the function it is in holds it too, or a helper written out.  A call giving one: a gap with its cell.
+- *The proof*: the row's lemma on the pair goes last (`KQRWf.kq_rw2`), once what is known of the pair has been used, the function it is of taken apart then.
+- *An environment with no pair*: a program that names none has no `prod` in what is quoted; the reader adds it, and `unit`.
+- *The C*: a program with no such function: byte-identical.
+- *Left*: a memory deeper in a value, a call as such a parameter, a local fix giving a record: gaps with their cells, with a mutual block, a polymorphic recursion, a Program Fixpoint.
+- *The acceptance*: `proved/examples/stat_fix`: a state record through a step function and a recursion, the memory before the number in a pair; the answer worked out apart: 228.
+- *Cells*: 48, `A_x_*`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5475,7 +5486,8 @@ Pushed to the public repository up to `4000208` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 79 (a value and a memory from the other forms of recursion: the construct table 3098 of 3224, 48 by design, 77 gaps, 6 gaps read), the C, the gate |
+| (this commit) | §12.V: step 80's design -- a memory in a record or a pair, at any place |
+| `c2120b8` | §12.V: step 79 (a value and a memory from the other forms of recursion: the construct table 3098 of 3224, 48 by design, 77 gaps, 6 gaps read), the C, the gate |
 | `4000208` | `proved/KQRWf.v` + `KQRReify.v` + `kitc.py` + `matrix` + `examples/sect_fix` step 79: a value and a memory under parameters and from a local fix; 41 cells |
 | `86d090f` | §12.V: step 79's design -- what is left of a value and a memory given back |
 | `2e29a22` | §12.V: step 78 (a value of several numbers and a memory given back by a recursion: the construct table 3059 of 3183, 45 by design, 78 gaps, 9 gaps read), the C, the gate; F70, F71; D29, §12.H: the floor, the owner's |
