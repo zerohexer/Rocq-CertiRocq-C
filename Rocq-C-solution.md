@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3331 of 3464, 78 gaps, 54 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3404 of 3540, 81 gaps, 54 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -5414,6 +5414,18 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The acceptance*: `proved/examples/optm_fix`: an allocator's helper, a ring's helper, a fill by recursion over it, a copy in an error monad; the answer worked out apart: 1674.
 - *Cells*: 76: 42 `A_zd_*`, the probe's 34 `A_zp_*`.
 
+**Step 85, what a fifth probe found — the result (2026-11-07).**  Built as designed:
+- *The reader*: `cf_opt`, `cf_size`, `cf_ends`, `cf_on`, `cf_has`, `cf_fl`, `cf_lp`, `cf_red`; `om_wrap`, `om_wrap0`, `om_of`, `om_match`, `om_tr`, `om_rows`, `om_stmt`, `om_sub`, `om_s`, a row's mark 989; `cl_red` through a helper over a class; marks `__clu__wy`.  `KQR.v`, `KQRWf.v` unchanged.  *`kitc.py`*: `__m<n>` rows; what a class's program unfolds, `om_wrap` among it.
+- *The acceptance*: `proved/examples/optm_fix`: proved, built, 1674.
+- *Cells*: 76 more: 71 proved; gaps by their categories: `A_zd_d_res`, `_d_res_rec`, `_d_sum_rec`, `A_zd_r_default`, `A_zp_mat_pow`.  Two gaps read: `A_fx_opt_mem`, `A_fx_opt_mem_rec`.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62, in clean copies of both trees; step 84's files / these): `HWP_kernel` 2.98 / 2.97 s, `HWP_own` 2.06 / 2.04, `HWP_irqnow` 1.73 / 1.72 — the same.
+- *`drv_fix`'s C differs*: a choice on written numbers, which the old form carried as a conditional move, is worked out when it is read: 11 temporaries fewer, the same answer.  It is the only one.
+- The C: 90 of the 91 programs byte-identical, `drv_fix` as above.  The construct table (on `875c47b`): **3404 of 3540 through the
+  verified compiler**, 54 by design, 81 gaps, 1 not Rocq (was 3331 of 3464: 71 of the 76 new cells read, 5 gaps; 2 gaps read; no
+  cell lost).  The gate on `875c47b`, the walk switched off: `make.sh` `core-ok`; examples 56 / 56; corpus 36 / 36; the five
+  kernels (15 / 15 / 18 / 15 / 15 s); **100 programs through the verified compiler, 0 refused**; `check_trust.py`: `trust
+  unchanged`.  Next: tests that cannot be moves, many in one expression.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5594,11 +5606,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `413a349` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `875c47b` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 85's design -- what a fifth probe found: a memory inside an option, a helper's choice of a value and a memory |
+| (this commit) | §12.V: step 85 (a memory inside an option, a helper's choice of a value and a memory: the construct table 3404 of 3540, 54 by design, 81 gaps, 2 gaps read), the C, the gate |
+| `875c47b` | `proved/KQRReify.v` + `kitc.py` + `matrix` + `examples/optm_fix` step 85: what a fifth probe found: a memory inside an option, a helper's choice of a value and a memory; 76 cells |
+| `59f3bf1` | §12.V: step 85's design -- what a fifth probe found: a memory inside an option, a helper's choice of a value and a memory |
 | `c5eaa9b` | §12.V: step 84 (a class or a record of functions given to a recursive function: the construct table 3331 of 3464, 54 by design, 78 gaps, 4 gaps read), the C, the gate |
 | `413a349` | `proved/KQRReify.v` step 84: a function given to a class's method is put in |
 | `248f2d4` | `proved/KQRReify.v` + `kitc.py` + `matrix` + `examples/cls_fix` step 84: a class or a record of functions given to a recursive function; 38 cells |
