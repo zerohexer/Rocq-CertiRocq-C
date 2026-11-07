@@ -1,0 +1,17 @@
+(* many tests that cannot be moves in one expression: a matrix power modulo a number, a sum of remainders: each such operand a function of its own, so the C stays the size of the text *)
+Record m2 := mk2 { x11 : int; x12 : int; x21 : int; x22 : int }.
+Definition mm (x y : m2) (p : int) : m2 :=
+  mk2 ((x11 x * x11 y + x12 x * x21 y) mod p) ((x11 x * x12 y + x12 x * x22 y) mod p)
+      ((x21 x * x11 y + x22 x * x21 y) mod p) ((x21 x * x12 y + x22 x * x22 y) mod p).
+Fixpoint pw (k : nat) (x r : m2) (e p : int) : m2 :=
+  match k with
+  | O => r
+  | S m => pw m (mm x x p) (if (e land 1) =? 1 then mm r x p else r) (e >> 1) p
+  end.
+Definition rems (a : int) : int :=
+  a mod 7 + (a + 1) mod 7 + (a + 2) mod 7 + (a + 3) mod 7 + (a + 4) mod 7 + (a + 5) mod 7 + (a + 6) mod 7 + (a + 7) mod 7.
+Definition solve (n : nat) (a : int) (s : mem) : int :=
+  x12 (pw n (mk2 1 1 1 0) (mk2 1 0 0 1) (a + 9) 1000007) * 100 + rems a + rd 0 a s.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_arg 1) (kq_input 0).

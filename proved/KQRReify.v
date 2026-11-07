@@ -4752,12 +4752,100 @@ Definition op_res (y : term) : bool :=
   | tConst kn _ => Kername.eqb kn kn_int
   | _ => false
   end.
-Definition opnd (Σ : global_env) (base : string) (ctx : list (option term)) (acc : list (string * term * term)) (oty : option term) (a : term)
+(** (step 86) how many times what follows an operand is written, the compiler's way: a test that cannot be a move ([KQR.choice_ok]) has it in each arm.  [tab]: a helper's number, read
+    from its body, the helpers looked up here and not in the environment, for what runs at every call (F64) *)
+Definition jn_kdiv := [kn_of <% PrimInt63.div %>; kn_of <% PrimInt63.mod %>; kn_of <% PrimInt63.divs %>; kn_of <% PrimInt63.mods %>].
+Definition jn_kandb := kn_of <% andb %>.
+Definition jn_korb := kn_of <% orb %>.
+Definition jn_kzm := kn_of <% KQ.KQRun.zmod %>.
+Definition jn_kzd := kn_of <% KQ.KQRun.zdiv %>.
+Definition jn_div (k : kername) : bool := existsb (Kername.eqb k) jn_kdiv.
+(** numbers of the machine here: a literal [nat] is built where it is used (F64), at every node *)
+Definition jn_cap : PrimInt63.int := 1073741824%uint63.
+Definition jn_one : PrimInt63.int := 1%uint63.
+Definition jn_mul (a b : PrimInt63.int) : PrimInt63.int :=
+  let p := PrimInt63.mul a b in if PrimInt63.ltb jn_cap p then jn_cap else p.
+Definition jn_add1 (a b : PrimInt63.int) : PrimInt63.int :=
+  let p := PrimInt63.add a b in if PrimInt63.ltb jn_cap p then jn_cap else p.
+Definition jn_fu : nat := 1000.
+Definition jn_fb : nat := 100000.
+(** at once, in one pass: how many times what follows is written, whether it can be a move *)
+Fixpoint jn_ds (fuel : nat) (tab : list (kername * PrimInt63.int)) (t : term) {struct fuel} : PrimInt63.int * bool :=
+  match fuel with
+  | O => (jn_one, false)
+  | S fuel =>
+      let go := jn_ds fuel tab in
+      let prod := fold_left (fun (a : PrimInt63.int * bool) (x : term) => let r := go x in (jn_mul (fst a) (fst r), andb (snd a) (snd r))) in
+      match t with
+      | tRel _ | tInt _ | tConstruct _ _ _ => (jn_one, true)
+      | tConst k _ => (jn_one, eq_mp (fst k) prim_mp)
+      | tApp (tConst k _) args =>
+          let r := prod args (jn_one, true) in
+          if eq_mp (fst k) prim_mp then (fst r, if jn_div k then false else snd r)
+          else if Kername.eqb k kn_rd then r
+          else match List.find (fun e => Kername.eqb (fst e) k) tab with
+               | Some e => (jn_mul (fst r) (snd e), if PrimInt63.eqb (snd e) jn_one then snd r else false)
+               | None => (fst r, false)
+               end
+      | tApp (tConstruct _ _ _) args => prod args (jn_one, true)
+      | tApp f args => let r := prod args (go f) in (fst r, false)
+      | tLambda _ _ b => let r := go b in (fst r, false)
+      | tLetIn _ v _ b => let r := go v in let q := go b in (jn_mul (fst r) (fst q), andb (snd r) (snd q))
+      | tCase _ _ c brs =>
+          let r := go c in
+          let qs := map (fun br => go (bbody br)) brs in
+          let smp := forallb snd qs in
+          (jn_mul (fst r) (if smp then jn_one
+                           else fold_left (fun a q => jn_add1 a (fst q)) qs
+                                  (* a test of two tests has an arm in two places *)
+                                  (match c with tApp (tConst k _) [_; _] => if Kername.eqb k jn_kandb then jn_one else if Kername.eqb k jn_korb then jn_one else 0%uint63 | _ => 0%uint63 end)),
+           andb (snd r) smp)
+      | _ => (jn_one, false)
+      end
+  end.
+Definition jn_dup (tab : list (kername * PrimInt63.int)) (t : term) : PrimInt63.int := fst (jn_ds jn_fu tab t).
+(** a function's body: its end has nothing after it *)
+Fixpoint jn_tail (fuel : nat) (tab : list (kername * PrimInt63.int)) (t : term) {struct fuel} : PrimInt63.int :=
+  match fuel with
+  | O => jn_one
+  | S fuel =>
+      let go := jn_tail fuel tab in
+      let mx := fun a b => if PrimInt63.ltb a b then b else a in
+      match t with
+      | tLambda _ _ b => go b
+      | tFix mfix _ => fold_left (fun a d => mx a (go (dbody d))) mfix jn_one
+      | tLetIn _ v _ b => jn_mul (jn_dup tab v) (go b)
+      | tCase _ _ c brs => jn_mul (jn_dup tab c) (fold_left (fun a br => mx a (go (bbody br))) brs jn_one)
+      | _ => jn_dup tab t
+      end
+  end.
+(** the program's own functions, each after what it calls, as Rocq has them: the head of the environment, no look-up (F64) *)
+Definition jn_own (Σ : global_env) (mp : modpath) : list (kername * term) :=
+  fold_left (fun a e =>
+    if if eq_mp (fst (fst e)) mp then true else eq_mp (fst (fst e)) copy_mp then
+      match snd e with
+      | ConstantDecl cb => match cst_body cb with Some b => (fst e, b) :: a | None => a end
+      | _ => a
+      end
+    else a) (firstn 200 (declarations Σ)) [].
+(** the helpers written out, those with no fixpoint and not read as functions; the kit's two that test, three arms each *)
+Definition jn_tab (own : list (kername * term)) (read : list kername) : list (kername * PrimInt63.int) :=
+  fold_left (fun t2 e =>
+    match snd e with
+    | tFix _ _ => t2
+    | b => if existsb (Kername.eqb (fst e)) read then t2
+           else if has_fix jn_fu b then t2
+           else (fst e, jn_dup t2 (snd (lams b))) :: t2
+    end) own [(jn_kzm, 3%uint63); (jn_kzd, 3%uint63)].
+Definition opnd (jt : option (list (kername * PrimInt63.int))) (Σ : global_env) (base : string) (ctx : list (option term)) (acc : list (string * term * term)) (oty : option term) (a : term)
   : term * list (string * term * term) :=
   match oty, a with
-  | Some T, (tLetIn _ _ _ _ | tCase _ _ _ _) =>
+  | Some T, (tLetIn _ _ _ _ | tCase _ _ _ _ | tApp (tConst _ _) _) =>
       if op_res T then
-        if writes_t 6 Σ a then
+        if match a with
+           | tApp _ _ => match jt with Some tb => PrimInt63.ltb jn_one (jn_dup tb a) | None => false end
+           | _ => if writes_t 6 Σ a then true else match jt with Some tb => PrimInt63.ltb jn_one (jn_dup tb a) | None => false end
+           end then
           let fv := fvs 1000 0 a [] in
           let tyof j := match nth_error ctx j with Some (Some y) => if op_param y then Some y else None | _ => None end in
           match opt_all (map tyof fv) with
@@ -4769,7 +4857,7 @@ Definition opnd (Σ : global_env) (base : string) (ctx : list (option term)) (ac
               let m := length P in
               let tys := map (fun j => match tyof j with Some y => y | None => dflt end) P in
               let sg := map (fun j => match find_idx j P with Some q => tRel (m - 1 - q) | None => dflt end) (seq 0 (length ctx)) in
-              let nm := base ^ "__kq"%bs ^ string_of_nat (length acc) in
+              let nm := base ^ (match jt with Some _ => "__kqj"%bs | None => "__kq"%bs end) ^ string_of_nat (length acc) in
               (tApp (tConst (copy_mp, nm) []) (map tRel P), acc ++ [(nm, pis_of tys T, lams_of tys (subst sg 0 a))])
           | None => (a, acc)
           end
@@ -4799,46 +4887,52 @@ Fixpoint arg_tys (args : list term) (ft : term) : list (option term) :=
               | _ => None :: arg_tys r ft
               end
   end.
-Fixpoint lift_op (fuel : nat) (Σ : global_env) (base : string) (ctx : list (option term)) (acc : list (string * term * term)) (t : term)
+Fixpoint lift_op (jt : option (list (kername * PrimInt63.int))) (fuel : nat) (Σ : global_env) (base : string) (ctx : list (option term)) (acc : list (string * term * term)) (t : term)
   {struct fuel} : term * list (string * term * term) :=
   match fuel with
   | O => (t, acc)
   | S fuel =>
       match t with
-      | tLambda na ty b => let '(b', a') := lift_op fuel Σ base (Some ty :: ctx) acc b in (tLambda na ty b', a')
+      | tLambda na ty b => let '(b', a') := lift_op jt fuel Σ base (Some ty :: ctx) acc b in (tLambda na ty b', a')
       | tFix mfix k =>
           let cx := repeat None (length mfix) ++ ctx in
           let '(ds, a') := fold_left (fun st d =>
                 let '(l, ac) := st in
-                let '(b', ac') := lift_op fuel Σ base cx ac (dbody d) in
+                let '(b', ac') := lift_op jt fuel Σ base cx ac (dbody d) in
                 (l ++ [{| dname := dname d; dtype := dtype d; dbody := b'; rarg := rarg d |}], ac')) mfix ([], acc) in
           (tFix ds k, a')
       | tCase ci p c brs =>
-          let '(c1, a1) := lift_op fuel Σ base ctx acc c in
+          let '(c1, a1) := lift_op jt fuel Σ base ctx acc c in
           let T := if Nat.eqb (ci_npar ci) 0 then Some (tInd (ci_ind ci) []) else None in
-          let '(c2, a2) := opnd Σ base ctx a1 T c1 in
+          let '(c2, a2) := opnd jt Σ base ctx a1 T c1 in
           let '(brs', a3) := fold_left (fun st br =>
                 let '(l, a) := st in
-                let '(bb, a') := lift_op fuel Σ base (lift_tys ci p br ++ ctx) a (bbody br) in
+                let '(bb, a') := lift_op jt fuel Σ base (lift_tys ci p br ++ ctx) a (bbody br) in
                 (l ++ [{| bcontext := bcontext br; bbody := bb |}], a')) brs ([], a2) in
           (tCase ci p c2 brs', a3)
       | tApp f args =>
           let '(args1, a1) := fold_left (fun st a =>
                 let '(l, ac) := st in
-                let '(a', ac') := lift_op fuel Σ base ctx ac a in (l ++ [a'], ac')) args ([], acc) in
+                let '(a', ac') := lift_op jt fuel Σ base ctx ac a in (l ++ [a'], ac')) args ([], acc) in
           let '(args2, a2) := fold_left (fun st ap =>
                 let '(l, ac) := st in
-                let '(a', ac') := opnd Σ base ctx ac (snd ap) (fst ap) in (l ++ [a'], ac')) (combine args1 (arg_tys args1 (head_ty Σ f))) ([], a1) in
+                let '(a', ac') := opnd jt Σ base ctx ac (snd ap) (fst ap) in (l ++ [a'], ac')) (combine args1 (arg_tys args1 (head_ty Σ f))) ([], a1) in
           (tApp f args2, a2)
       | tLetIn na b ty body =>
-          let '(b1, a1) := lift_op fuel Σ base ctx acc b in
-          let '(b2, a2) := opnd Σ base ctx a1 (Some ty) b1 in
-          let '(body', a3) := lift_op fuel Σ base (Some ty :: ctx) a2 body in
+          let '(b1, a1) := lift_op jt fuel Σ base ctx acc b in
+          let '(b2, a2) := opnd jt Σ base ctx a1 (Some ty) b1 in
+          let '(body', a3) := lift_op jt fuel Σ base (Some ty :: ctx) a2 body in
           (tLetIn na b2 ty body', a3)
       | _ => (t, acc)
       end
   end.
+(** the mark of a program read with such operands as functions *)
+Definition jn_mark : kername := (copy_mp, "kq_join"%bs).
 Definition lift_ops (Σ : global_env) (mp : modpath) (root : kername) : global_env * copytab :=
+  let jt := match lookup_env Σ jn_mark with
+            | Some _ => Some (jn_tab (jn_own Σ mp) [])
+            | None => None
+            end in
   fold_left (fun st kn =>
     let '(S1, tb) := st in
     if in_prog mp (fst kn) then
@@ -4846,7 +4940,7 @@ Definition lift_ops (Σ : global_env) (mp : modpath) (root : kername) : global_e
       | Some (ConstantDecl cb) =>
           match cst_body cb with
           | Some b =>
-              match lift_op 100000 Σ (mangle kn) [] [] b with
+              match lift_op jt 100000 Σ (mangle kn) [] [] b with
               | (_, []) => st
               | (b', ls) =>
                   (add_decl (fold_left (fun s l => add_decl s (copy_mp, fst (fst l)) (snd (fst l)) (snd l)) ls S1) kn (cst_type cb) b',
@@ -10270,9 +10364,55 @@ Definition reify_prog2m (lo : bool) (p : program) : option (list (kername * sig 
             end
   end.
 (** (step 54) a program read as it stands, its C what it was; failing that, with its operands that write made functions *)
+Definition jn_big (Σ : global_env) (mp : modpath) (read : list kername) : bool :=
+  let own := jn_own Σ mp in
+  (* a function read as a function is a call, nothing follows it twice *)
+  let tab := jn_tab own read in
+  (* what was read: a Program's obligations are not *)
+  existsb (fun e => if existsb (Kername.eqb (fst e)) read then PrimInt63.ltb 1024%uint63 (jn_tail jn_fu tab (snd e)) else false) own.
+(** the first test, what runs for every program: how many such operands the program's own text has at all, its declarations at the head of the environment, no look-up (F64) *)
+Fixpoint jn_cnt (fuel : nat) (zm zd : kername) (t : term) {struct fuel} : nat :=
+  match fuel with
+  | O => 0
+  | S fuel =>
+      let go := jn_cnt fuel zm zd in
+      let opd := fun a => match a with tCase _ _ _ _ | tLetIn _ _ _ _ => 1%nat | _ => 0%nat end in
+      match t with
+      | tApp (tConst k _) args =>
+          fold_left (fun a x => (a + opd x + go x)%nat) args (if Kername.eqb k zm then 1%nat else if Kername.eqb k zd then 1%nat else 0%nat)
+      | tApp f args => fold_left (fun a x => (a + opd x + go x)%nat) args (go f)
+      | tLambda _ _ b => go b
+      | tLetIn _ v _ b => (opd v + go v + go b)%nat
+      | tCase _ _ c brs => fold_left (fun a br => (a + go (bbody br))%nat) brs (opd c + go c)%nat
+      | tFix mfix _ => fold_left (fun a d => (a + go (dbody d))%nat) mfix 0%nat
+      | _ => 0%nat
+      end
+  end.
+Definition jn_pre (Σ : global_env) (mp : modpath) : bool :=
+  let zm := jn_kzm in
+  let zd := jn_kzd in
+  Nat.leb 4 (fold_left (fun a e =>
+    if if eq_mp (fst (fst e)) mp then true else eq_mp (fst (fst e)) copy_mp then
+      match snd e with
+      | ConstantDecl cb => match cst_body cb with Some b => (a + jn_cnt jn_fb zm zd b)%nat | None => a end
+      | _ => a
+      end
+    else a) (firstn 200 (declarations Σ)) 0%nat).
+Definition jn_add (Σ : global_env) : global_env := add_decl Σ jn_mark (tSort sProp) (tSort sProp).
+Definition jn_try (q : program) (r : list (kername * sig * fbody) * list (string * term)) : option (list (kername * sig * fbody) * list (string * term)) :=
+  match q with
+  | (Σ, tConst root _) =>
+      if if jn_pre Σ (fst root) then jn_big Σ (fst root) (map (fun e : kername * sig * fbody => fst (fst e)) (fst r)) else false then
+        match reify_prog2m true (jn_add Σ, tConst root []) with
+        | Some r2 => Some r2
+        | None => Some r
+        end
+      else Some r
+  | _ => Some r
+  end.
 Definition reify_prog2 (p : program) : option (list (kername * sig * fbody) * list (string * term)) :=
   match reify_prog2m false p with
-  | Some r => Some r
+  | Some r => jn_try p r
   | None =>
       match p with
       | (Σ, tConst root _) =>
@@ -10286,7 +10426,7 @@ Definition reify_prog2 (p : program) : option (list (kername * sig * fbody) * li
               match y_all Σ (fst root) root with
               | (Σy, true) =>
                   match reify_prog2m false (Σy, tConst root []) with
-                  | Some r => Some r
+                  | Some r => jn_try (Σy, tConst root []) r
                   | None => reify_prog2m true (Σy, tConst root [])
                   end
               | _ => None
@@ -10300,6 +10440,12 @@ Definition is_kq4 (s : string) : bool :=
   | String.String a (String.String b (String.String c (String.String d _))) =>
       if Byte.eqb a "_"%byte then if Byte.eqb b "_"%byte then if Byte.eqb c "k"%byte then Byte.eqb d "q"%byte else false else false else false
   | _ => false
+  end.
+(** a program read with such operands as functions says so by their names *)
+Fixpoint has_kqj (s : string) : bool :=
+  match s with
+  | String.EmptyString => false
+  | String.String a r => if String.prefix "__kqj"%bs s then true else has_kqj r
   end.
 Fixpoint has_kq (s : string) : bool :=
   match s with
@@ -10319,7 +10465,7 @@ Definition rec_info2 (p0 : program) (r : option (list (kername * sig * fbody) * 
     match p with
     | (Σ000, tConst root _) =>
         let mp := fst root in
-        let Σ00 := fst (pf_all Σ000 mp root) in
+        let Σ00 := fst (pf_all (if lo then (if existsb (fun q => has_kqj (fst q)) (match r with Some (_, mts) => mts | None => [] end) then jn_add Σ000 else Σ000) else Σ000) mp root) in
         let Σ0 := if lo then fst (lift_ops Σ00 mp root) else Σ00 in
         let kns0 := reach 1000 Σ0 mp root root [] in
         let '(Σ, kns, _) := lift_all (float_all Σ0 kns0) mp kns0 in

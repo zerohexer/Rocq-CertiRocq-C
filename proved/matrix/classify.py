@@ -178,7 +178,7 @@ BY_NAME = {
   "A_zd_d_res_rec": "a memory in a data type of the program's or in a sum, given back",
   "A_zd_d_sum_rec": "a memory in a data type of the program's or in a sum, given back",
   "A_zd_r_default": "the memory before a call that gave nothing, used after it",
-  "A_zp_mat_pow": "tests that cannot be moves in one expression, many: what follows written in each arm",
+  "A_ze_own_call_12": "tests that cannot be moves in one expression, an own call in each: what follows written in each arm",
   "A_l_ack": "a fixpoint inside a fixpoint that gives back a function",
   "A_l_dec_proof_used": "a proof a test gives, named by what follows",
   "A_l_fix_mut": "a local mutual fixpoint",

@@ -1079,6 +1079,8 @@ def reflect(name, entry, prog, no_proof):
                 t += f"Lemma {name}_rsh{j} : KQR.sh_ok {shared} (KQRReify.body_at {name}_funs {j}) = true.\nProof. exact eq_refl. Qed.\n"
     t += c_print(name)
     f1 = os.path.join(GEN, f"{name}_rp.v")
+    # (step 86) a function named p1 or p2: `.p1` is a token of MetaRocq's notations: by its short name, the program's file being imported
+    t = re.sub(r"\bKQG\.\w+\.(p[12])\b", r"\1", t)
     open(f1, "w").write(t)
     rc, out = coqc(f1)
     if rc != 0:
@@ -1228,6 +1230,7 @@ def main():
                       + (" (the rest proved)" if unproved else "") + "; entry", entry, "id", eid, kinds, "->", res)
                 continue
         t += c_print(name)
+        t = re.sub(r"\bKQG\.\w+\.(p[12])\b", r"\1", t)
         # a lemma the kernel does not finish (KQ_TIMEOUT) is left unproved (Admitted): the C is still made and is
         # checked by tests only; the program is then reported as unproved
         while True:
