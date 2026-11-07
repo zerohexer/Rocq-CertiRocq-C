@@ -150,6 +150,7 @@ BY_NAME = {
   "A_x_f_three": "a memory deeper in a value given back: a pair in a pair",
   "A_x_p_var_rec": "a value holding a memory given as a parameter by a call of a recursion",
   "A_x_r_local": "a value and a memory given back by a local fix, a Section's fixpoint",
+  "A_y_p_section_unused": "a proof a test gives, named by what follows",
   "A_l_ack": "a fixpoint inside a fixpoint that gives back a function",
   "A_l_dec_proof_used": "a proof a test gives, named by what follows",
   "A_l_fix_mut": "a local mutual fixpoint",

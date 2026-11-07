@@ -2846,6 +2846,87 @@ addA('q_nat_pair_ret', "", 'let (q, r) := sp n in if Nat.eqb r 0 then a else Uin
 addA('q_divmod', "", 'Uint63.of_nat (fst (Nat.divmod n 3 0 3))',
      '')
 
+# a proof as a parameter, a value with its proof as a parameter (step 81)
+addA('y_p_first', "", 'f I a',
+     'Definition f (H : True) (x : int) : int := x + 1.\n')
+addA('y_p_last', "", 'f a I',
+     'Definition f (x : int) (H : True) : int := x + 1.\n')
+addA('y_p_two', "", 'f I a eq_refl b',
+     'Definition f (H : True) (x : int) (J : 0 = 0) (y : int) : int := x + y.\n')
+addA('y_p_mem', "", '(if PrimInt63.lesb 0 a as c return PrimInt63.lesb 0 a = c -> int then fun H => f a H s else fun _ => 0) eq_refl',
+     'Definition f (i : int) (H : (PrimInt63.lesb 0 i) = true) (t : mem) : int := rd 0 i t.\n')
+addA('y_p_mem_writes', "", 'rd 0 a ((if PrimInt63.lesb 0 a as c return PrimInt63.lesb 0 a = c -> mem then fun H => f a H s else fun _ => s) eq_refl)',
+     'Definition f (i : int) (H : (PrimInt63.lesb 0 i) = true) (t : mem) : mem := upd 0 i i t.\n')
+addA('y_p_lt', "", 'f 2 (ltac:(repeat constructor) : (2 < 5)%nat) a',
+     'Definition f (x : nat) (H : (x < 5)%nat) (y : int) : int := y + 1.\n')
+addA('y_p_not', "", 'f a (ltac:(discriminate) : ~ (0 = 1)%nat)',
+     'Definition f (x : int) (H : ~ (0 = 1)%nat) : int := x + 1.\n')
+addA('y_p_def', "", 'f 1 (ltac:(unfold small; repeat constructor) : small 1) a',
+     'Definition small (x : nat) : Prop := (x <= 3)%nat.\nDefinition f (x : nat) (H : small x) (y : int) : int := y + 1.\n')
+addA('y_p_and', "", 'f a (conj I I)',
+     'Definition f (x : int) (H : True /\\ True) : int := x + 1.\n')
+addA('y_p_forall', "", 'f a (fun _ => eq_refl)',
+     'Definition f (x : int) (H : forall k : nat, (k = k)%nat) : int := x + 1.\n')
+addA('y_p_rec_first', "", 'f I n a',
+     'Fixpoint f (H : True) (k : nat) (x : int) {struct k} : int := match k with O => x | S m => f H m (x + 1) end.\n')
+addA('y_p_rec_after', "", 'f n a I',
+     'Fixpoint f (k : nat) (x : int) (H : True) {struct k} : int := match k with O => x | S m => f m (x + 1) I end.\n')
+addA('y_p_rec_mem', "", 'rd 0 a (f n I a s)',
+     'Fixpoint f (k : nat) (H : True) (i : int) (t : mem) {struct k} : mem := match k with O => t | S m => f m H (i + 1) (upd 0 i i t) end.\n')
+addA('y_p_rec_val', "", 'match f n I a s with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Fixpoint f (k : nat) (H : True) (i : int) (t : mem) {struct k} : option int * mem := match k with O => (Some i, t) | S m => f m H (i + 1) (upd 0 i i t) end.\n')
+addA('y_p_rec_convoy', "", 'f (S (S O)) (ltac:(repeat constructor) : (2 <= 100)%nat) a',
+     'Fixpoint f (k : nat) (H : (k <= 100)%nat) (x : int) {struct k} : int := match k as k0 return (k0 <= 100)%nat -> int with O => fun _ => x | S m => fun H0 => f m (PeanoNat.Nat.le_trans _ _ _ (PeanoNat.Nat.le_succ_diag_r m) H0) (x + 1) end H.\n')
+addA('y_p_given', "", 'f a I',
+     'Definition g (x : int) (H : True) : int := x + 1.\nDefinition f (x : int) (H : True) : int := g x H + 1.\n')
+addA('y_p_given_rec', "", 'f n a I',
+     'Definition g (x : int) (H : True) : int := x + 1.\nFixpoint f (k : nat) (x : int) (H : True) {struct k} : int := match k with O => g x H | S m => f m (g x H) H end.\n')
+addA('y_p_section', "", 'f I a',
+     'Section S.\nHypothesis H : True.\nDefinition f (x : int) : int := match H with I => x + 1 end.\nEnd S.\n')
+addA('y_p_section_unused', "", 'f b eq_refl n a',
+     'Section S.\nVariable d : int.\nHypothesis H : (0 = 0)%nat.\nFixpoint f (k : nat) (x : int) : int := match H with eq_refl => match k with O => x + d | S m => f m (x + 1) end end.\nEnd S.\n')
+addA('y_p_cast', "", 'f eq_refl a',
+     'Definition f (H : (0 = 0)%nat) (x : int) : int := match H with eq_refl => x + 1 end.\n')
+addA('y_p_used_by_match', "", 'f I a',
+     'Definition f (H : True) (x : int) : int := match H with I => x + 1 end.\n')
+addA('y_p_tactic_def', "", '(if PrimInt63.lesb 0 a as c return PrimInt63.lesb 0 a = c -> int then fun H => f a H else fun _ => 0) eq_refl',
+     'Definition f (x : int) (H : (PrimInt63.lesb 0 x) = true) : int.\nProof. exact (x + 1). Defined.\n')
+addA('y_p_value_of_proof', "", 'f a (exist _ 0%nat eq_refl)',
+     'Definition f (x : int) (H : {y : nat | y = 0%nat}) : int := match proj1_sig H with O => x | S _ => x + 1 end.\n')
+addA('y_s_var', "", '(if PrimInt63.lesb 0 a as c return PrimInt63.lesb 0 a = c -> int then fun H => hh (exist _ a H) else fun _ => 0) eq_refl',
+     'Definition g (x : {y : int | PrimInt63.lesb 0 y = true}) : int := proj1_sig x + 1.\nDefinition hh (x : {y : int | PrimInt63.lesb 0 y = true}) : int := g x + 2.\n')
+addA('y_s_match', "", 'g (exist _ a I)',
+     'Definition g (x : {y : int | True}) : int := match x with exist v _ => v + 1 end.\n')
+addA('y_s_let', "", 'g (exist _ a I)',
+     'Definition g (x : {y : int | True}) : int := let (v, _) := x in v + 1.\n')
+addA('y_s_with_mem', "", 'rd 0 a (g (exist _ a I) s)',
+     'Definition g (x : {y : int | True}) (t : mem) : mem := upd 0 (proj1_sig x) 1 t.\n')
+addA('y_s_two', "", 'g (exist _ a I) (exist _ b I)',
+     'Definition g (x y : {v : int | True}) : int := proj1_sig x + proj1_sig y.\n')
+addA('y_s_rec', "", 'g n (exist _ a I)',
+     'Fixpoint g (k : nat) (x : {y : int | True}) {struct k} : int := match k with O => proj1_sig x | S m => g m (exist _ (proj1_sig x + 1) I) end.\n')
+addA('y_s_rec_mem', "", 'rd 0 a (g n (exist _ a I) s)',
+     'Fixpoint g (k : nat) (x : {y : int | True}) (t : mem) {struct k} : mem := match k with O => t | S m => g m (exist _ (proj1_sig x + 1) I) (upd 0 (proj1_sig x) 1 t) end.\n')
+addA('y_s_from_fn', "", 'u (clamp a) + u (clamp b)',
+     'Definition clamp (x : int) : {y : int | True} := exist _ (if x <? 0 then 0 else x) I.\nDefinition u (x : {y : int | True}) : int := proj1_sig x + 1.\n')
+addA('y_s_from_rec', "", 'u (clamp n a)',
+     'Fixpoint clamp (k : nat) (x : int) : {y : int | True} := match k with O => exist _ x I | S m => clamp m (x + 1) end.\nDefinition u (x : {y : int | True}) : int := proj1_sig x + 1.\n')
+addA('y_s_nat', "", 'g (exist _ n I) a',
+     'Definition g (x : {k : nat | True}) (y : int) : int := match proj1_sig x with O => y | S _ => y + 1 end.\n')
+addA('y_s_bool', "", 'g (exist _ (a <? b) eq_refl) a',
+     'Definition g (x : {k : bool | k = k}) (y : int) : int := if proj1_sig x then y else y + 1.\n')
+addA('y_s_record', "", 'g (exist _ (mk2w a b) I)',
+     'Record r2w := mk2w { wa : int; wb : int }.\nDefinition g (x : {k : r2w | True}) : int := wa (proj1_sig x) + wb (proj1_sig x).\n')
+addA('y_s_given_var', "", 'hh (exist _ a I) b',
+     'Definition g (x : {y : int | True}) : int := proj1_sig x + 1.\nDefinition hh (x : {y : int | True}) (k : int) : int := g x + k.\n')
+addA('y_r_field', "", 'g (mkpos a eq_refl)',
+     'Record pos := mkpos { pv : int; pp : (0 = 0)%nat }.\nDefinition g (x : pos) : int := pv x + 1.\n')
+addA('y_r_two_nums', "", 'g (mkpos a b eq_refl)',
+     'Record pos := mkpos { pv : int; pw : int; pp : (0 = 0)%nat }.\nDefinition g (x : pos) : int := pv x + pw x.\n')
+addA('y_r_result', "", 'g (mk a)',
+     'Record pos := mkpos { pv : int; pp : (0 = 0)%nat }.\nDefinition mk (a : int) : pos := mkpos (a + 1) eq_refl.\nDefinition g (x : pos) : int := pv x + 1.\n')
+addA('y_r_rec', "", 'g n (mkpos a eq_refl)',
+     'Record pos := mkpos { pv : int; pp : (0 = 0)%nat }.\nFixpoint g (k : nat) (x : pos) {struct k} : int := match k with O => pv x | S m => g m (mkpos (pv x + 1) eq_refl) end.\n')
 # a memory in a record or a pair, at any place, as a result and as a parameter (step 80)
 addA('x_r_mid', "", 'let r := lp n a s in qa r + qb r + rd 0 a (qt r)',
      'Record rq := mkq { qa : int; qt : mem; qb : int }.\nFixpoint lp (k : nat) (i : int) (t : mem) : rq := match k with O => mkq i t (i + 1) | S m => lp m (i + 1) (upd 0 i i t) end.\n')

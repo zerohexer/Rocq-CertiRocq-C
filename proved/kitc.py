@@ -934,7 +934,7 @@ def reflect(name, entry, prog, no_proof):
             t += (f"Lemma {name}_rr{j} {hrb}: {m}.\nProof. unfold {m}. intros; unfold {unfc}; first [solve [KQRWf.own_step0] | solve [cbn; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0]]. Qed.\n")
         else:
             # (step 78) the counter of a function read through the slot block may stand anywhere
-            mv = re.search(r"__[vq](\d+)__rq__wy$", m)
+            mv = re.search(r"__[vqg](\d+)__rq__wy$", m)
             rv = int(mv.group(1)) if mv else 0
             d0 = f"do {rv} intro; " if rv else ""
             t += (f"Lemma {name}_rr{j} {hrb}: {m}.\nProof. unfold {m}. fix IH {rv + 1}. {d0}intros kqn; destruct kqn as [|kqn]; intros; cbn [{unf}]; first [solve [KQRWf.own_step IH] | solve [cbn; KQRWf.own_step IH] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step IH]]. Qed.\n")
