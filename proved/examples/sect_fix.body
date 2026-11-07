@@ -1,0 +1,28 @@
+(* a value and a memory from a fixpoint under a Section's variable, a block's number given *)
+Section Tbl.
+Variable step : int.
+Fixpoint find0 (h : int) (k : nat) (i : int) (t : mem) : option int * mem :=
+  match k with
+  | O => (None, t)
+  | S m => if rd h i t =? 0 then (Some i, t) else find0 h m (i + step) (upd 1 i (rd h i t) t)
+  end.
+End Tbl.
+(* from a local fix naming what is around it *)
+Definition sumw (c : int) (k0 : nat) (i0 : int) (t0 : mem) : (int * int) * mem :=
+  let fix go (k : nat) (i acc : int) (t : mem) : (int * int) * mem :=
+    match k with
+    | O => ((i, acc), t)
+    | S m => go m (i + c) (acc + rd 1 i t) (upd 2 i acc t)
+    end in
+  go k0 i0 0 t0.
+(* the same call named for its value and for its memory *)
+Definition solve (n : nat) (a : int) (s : mem) : int :=
+  match fst (find0 2 0 n a s) with
+  | Some v =>
+      let (p, t2) := sumw 2 (S (S (S O))) a (snd (find0 2 0 n a s)) in
+      v + fst p * 3 + snd p * 5 + rd 1 a t2 * 7 + rd 2 (a + 2) t2 * 11
+  | None => 0
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_arg 1) (kq_input 0).

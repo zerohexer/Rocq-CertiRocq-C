@@ -897,12 +897,14 @@ def reflect(name, entry, prog, no_proof):
     # that gives a memory, that it leaves the cells alone; the equations then hold where the block has room, the program's largest value
     kqunm = lambda x: x.replace("''", "\0").replace("'_", ".").replace("\0", "'")
     fqs = [m for m, _ in mts if m.endswith("__fq__wy")]
-    fqf = [(m, kqunm(re.match(r"(.*)__f\d+__fq__wy$", m).group(1)), int(re.search(r"__f(\d+)__fq__wy$", m).group(1))) for m in fqs]
+    # (step 79) a local fix is no constant: its lemma is stated of the fix itself
+    kqfn = lambda x: "" if re.search(r"__l\d+(__v\d+)?$", x) else kqunm(x)
+    fqf = [(m, kqfn(re.match(r"(.*)__f\d+__fq__wy$", m).group(1)), int(re.search(r"__f(\d+)__fq__wy$", m).group(1))) for m in fqs]
     vmr = any(re.search(r"__v\d+__rq__wy$", m) for m, _ in rrs)
     roomw = max([int(r[2]) for r in recs] + [1])
     roomR = f"({roomw} <= Sint63.to_Z (KQ.KQBound.kq_len 63) + 1)%Z" if roomw > 1 else "True"
     hrb = f"(Hr : {roomR}) " if vmr else ""
-    keepf = " ".join(sorted({"KQ.KQRun.kq_nat"} | {x for m, h in rrs for x in (h, m[:-len("__rq__wy")] + "__rp__wy") if x} | {f[1] for f in fqf}
+    keepf = " ".join(sorted({"KQ.KQRun.kq_nat"} | {x for m, h in rrs for x in (h, m[:-len("__rq__wy")] + "__rp__wy") if x} | {f[1] for f in fqf if f[1]}
                             | {f[0] for f in fs if f[0] in fix1} | {f[0].rsplit(".", 1)[-1] + "__wy" for f in fs if f[0].rsplit(".", 1)[-1] + "__wy" in made}))
     if vmr:
         if roomw > 1:
@@ -913,12 +915,13 @@ def reflect(name, entry, prog, no_proof):
         t += "Ltac KQRWf.kq_vm ::= KQRWf.kq_vm0.\n"
     for j, (m, fn, r) in enumerate(fqf):
         d0 = f"do {r} intro; " if r else ""
-        t += (f"Lemma {name}_fq{j} : {m}.\nProof. unfold {m}. fix IH {r + 1}. {d0}intros kqn; destruct kqn as [|kqn]; intros; cbn [{fn}]; first [solve [KQRWf.fr_step IH] | solve [cbn; KQRWf.fr_step IH] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.fr_step IH]]. Qed.\n")
-        t += "Ltac KQRWf.kq_fr ::= progress (rewrite " + ", ".join(f"?{name}_fq{i}" for i in range(j + 1)) + ").\n"
+        cb0 = f"cbn [{fn}]" if fn else "cbn beta iota"
+        t += (f"Lemma {name}_fq{j} : {m}.\nProof. unfold {m}. fix IH {r + 1}. {d0}intros kqn; destruct kqn as [|kqn]; intros; {cb0}; first [solve [KQRWf.fr_step IH] | solve [cbn; KQRWf.fr_step IH] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.fr_step IH]]. Qed.\n")
+        t += "Ltac KQRWf.kq_fr ::= progress (rewrite " + ", ".join(f"?{name}_fq{i}" for i in range(j + 1)) + " by KQRWf.vm_side).\n"
     for j, (m, h) in enumerate(rrs):
         F = m[:-len("__rq__wy")] + "__rp__wy"
         # (step 78) what is read through the slot block: its statement names the function by what follows the row
-        h = kqunm(re.match(r"(.*)__v\d+__rq__wy$", m).group(1)) if re.search(r"__v\d+__rq__wy$", m) else h
+        h = kqfn(re.match(r"(.*)__v\d+__rq__wy$", m).group(1)) if re.search(r"__v\d+__rq__wy$", m) else h
         unf = " ".join(x for x in [h, F] if x)
         unfc = ", ".join(x for x in [h, F] if x)
         if m.endswith("__n__rq__wy"):
@@ -934,16 +937,19 @@ def reflect(name, entry, prog, no_proof):
             t += (f"Lemma {name}_rr{j} {hrb}: {m}.\nProof. unfold {m}. fix IH {rv + 1}. {d0}intros kqn; destruct kqn as [|kqn]; intros; cbn [{unf}]; first [solve [KQRWf.own_step IH] | solve [cbn; KQRWf.own_step IH] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step IH]]. Qed.\n")
         rrn.append(f"{name}_rr{j}")
         # (step 76) rewriting compares up to unfolding: such a lemma only where its function is in the goal, or it would turn the operation back
-        rrj = f"match goal with Hr : {roomR} |- _ => rewrite ?({name}_rr{j} Hr) end" if vmr else f"rewrite ?{name}_rr{j}"
+        rrj = f"match goal with Hr : {roomR} |- _ => rewrite ?({name}_rr{j} Hr) by KQRWf.vm_side end" if vmr else f"rewrite ?{name}_rr{j}"
         rrw.append(f"try (match goal with |- context [{F}] => {rrj} end)" if m.endswith("__e__rq__wy") or m.endswith("__e__n__rq__wy") else rrj)
         t += "Ltac KQRWf.kq_rw ::= progress (" + "; ".join(rrw) + ").\n"
     yf = {f[0]: f[0].rsplit(".", 1)[-1] + "__wy" for f in fs if f[0].rsplit(".", 1)[-1] + "__wy" in made}
+    keepg = " ".join(sorted({"KQ.KQRun.kq_nat"} | {m[:-len("__rq__wy")] + "__rp__wy" for m, _ in rrs} | set(yf.values())))
+    alt0 = f" | solve [cbv beta iota zeta delta -[{keepg}]; KQRWf.own_step0]" if vmr else ""
+    altn = f" | solve [cbv beta iota zeta delta -[{keepg}]; KQRWf.own_step IH]" if vmr else ""
     for j, f in enumerate(fs):
         if f[0] in yf:
             W = yf[f[0]]
             t += (f"Lemma {name}_rqy{j} {hrb}: KQR.eqC {f[1]} _ (KQR.eqN {kl(f)} {f[3]} _) {W} {f[0]}.\n"
-                  + (f"Proof. cbn [KQR.eqC KQR.eqN]. fix IH 1. intros kqn; destruct kqn as [|kqn]; intros; cbn [{W} {f[0]}]; first [solve [KQRWf.own_step IH] | solve [cbn; KQRWf.own_step IH] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step IH]]. Qed.\n" if f[0] in fix1 else
-                     f"Proof. cbn [KQR.eqC KQR.eqN]. intros. unfold {W}, {f[0]}. first [solve [KQRWf.own_step0] | solve [cbn; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0p]]. Qed.\n"))
+                  + (f"Proof. cbn [KQR.eqC KQR.eqN]. fix IH 1. intros kqn; destruct kqn as [|kqn]; intros; cbn [{W} {f[0]}]; first [solve [KQRWf.own_step IH] | solve [cbn; KQRWf.own_step IH] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step IH]{altn}]. Qed.\n" if f[0] in fix1 else
+                     f"Proof. cbn [KQR.eqC KQR.eqN]. intros. unfold {W}, {f[0]}. first [solve [KQRWf.own_step0] | solve [cbn; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0p]{alt0}]. Qed.\n"))
     t += "Strategy opaque [" + " ".join([f[0] for f in fs if not iswr(f[0])] + tmpls) + "].\n"   # a copy is unfolded first
     if not no_proof:
         for j, f in enumerate(fs):

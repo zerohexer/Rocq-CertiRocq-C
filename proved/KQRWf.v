@@ -404,11 +404,13 @@ Proof.
 Qed.
 Lemma fr_cmp : forall x y n h i j s, PrimInt63.eqb h 63 = false -> rd 63 j (hw_cmp x y n h i s) = rd 63 j s.
 Proof. intros x y n h i j s E. unfold hw_cmp. apply (fr_cmp_go _ _ _ _ _ _ _ E). Qed.
+(** (step 79) a block's number written, or a parameter the function's lemma takes as not 63 *)
+Ltac vm_side := first [ reflexivity | assumption ].
 Ltac fr_mem :=
-  first [ rewrite fr_upd by reflexivity | rewrite fr_upd32 | rewrite fr_upd8 | rewrite fr_upd16 | rewrite fr_grow
-        | rewrite fr_load by reflexivity | rewrite fr_aload by reflexivity | rewrite fr_store | rewrite fr_store64 | rewrite fr_astore | rewrite fr_astore64 | rewrite fr_fence
-        | rewrite fr_atomic by reflexivity | rewrite fr_atomic64 by reflexivity | rewrite fr_cas by reflexivity | rewrite fr_cas64 by reflexivity
-        | rewrite fr_copy by reflexivity | rewrite fr_fill | rewrite fr_cmp by reflexivity ].
+  first [ rewrite fr_upd by vm_side | rewrite fr_upd32 | rewrite fr_upd8 | rewrite fr_upd16 | rewrite fr_grow
+        | rewrite fr_load by vm_side | rewrite fr_aload by vm_side | rewrite fr_store | rewrite fr_store64 | rewrite fr_astore | rewrite fr_astore64 | rewrite fr_fence
+        | rewrite fr_atomic by vm_side | rewrite fr_atomic64 by vm_side | rewrite fr_cas by vm_side | rewrite fr_cas64 by vm_side
+        | rewrite fr_copy by vm_side | rewrite fr_fill | rewrite fr_cmp by vm_side ].
 (** a program's lemmas that a function leaves the slot block alone: [kitc.py] sets it *)
 Ltac kq_fr := fail.
 (** a cell of the slot block: the block's room, a number in it *)
@@ -431,9 +433,12 @@ Qed.
 Lemma upd_same : forall i o m, rd 63 i m = o -> upd 63 i o m = m.
 Proof. intros i o m E. rewrite <- E. apply KQMAuto.upd_rd_id_r. Qed.
 (** a call's pair taken apart as its two parts, so that the same call anywhere is the same two parts and what is known of the call applies to them *)
+Ltac vm_head t := match t with ?f _ => vm_head f | _ => t end.
 Ltac vm_call_pair :=
   match goal with |- context [match ?c with pair _ _ => _ end] =>
-    lazymatch c with context [match _ with _ => _ end] => fail | PrimInt63.diveucl_21 _ _ _ => fail | pair _ _ => fail | _ => rewrite (surjective_pairing c) end end.
+    let h := vm_head c in
+    first [ is_fix h; rewrite (surjective_pairing c)
+          | lazymatch c with context [match _ with _ => _ end] => fail | PrimInt63.diveucl_21 _ _ _ => fail | pair _ _ => fail | _ => rewrite (surjective_pairing c) end ] end.
 (** the value of a call taken apart once *)
 Ltac vm_case :=
   match goal with
@@ -471,7 +476,7 @@ Ltac kq_vm := fail.
 Ltac fr_step IH :=
   repeat (cbn beta iota zeta delta [fst snd proj1_sig]; kq_unf;
           first [ kq_fr
-                | progress (rewrite ?IH)
+                | progress (rewrite ?IH by vm_side)
                 | fr_mem
                 | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
                 | vm_call_pair
@@ -491,7 +496,7 @@ Ltac own_step IH :=
           first [ prim_rw
                 | kq_guard
                 | kq_rw
-                | progress (rewrite ?IH)
+                | progress (rewrite ?IH by vm_side)
                 | kq_vm
                 | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
                 | match goal with |- context [match ?c with pair _ _ => _ end] => lazymatch c with context [match _ with _ => _ end] => fail | PrimInt63.diveucl_21 _ _ _ => fail | _ => destruct c end end

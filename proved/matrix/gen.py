@@ -2846,6 +2846,89 @@ addA('q_nat_pair_ret', "", 'let (q, r) := sp n in if Nat.eqb r 0 then a else Uin
 addA('q_divmod', "", 'Uint63.of_nat (fst (Nat.divmod n 3 0 3))',
      '')
 
+# a value and a memory under parameters, from a local fix, a block's number given, the same call named twice (step 79)
+addA('w_b_two', "", 'match lp 0 1 n a s with (Some v, t) => v + rd 1 a t | (None, _) => 0 end',
+     'Fixpoint lp (h j : int) (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => lp h j m (i + 1) (upd j i i (upd h i i t)) end.\n')
+addA('w_b_const', "", 'match lp blk n a s with (Some v, t) => v + rd blk a t | (None, _) => 0 end',
+     'Definition blk : int := 3.\nFixpoint lp (h : int) (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => lp h m (i + 1) (upd h i i t) end.\n')
+addA('w_b_moved', "", 'match lp 0 n a s with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Fixpoint lp (h : int) (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => lp (h + 1) m (i + 1) (upd h i i t) end.\n')
+addA('w_b_lit_moved', "", 'match lp 0 n a s with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Fixpoint lp (h : int) (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => lp 2 m (i + 1) (upd h i i t) end.\n')
+addA('w_b_call_63', "", 'match lp 63 n a s with (Some v, t) => v + rd 63 a t | (None, _) => 0 end',
+     'Fixpoint lp (h : int) (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => lp h m (i + 1) (upd h i i t) end.\n')
+addA('w_b_call_var', "", 'match lp b n a s with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Fixpoint lp (h : int) (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => lp h m (i + 1) (upd h i i t) end.\n')
+addA('w_b_call_tested', "", 'if b =? 63 then 0 else match lp b n a s with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Fixpoint lp (h : int) (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => lp h m (i + 1) (upd h i i t) end.\n')
+addA('w_b_helper', "", 'match lp 0 n a s with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Definition hw (b i v : int) (t : mem) : mem := upd b i v t.\nFixpoint lp (h : int) (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => lp h m (i + 1) (hw h i i t) end.\n')
+addA('w_b_callee_rec', "", 'match lp n a s with (Some v, t) => v + rd 1 a t | (None, _) => 0 end',
+     'Fixpoint wr (h : int) (k : nat) (i : int) (t : mem) : mem := match k with O => t | S m => wr h m (i + 1) (upd h i i t) end.\nFixpoint lp (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, wr 1 3 i t) | S m => lp m (i + 1) (wr 2 2 i t) end.\n')
+addA('w_b_callee_given', "", 'match lp 1 n a s with (Some v, t) => v + rd 1 a t | (None, _) => 0 end',
+     'Fixpoint wr (h : int) (k : nat) (i : int) (t : mem) : mem := match k with O => t | S m => wr h m (i + 1) (upd h i i t) end.\nFixpoint lp (h : int) (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, wr h 3 i t) | S m => lp h m (i + 1) (wr h 2 i t) end.\n')
+addA('w_b_row_given', "", 'match lq 1 n a s with (Some v, t) => v + rd 1 a t | (None, _) => 0 end',
+     'Fixpoint lp (h : int) (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => lp h m (i + 1) (upd h i i t) end.\nFixpoint lq (h : int) (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => match lp h 2 i t with (Some v, t1) => lq h m v t1 | (None, t1) => (None, t1) end end.\n')
+addA('w_b_helper_given', "", 'wrap 1 n a s',
+     'Fixpoint lp (h : int) (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => lp h m (i + 1) (upd h i i t) end.\nDefinition wrap (h : int) (n : nat) (a : int) (s : mem) : int := match lp h n a s with (Some v, t) => v + rd h a t | (None, _) => 0 end.\n')
+addA('w_b_load', "", 'match lp 0 n a s with (Some v, t) => v + rd 0 0 t | (None, _) => 0 end',
+     'Fixpoint lp (h : int) (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => let t1 := hw_load 4 i h 0 t in lp h m (rd h 0 t1) t1 end.\n')
+addA('w_s_two', "", 'match lp a b n a s with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Section S.\nVariables c e : int.\nFixpoint lp (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some (i + c), t) | S m => lp m (i + e) (upd 0 i c t) end.\nEnd S.\n')
+addA('w_s_block', "", 'match lp 2 n a s with (Some v, t) => v + rd 2 a t | (None, _) => 0 end',
+     'Section S.\nVariable h : int.\nFixpoint lp (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => lp m (i + 1) (upd h i i t) end.\nEnd S.\n')
+addA('w_s_mem', "", 'match lp s n a s with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Section S.\nVariable u : mem.\nFixpoint lp (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some (rd 0 i u), t) | S m => lp m (i + 1) (upd 0 i i t) end.\nEnd S.\n')
+addA('w_s_bool', "", 'match lp true n a s with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Section S.\nVariable f : bool.\nFixpoint lp (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (if f then Some i else None, t) | S m => lp m (i + 1) (upd 0 i i t) end.\nEnd S.\n')
+addA('w_s_counter', "", 'match lp 2 n a s with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Section S.\nVariable j : nat.\nFixpoint lp (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (match j with O => Some i | S _ => None end, t) | S m => lp m (i + 1) (upd 0 i i t) end.\nEnd S.\n')
+addA('w_s_fn', "", 'match lp (fun x => x + b) n a s with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Section S.\nVariable f : int -> int.\nFixpoint lp (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some (f i), t) | S m => lp m (f i) (upd 0 i i t) end.\nEnd S.\n')
+addA('w_s_record', "", 'match lp (mk2w a b) n a s with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Record r2w := mk2w { wa : int; wb : int }.\nSection S.\nVariable r : r2w.\nFixpoint lp (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some (wa r), t) | S m => lp m (i + wb r) (upd 0 i i t) end.\nEnd S.\n')
+addA('w_s_three_value', "", "let (r, t) := lp b n a s in let '(x, y, z) := r in x + y + z + rd 0 a t",
+     'Section S.\nVariable c : int.\nFixpoint lp (k : nat) (i : int) (t : mem) : (int * int * int) * mem := match k with O => ((i, c, i + c), t) | S m => lp m (i + c) (upd 0 i c t) end.\nEnd S.\n')
+addA('w_s_rec_caller', "", 'outer n a s',
+     "Section S.\nVariable c : int.\nFixpoint lp (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some (i + c), t) | S m => lp m (i + c) (upd 0 i c t) end.\nEnd S.\nFixpoint outer (j : nat) (a : int) (t : mem) : int := match j with O => rd 0 a t | S j' => match lp a 2 a t with (Some v, t1) => outer j' v t1 | (None, t1) => outer j' a t1 end end.\n")
+addA('w_l_in_rec', "", 'outer n a s',
+     "Fixpoint outer (j : nat) (a : int) (t : mem) : int := match j with O => rd 0 a t | S j' => let fix go (k : nat) (i : int) (u : mem) : option int * mem := match k with O => (Some i, u) | S m => go m (i + a) (upd 0 i a u) end in match go (S (S O)) a t with (Some v, t1) => outer j' v t1 | (None, t1) => outer j' a t1 end end.\n")
+addA('w_l_two', "", 'match lp n a s with (Some v, t) => v + rd 0 a t | (None, t) => rd 1 a t end',
+     'Definition lp (k0 : nat) (i0 : int) (t0 : mem) : option int * mem := let fix ga (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => ga m (i + 1) (upd 0 i i t) end in let fix gb (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (None, t) | S m => gb m (i + 2) (upd 1 i i t) end in match ga k0 i0 t0 with (Some v, t) => gb k0 v t | (None, t) => (None, t) end.\n')
+addA('w_l_cap_mem', "", 'match lp n a s with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Definition lp (k0 : nat) (i0 : int) (u : mem) : option int * mem := let fix go (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some (rd 0 i u), t) | S m => go m (i + 1) (upd 0 i i t) end in go k0 i0 u.\n')
+addA('w_l_cap_bool', "", 'match lp (a <? b) n a s with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Definition lp (f : bool) (k0 : nat) (i0 : int) (t0 : mem) : option int * mem := let fix go (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (if f then Some i else None, t) | S m => go m (i + 1) (upd 0 i i t) end in go k0 i0 t0.\n')
+addA('w_l_cap_lit', "", 'match lp 3 n a s with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Definition lp (c : int) (k0 : nat) (i0 : int) (t0 : mem) : option int * mem := let fix go (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some (i + c), t) | S m => go m (i + c) (upd 0 i c t) end in go k0 i0 t0.\n')
+addA('w_l_cap_pattern', "", 'match lp (Some a) n s with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Definition lp (o : option int) (k0 : nat) (t0 : mem) : option int * mem := match o with Some c => let fix go (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some (i + c), t) | S m => go m (i + c) (upd 0 i c t) end in go k0 c t0 | None => (None, t0) end.\n')
+addA('w_l_cap_let', "", 'match lp a n s with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Definition lp (c : int) (k0 : nat) (t0 : mem) : option int * mem := let e := c + 1 in let fix go (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some (i + e), t) | S m => go m (i + e) (upd 0 i e t) end in go k0 c t0.\n')
+addA('w_l_block_cap', "", 'match lp 1 n a s with (Some v, t) => v + rd 1 a t | (None, _) => 0 end',
+     'Definition lp (h : int) (k0 : nat) (i0 : int) (t0 : mem) : option int * mem := let fix go (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => go m (i + 1) (upd h i i t) end in go k0 i0 t0.\n')
+addA('w_l_writes_mem', "", 'match lp n a s with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Definition lp (k0 : nat) (i0 : int) (t0 : mem) : option int * mem := let fix wr (k : nat) (i : int) (t : mem) : mem := match k with O => t | S m => wr m (i + 1) (upd 0 i i t) end in let fix go (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, wr (S (S O)) i t) | S m => go m (i + 1) t end in go k0 i0 t0.\n')
+addA('w_l_num_caller', "", 'lp n a s',
+     'Definition lp (k0 : nat) (i0 : int) (t0 : mem) : int := let fix go (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => go m (i + 1) (upd 0 i i t) end in match go k0 i0 t0 with (Some v, t) => v + rd 0 i0 t | (None, _) => 0 end.\n')
+addA('w_l_where', "", 'match lp n a s with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Definition lp (k0 : nat) (i0 : int) (t0 : mem) : option int * mem := (fix go (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => go m (i + 1) (upd 0 i i t) end) k0 i0 t0.\n')
+addA('w_t_sum', "", 'match fst (lp n a s) with Some v => v | None => 0 end + rd 0 a (snd (lp n a s))',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => if rd 0 i t =? 0 then (None, t) else lp m (i + 1) (upd 0 i i t) end.\n')
+addA('w_t_test', "", 'if rd 0 a (snd (lp n a s)) =? 0 then match fst (lp n a s) with Some v => v | None => 1 end else 2',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => if rd 0 i t =? 0 then (None, t) else lp m (i + 1) (upd 0 i i t) end.\n')
+addA('w_t_let', "", 'let v := fst (lp n a s) in let t := snd (lp n a s) in match v with Some x => x + rd 0 a t | None => rd 0 b t end',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => if rd 0 i t =? 0 then (None, t) else lp m (i + 1) (upd 0 i i t) end.\n')
+addA('w_t_three', "", 'match fst (lp n a s) with Some v => v + rd 0 a (snd (lp n a s)) + rd 0 b (snd (lp n a s)) | None => 0 end',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => if rd 0 i t =? 0 then (None, t) else lp m (i + 1) (upd 0 i i t) end.\n')
+addA('w_t_under_if', "", 'if a <? b then match fst (lp n a s) with Some v => v + rd 0 a (snd (lp n a s)) | None => 0 end else rd 0 a s',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => if rd 0 i t =? 0 then (None, t) else lp m (i + 1) (upd 0 i i t) end.\n')
+addA('w_t_other_args', "", 'match fst (lp n a s) with Some v => v + rd 0 a (snd (lp n b s)) | None => 0 end',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => if rd 0 i t =? 0 then (None, t) else lp m (i + 1) (upd 0 i i t) end.\n')
+addA('w_t_in_rec', "", 'outer n a s',
+     "Fixpoint lp (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => if rd 0 i t =? 0 then (None, t) else lp m (i + 1) (upd 0 i i t) end.\nFixpoint outer (j : nat) (a : int) (t : mem) : int := match j with O => rd 0 a t | S j' => match fst (lp 3 a t) with Some v => outer j' v (snd (lp 3 a t)) | None => outer j' a (snd (lp 3 a t)) end end.\n")
+addA('w_t_in_row', "", 'match lq n a s with (Some v, t) => v + rd 0 a t | (None, _) => 0 end',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => if rd 0 i t =? 0 then (None, t) else lp m (i + 1) (upd 0 i i t) end.\nFixpoint lq (k : nat) (i : int) (t : mem) : option int * mem := match k with O => (Some i, t) | S m => match fst (lp 3 i t) with Some v => lq m v (snd (lp 3 i t)) | None => (None, snd (lp 3 i t)) end end.\n')
 # a value of several numbers and a memory given back by a recursion: through the slot block (step 78)
 addA('v_record', "", 'let (r, t) := lp n a s in fa r + fb r + rd 0 a t',
      'Record r2 := mk2 { fa : int; fb : int }.\nFixpoint lp (k : nat) (i : int) (t : mem) : r2 * mem := match k with O => (mk2 i (i + 1), t) | S m => lp m (i + 1) (upd 0 i i t) end.\n')

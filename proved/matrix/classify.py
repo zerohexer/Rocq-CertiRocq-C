@@ -13,6 +13,10 @@ import re, sys, collections
 # differs only in the cause.  The cells once listed here (option, sum, a list cell, a function in a pair, a function returned,
 # a dead memory let) build and take apart their value in place, so they are gaps.
 DESIGN_CELLS = {
+  # read from a memory and written in another, given the same one: two versions differing in cells whose number comes from the data (Rocq-C-solution.md §0.5, third reason); controls: A_w_s_three_value, A_w_l_cap_lit
+  "A_w_s_mem", "A_w_l_cap_mem",
+  # the same function from the same memory on other arguments, its value from one and its memory from the other: two versions; control: A_v_call_both
+  "A_w_t_other_args",
   # two calls of a function that writes at each round, each from the same memory, the writes kept in place by what it gives back: two versions differing in cells whose number comes from the data (Rocq-C-solution.md §0.5, third reason); control: A_v_call_in_helper
   "A_v_call_in_helper_two",
   # the same, two memory parameters: read from one, written in the other, given the same one by the call: two versions; control: A_v_mem_first
@@ -132,20 +136,19 @@ BY_NAME = {
   "A_p_nat_len": "a function giving back a counter, a counter as a field",
   "A_p_nat_len_cmp": "a function giving back a counter, a counter as a field",
   "A_p_nat_add": "a function giving back a counter, a counter as a field",
-  "A_v_call_both": "the same call named twice, its value and its memory each on its own",
   "A_v_w_block_63": "a recursion giving back a value and a memory that writes the slot block, or a block whose number is not written: nothing shows it leaves the value's cells alone",
-  "A_v_w_block_param": "a recursion giving back a value and a memory that writes the slot block, or a block whose number is not written: nothing shows it leaves the value's cells alone",
   "A_v_w_out": "the kit's input and output: hosted (§12.I)",
-  "A_v_o_given_top": "a value and a memory given back by a local fix, a Section's fixpoint",
-  "A_v_o_local_fix": "a value and a memory given back by a local fix, a Section's fixpoint",
-  "A_v_o_local_fix_cap": "a value and a memory given back by a local fix, a Section's fixpoint",
-  "A_v_o_section": "a value and a memory given back by a local fix, a Section's fixpoint",
   "A_v_o_mutual": "a value and a memory given back by a mutual block",
   "A_v_o_poly": "a value and a memory given back by a polymorphic recursion",
   "A_v_o_program": "a value and a memory given back by a Program Fixpoint",
   "A_v_o_ret_in_pair_rev": "the memory before the value in the pair given back",
   "A_v_o_record_mem": "a memory as a field of a data type",
   "A_v_o_value_mem_param": "a memory as a field of a data type",
+  "A_w_b_call_63": "a recursion giving back a value and a memory that writes the slot block, or a block whose number is not written: nothing shows it leaves the value's cells alone",
+  "A_w_b_call_tested": "a recursion giving back a value and a memory that writes the slot block, or a block whose number is not written: nothing shows it leaves the value's cells alone",
+  "A_w_b_call_var": "a recursion giving back a value and a memory that writes the slot block, or a block whose number is not written: nothing shows it leaves the value's cells alone",
+  "A_w_b_moved": "a recursion giving back a value and a memory that writes the slot block, or a block whose number is not written: nothing shows it leaves the value's cells alone",
+  "A_w_l_writes_mem": "a local fix of a memory in what gives back a value and a memory",
   "A_l_ack": "a fixpoint inside a fixpoint that gives back a function",
   "A_l_dec_proof_used": "a proof a test gives, named by what follows",
   "A_l_fix_mut": "a local mutual fixpoint",
