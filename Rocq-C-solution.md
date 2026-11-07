@@ -5471,6 +5471,17 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   16 s); **102 programs through the verified compiler, 0 refused**; `check_trust.py`: `trust unchanged`.  Next: the integer types
   of C as ordinary functions, what each computes proved.
 
+**Step 88, the integer types of C as ordinary functions, what each computes proved (§2.1, §12.O) — the design (2026-11-07).**  `uint8_t` .. `int32_t` with C's wrap-around, `uint64_t`'s division and remainder, the high half of a product, `int64_t`, rotations, byte swaps, `popcount`, `clz`, `ctz`.  All of it has a definition other than the machine, so all of it is Rocq functions or cases of the generator's proof (§0.3, F66); nothing is added to what is assumed.
+- *`uint64_t`'s `/` and `%`*: `W_divu`, `W_modu` of `w64op`, one instruction of `Ew64`, what `Z`'s `/` and `mod` give in `KQRun.v`.  A case of the generator's proof: C's are undefined at 0, so `tr_w64` writes a test around them (`w64_set`, `exec_w64set`), and clang removes it where it knows the divisor.  A division in the hardware is C's, which Clight's semantics states: this is proved against CompCert's `Int64.divu`, not assumed.  `KQ.KQRun.u64_divu`, `u64_modu`.
+- *The library* (`lib/CInt.v`, generated text, 185 lines): over the numbers of the system and the `u64` of `KQRun.v`.  A value of a narrow type is a number in the type's range; each operation gives a value in the range.  A program that names one gets the text in front of it (`kitc.py`), in a module of its own, so a name of the program's own stands beside it and shadows it.
+- *The theorems* (`lib/CIntSpec.v`): 120, against `Z`: each narrow operation on any number of the system, modulo `2^w` or wrapped into the signed range (`sw`); `u64_divu`, `u64_modu` against `/` and `mod`; `u64_mulhi` by its carries; `int64_t` read in two's complement (`sv`), including the smallest number over -1 and a divisor of 0; rotations; bytes; `clz`, `ctz` from Rocq's axioms on `head0`, `tail0`; `popcount32` by the two halves of 16 bits, each step checked on all 65536 values by computation.  `proved/make.sh` stops if they rest on anything but Rocq's axioms of its machine numbers.
+- *C's undefined cases*: a signed overflow wraps, the way `-fwrapv` does; a division by 0 gives what `Z`'s does; the smallest number over -1 wraps.  A definition has to say something.  A test in the text is needed around `divs` by Rocq's axioms (§0.5, fourth reason): the library has it.
+- *Many of them in one expression* (`jn_cnt`, `jn_own`, `jn_pre`): step 86's first test counted the written tests of the program's own text, so helpers of a library with tests inside them were never counted, and `i64_div` four times in one expression ran out of time.  A test written in a helper counts now, in a module of the file too, and one is enough to look further, since a helper used four times is four; the look at the environment's head goes to 500 declarations, since a library comes in front of the program.
+- *The speed*: `u64_mulhi` is four multiplications, as portable C writes it: Clight has no high half.  `popcount`, `clz`, `ctz`: C has no operator; a form with one instruction would be a case of the generator's proof, measured, never a machine operation (F66).
+- *`proved/make.sh`*: `KQLBack.v`, CompCert's pass theorems composed, leaves the default build: nothing depends on it, and the passes' licence is non-commercial (D30).
+- *The acceptance*: `proved/examples/cint_fix`: every operation on every pair of 32 numbers, the edges of each type among them, folded into one number; the answer worked out apart in Python from the statements of the theorems: 258591630940955040.
+- *Cells*: 128, `A_zg_*`: one per operation, and places: a name of the program's own beside the library's, many with tests in one expression, nested, a round of SHA-256, in loops, in a memory, as a record's field, given as a function.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5655,7 +5666,8 @@ Pushed to the public repository up to `720c58c` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 87 (a memory in a value of any data type: the construct table 3481 of 3614, 54 by design, 78 gaps, 3 gaps read), the C, the gate; D30, the proof ends at Clight |
+| (this commit) | §12.V: step 88's design -- the integer types of C as ordinary functions, what each computes proved |
+| `6b5e6e1` | §12.V: step 87 (a memory in a value of any data type: the construct table 3481 of 3614, 54 by design, 78 gaps, 3 gaps read), the C, the gate; D30, the proof ends at Clight |
 | `720c58c` | `proved/KQRReify.v` + `matrix` + `examples/resm_fix` step 87: a memory in a value of any data type; a sixth probe; 51 cells |
 | `9eccf19` | §12.V: step 87's design -- a memory in a value of any data type; a sixth probe |
 | `b7505f1` | §12.V: step 86 (tests that cannot be moves, many in one expression: the construct table 3428 of 3563, 54 by design, 80 gaps, 2 gaps read), the C, the gate |
