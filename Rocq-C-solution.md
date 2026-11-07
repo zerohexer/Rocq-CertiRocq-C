@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3189 of 3312, 73 gaps, 49 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3227 of 3356, 79 gaps, 49 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -5344,6 +5344,18 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The acceptance*: `proved/examples/cret_fix`: a count by recursion after the call, a count as a parameter, a helper over both; the answer worked out apart: 5548.
 - *Cells*: 44, `A_z_*`.
 
+**Step 82, a function giving back a counter, made a number — the result (2026-11-07).**
+- *The reader*: `nr_only`, `nr_tail_ok`, `nr_tr`, `nr_rows`, `nr_stmt`, `nr_sub`, a row's mark 990, the accumulators' places among its slots; `nr_sub` before the library is unfolded, since `Uint63.of_nat` is a notation for `of_Z (Z.of_nat ..)`.  The reason "two memories as parameters" no longer given for a counter given back.  *`KQRWf.v`*: `nr_O`, `nr_S`, `nr_add`, `nr_mul`, `kq_nr`, `nr_step`.  *`kitc.py`*: `__k<n>` rows; `Uint63.of_Z`, `Z.of_nat`, `Nat.add`, `Nat.mul` stay folded in such a program's proofs.  `KQR.v` unchanged.
+- *The acceptance*: `proved/examples/cret_fix`: proved, built, 5548.
+- *Cells*: 44 more: 34 proved; gaps by their categories: a counter in a value, a local fix, a recursion two steps down; a counter used as a counter (its bound).  Four gaps read: `A_q_nat_ret_acc`, `A_q_nat_ret_len`, `A_p_nat_len`, `A_p_nat_add`.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62; step 81's files / these): `HWP_kernel` 3.00 / 3.06 s, `HWP_own` 2.04 / 2.05, `HWP_irqnow` 1.72 / 1.71 — the same.
+- *One cell read and refused by the check*: `A_q_nat_field`, `Uint63.of_nat` of a counter that is a field of a record: the reader gives a form the kernel does not find equal to the function, and the check refuses it, so nothing false is accepted, and the cell stays a gap in its category; a cell should be read or refused by the reader, not by the check, and this goes with the counters in values.
+- The C: the 88 programs byte-identical.  The construct table (on `b017845`): **3227 of 3356 through the verified compiler**, 49
+  by design, 79 gaps, 1 not Rocq (was 3189 of 3312: 34 of the 44 new cells read, 10 gaps; 4 gaps read; no cell lost).  The gate on
+  `b017845`, the walk switched off: `make.sh` `core-ok`; examples 53 / 53; corpus 36 / 36; the five kernels (17 / 17 / 19 / 16 /
+  17 s); **97 programs through the verified compiler, 0 refused**; `check_trust.py`: `trust unchanged`.  Next: a counter
+  expression as a counter.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5524,11 +5536,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `6ce4511` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `b017845` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 82's design -- a function giving back a counter, made a number where it is used |
+| (this commit) | §12.V: step 82 (a function giving back a counter: the construct table 3227 of 3356, 49 by design, 79 gaps, 4 gaps read), the C, the gate |
+| `b017845` | `proved/KQRWf.v` + `KQRReify.v` + `kitc.py` + `matrix` + `examples/cret_fix` step 82: a function giving back a counter, made a number where it is used; 44 cells |
+| `838a52f` | §12.V: step 82's design -- a function giving back a counter, made a number where it is used |
 | `0284dba` | §12.V: step 81 (a proof as a parameter, a value with its proof as a parameter: the construct table 3189 of 3312, 49 by design, 73 gaps, 4 gaps read), the C, the gate |
 | `6ce4511` | `proved/KQRReify.v` step 81: a helper giving back a sig stays on its own route |
 | `0f4e425` | `proved/KQRReify.v` + `kitc.py` + `matrix` + `examples/prfp_fix` step 81: a proof as a parameter, a value with its proof as a parameter; 40 cells |
