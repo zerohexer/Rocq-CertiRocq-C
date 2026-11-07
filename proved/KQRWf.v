@@ -330,8 +330,161 @@ Ltac kq_convoy :=
   match goal with
   | |- context [(match ?t with true => ?f | false => ?g end) (@eq_refl _ _)] =>
       let e := fresh "kqe" in
-      destruct (bool_cases t) as [e | e]; [rewrite (convoy_true t _ f g e) | rewrite (convoy_false t _ f g e)]
+      destruct (bool_cases t) as [e | e]; [rewrite (convoy_true t _ f g e); try rewrite e | rewrite (convoy_false t _ f g e); try rewrite e]
   end.
+(** (step 78) what leaves the cells of the slot block as they are: the laws of the memory, each at block 63 *)
+Lemma fr_oth : forall h i j, PrimInt63.eqb h 63 = false -> KQ.KQSpec.other h i 63 j = true.
+Proof. intros h i j E. unfold KQ.KQSpec.other. rewrite E. reflexivity. Qed.
+Lemma fr_upd : forall h i v j s, PrimInt63.eqb h 63 = false -> rd 63 j (upd h i v s) = rd 63 j s.
+Proof. intros h i v j s E. exact (KQ.KQSpec.rd_upd_ne KQ.KQSpec.real KQ.KQSpec.real_laws h i 63 j v s (fr_oth h i j E)). Qed.
+Lemma fr_upd32 : forall h i v j s, rd 63 j (upd32 h i v s) = rd 63 j s.
+Proof. intros. exact (KQ.KQSpec.rd_upd32 KQ.KQSpec.real KQ.KQSpec.real_laws h i v 63 j s). Qed.
+Lemma fr_upd8 : forall h i v j s, rd 63 j (upd8 h i v s) = rd 63 j s.
+Proof. intros. unfold upd8. cbv zeta. apply fr_upd32. Qed.
+Lemma fr_upd16 : forall h i v j s, rd 63 j (upd16 h i v s) = rd 63 j s.
+Proof. intros. unfold upd16. rewrite !fr_upd8. reflexivity. Qed.
+Lemma fr_grow : forall h n j s, rd 63 j (kq_grow h n s) = rd 63 j s.
+Proof. intros. exact (KQ.KQSpec.rd_grow KQ.KQSpec.real KQ.KQSpec.real_laws h n 63 j s). Qed.
+Lemma fr_load : forall w a h i j s, PrimInt63.eqb h 63 = false -> rd 63 j (hw_load w a h i s) = rd 63 j s.
+Proof.
+  intros w a h i j s E. apply (KQ.KQSpec.load_rd KQ.KQSpec.real KQ.KQSpec.real_laws w a h i 63 j s (fr_oth h i j E)).
+  rewrite (fr_oth h _ j E). apply Bool.orb_true_r.
+Qed.
+Lemma fr_aload : forall w a h i j s, PrimInt63.eqb h 63 = false -> rd 63 j (hw_aload w a h i s) = rd 63 j s.
+Proof.
+  intros w a h i j s E. apply (KQ.KQSpec.aload_rd KQ.KQSpec.real KQ.KQSpec.real_laws w a h i 63 j s (fr_oth h i j E)).
+  rewrite (fr_oth h _ j E). apply Bool.orb_true_r.
+Qed.
+Lemma fr_store : forall w a v j s, rd 63 j (hw_store w a v s) = rd 63 j s.
+Proof. intros. exact (KQ.KQSpec.store_rd KQ.KQSpec.real KQ.KQSpec.real_laws w a v 63 j s). Qed.
+Lemma fr_store64 : forall a lo hi j s, rd 63 j (hw_store64 a lo hi s) = rd 63 j s.
+Proof. intros. exact (KQ.KQSpec.store64_rd KQ.KQSpec.real KQ.KQSpec.real_laws a lo hi 63 j s). Qed.
+Lemma fr_astore : forall w a v j s, rd 63 j (hw_astore w a v s) = rd 63 j s.
+Proof. intros. exact (KQ.KQSpec.astore_rd KQ.KQSpec.real KQ.KQSpec.real_laws w a v 63 j s). Qed.
+Lemma fr_astore64 : forall a lo hi j s, rd 63 j (hw_astore64 a lo hi s) = rd 63 j s.
+Proof. intros. exact (KQ.KQSpec.astore64_rd KQ.KQSpec.real KQ.KQSpec.real_laws a lo hi 63 j s). Qed.
+Lemma fr_fence : forall k j s, rd 63 j (hw_fence k s) = rd 63 j s.
+Proof. intros. exact (KQ.KQSpec.fence_rd KQ.KQSpec.real KQ.KQSpec.real_laws k 63 j s). Qed.
+Lemma fr_atomic : forall op w a v h i j s, PrimInt63.eqb h 63 = false -> rd 63 j (hw_atomic op w a v h i s) = rd 63 j s.
+Proof. intros op w a v h i j s E. exact (KQ.KQSpec.atomic_rd KQ.KQSpec.real KQ.KQSpec.real_laws op w a v h i 63 j s (fr_oth h i j E)). Qed.
+Lemma fr_atomic64 : forall op a lo hi h i j s, PrimInt63.eqb h 63 = false -> rd 63 j (hw_atomic64 op a lo hi h i s) = rd 63 j s.
+Proof. intros op a lo hi h i j s E. exact (KQ.KQSpec.atomic64_rd KQ.KQSpec.real KQ.KQSpec.real_laws op a lo hi h i 63 j s (fr_oth h i j E) (fr_oth h _ j E)). Qed.
+Lemma fr_cas : forall w a o n h i j s, PrimInt63.eqb h 63 = false -> rd 63 j (hw_cas w a o n h i s) = rd 63 j s.
+Proof. intros w a o n h i j s E. exact (KQ.KQSpec.cas_rd KQ.KQSpec.real KQ.KQSpec.real_laws w a o n h i 63 j s (fr_oth h i j E) (fr_oth h _ j E)). Qed.
+Lemma fr_cas64 : forall a ol oh nl nh h i j s, PrimInt63.eqb h 63 = false -> rd 63 j (hw_cas64 a ol oh nl nh h i s) = rd 63 j s.
+Proof. intros a ol oh nl nh h i j s E. exact (KQ.KQSpec.cas64_rd KQ.KQSpec.real KQ.KQSpec.real_laws a ol oh nl nh h i 63 j s (fr_oth h i j E) (fr_oth h _ j E) (fr_oth h _ j E)). Qed.
+Lemma fr_copy_up : forall k d x h i j s, PrimInt63.eqb h 63 = false -> rd 63 j (hw_copy_up k d x h i s) = rd 63 j s.
+Proof.
+  induction k as [|k IH]; intros d x h i j s E; cbn [hw_copy_up]; [reflexivity|]. cbv zeta.
+  rewrite (IH _ _ _ _ _ _ E), fr_store, (fr_load _ _ _ _ _ _ E). reflexivity.
+Qed.
+Lemma fr_copy_down : forall k d x h i j s, PrimInt63.eqb h 63 = false -> rd 63 j (hw_copy_down k d x h i s) = rd 63 j s.
+Proof.
+  induction k as [|k IH]; intros d x h i j s E; cbn [hw_copy_down]; [reflexivity|]. cbv zeta.
+  rewrite (IH _ _ _ _ _ _ E), fr_store, (fr_load _ _ _ _ _ _ E). reflexivity.
+Qed.
+Lemma fr_copy : forall d x n h i j s, PrimInt63.eqb h 63 = false -> rd 63 j (hw_copy d x n h i s) = rd 63 j s.
+Proof.
+  intros d x n h i j s E. unfold hw_copy.
+  destruct (andb (PrimInt63.ltb (PrimInt63.sub d x) n) (negb (PrimInt63.eqb d x))); [apply fr_copy_down | apply fr_copy_up]; exact E.
+Qed.
+Lemma fr_fill_go : forall k d b j s, rd 63 j (hw_fill_go k d b s) = rd 63 j s.
+Proof.
+  induction k as [|k IH]; intros d b j s; cbn [hw_fill_go]; [reflexivity|].
+  rewrite IH, fr_store. reflexivity.
+Qed.
+Lemma fr_fill : forall d b n j s, rd 63 j (hw_fill d b n s) = rd 63 j s.
+Proof. intros. unfold hw_fill. apply fr_fill_go. Qed.
+Lemma fr_cmp_go : forall k x y h i j s, PrimInt63.eqb h 63 = false -> rd 63 j (hw_cmp_go k x y h i s) = rd 63 j s.
+Proof.
+  induction k as [|k IH]; intros x y h i j s E; cbn [hw_cmp_go]; [apply (fr_upd _ _ _ _ _ E)|]. cbv zeta.
+  destruct (PrimInt63.ltb _ _); [|destruct (PrimInt63.ltb _ _)];
+    [rewrite (fr_upd _ _ _ _ _ E) | rewrite (fr_upd _ _ _ _ _ E) | rewrite (IH _ _ _ _ _ _ E)];
+    rewrite !(fr_load _ _ _ _ _ _ E); reflexivity.
+Qed.
+Lemma fr_cmp : forall x y n h i j s, PrimInt63.eqb h 63 = false -> rd 63 j (hw_cmp x y n h i s) = rd 63 j s.
+Proof. intros x y n h i j s E. unfold hw_cmp. apply (fr_cmp_go _ _ _ _ _ _ _ E). Qed.
+Ltac fr_mem :=
+  first [ rewrite fr_upd by reflexivity | rewrite fr_upd32 | rewrite fr_upd8 | rewrite fr_upd16 | rewrite fr_grow
+        | rewrite fr_load by reflexivity | rewrite fr_aload by reflexivity | rewrite fr_store | rewrite fr_store64 | rewrite fr_astore | rewrite fr_astore64 | rewrite fr_fence
+        | rewrite fr_atomic by reflexivity | rewrite fr_atomic64 by reflexivity | rewrite fr_cas by reflexivity | rewrite fr_cas64 by reflexivity
+        | rewrite fr_copy by reflexivity | rewrite fr_fill | rewrite fr_cmp by reflexivity ].
+(** a program's lemmas that a function leaves the slot block alone: [kitc.py] sets it *)
+Ltac kq_fr := fail.
+(** a cell of the slot block: the block's room, a number in it *)
+Definition slot_lit (W : Z) (j : int) : bool := andb (Z.leb 0 (Sint63.to_Z j)) (Z.ltb (Sint63.to_Z j + 1) W).
+Lemma slot_eq : forall (W : Z), (W <= Sint63.to_Z (KQ.KQBound.kq_len 63) + 1)%Z -> forall j v s, slot_lit W j = true ->
+  rd 63 j (upd 63 j v s) = v.
+Proof.
+  intros W Hr j v s L. apply andb_prop in L. destruct L as [L1 L2]. apply Z.leb_le in L1. apply Z.ltb_lt in L2.
+  apply (KQ.KQSpec.rd_upd_eq KQ.KQSpec.real KQ.KQSpec.real_laws).
+  unfold KQ.KQSpec.cell. cbn [KQ.KQSpec.Size KQ.KQSpec.real]. pose proof (KQMAuto.size_ge_len 63%uint63 s) as Hs.
+  assert (E1 : PrimInt63.lesb 0%uint63 j = true) by (apply (proj2 (KQ.KQSpec.le_Z _ _)); exact L1).
+  assert (E2 : PrimInt63.ltsb j (kq_size 63%uint63 s) = true) by (apply (proj2 (KQ.KQSpec.lt_Z _ _)); lia).
+  rewrite E1, E2. reflexivity.
+Qed.
+Lemma slot_ne : forall i j v s, PrimInt63.eqb i j = false -> rd 63 j (upd 63 i v s) = rd 63 j s.
+Proof.
+  intros i j v s E. apply (KQ.KQSpec.rd_upd_ne KQ.KQSpec.real KQ.KQSpec.real_laws).
+  unfold KQ.KQSpec.other. rewrite E, Bool.andb_false_r. reflexivity.
+Qed.
+Lemma upd_same : forall i o m, rd 63 i m = o -> upd 63 i o m = m.
+Proof. intros i o m E. rewrite <- E. apply KQMAuto.upd_rd_id_r. Qed.
+(** a call's pair taken apart as its two parts, so that the same call anywhere is the same two parts and what is known of the call applies to them *)
+Ltac vm_call_pair :=
+  match goal with |- context [match ?c with pair _ _ => _ end] =>
+    lazymatch c with context [match _ with _ => _ end] => fail | PrimInt63.diveucl_21 _ _ _ => fail | pair _ _ => fail | _ => rewrite (surjective_pairing c) end end.
+(** the value of a call taken apart once *)
+Ltac vm_case :=
+  match goal with
+  | e : fst ?c = _ |- context [fst ?c] => rewrite e
+  | |- context [match fst ?c with _ => _ end] => let e := fresh "kqe" in destruct (fst c) eqn:e
+  end.
+Ltac vm_slot :=
+  first [ match goal with Hr : (_ <= Sint63.to_Z (KQ.KQBound.kq_len 63) + 1)%Z |- _ => rewrite (slot_eq _ Hr) by reflexivity end
+        | rewrite slot_ne by reflexivity ].
+Ltac fr_rd := first [ vm_slot | fr_mem | kq_fr ].
+(** a cell written back with what it held *)
+Ltac vm_restore :=
+  match goal with |- context [upd 63 ?i ?o ?m] =>
+    rewrite (upd_same i o m) by (repeat fr_rd; reflexivity) end.
+(** a test of two written numbers: what a value's tag gives when it is known *)
+Ltac vm_lit :=
+  match goal with |- context [PrimInt63.eqb ?x ?y] =>
+    let r := eval cbv in (PrimInt63.eqb x y) in
+    lazymatch r with
+    | true => change (PrimInt63.eqb x y) with true
+    | false => change (PrimInt63.eqb x y) with false
+    end end.
+Ltac kq_vm0 :=
+  first [ rewrite KQMAuto.upd_upd_r
+        | vm_restore
+        | vm_slot
+        | kq_fr
+        | vm_lit
+        | vm_call_pair
+        | vm_case
+        | match goal with |- context [match ?c with _ => _ end] => is_var c; destruct c end ].
+(** switched on by a program with such a function *)
+Ltac kq_vm := fail.
+(** a function that leaves the slot block alone, by induction on its counter: each end is [rd 63 j] of what it was given *)
+Ltac fr_step IH :=
+  repeat (cbn beta iota zeta delta [fst snd proj1_sig]; kq_unf;
+          first [ kq_fr
+                | progress (rewrite ?IH)
+                | fr_mem
+                | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
+                | vm_call_pair
+                | vm_case
+                | kq_convoy
+                | match goal with |- context [match ?c with exist _ _ _ => _ end] => destruct c end
+                | match goal with |- context [if ?c then _ else _] => lazymatch c with context [match _ with _ => _ end] => fail | _ => let e := fresh "kqe" in destruct c eqn:e end end
+                | match goal with |- context [if ?c then _ else _] => match c with context [match ?v with _ => _ end] => is_var v; destruct v end end
+                | match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
+                | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
+                | match goal with |- context [match ?c with pair _ _ => _ end] => destruct c end
+                | reflexivity
+                | match goal with |- context [match ?c with _ => _ end] => is_var c; destruct c end ]).
 (** (step 61) a fixpoint with its own call under a choice in an operand, and the same with the choice floated out: equal at each counter, test by test *)
 Ltac own_step IH :=
   repeat (cbn beta iota zeta delta [fst snd proj1_sig]; kq_unf;
@@ -339,6 +492,7 @@ Ltac own_step IH :=
                 | kq_guard
                 | kq_rw
                 | progress (rewrite ?IH)
+                | kq_vm
                 | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
                 | match goal with |- context [match ?c with pair _ _ => _ end] => lazymatch c with context [match _ with _ => _ end] => fail | PrimInt63.diveucl_21 _ _ _ => fail | _ => destruct c end end
                 | kq_convoy
@@ -369,6 +523,7 @@ Ltac own_step0 :=
           first [ prim_rw
                 | kq_guard
                 | kq_rw
+                | kq_vm
                 | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
                 | match goal with |- context [match ?c with pair _ _ => _ end] => lazymatch c with context [match _ with _ => _ end] => fail | PrimInt63.diveucl_21 _ _ _ => fail | _ => destruct c end end
                 | kq_convoy

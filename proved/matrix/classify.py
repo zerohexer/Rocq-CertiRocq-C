@@ -13,6 +13,10 @@ import re, sys, collections
 # differs only in the cause.  The cells once listed here (option, sum, a list cell, a function in a pair, a function returned,
 # a dead memory let) build and take apart their value in place, so they are gaps.
 DESIGN_CELLS = {
+  # two calls of a function that writes at each round, each from the same memory, the writes kept in place by what it gives back: two versions differing in cells whose number comes from the data (Rocq-C-solution.md §0.5, third reason); control: A_v_call_in_helper
+  "A_v_call_in_helper_two",
+  # the same, two memory parameters: read from one, written in the other, given the same one by the call: two versions; control: A_v_mem_first
+  "A_v_o_two_mems",
   # a function built anew at each round of a recursion, a list whose size comes from the data: allocated behind the programmer's back (Rocq-C-solution.md §0.5, first reason); controls: A_p_cps, A_p_list_rec_lit (step 77)
   "A_p_cps_grow", "A_p_list_built",
   # divs with nothing ruling out the smallest number over -1: Rocq's axioms say nothing there, so nothing says what it computes (Rocq-C-solution.md §0.5, fourth reason); controls: A_s_test_pos, A_s_lit_b, and / : A_s_slash_var (step 74)
@@ -84,9 +88,9 @@ BY_NAME = {
   "A_c2_nat_b2n": "a function of the library on counters that recurses or gives functions to a recursion: gcd, log2, sqrt, land, shiftr, testbit, b2n",
   "A_c2_match_cnt": "a counter chosen by a match on a counter",
   "A_c2_min_clamp": "a counter clamped by a number: the bound of a min is not yet the smaller one",
-  "A_q_st_mem_iter": "a value and a memory given back together by a recursion or a loop, the value not one number",
+  "A_q_st_mem_iter": "a memory as a field of a data type",
   "A_q_mem_rec_triple": "a value and a memory given back together by a recursion or a loop, the value not one number",
-  "A_q_mem_record": "a value and a memory given back together by a recursion or a loop, the value not one number",
+  "A_q_mem_record": "a memory as a field of a data type",
   "A_q_rec_vtable_rec": "a record of functions or a class's instance given to a recursive function",
   "A_q_cl_fold": "a record of functions or a class's instance given to a recursive function",
   "A_q_nat_ret_len": "a function giving back a counter, a counter as a field",
@@ -128,6 +132,20 @@ BY_NAME = {
   "A_p_nat_len": "a function giving back a counter, a counter as a field",
   "A_p_nat_len_cmp": "a function giving back a counter, a counter as a field",
   "A_p_nat_add": "a function giving back a counter, a counter as a field",
+  "A_v_call_both": "the same call named twice, its value and its memory each on its own",
+  "A_v_w_block_63": "a recursion giving back a value and a memory that writes the slot block, or a block whose number is not written: nothing shows it leaves the value's cells alone",
+  "A_v_w_block_param": "a recursion giving back a value and a memory that writes the slot block, or a block whose number is not written: nothing shows it leaves the value's cells alone",
+  "A_v_w_out": "the kit's input and output: hosted (§12.I)",
+  "A_v_o_given_top": "a value and a memory given back by a local fix, a Section's fixpoint",
+  "A_v_o_local_fix": "a value and a memory given back by a local fix, a Section's fixpoint",
+  "A_v_o_local_fix_cap": "a value and a memory given back by a local fix, a Section's fixpoint",
+  "A_v_o_section": "a value and a memory given back by a local fix, a Section's fixpoint",
+  "A_v_o_mutual": "a value and a memory given back by a mutual block",
+  "A_v_o_poly": "a value and a memory given back by a polymorphic recursion",
+  "A_v_o_program": "a value and a memory given back by a Program Fixpoint",
+  "A_v_o_ret_in_pair_rev": "the memory before the value in the pair given back",
+  "A_v_o_record_mem": "a memory as a field of a data type",
+  "A_v_o_value_mem_param": "a memory as a field of a data type",
   "A_l_ack": "a fixpoint inside a fixpoint that gives back a function",
   "A_l_dec_proof_used": "a proof a test gives, named by what follows",
   "A_l_fix_mut": "a local mutual fixpoint",

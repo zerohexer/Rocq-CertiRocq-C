@@ -1,0 +1,30 @@
+Inductive res := Okk (x y : int) | Err (e : int) | Nope.
+Record r3v := mk3v { ka : int; kb : int; kc : int }.
+(* a value of three numbers and a memory given back by a recursion: the first cell holding 0 from i, what it passes counted in block 1 *)
+Fixpoint scan (k : nat) (i : int) (t : mem) : res * mem :=
+  match k with
+  | O => (Nope, t)
+  | S m => if rd 0 i t =? 0 then (Okk i (i + 1), t)
+           else if 100 <? i then (Err i, t)
+           else scan m (i + 1) (upd 1 i (rd 0 i t + 1) t)
+  end.
+(* the call not the last step *)
+Fixpoint tally (k : nat) (i : int) (t : mem) : r3v * mem :=
+  match k with
+  | O => (mk3v i 0 1, t)
+  | S m => let (r, t') := tally m (i + 1) (upd 2 i (i * 2) t) in
+           (mk3v (kb r + i) (ka r) (kc r + 1), upd 2 i (ka r + rd 2 i t') t')
+  end.
+(* the cells of the slot block written here hold their numbers after both calls *)
+Definition solve (n : nat) (a : int) (s : mem) : int :=
+  let s0 := upd 63 0 77 (upd 63 1 5 s) in
+  match scan n a s0 with
+  | (Okk x y, t) =>
+      let (r, t2) := tally 3 x t in
+      x + y * 3 + ka r * 5 + kb r * 7 + kc r * 11 + rd 1 a t2 + rd 2 x t2 * 13 + rd 63 0 t2 * 17 + rd 63 1 t2 * 19
+  | (Err e, _) => e
+  | (Nope, t) => rd 1 a t
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_arg 1) (kq_input 0).

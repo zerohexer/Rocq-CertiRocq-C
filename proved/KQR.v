@@ -11584,6 +11584,14 @@ Proof.
   { intros s. cbn [callf]. symmetry. apply appnT_eqN. apply (appc_eqC x _ (eqN k m _) h h' cvs Eh). }
   unfold calln, callm, callmw in *. cbn [sw sr sq sn sk] in *. destruct w; [destruct H as [M' H]; exists M'|]; rewrite !E; exact H.
 Qed.
+(** (step 78) the same, the equation holding where the slot block has room, which a theorem takes as its premise *)
+Lemma callee_ok_eqr : forall P id B x k m r w q b v (R : Prop) (h h' : ftype (mksig9 x k m r w q b v false)),
+  (slot_room -> R) -> (R -> eqC x _ (eqN k m _) h h') ->
+  callee_ok P id B (mksig9 x k m r w q b v false) h -> callee_ok P id B (mksig9 x k m r w q b v false) h'.
+Proof.
+  intros P id B x k m r w q b v R h h' HR Eh H Hsl.
+  exact (callee_ok_eq P id B x k m r w q b v h h' (Eh (HR Hsl)) H Hsl).
+Qed.
 Theorem compile_f_ok : forall P cs gidf j gs b,
   find P (gidf j) = Some (compile_f gidf j gs b) -> wf_f (map (@projT1 _ _) cs) gs b = true -> callees_ok P gidf cs ->
   Nat.leb (length cs) j = true -> (Z.of_nat j <? 1099511627776)%Z = true ->
