@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3227 of 3356, 79 gaps, 49 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3294 of 3426, 78 gaps, 53 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -5366,6 +5366,20 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The acceptance*: `proved/examples/cuse_fix`: a budget, a test, a match, an operand, in a recursion; the answer worked out apart: 419061.
 - *Cells*: 65, `A_zb_*`.
 
+**Step 83, a counter a function gives back, used as a counter — the result (2026-11-07).**  Built as designed:
+- *The reader*: `nb_go`, `nb_of`, `nb_all`, `nb_stmt` (the bound, read off the text); `nc_has`, `nc_c`, `nc_tr`, `nc_sub`, `nc_any`, `nc_s` (the counter as a number; a let of one held as the number, once); marks `__nc__wy`, `__nco__wy` (the smallest own bound), `__nch__wy` (a helper, unfolded).  *`KQR.v`*: `eqCb`, `callee_ok_eqb`, nothing else.  *`KQRWf.v`*: `nc_E`, `nc_fold`, `nc_step`, `nc_match`, `nb_step`; `kq_nc` before `kq_rw` in the two steps that read a text, `vm_side` with `lia` where the program has such a counter.  *`kitc.py`*: the bounds before the equations, each after what it calls; the equations of what uses them under the counters' bound.
+- *The acceptance*: `proved/examples/cuse_fix`: proved, built, 419061.
+- *Cells*: 70 more: 60 proved; by design, each with a control: `A_zb_s_power`, `_s_power_mul`, `_a_acc_doubles` (a doubling), `A_zb_s_add_var`, `_s_quadratic` (a round adding a parameter); gaps by their categories: `A_zb_o_callee_grows`, `_o_counter_row_uses`, `_o_weights`, `_o_local`, `_s_deep`.  Five gaps read: `A_z_u_counter_use`, `_eqb`, `_leb`, `_match`, `A_p_nat_len_cmp`.  `A_l_nat_ret_grow`, by design since step 68 ("an unbounded number"), is read: its counter grows by one a round, its bound is linear, and the classification was wrong: a design cell needs the cause shown, here a doubling.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62; step 82's files / these): `HWP_kernel` 3.27 / 3.27 s, `HWP_own` 2.24 / 2.25, `HWP_irqnow` 1.88 / 1.89 — the same.  The first version cost 6%: a look-up of a mark per function, the whole environment each time (F64 again); the marks are looked for once now.
+- *Better than the design said*: `A_l_nat_ret_same` read too, a gap of step 82.
+- *The table's image*: from this table on, the image the gate runs in is one flattened layer: every file's checksum the same as before, less the opam build and source folders, which nothing reads when it runs.
+- The C: the 89 programs byte-identical.  The construct table (on `95d192b`): **3294 of 3426 through the verified compiler**, 53
+  by design, 78 gaps, 1 not Rocq (was 3227 of 3356: 60 of the 70 new cells read, 5 by design, 5 gaps; 6 gaps read, and
+  `A_l_nat_ret_grow`, wrongly by design; no cell lost).  The gate on `95d192b`, the walk switched off: `make.sh` `core-ok`;
+  examples 54 / 54; corpus 36 / 36; the five kernels (17 / 17 / 19 / 16 / 17 s); **98 programs through the verified compiler, 0
+  refused**; `check_trust.py`: `trust unchanged`.  Next: a class's instance read as a type, a record of functions given to a
+  recursive function.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5546,11 +5560,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `b017845` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `95d192b` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 83's design -- a counter expression as a counter, its bound proved by induction |
+| (this commit) | §12.V: step 83 (a counter a function gives back, used as a counter: the construct table 3294 of 3426, 53 by design, 78 gaps, 7 cells read), the C, the gate |
+| `95d192b` | `proved/KQR.v` + `KQRWf.v` + `KQRReify.v` + `kitc.py` + `matrix` + `examples/cuse_fix` step 83: a counter a function gives back, used as a counter; 70 cells |
+| `90820ee` | §12.V: step 83's design -- a counter expression as a counter, its bound proved by induction |
 | `1029a00` | §12.V: step 82 (a function giving back a counter: the construct table 3227 of 3356, 49 by design, 79 gaps, 4 gaps read), the C, the gate |
 | `b017845` | `proved/KQRWf.v` + `KQRReify.v` + `kitc.py` + `matrix` + `examples/cret_fix` step 82: a function giving back a counter, made a number where it is used; 44 cells |
 | `838a52f` | §12.V: step 82's design -- a function giving back a counter, made a number where it is used |
