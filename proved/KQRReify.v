@@ -7239,7 +7239,7 @@ Fixpoint um_inl (fuel : nat) (Σ : global_env) (mp : modpath) (t : term) {struct
                       | tApp (tConstruct _ 0 _) _ as r => r
                       | _ => dflt
                       end
-                    else if (if vm_ty (ret_ty ty) then true else if (match vm_sh Σ (ret_ty ty) with Some (i, _, fts, m) => negb (Kername.eqb (inductive_mind i) (inductive_mind ind_prod) && Nat.eqb m 1 && Nat.eqb (length fts) 2) | None => false end) then true else existsb (fun t => match vm_sh Σ t with Some _ => true | None => false end) (removelast (prod_tys ty)) || (match sp_sh Σ (ret_ty ty) with Some _ => true | None => false end)) && Nat.eqb (length (removelast (prod_tys ty))) (length args') then um_red 1000 Σ mp dflt
+                    else if (if vm_ty (ret_ty ty) then true else if (match vm_sh Σ (ret_ty ty) with Some (i, _, fts, m) => negb (Kername.eqb (inductive_mind i) (inductive_mind ind_prod) && Nat.eqb m 1 && Nat.eqb (length fts) 2) | None => false end) then true else existsb (fun t => match vm_sh Σ t with Some _ => true | None => false end) (removelast (prod_tys ty)) || (match sp_sh Σ (ret_ty ty) with Some (i, _, _, _) => negb (Kername.eqb (inductive_mind i) (inductive_mind (ind_of <% @Corelib.Init.Specif.sig %>))) | None => false end)) && Nat.eqb (length (removelast (prod_tys ty))) (length args') then um_red 1000 Σ mp dflt
                     else dflt
                 end
             | _ => dflt
