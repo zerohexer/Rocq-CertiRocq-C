@@ -5313,6 +5313,15 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   19 / 16 / 16 s); **95 programs through the verified compiler, 0 refused**; `check_trust.py`: `trust unchanged`.  Next: a proof
   as a parameter, a value with its proof as a parameter.
 
+**Step 81, a proof as a parameter, a value with its proof as a parameter (§3.5, §12.A) — the design (2026-11-07).**  A read that takes a proof its index is in range, a recursion taking a proof of its counter's bound, `{y : int | P y}`, a record holding a proof: ordinary dependent Rocq.  A proof computes nothing.
+- *A proof as a parameter*: a function of its own in the function's place without it (step 69's row, its slots), at every argument and every proof equal to it.  A parameter whose type has sort Prop, through definitions and arrows (`prf_ty`), that nothing reads but the function's own call at that place and what is in the place of a function it calls.  A convoy giving it (`match k as k0 return k0 <= 100 -> int with .. end H`): the proof in each branch first (`prf_push`).
+- *A value with its proof as a parameter*: `sig`, a record holding proofs: the fields that are not proofs as parameters, each a projection of what is given, `g x = g' (proj1_sig x)` at every `x`, so that what is given need not be written as its constructor; a helper giving such a value is written out.  A field of what is made here reduces (`sp_red`, `sp_pj`); a proof left in the text leaves the function unread.
+- *What stands in those places is read as any function*: a value and a memory through step 78, under step 79's and step 80's forms.
+- *A proof taken apart in what is computed* (`match H with eq_refl => ..` where `H` is a variable): the kernel's reduction stops on it: a gap with its cell.
+- *The C*: a program with no such function: byte-identical.
+- *The acceptance*: `proved/examples/prfp_fix`: all of these together; the answer worked out apart: 42.
+- *Cells*: 40, `A_y_*`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5497,7 +5506,8 @@ Pushed to the public repository up to `d9b85b2` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 80 (a memory in a record or a pair: the construct table 3146 of 3272, 49 by design, 76 gaps, 4 gaps read), the C, the gate |
+| (this commit) | §12.V: step 81's design -- a proof as a parameter, a value with its proof as a parameter |
+| `e3613d8` | §12.V: step 80 (a memory in a record or a pair: the construct table 3146 of 3272, 49 by design, 76 gaps, 4 gaps read), the C, the gate |
 | `d9b85b2` | `proved/KQRWf.v` + `KQRReify.v` + `kitc.py` + `matrix` + `examples/stat_fix` step 80: a memory in a record or a pair, at any place; 48 cells |
 | `2b4f456` | §12.V: step 80's design -- a memory in a record or a pair, at any place |
 | `c2120b8` | §12.V: step 79 (a value and a memory from the other forms of recursion: the construct table 3098 of 3224, 48 by design, 77 gaps, 6 gaps read), the C, the gate |
