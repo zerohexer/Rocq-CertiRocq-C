@@ -5356,6 +5356,16 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   17 s); **97 programs through the verified compiler, 0 refused**; `check_trust.py`: `trust unchanged`.  Next: a counter
   expression as a counter.
 
+**Step 83, a counter a function gives back, used as a counter (§3.5, §12.A) — the design (2026-11-07).**  Step 82 made `cnt k i t : nat` a number where it is made one.  `Nat.leb (cnt n a s) 3`, `match cnt n a s with`, `ff (cnt n a s) b`: the comparison is of the counter, and its number is the counter only below `wB`, so a bound is needed, proved, not assumed.
+- *The bound*: of each function giving back a counter, `f args <= w0 * c0 + .. + d`, linear in its counters, read off its text, proved by induction from the text alone (`__b<n>_<rarg>__bq__wy`, `KQRWf.nb_step`).  `w` for its recursion's counter: the most a round adds to the result and to the counters it hands on; 1 for the others, `d` the most an end gives.  Another such function's bound is put in at its arguments.
+- *Where no such bound exists*: a round adding a parameter (`c + tw m c`, `tw m + th m`) reaches `n^2`, an own call twice in a round or a doubling (`tw m + tw m`, `2 * tw m`, `tw m (acc + acc)`) reaches `2^n`: past a machine number from a written budget, so what the text means needs a bignum there (§0.5, second reason): by design, each with a control beside it, the same function with a linear bound.
+- *The form*: the largest counter expression around such a call, `S`, `+`, `*` of a written number, as one number: `ff (S (cnt n a s)) b` is `ff (Z.to_nat (Uint63.to_Z (F n a s + 1))) b`, what a C programmer writes.  Equal where the bound keeps it below `wB`.  Nothing new in `S`: `CToNatU`, read since step 70.
+- *The caller's equation*: under its own counters' bound, `KQR.callee_ok_eqb`, since `callee_ok` takes that bound as its premise anyway; `KQRWf.nc_E`, `nc_fold`, `nc_step`: back to the counter in one step, each side by `lia` from the bounds of the calls in the goal or kept by a test.  A counter at most twice its counters fits below the index's bound; up to seven times, below the smallest own bound (`__nco__wy`, 2^60 and a little); more does not fit below `wB` from `kq_nat`'s 2^60: a gap with its cell.
+- *What is proved*: nothing assumed beyond the list: the bound and the equation are theorems of each program.  The C: a program with no such call: byte-identical.
+- *Left, with cells*: a counter's `CToNatU` is at most `2^63 - 1` to `wf`, so a callee that grows its counter is not called with it (`A_zb_o_callee_grows`); a function giving back a counter that uses another's as a counter (`A_zb_o_counter_row_uses`); a function with weights (`A_zb_o_weights`); a local fix; a recursion two steps down, as at step 82; a test in `Z` on it (`A_z_u_zofnat`).
+- *The acceptance*: `proved/examples/cuse_fix`: a budget, a test, a match, an operand, in a recursion; the answer worked out apart: 419061.
+- *Cells*: 65, `A_zb_*`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5540,7 +5550,8 @@ Pushed to the public repository up to `b017845` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 82 (a function giving back a counter: the construct table 3227 of 3356, 49 by design, 79 gaps, 4 gaps read), the C, the gate |
+| (this commit) | §12.V: step 83's design -- a counter expression as a counter, its bound proved by induction |
+| `1029a00` | §12.V: step 82 (a function giving back a counter: the construct table 3227 of 3356, 49 by design, 79 gaps, 4 gaps read), the C, the gate |
 | `b017845` | `proved/KQRWf.v` + `KQRReify.v` + `kitc.py` + `matrix` + `examples/cret_fix` step 82: a function giving back a counter, made a number where it is used; 44 cells |
 | `838a52f` | §12.V: step 82's design -- a function giving back a counter, made a number where it is used |
 | `0284dba` | §12.V: step 81 (a proof as a parameter, a value with its proof as a parameter: the construct table 3189 of 3312, 49 by design, 73 gaps, 4 gaps read), the C, the gate |
