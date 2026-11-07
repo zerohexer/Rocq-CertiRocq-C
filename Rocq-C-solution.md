@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3404 of 3540, 81 gaps, 54 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3428 of 3563, 80 gaps, 54 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1659,6 +1659,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F72 | A chain went on past a refusal: the gate's `== refused (must be none): 1` line was printed and nothing read it, and `examples.sh` said 48 of 48 with `monad_fix` refused, because it ran the binary an earlier run had left (step 77's first version, found reading the log before the record) | a chain stops on that line; `examples.sh` removes the binary before it compiles |
 | F71 | A rule added to the proof tactic for one class took a cell that was read: step 76's `kq_convoy` on a variable left `A_l_convoy_b` unproved, and the count of proved cells, which rose by 39 where 40 were expected, was the only sign: no line of the gate says a cell was lost | the rule fixed (step 78); each landing now compares the table's results with the last one's, cell by cell, and says what was lost |
 | F70 | The record table was built in three places, `rec_info` with the made functions that name a value's type and the reader's two without them: a syntax tree numbering its records by one table, its meaning read by the other.  Nothing wrong was accepted: the kernel's check `denote s = f` refused it (`A_v_callee_other_value`, two types of the same width, found at step 78) | one list for all three |
+| F73 | `compile` writes what follows an operand in each arm of a test that cannot be a conditional move, so `k` of them in one expression are `2^k` copies, and `x mod p` is three arms: a matrix power modulo `p` was read, its check passed, and printing its C ran out of memory; nothing had measured the size of the C (found by the fifth probe, step 85) | step 86: above 1024 copies by a count from the text, such operands are functions.  A join point in KQL would need no function: §6.4 |
 | F69 | `rewrite` compares up to unfolding, full, whatever `Strategy opaque` says: a lemma about a function whose body is one operation fires on that operation where the function is not written, and with a tactic turning the operation back the proof never ended | the lemma only where the function is in the goal (`match goal with |- context [F]`); a proof that looks for what to rewrite is stepped by hand when it times out |
 | F68 | A program's own file (`Require`d by its text) was compiled again only when older than its source, not than the kit, so after `KQRun.v` changed the program failed once on Rocq's inconsistent assumptions and `kitc.py` wrote no C; the comparison showed `none`, at steps 65 and 73 | `build_user_files` counts the kit's `.vo` |
 | F67 | A budget written as `S (S ..)` makes a conversion unroll the fixpoint: both sides reduce on the constructor, and with two branches in each round the comparison is exponential.  `reflexivity` on `(fix go ..) 63 c 0 a b = kq_d21_go 63 c 0 a b` did not end, nor `rewrite` of a term holding it, with the fixpoints' bodies identical | a written budget is `kq_nat 63`, opaque to a conversion (D18); a lemma about it is stated with the budget a variable, and the number put in with `exact` |
@@ -5436,6 +5437,17 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The acceptance*: `proved/examples/jn_fix`: a matrix power modulo a number, a sum of eight remainders; the answer worked out apart: 5525.
 - *Cells*: 23, `A_ze_*`, with controls below the threshold.
 
+**Step 86, tests that cannot be moves, many in one expression — the result (2026-11-07).**  Built as designed:
+- *The reader*: `jn_div`, `jn_mul`, `jn_ds`, `jn_dup`, `jn_tail`, `jn_own`, `jn_tab`, `jn_big`, `jn_cnt`, `jn_pre`, `jn_add`, `jn_try`, `jn_mark`; `opnd`, `lift_op`, `lift_ops`, `rec_info2` take it.  `KQR.v`, `KQRWf.v` unchanged.  *`kitc.py`*: a function named `p1` or `p2` by its short name.
+- *The acceptance*: `proved/examples/jn_fix`: proved, built, 5525.
+- *Cells*: 23 more: 22 proved; `A_ze_own_call_12` a gap.  One gap read: `A_m_e_name_p1`; and `A_zp_mat_pow`, step 85's.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62, in clean copies of both trees; step 85's files / these): `HWP_kernel` 2.98 / 3.01 s, `HWP_own` 2.04 / 2.07, `HWP_irqnow` 1.71 / 1.73: 0.03 s, the count.  Its first version made them 2.8 times slower, 8 s on `HWP_kernel`: `Nat.min 100000 ..` builds that literal at every node, and it took a look-up per function (F64 again); the timing is what found it.
+- The C: the 92 programs byte-identical.  The construct table (on `3ed96d9`): **3428 of 3563 through the verified compiler**, 54
+  by design, 80 gaps, 1 not Rocq (was 3404 of 3540: 22 of the 23 new cells read, 1 gap; 2 gaps read; no cell lost).  The gate on
+  `3ed96d9`, the walk switched off: `make.sh` `core-ok`; examples 57 / 57; corpus 36 / 36; the five kernels (15 / 15 / 18 / 15 /
+  15 s); **101 programs through the verified compiler, 0 refused**; `check_trust.py`: `trust unchanged`.  Next: a memory in a
+  value of any data type; a sixth probe.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5616,11 +5628,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `875c47b` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `3ed96d9` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 86's design -- tests that cannot be moves, many in one expression |
+| (this commit) | §12.V: step 86 (tests that cannot be moves, many in one expression: the construct table 3428 of 3563, 54 by design, 80 gaps, 2 gaps read), the C, the gate |
+| `3ed96d9` | `proved/KQRReify.v` + `kitc.py` + `matrix` + `examples/jn_fix` step 86: tests that cannot be moves, many in one expression; 23 cells |
+| `f2c5463` | §12.V: step 86's design -- tests that cannot be moves, many in one expression |
 | `1a5ee67` | §12.V: step 85 (a memory inside an option, a helper's choice of a value and a memory: the construct table 3404 of 3540, 54 by design, 81 gaps, 2 gaps read), the C, the gate |
 | `875c47b` | `proved/KQRReify.v` + `kitc.py` + `matrix` + `examples/optm_fix` step 85: what a fifth probe found: a memory inside an option, a helper's choice of a value and a memory; 76 cells |
 | `59f3bf1` | §12.V: step 85's design -- what a fifth probe found: a memory inside an option, a helper's choice of a value and a memory |
