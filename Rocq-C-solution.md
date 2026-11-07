@@ -5426,6 +5426,16 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   kernels (15 / 15 / 18 / 15 / 15 s); **100 programs through the verified compiler, 0 refused**; `check_trust.py`: `trust
   unchanged`.  Next: tests that cannot be moves, many in one expression.
 
+**Step 86, tests that cannot be moves, many in one expression (§6, §12.A) — the design (2026-11-07).**  `compile` writes what follows an operand in each arm of a test that cannot be a conditional move (`KQR.choice_ok`: a call, a division).  So `k` such tests in one expression are `2^k` copies, and `x mod p`, which tests its signs and divides, is three arms: a matrix power modulo `p`, eight `mod` in one call's arguments, was read and proved and ran out of memory printing its C (F73).  A programmer writes that without thinking, so it is ordinary Rocq and must be read.
+- *How many copies* (`jn_ds`, `jn_tail`, `jn_tab`, `jn_cnt`, `jn_pre`): read from the text, the compiler's way: an arm in each place a test puts it, a helper's own number from its body, a function read as a function a call, at the end of a function nothing after it.  One pass over the program's own declarations, in machine numbers: it runs for every program (F64).
+- *More than 1024*: the program is read again with every such operand a function of its variables (step 54's `lift_ops`, `opnd`, the same term up to delta and beta), so it is a call and what follows is written once.  No proof to find: `denote s = f` by conversion, as before.  Clang inlines what is worth it.
+- *Fewer*: read as it was, its C byte-identical.  The line keeps the programs read today as they are: none of them has more, and no measurement says a lower one would be better or worse.
+- *An own call in such an operand* cannot leave its fixpoint: `A_ze_own_call_*`: written in each arm as before: eight are 256 copies, twelve a gap with its cell.
+- *What it does not do*: a join point in KQL (an `Eif` whose arms go on to one continuation, the C `if (c) t = a; else t = b;`) would need no function, and is a change to KQL, `eval`, the generator and its proof: not this step, §6.4.
+- *A function named `p1` or `p2`*: `.p1` is a token of MetaRocq's notations in the proof file, so `KQG.file.p1` did not parse: by its short name there, the program's file being imported (`A_m_e_name_p1`).
+- *The acceptance*: `proved/examples/jn_fix`: a matrix power modulo a number, a sum of eight remainders; the answer worked out apart: 5525.
+- *Cells*: 23, `A_ze_*`, with controls below the threshold.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5610,7 +5620,8 @@ Pushed to the public repository up to `875c47b` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 85 (a memory inside an option, a helper's choice of a value and a memory: the construct table 3404 of 3540, 54 by design, 81 gaps, 2 gaps read), the C, the gate |
+| (this commit) | §12.V: step 86's design -- tests that cannot be moves, many in one expression |
+| `1a5ee67` | §12.V: step 85 (a memory inside an option, a helper's choice of a value and a memory: the construct table 3404 of 3540, 54 by design, 81 gaps, 2 gaps read), the C, the gate |
 | `875c47b` | `proved/KQRReify.v` + `kitc.py` + `matrix` + `examples/optm_fix` step 85: what a fifth probe found: a memory inside an option, a helper's choice of a value and a memory; 76 cells |
 | `59f3bf1` | §12.V: step 85's design -- what a fifth probe found: a memory inside an option, a helper's choice of a value and a memory |
 | `c5eaa9b` | §12.V: step 84 (a class or a record of functions given to a recursive function: the construct table 3331 of 3464, 54 by design, 78 gaps, 4 gaps read), the C, the gate |
