@@ -2846,6 +2846,147 @@ addA('q_nat_pair_ret', "", 'let (q, r) := sp n in if Nat.eqb r 0 then a else Uin
 addA('q_divmod', "", 'Uint63.of_nat (fst (Nat.divmod n 3 0 3))',
      '')
 
+# a counter a function gives back, used as a counter (step 83)
+addA('zb_u_lt', "", 'if Nat.ltb (cnt n a s) n then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('zb_u_sum', "", 'ff (cnt n a s + cnt n b s) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zb_u_succ', "", 'ff (S (cnt n a s)) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zb_u_add_lit', "", 'ff (cnt n a s + 3) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zb_u_lit_add', "", 'ff (3 + cnt n a s) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zb_u_add_var', "", 'ff (cnt n a s + n) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zb_u_mul2', "", 'ff (2 * cnt n a s) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zb_u_mul3', "", 'ff (3 * cnt n a s) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zb_u_match_pred', "", 'match cnt n a s with O => a | S p => ff p b end',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zb_u_match_two', "", 'match cnt n a s with O => a | S O => b | S (S _) => a + b end',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('zb_u_let', "", 'let c := cnt n a s in if Nat.leb c 3 then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('zb_u_let_twice', "", 'let c := cnt n a s in ff c b + ff c a',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zb_u_let_succ', "", 'let c := cnt n a s in ff (S c) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zb_u_let_add', "", 'let c := cnt n a s in ff (c + c) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zb_u_let_two', "", 'let c := cnt n a s in let d := cnt n b s in ff (c + d) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zb_u_let_nested', "", 'let c := cnt n a s in let d := S c in ff (S d) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zb_u_let_helper', "", 'let c := hh n a s in ff c b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nDefinition hh (k : nat) (i : int) (t : mem) : nat := S (cnt k i t).\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zb_u_let_number', "", 'let c := cnt n a s in Uint63.of_nat c + 1',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('zb_u_pred', "", 'ff (Nat.pred (cnt n a s)) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zb_u_sub', "", 'ff (cnt n a s - 1) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zb_u_min', "", 'ff (Nat.min (cnt n a s) n) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zb_u_max', "", 'ff (Nat.max (cnt n a s) n) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zb_u_div2', "", 'ff (Nat.div2 (cnt n a s)) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zb_u_nested', "", 'Uint63.of_nat (cnt (cnt n a s) b s)',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('zb_u_nested_use', "", 'if Nat.leb (cnt (cnt n a s) b s) 3 then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('zb_u_two_funcs', "", 'if Nat.leb (cnt n a s) (tw n) then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint tw (k : nat) : nat := match k with O => O | S m => S (tw m) end.\n')
+addA('zb_u_in_rec', "", 'outer n a s',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint outer (j : nat) (x : int) (t : mem) : int := match j with O => x | S m => if Nat.leb (cnt m x t) 3 then outer m (x + 1) t else x end.\n')
+addA('zb_u_in_rec_given', "", 'outer n a s',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\nFixpoint outer (j : nat) (x : int) (t : mem) : int := match j with O => x | S m => outer m (ff (cnt m x t) x) t end.\n')
+addA('zb_u_helper', "", 'if wrap n a s then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nDefinition wrap (k : nat) (a : int) (t : mem) : bool := Nat.leb (cnt k a t) 3.\n')
+addA('zb_u_helper_num', "", 'wrap n a s + wrap n b s',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nDefinition wrap (k : nat) (a : int) (t : mem) : int := if Nat.leb (cnt k a t) 3 then a else 0.\n')
+addA('zb_u_in_mem', "", 'rd 0 a (wr n a s)',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nDefinition wr (k : nat) (a : int) (t : mem) : mem := if Nat.leb (cnt k a t) 3 then upd 0 a 1 t else t.\n')
+addA('zb_u_after_write', "", 'let t := upd 0 a b s in if Nat.leb (cnt n a t) 3 then a else rd 0 a t',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('zb_u_rec_mem', "", 'rd 0 a (w n a s)',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint w (k : nat) (i : int) (t : mem) : mem := match k with O => t | S m => if Nat.leb (cnt m i t) 3 then w m (i + 1) (upd 0 i 1 t) else w m (i + 1) t end.\n')
+addA('zb_u_match_pred_use', "", 'match cnt n a s with O => a | S p => if Nat.leb (cnt p a s) 3 then a else b end',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('zb_u_lit', "", 'if Nat.leb (cnt 5 a s) 3 then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('zb_u_arg_add', "", 'if Nat.leb (cnt (n + n) a s) 3 then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('zb_u_arg_succ', "", 'if Nat.leb (cnt (S n) a s) 3 then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('zb_u_budget_writes', "", 'fw (cnt n a s) b s',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint fw (k : nat) (x : int) (t : mem) : int := match k with O => rd 0 x t | S m => fw m (x + 1) (upd 0 x 1 t) end.\n')
+addA('zb_a_acc', "", 'if Nat.leb (tw n 0) 3 then a else b',
+     'Fixpoint tw (k acc : nat) : nat := match k with O => acc | S m => tw m (S acc) end.\n')
+addA('zb_a_acc_first', "", 'if Nat.leb (tw 0 n) 3 then a else b',
+     'Fixpoint tw (acc k : nat) : nat := match k with O => acc | S m => tw (S acc) m end.\n')
+addA('zb_a_acc_add', "", 'if Nat.leb (tw n 1) 3 then a else b',
+     'Fixpoint tw (k acc : nat) : nat := match k with O => acc | S m => tw m (acc + 2) end.\n')
+addA('zb_a_acc_if', "", 'if Nat.leb (tw n 0 a) 3 then a else b',
+     'Fixpoint tw (k acc : nat) (i : int) : nat := match k with O => acc | S m => tw m (if i =? 0 then acc else S acc) (i + 1) end.\n')
+addA('zb_a_two_acc', "", 'if Nat.leb (tw n 0 1) 3 then a else b',
+     'Fixpoint tw (k x y : nat) : nat := match k with O => x | S m => tw m y (S x) end.\n')
+addA('zb_a_acc_read', "", 'if Nat.leb (tw n 0) 3 then a else b',
+     'Fixpoint tw (k acc : nat) : nat := match k with O => acc | S m => match acc with O => tw m 1 | S q => tw m q end end.\n')
+addA('zb_a_acc_doubles', "", 'if Nat.leb (tw n 1) 3 then a else b',
+     'Fixpoint tw (k acc : nat) : nat := match k with O => acc | S m => tw m (acc + acc) end.\n')
+addA('zb_s_two', "", 'if Nat.leb (tw n) 3 then a else b',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S m => S (S (tw m)) end.\n')
+addA('zb_s_three', "", 'if Nat.leb (tw n) 3 then a else b',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S m => S (S (S (tw m))) end.\n')
+addA('zb_s_lit', "", 'if Nat.leb (tw n) 3 then a else b',
+     'Fixpoint tw (k : nat) : nat := match k with O => 7 | S m => S (tw m) end.\n')
+addA('zb_s_add', "", 'if Nat.leb (tw n) 3 then a else b',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S m => 2 + tw m end.\n')
+addA('zb_s_var', "", 'if Nat.leb (tw n 3) 3 then a else b',
+     'Fixpoint tw (k c : nat) : nat := match k with O => c | S m => S (tw m c) end.\n')
+addA('zb_s_other_counter', "", 'if Nat.leb (tw n n) 3 then a else b',
+     'Fixpoint tw (k c : nat) : nat := match k with O => c | S m => tw m c end.\n')
+addA('zb_s_if_num', "", 'if Nat.leb (tw n a) 3 then a else b',
+     'Fixpoint tw (k : nat) (i : int) : nat := match k with O => O | S m => if i =? 0 then tw m (i + 1) else S (tw m (i + 1)) end.\n')
+addA('zb_s_let', "", 'if Nat.leb (tw n a) 3 then a else b',
+     'Fixpoint tw (k : nat) (i : int) : nat := match k with O => O | S m => let r := i + 1 in S (tw m r) end.\n')
+addA('zb_s_let_rec', "", 'if Nat.leb (tw n) 3 then a else b',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S m => let r := tw m in S (S r) end.\n')
+addA('zb_s_deep', "", 'if Nat.leb (tw n) 3 then a else b',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\n')
+addA('zb_s_counter_second', "", 'if Nat.leb (tw a n) 3 then a else b',
+     'Fixpoint tw (i : int) (k : nat) : nat := match k with O => O | S m => S (tw (i + 1) m) end.\n')
+addA('zb_s_two_funcs', "", 'if Nat.leb (th n) 3 then a else b',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S m => S (tw m) end.\nFixpoint th (k : nat) : nat := match k with O => tw 2 | S m => S (th m) end.\n')
+addA('zb_s_add_var', "", 'if Nat.leb (tw n 2) 3 then a else b',
+     'Fixpoint tw (k c : nat) : nat := match k with O => O | S m => c + tw m c end.\n')
+addA('zb_s_quadratic', "", 'if Nat.leb (th n) 3 then a else b',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S m => S (tw m) end.\nFixpoint th (k : nat) : nat := match k with O => O | S m => tw m + th m end.\n')
+addA('zb_s_power', "", 'if Nat.leb (tw n) 3 then a else b',
+     'Fixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
+addA('zb_s_power_mul', "", 'if Nat.leb (tw n) 3 then a else b',
+     'Fixpoint tw (k : nat) : nat := match k with O => 1 | S m => 2 * tw m end.\n')
+addA('zb_o_helper_two', "", 'if Nat.leb (hh n) 3 then a else b',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S m => S (tw m) end.\nDefinition hh (k : nat) : nat := tw k + tw k.\n')
+addA('zb_o_section', "", 'if Nat.leb (tw b n a) 3 then a else b',
+     'Section S.\nVariable d : int.\nFixpoint tw (k : nat) (i : int) : nat := match k with O => O | S m => if i =? d then tw m (i + 1) else S (tw m (i + 1)) end.\nEnd S.\n')
+addA('zb_o_local', "", 'if tw n a then a else b',
+     'Definition tw (k0 : nat) (i0 : int) : bool := let fix go (k : nat) (i : int) : nat := match k with O => O | S m => S (go m (i + 1)) end in Nat.leb (go k0 i0) 3.\n')
+addA('zb_o_helper', "", 'if Nat.leb (hh n) 3 then a else b',
+     'Definition hh (k : nat) : nat := S (S k).\n')
+addA('zb_o_helper_call', "", 'if Nat.leb (hh n) 3 then a else b',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S m => S (tw m) end.\nDefinition hh (k : nat) : nat := S (tw k).\n')
+addA('zb_o_callee_grows', "", 'ff (cnt n a s) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint hh (k : nat) (x : int) : int := match k with O => x | S m => hh m (x + 1) end.\nDefinition ff (k : nat) (x : int) : int := hh (S k) x.\n')
+addA('zb_o_weights', "", 'pp n n a s',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint pp (k c : nat) (x : int) (t : mem) : int := match k with O => x | S m => if Nat.leb (cnt c x t) 3 then pp m (S c) (x + 1) t else x end.\n')
+addA('zb_o_row_uses', "", 'fst (w n a s)',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint w (k : nat) (i : int) (t : mem) : int * mem := match k with O => (i, t) | S m => if Nat.leb (cnt m i t) 3 then w m (i + 1) (upd 0 i 1 t) else (i, t) end.\n')
+addA('zb_o_counter_row_uses', "", 'if Nat.leb (w n a s) 3 then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint w (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if Nat.leb (cnt m i t) 3 then S (w m (i + 1) t) else w m (i + 1) t end.\n')
 # a function giving back a counter, made a number where it is used (step 82)
 addA('z_n_arith', "", 'Uint63.of_nat (cnt n a s) * 2 + b',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')

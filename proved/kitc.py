@@ -952,13 +952,50 @@ def reflect(name, entry, prog, no_proof):
             continue
         rrw.append(f"try (match goal with |- context [{F}] => {rrj} end)" if m.endswith("__e__rq__wy") or m.endswith("__e__n__rq__wy") else rrj)
         t += "Ltac KQRWf.kq_rw ::= progress (" + "; ".join(rrw) + ").\n"
+    # (step 83) a counter a function gives back, used as a counter: the bound of each such function, by induction, each after what it calls; the equations of what uses them hold where the counters are below the bound
+    bqs = [m for m, _ in mts if m.endswith("__bq__wy")]
+    ncp = bool(bqs)
+    if ncp:
+        rrk0 = [f"{name}_rr{j}" for j, (m, h) in enumerate(rrs) if re.search(r"__k\d+__rq__wy$", m)]
+        nch = [kqfn(m[:-len("__nch__wy")]) for m, _ in mts if m.endswith("__nch__wy")]
+        rrk = ("try unfold " + ", ".join(nch) + "; " if nch else "") + "; ".join(f"match goal with Hr : {roomR} |- _ => rewrite ?({x} Hr) end" if vmr else f"rewrite ?{x}" for x in rrk0) or "idtac"
+        bprev = "fail"
+        for j, m in enumerate(bqs):
+            mb = re.match(r"(.*)__b(\d+)_(\d+)__bq__wy$", m)
+            fn, ar, r = kqfn(mb.group(1)), int(mb.group(2)), int(mb.group(3))
+            xs = " ".join(f"?kx{i}" for i in range(ar))
+            ys = " ".join(f"kx{i}" for i in range(ar))
+            ptn = lambda pr: f"match goal with |- context [{fn} {xs}] => lazymatch goal with _ : ({fn} {ys} <= _)%nat |- _ => fail | _ => pose proof ({pr} {ys}) end end"
+            if r >= ar:
+                t += (f"Lemma {name}_bd{j} : {m}.\nProof. unfold {m}. intros; unfold {fn}. KQRWf.nb_step ltac:(repeat first [{bprev}]). Qed.\n")
+            else:
+                d0 = f"do {r} intro; " if r else ""
+                t += (f"Lemma {name}_bd{j} : {m}.\nProof. unfold {m}. fix IH {r + 1}. {d0}intros kqn; destruct kqn as [|kqn]; intros; cbn [{fn}]; KQRWf.nb_step ltac:(repeat first [{ptn('IH')} | {bprev}]). Qed.\n")
+            # what the tests kept too
+            pth = lambda pr: f"match goal with _ : context [{fn} {xs}] |- _ => lazymatch goal with _ : ({fn} {ys} <= _)%nat |- _ => fail | _ => pose proof ({pr} {ys}) end end"
+            t += f"Ltac {name}_bt{j} := first [{ptn(f'{name}_bd{j}')} | {pth(f'{name}_bd{j}')} | {bprev}].\n"
+            bprev = f"{name}_bt{j}"
+        t += f"Ltac KQRWf.kq_bd ::= repeat {bprev}.\nLtac KQRWf.kq_nc ::= first [KQRWf.nc_step ltac:({rrk}) | KQRWf.nc_match].\nLtac KQRWf.kq_nc_side ::= KQRWf.nc_lia.\n"
+        keepf = keepf + " Z.to_nat Uint63.to_Z"
     yf = {f[0]: f[0].rsplit(".", 1)[-1] + "__wy" for f in fs if f[0].rsplit(".", 1)[-1] + "__wy" in made}
+    # (step 83) the bound as a number
+    bnz = lambda f, j: str(2**62 - j * 2**20) if not f[7] else str(f[7])
+    ncfs = {m[:-len("__nc__wy")] for m in made if m.endswith("__nc__wy")}
+    ncf = lambda f: f[0].rsplit(".", 1)[-1] in ncfs
     keepg = " ".join(sorted({"KQ.KQRun.kq_nat"} | {m[:-len("__rq__wy")] + "__rp__wy" for m, _ in rrs} | set(yf.values())))
     alt0 = f" | solve [cbv beta iota zeta delta -[{keepg}]; KQRWf.own_step0]" if vmr else ""
     altn = f" | solve [cbv beta iota zeta delta -[{keepg}]; KQRWf.own_step IH]" if vmr else ""
     for j, f in enumerate(fs):
         if f[0] in yf:
             W = yf[f[0]]
+            if ncf(f) and wsl(f) != "nil":
+                # the counters held by weights: not yet
+                t += "Check KQ_refused__a_counter_given_back_used_where_the_counters_are_held_by_weights.\n"
+            if ncf(f):
+                t += (f"Lemma {name}_rqy{j} {hrb}: KQR.eqCb {bnz(f, j)}%Z {f[1]} _ (KQR.eqN {kl(f)} {f[3]} _) {W} {f[0]}.\n"
+                      + (f"Proof. cbn [KQR.eqCb KQR.eqN]. fix IH 1. intros kqn kqH; destruct kqn as [|kqn]; intros; cbn [{W} {f[0]}]; first [solve [KQRWf.own_step IH] | solve [cbn; KQRWf.own_step IH] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step IH]{altn}]. Qed.\n" if f[0] in fix1 else
+                         f"Proof. cbn [KQR.eqCb KQR.eqN]. intros. unfold {W}, {f[0]}. first [solve [KQRWf.own_step0] | solve [cbn; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0p]{alt0}]. Qed.\n"))
+                continue
             t += (f"Lemma {name}_rqy{j} {hrb}: KQR.eqC {f[1]} _ (KQR.eqN {kl(f)} {f[3]} _) {W} {f[0]}.\n"
                   + (f"Proof. cbn [KQR.eqC KQR.eqN]. fix IH 1. intros kqn; destruct kqn as [|kqn]; intros; cbn [{W} {f[0]}]; first [solve [KQRWf.own_step IH] | solve [cbn; KQRWf.own_step IH] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step IH]{altn}]. Qed.\n" if f[0] in fix1 else
                      f"Proof. cbn [KQR.eqC KQR.eqN]. intros. unfold {W}, {f[0]}. first [solve [KQRWf.own_step0] | solve [cbn; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0p]{alt0}]. Qed.\n"))
@@ -979,6 +1016,11 @@ def reflect(name, entry, prog, no_proof):
                     t += (f"Lemma {rq0} : KQR.eqC {f[1]} _ (KQR.eqN {kl(f)} {f[3]} _) {W} {f[0]}.\n"
                           f"Proof. cbn [KQR.eqC KQR.eqN]; intros; unfold {W}, {f[0]}; apply {reqs[pfc[f[0]]]}. Qed.\n")
                 t += f"Lemma {name}_rok{j} : @KQR.callee_ok {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {sig(f)} {f[0]}.\n"
+                if ncf(f):
+                    rr0 = f"{name}_room {rq0}" if vmr else f"(fun _ => Logic.I) (fun _ => {rq0})"
+                    t += (f"Proof. exact_no_check (@KQR.callee_ok_eqb {inst} {name}_prog (KQR.gid1 {j}) {bnz(f, j)}%Z {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)} ({roomR}) {W} {f[0]} {rr0}"
+                          f" (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j}) eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl)). Qed.\n")
+                    continue
                 t += (f"Proof. exact_no_check (@KQR.callee_ok_eqr {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)} {wsl(f)} ({roomR}) {W} {f[0]} {name}_room {rq0}"
                       f" (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j}) eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl)). Qed.\n" if vmr and f[0] in yf else
                       f"Proof. exact_no_check (@KQR.callee_ok_eq {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)} {wsl(f)} {W} {f[0]} {rq0}"

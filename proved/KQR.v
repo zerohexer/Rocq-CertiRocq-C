@@ -11592,6 +11592,28 @@ Proof.
   intros P id B x k m r w q b v R h h' HR Eh H Hsl.
   exact (callee_ok_eq P id B x k m r w q b v h h' (Eh (HR Hsl)) H Hsl).
 Qed.
+(** (step 83) the same, the equation holding where the counters are below the function's bound, which the theorem takes as its premise *)
+Fixpoint eqCb (B : Z) (x : nat) (A : Type) (R : A -> A -> Prop) {struct x} : ctype x A -> ctype x A -> Prop :=
+  match x as x0 return ctype x0 A -> ctype x0 A -> Prop with
+  | O => R
+  | S x => fun h h' => forall c, (Z.of_nat c < B)%Z -> eqCb B x A R (h c) (h' c)
+  end.
+Lemma appc_eqCb : forall B x A (R : A -> A -> Prop) h h' cvs, length cvs = x -> Forall (fun c => (Z.of_nat c < B)%Z) cvs ->
+  eqCb B x A R h h' -> R (appc x A h cvs) (appc x A h' cvs).
+Proof.
+  intros B. induction x as [|x IH]; intros A R h h' cvs L F H; [exact H|].
+  destruct cvs as [|c cvs]; [discriminate L|]. cbn [appc]. inversion F; subst. apply IH; [injection L; auto | assumption | apply H; assumption].
+Qed.
+Lemma callee_ok_eqb : forall P id B x k m r w q b (R : Prop) (h h' : ftype (mksig9 x k m r w q b [] false)),
+  (slot_room -> R) -> (R -> eqCb B x _ (eqN k m _) h h') ->
+  callee_ok P id B (mksig9 x k m r w q b [] false) h -> callee_ok P id B (mksig9 x k m r w q b [] false) h'.
+Proof.
+  intros P id B x k m r w q b R h h' HR Eh H Hsl. pose proof (Eh (HR Hsl)) as Eh'.
+  unfold callee_ok in *. intros cvs vs M L K C. specialize (H Hsl cvs vs M L K C).
+  assert (E : forall s, callf (mksig9 x k m r w q b [] false) h' cvs vs s = callf (mksig9 x k m r w q b [] false) h cvs vs s).
+  { intros s. cbn [callf]. symmetry. apply appnT_eqN. apply (appc_eqCb B x _ (eqN k m _) h h' cvs L C Eh'). }
+  unfold calln, callm, callmw in *. cbn [sw sr sq sn sk] in *. destruct w; [destruct H as [M' H]; exists M'|]; rewrite !E; exact H.
+Qed.
 Theorem compile_f_ok : forall P cs gidf j gs b,
   find P (gidf j) = Some (compile_f gidf j gs b) -> wf_f (map (@projT1 _ _) cs) gs b = true -> callees_ok P gidf cs ->
   Nat.leb (length cs) j = true -> (Z.of_nat j <? 1099511627776)%Z = true ->

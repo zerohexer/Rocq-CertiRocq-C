@@ -1,0 +1,30 @@
+(* counters given back, used as counters: a budget, a test, a match, an operand; each function's bound proved from its text *)
+Fixpoint cnt (k : nat) (i : int) (t : mem) : nat :=
+  match k with
+  | O => O
+  | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t)
+  end.
+Fixpoint big (k acc : nat) (i : int) (t : mem) : nat :=
+  match k with
+  | O => acc
+  | S m => big m (if 9 <? rd 0 i t then S acc else acc) (i + 1) t
+  end.
+Fixpoint rep (k : nat) (x : int) : int :=
+  match k with
+  | O => x
+  | S m => rep m (x + 3)
+  end.
+Fixpoint scan (j : nat) (i : int) (t : mem) : int :=
+  match j with
+  | O => 0
+  | S m => (if Nat.leb (cnt m i t) 2 then 1 else 100) + scan m (i + 1) t
+  end.
+Definition solve (n : nat) (a : int) (s : mem) : int :=
+  let c := cnt n a s in
+  rep (S c) 1 * 1000
+  + (match big n 1 a s with O => 7 | S p => rep p 0 end) * 10
+  + (if Nat.ltb (cnt n a s) n then 1 else 2)
+  + scan 4 a s * 100000.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_arg 1) (kq_input 0).

@@ -405,7 +405,9 @@ Qed.
 Lemma fr_cmp : forall x y n h i j s, PrimInt63.eqb h 63 = false -> rd 63 j (hw_cmp x y n h i s) = rd 63 j s.
 Proof. intros x y n h i j s E. unfold hw_cmp. apply (fr_cmp_go _ _ _ _ _ _ _ E). Qed.
 (** (step 79) a block's number written, or a parameter the function's lemma takes as not 63 *)
-Ltac vm_side := first [ reflexivity | assumption ].
+Ltac kq_nc_side := fail.
+Ltac nc_lia := lia.
+Ltac vm_side := first [ reflexivity | assumption | kq_nc_side ].
 Ltac fr_mem :=
   first [ rewrite fr_upd by vm_side | rewrite fr_upd32 | rewrite fr_upd8 | rewrite fr_upd16 | rewrite fr_grow
         | rewrite fr_load by vm_side | rewrite fr_aload by vm_side | rewrite fr_store | rewrite fr_store64 | rewrite fr_astore | rewrite fr_astore64 | rewrite fr_fence
@@ -490,6 +492,37 @@ Ltac kq_nr :=
   | |- context [Uint63.of_Z (Z.of_nat (Nat.mul ?a ?b))] => rewrite (nr_mul a b)
   | |- context [Uint63.of_Z (Z.of_nat O)] => rewrite nr_O
   end.
+(** (step 83) a counter a function gives back, used as a counter: the same counter, where its bound keeps it below [wB] *)
+Lemma nc_E : forall n, (Z.of_nat n < 9223372036854775808)%Z -> Z.to_nat (Uint63.to_Z (Uint63.of_Z (Z.of_nat n))) = n.
+Proof.
+  intros n H. rewrite Uint63.of_Z_spec, Z.mod_small by (split; [lia | exact H]). apply Nat2Z.id.
+Qed.
+(** what is known of the calls in the goal: [kitc.py] sets it *)
+Ltac kq_bd := idtac.
+Ltac nc_side := kq_bd; lia.
+Ltac nc_fold :=
+  match goal with
+  | |- context [PrimInt63.add (Uint63.of_Z (Z.of_nat ?a)) 1%uint63] => rewrite <- (nr_S a)
+  | |- context [PrimInt63.add (Uint63.of_Z (Z.of_nat ?a)) (Uint63.of_Z (Z.of_nat ?b))] => rewrite <- (nr_add a b)
+  | |- context [PrimInt63.mul (Uint63.of_Z (Z.of_nat ?a)) (Uint63.of_Z (Z.of_nat ?b))] => rewrite <- (nr_mul a b)
+  end.
+(** what stands in a function's place back to the counter, around it the same counter, in one step: what is left of them is folded again after *)
+Ltac nc_step rw :=
+  match goal with |- context [Z.to_nat (Uint63.to_Z _)] =>
+    rw; repeat nc_fold;
+    match goal with |- context [Z.to_nat (Uint63.to_Z (Uint63.of_Z (Z.of_nat ?n)))] => rewrite (nc_E n) by nc_side end
+  end.
+(** a match on such a counter, what it is kept: what is under it is below it *)
+Ltac nc_match :=
+  match goal with |- context [match ?c with O => _ | S _ => _ end] =>
+    lazymatch c with ?f _ => let e := fresh "kqe" in destruct c eqn:e end end.
+Ltac kq_nc := fail.
+(** a bound, by the tests of its text: [tac] says what is known of the calls *)
+Ltac nb_step tac :=
+  repeat (cbn beta iota zeta;
+          first [ solve [tac; lia]
+                | match goal with |- context [match ?c with _ => _ end] =>
+                    lazymatch c with context [match _ with _ => _ end] => fail | _ => destruct c end end ]).
 (** a program's lemmas of a function read as a pair, for when what is known of the pair has been used: [kitc.py] sets it *)
 Ltac kq_rw2 := fail.
 Ltac kq_vm0 :=
@@ -531,6 +564,7 @@ Ltac own_step IH :=
   repeat (cbn beta iota zeta delta [fst snd proj1_sig]; kq_unf;
           first [ prim_rw
                 | kq_guard
+                | kq_nc
                 | kq_rw
                 | progress (rewrite ?IH by vm_side)
                 | kq_vm
@@ -577,6 +611,7 @@ Ltac own_step0 :=
   repeat (cbn beta iota zeta delta [fst snd proj1_sig]; kq_unf;
           first [ prim_rw
                 | kq_guard
+                | kq_nc
                 | kq_rw
                 | kq_vm
                 | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
