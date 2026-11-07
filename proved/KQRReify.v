@@ -9618,7 +9618,7 @@ Fixpoint cl_beta (fuel : nat) (args : list term) (t : term) {struct fuel} : term
       | [], _ => t
       | a :: r, tLambda na ty b =>
           match a with
-          | tRel _ | tConst _ _ | tInt _ | tConstruct _ _ _ => cl_beta fuel r (subst10 a b)
+          | tRel _ | tConst _ _ | tInt _ | tConstruct _ _ _ | tLambda _ _ _ => cl_beta fuel r (subst10 a b)
           | _ => tLetIn na a ty (cl_beta fuel (map (lift0 1) r) b)
           end
       | _, _ => mkApps t args
