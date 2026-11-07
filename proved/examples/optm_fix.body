@@ -1,0 +1,36 @@
+(* what a fifth probe found: a helper's choice of a value and a memory taken apart; a memory inside an option, from a helper and from a recursion, as an error monad over the memory *)
+Definition alloc (t : mem) : option int * mem :=
+  let h := rd 0 0 t in
+  if h =? 0 then (None, t) else (Some h, upd 0 0 (rd 0 h t) t).
+Definition push (v : int) (t : mem) : option mem :=
+  let tl := rd 1 0 t in
+  if tl =? 9 then None else Some (upd 1 0 (tl + 1) (upd 1 (tl + 1) v t)).
+Definition M (A : Type) := mem -> option (A * mem).
+Definition ret {A} (x : A) : M A := fun t => Some (x, t).
+Definition bind {A B} (m : M A) (f : A -> M B) : M B := fun t => match m t with Some (x, u) => f x u | None => None end.
+Definition rdc (i : int) : M int := fun t => if i <? 8 then Some (rd 0 i t, t) else None.
+Definition wrc (i v : int) : M unit := fun t => if i <? 8 then Some (tt, upd 2 i v t) else None.
+Notation "x <- m ;; k" := (bind m (fun x => k)) (at level 61, m at next level, right associativity).
+Fixpoint copy (k : nat) (i : int) : M int :=
+  match k with
+  | O => ret i
+  | S m => v <- rdc i ;; _u <- wrc i (v + 1) ;; copy m (i + 1)
+  end.
+Fixpoint fill (k : nat) (v : int) (t : mem) : mem :=
+  match k with
+  | O => t
+  | S m => match push v t with Some u => fill m (v + 1) u | None => t end
+  end.
+Definition solve (n : nat) (a : int) (s : mem) : int :=
+  match alloc s with
+  | (Some p, t) =>
+      let u := fill n a t in
+      match copy n p u with
+      | Some (e, w) => p * 1000 + rd 1 0 w * 100 + e * 10 + rd 2 p w
+      | None => 1
+      end
+  | (None, _) => 0
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_arg 1) (kq_input 0).

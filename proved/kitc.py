@@ -894,8 +894,10 @@ def reflect(name, entry, prog, no_proof):
     rrs = [(m, h) for m, h in mts if m.endswith("__rq__wy")]
     rrn = []
     rrw = []
-    if rrs:
-        t += "Ltac KQRWf.kq_unf ::= try unfold KQRReify.kq_sb2b.\n"
+    # (step 85) what the proof of a class's program unfolds
+    clu = [m[:-len("__clu__wy")].replace("''", "\0").replace("'_", ".").replace("\0", "'").split("kqcopy.")[-1] for m, _ in mts if m.endswith("__clu__wy")]
+    if rrs or clu:
+        t += "Ltac KQRWf.kq_unf ::= try unfold KQRReify.kq_sb2b; try unfold KQRReify.om_wrap; try unfold KQRReify.om_wrap0" + "".join(f"; try unfold {c}" for c in clu) + ".\n"
     # (step 72) what the tactic rewrites stays folded when the helpers are unfolded
     # (step 78) a value of several numbers and a memory given back by a recursion: through the slot block.  First, of each recursive function
     # that gives a memory, that it leaves the cells alone; the equations then hold where the block has room, the program's largest value
@@ -905,7 +907,7 @@ def reflect(name, entry, prog, no_proof):
     kqfn = lambda x: "" if re.search(r"__l\d+(__v\d+)?$", x) else kqunm(x).split("kqcopy.")[-1]
     fqf = [(m, kqfn(re.match(r"(.*)__f\d+__fq__wy$", m).group(1)), int(re.search(r"__f(\d+)__fq__wy$", m).group(1))) for m in fqs]
     vmr = any(re.search(r"__v\d+__rq__wy$", m) for m, _ in rrs)
-    qmr = any(re.search(r"__[qk]\d+__rq__wy$", m) for m, _ in rrs)
+    qmr = any(re.search(r"__[qkm]\d+__rq__wy$", m) for m, _ in rrs)
     rrw2 = []
     roomw = max([int(r[2]) for r in recs] + [1])
     roomR = f"({roomw} <= Sint63.to_Z (KQ.KQBound.kq_len 63) + 1)%Z" if roomw > 1 else "True"
@@ -928,7 +930,7 @@ def reflect(name, entry, prog, no_proof):
     for j, (m, h) in enumerate(rrs):
         F = m[:-len("__rq__wy")] + "__rp__wy"
         # (step 78) what is read through the slot block: its statement names the function by what follows the row
-        h = kqfn(re.match(r"(.*)__[vqk]\d+__rq__wy$", m).group(1)) if re.search(r"__[vqk]\d+__rq__wy$", m) else h
+        h = kqfn(re.match(r"(.*)__[vqkm]\d+__rq__wy$", m).group(1)) if re.search(r"__[vqkm]\d+__rq__wy$", m) else h
         unf = " ".join(x for x in [h, F] if x)
         unfc = ", ".join(x for x in [h, F] if x)
         if m.endswith("__n__rq__wy"):
@@ -938,7 +940,7 @@ def reflect(name, entry, prog, no_proof):
             t += (f"Lemma {name}_rr{j} {hrb}: {m}.\nProof. unfold {m}. intros; unfold {unfc}; first [solve [KQRWf.own_step0] | solve [cbn; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0]]. Qed.\n")
         else:
             # (step 78) the counter of a function read through the slot block may stand anywhere
-            mv = re.search(r"__[vqgk](\d+)__rq__wy$", m)
+            mv = re.search(r"__[vqgkm](\d+)__rq__wy$", m)
             rv = int(mv.group(1)) if mv else 0
             d0 = f"do {rv} intro; " if rv else ""
             ost = "KQRWf.nr_step" if re.search(r"__k\d+__rq__wy$", m) else "KQRWf.own_step"
