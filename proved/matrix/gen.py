@@ -2846,6 +2846,109 @@ addA('q_nat_pair_ret', "", 'let (q, r) := sp n in if Nat.eqb r 0 then a else Uin
 addA('q_divmod', "", 'Uint63.of_nat (fst (Nat.divmod n 3 0 3))',
      '')
 
+# a memory in a value of any data type; a sixth probe (step 87)
+addA('zf_h_user', "", 'match st1 a s with Ok v t => v + rd 0 a t | Err e => e end',
+     'Inductive res := Ok (v : int) (t : mem) | Err (e : int).\nDefinition st1 (i : int) (t : mem) : res := if i =? 0 then Err 1 else Ok i (upd 0 i i t).\n')
+addA('zf_h_user_seq', "", 'match st1 a s with Ok v t => match st1 b t with Ok w u => v + w + rd 0 a u | Err e => e + v end | Err e => e end',
+     'Inductive res := Ok (v : int) (t : mem) | Err (e : int).\nDefinition st1 (i : int) (t : mem) : res := if i =? 0 then Err 1 else Ok i (upd 0 i i t).\n')
+addA('zf_h_sum', "", 'match st1 a s with inr (v, t) => v + rd 0 a t | inl e => e end',
+     'Definition st1 (i : int) (t : mem) : int + (int * mem) := if i =? 0 then inl 1 else inr (i, upd 0 i i t).\n')
+addA('zf_h_sum_left', "", 'match st1 a s with inl (v, t) => v + rd 0 a t | inr e => e end',
+     'Definition st1 (i : int) (t : mem) : (int * mem) + int := if i =? 0 then inr 1 else inl (i, upd 0 i i t).\n')
+addA('zf_h_sum_mem', "", 'match st1 a s with inr t => rd 0 a t | inl e => e end',
+     'Definition st1 (i : int) (t : mem) : int + mem := if i =? 0 then inl 1 else inr (upd 0 i i t).\n')
+addA('zf_h_both', "", 'match st1 a s with inl t => rd 0 1 t | inr t => rd 0 a t end',
+     'Definition st1 (i : int) (t : mem) : mem + mem := if i =? 0 then inl (upd 0 1 1 t) else inr (upd 0 i i t).\n')
+addA('zf_h_three', "", 'match st1 a s with A3 t => rd 0 0 t | B3 x t => x + rd 0 a t | C3 e f => e + f end',
+     'Inductive r3c := A3 (t : mem) | B3 (x : int) (t : mem) | C3 (e f : int).\nDefinition st1 (i : int) (t : mem) : r3c := if i =? 0 then C3 1 2 else if i =? 1 then A3 t else B3 i (upd 0 i i t).\n')
+addA('zf_r_user', "", 'match lp n a s with Ok v t => v + rd 0 a t | Err e => e end',
+     'Inductive res := Ok (v : int) (t : mem) | Err (e : int).\nFixpoint lp (k : nat) (i : int) (t : mem) : res := match k with O => Ok i t | S m => if i =? 7 then Err i else lp m (i + 1) (upd 0 i 1 t) end.\n')
+addA('zf_r_user_after', "", 'match lp n a s with Ok v t => v + rd 0 a t | Err e => e end',
+     'Inductive res := Ok (v : int) (t : mem) | Err (e : int).\nFixpoint lp (k : nat) (i : int) (t : mem) : res := match k with O => Ok i t | S m => match lp m (i + 1) t with Ok v u => Ok (v + 1) (upd 0 i v u) | Err e => Err (e + 1) end end.\n')
+addA('zf_r_user_noval', "", 'match lp n a s with Good t => rd 0 a t | Bad => 0 end',
+     'Inductive rm := Good (t : mem) | Bad.\nFixpoint lp (k : nat) (i : int) (t : mem) : rm := match k with O => Good t | S m => if i =? 7 then Bad else lp m (i + 1) (upd 0 i 1 t) end.\n')
+addA('zf_r_sum', "", 'match lp n a s with inr (v, t) => v + rd 0 a t | inl e => e end',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : int + (int * mem) := match k with O => inr (i, t) | S m => if i =? 7 then inl i else lp m (i + 1) (upd 0 i 1 t) end.\n')
+addA('zf_r_sum_after', "", 'match lp n a s with inr (v, t) => v + rd 0 a t | inl e => e end',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : int + (int * mem) := match k with O => inr (i, t) | S m => match lp m (i + 1) t with inr (v, u) => inr (v + 1, upd 0 i v u) | inl e => inl (e + 1) end end.\n')
+addA('zf_r_sum_mem', "", 'match lp n a s with inr t => rd 0 a t | inl e => e end',
+     'Fixpoint lp (k : nat) (i : int) (t : mem) : int + mem := match k with O => inr t | S m => if i =? 7 then inl i else lp m (i + 1) (upd 0 i 1 t) end.\n')
+addA('zf_r_three', "", 'match lp n a s with A3 t => rd 0 0 t | B3 x t => x + rd 0 a t | C3 e f => e + f end',
+     'Inductive r3c := A3 (t : mem) | B3 (x : int) (t : mem) | C3 (e f : int).\nFixpoint lp (k : nat) (i : int) (t : mem) : r3c := match k with O => A3 t | S m => if i =? 7 then C3 i 1 else if i =? 8 then B3 i t else lp m (i + 1) (upd 0 i 1 t) end.\n')
+addA('zf_r_field_record', "", 'match lp n a s with OkR x t => pa x + pb x + rd 0 a t | ErrR => 0 end',
+     'Record pr := mkpr { pa : int; pb : int }.\nInductive rr := OkR (x : pr) (t : mem) | ErrR.\nFixpoint lp (k : nat) (i : int) (t : mem) : rr := match k with O => OkR (mkpr i i) t | S m => if i =? 7 then ErrR else lp m (i + 1) (upd 0 i 1 t) end.\n')
+addA('zf_r_two_funcs', "", 'match lq n a s with Ok v t => v + rd 0 a t | Err e => e end',
+     'Inductive res := Ok (v : int) (t : mem) | Err (e : int).\nFixpoint lp (k : nat) (i : int) (t : mem) : res := match k with O => Ok i t | S m => lp m (i + 1) (upd 0 i 1 t) end.\nFixpoint lq (k : nat) (i : int) (t : mem) : res := match k with O => lp 2 i t | S m => match lq m i t with Ok v u => Ok (v + 1) u | Err e => Err e end end.\n')
+addA('zf_r_in_number_fn', "", 'outer n a s',
+     'Inductive res := Ok (v : int) (t : mem) | Err (e : int).\nFixpoint lp (k : nat) (i : int) (t : mem) : res := match k with O => Ok i t | S m => lp m (i + 1) (upd 0 i 1 t) end.\nFixpoint outer (j : nat) (x : int) (t : mem) : int := match j with O => x | S m => match lp 2 x t with Ok v u => outer m (x + v) u | Err e => e end end.\n')
+addA('zf_r_let', "", 'let r := lp n a s in match r with Ok v _ => v | Err e => e end',
+     'Inductive res := Ok (v : int) (t : mem) | Err (e : int).\nFixpoint lp (k : nat) (i : int) (t : mem) : res := match k with O => Ok i t | S m => lp m (i + 1) (upd 0 i 1 t) end.\n')
+addA('zf_r_old_mem', "", 'match lp n a s with Ok v _ => v | Err e => rd 0 0 s end',
+     'Inductive res := Ok (v : int) (t : mem) | Err (e : int).\nFixpoint lp (k : nat) (i : int) (t : mem) : res := match k with O => Ok i t | S m => lp m (i + 1) (upd 0 i 1 t) end.\n')
+addA('zf_m_sum', "", 'match total n a s with inr (x, _) => x | inl e => 0 - e end',
+     'Definition R (A : Type) := mem -> int + (A * mem).\nDefinition rok {A} (x : A) : R A := fun t => inr (x, t).\nDefinition rbind {A B} (m : R A) (f : A -> R B) : R B := fun t => match m t with inr (x, u) => f x u | inl e => inl e end.\nDefinition rerr {A} (e : int) : R A := fun _ => inl e.\nDefinition get (i : int) : R int := fun t => if i <? 16 then inr (rd 0 i t, t) else inl i.\nFixpoint total (k : nat) (i : int) : R int := match k with O => rok 0 | S m => rbind (get i) (fun v => rbind (total m (i + 1)) (fun r => rok (v + r))) end.\n')
+addA('zf_m_user', "", 'match total n a s with Ok x _ => x | Err e => 0 - e end',
+     'Inductive res (A : Type) := Ok (v : A) (t : mem) | Err (e : int).\nArguments Ok {A} v t. Arguments Err {A} e.\nDefinition R (A : Type) := mem -> res A.\nDefinition rok {A} (x : A) : R A := fun t => Ok x t.\nDefinition rbind {A B} (m : R A) (f : A -> R B) : R B := fun t => match m t with Ok x u => f x u | Err e => Err e end.\nDefinition get (i : int) : R int := fun t => if i <? 16 then Ok (rd 0 i t) t else Err i.\nFixpoint total (k : nat) (i : int) : R int := match k with O => rok 0 | S m => rbind (get i) (fun v => rbind (total m (i + 1)) (fun r => rok (v + r))) end.\n')
+addA('zq_res_sum_mem', "", 'match total n a s with inr (x, _) => x | inl e => 0 - e end',
+     'Definition R (A : Type) := mem -> int + (A * mem).\nDefinition rok {A} (x : A) : R A := fun t => inr (x, t).\nDefinition rbind {A B} (m : R A) (f : A -> R B) : R B := fun t => match m t with inr (x, u) => f x u | inl e => inl e end.\nDefinition rerr {A} (e : int) : R A := fun _ => inl e.\nDefinition get (i : int) : R int := fun t => if i <? 16 then inr (rd 0 i t, t) else inl i.\nFixpoint total (k : nat) (i : int) : R int :=\n  match k with O => rok 0 | S m => rbind (get i) (fun v => rbind (total m (i + 1)) (fun r => rok (v + r))) end.\n')
+addA('zq_st_record', "", 'match run n a (mkst 0 0) with (x, z) => x + cnt z + sum0 z end',
+     'Record st := mkst { cnt : int; sum0 : int }.\nDefinition S0 (A : Type) := st -> A * st.\nDefinition sret {A} (x : A) : S0 A := fun z => (x, z).\nDefinition sbind {A B} (m : S0 A) (f : A -> S0 B) : S0 B := fun z => let (x, z2) := m z in f x z2.\nDefinition tick (v : int) : S0 int := fun z => (cnt z, mkst (cnt z + 1) (sum0 z + v)).\nFixpoint run (k : nat) (i : int) : S0 int :=\n  match k with O => sret i | S m => sbind (tick i) (fun _ => run m (i + 1)) end.\n')
+addA('zq_reader', "", 'walk n a (mkcfg 10 b)',
+     'Record cfg := mkcfg { lim : int; stepz : int }.\nDefinition Rd (A : Type) := cfg -> A.\nDefinition rret {A} (x : A) : Rd A := fun _ => x.\nDefinition rbnd {A B} (m : Rd A) (f : A -> Rd B) : Rd B := fun c => f (m c) c.\nDefinition ask : Rd int := fun c => stepz c.\nFixpoint walk (k : nat) (i : int) : Rd int :=\n  match k with O => rret i | S m => rbnd ask (fun d => walk m (i + d)) end.\n')
+addA('zq_option_pure', "", 'match calc a b 3 with Some v => v | None => 0 end',
+     'Definition obind {A B} (m : option A) (f : A -> option B) : option B := match m with Some x => f x | None => None end.\nDefinition safe_div (x y : int) : option int := if y =? 0 then None else Some (x / y).\nDefinition calc (x y z : int) : option int := obind (safe_div x y) (fun p => obind (safe_div p z) (fun q => Some (p + q))).\n')
+addA('zq_nested_pats', "", 'pick (oo a) (oo b) + pick (oo (a - 1)) None',
+     'Definition pick (x y : option int) : int :=\n  match x, y with Some p, Some q => p + q | Some p, None => p | None, Some q => q | None, None => 0 end.\nDefinition oo (x : int) : option int := if x <? 0 then None else Some x.\n')
+addA('zq_tuple_bools', "", 'mode (a <? b) (b <? 3) + mode (b <? a) (a <? 3)',
+     'Definition mode (x y : bool) : int := match x, y with true, true => 1 | true, false => 2 | false, true => 3 | false, false => 4 end.\n')
+addA('zq_enum_state', "", 'ticks (runj n (mkjob Idle a 0))',
+     'Inductive phase := Idle | Busy | Done.\nDefinition phase_eq (x y : phase) : bool := match x, y with Idle, Idle | Busy, Busy | Done, Done => true | _, _ => false end.\nRecord job := mkjob { ph : phase; left0 : int; ticks : int }.\nDefinition stepj (j : job) : job :=\n  match ph j with\n  | Idle => {| ph := Busy; left0 := left0 j; ticks := ticks j |}\n  | Busy => if left0 j <=? 1 then {| ph := Done; left0 := 0; ticks := ticks j + 1 |} else {| ph := Busy; left0 := left0 j - 1; ticks := ticks j + 1 |}\n  | Done => j\n  end.\nFixpoint runj (k : nat) (j : job) : job := match k with O => j | S m => if phase_eq (ph j) Done then j else runj m (stepj j) end.\n')
+addA('zq_nested_records', "", 'x0 (p1b (shrink n (mkseg (mkpt 0 0) (mkpt a b))))',
+     'Record pt := mkpt { x0 : int; y0 : int }.\nRecord seg := mkseg { p0 : pt; p1b : pt }.\nDefinition mid (s0 : seg) : pt := mkpt ((x0 (p0 s0) + x0 (p1b s0)) / 2) ((y0 (p0 s0) + y0 (p1b s0)) / 2).\nFixpoint shrink (k : nat) (s0 : seg) : seg := match k with O => s0 | S m => shrink m (mkseg (p0 s0) (mid s0)) end.\n')
+addA('zq_struct_in_mem', "", 'pr (load a (bump n a s))',
+     'Record task := mkt { pr : int; st0 : int; nx : int }.\nDefinition load (i : int) (t : mem) : task := mkt (rd 0 (3 * i) t) (rd 0 (3 * i + 1) t) (rd 0 (3 * i + 2) t).\nDefinition store (i : int) (x : task) (t : mem) : mem := upd 0 (3 * i) (pr x) (upd 0 (3 * i + 1) (st0 x) (upd 0 (3 * i + 2) (nx x) t)).\nFixpoint bump (k : nat) (i : int) (t : mem) : mem :=\n  match k with O => t | S m => let x := load i t in bump m (nx x) (store i (mkt (pr x + 1) (st0 x) (nx x)) t) end.\n')
+addA('zq_bitfields', "", 'getf (setf a 4 8 b) 4 8 + rot32 a 7',
+     'Definition getf (w lo len : int) : int := (w >> lo) land ((1 << len) - 1).\nDefinition setf (w lo len v : int) : int := let m := ((1 << len) - 1) << lo in (w land (m lxor (0 - 1))) lor ((v << lo) land m).\nDefinition rot32 (x k : int) : int := ((x << k) lor (x >> (32 - k))) land 4294967295.\n')
+addA('zq_fixed_sat', "", 'powf n a 65536',
+     'Definition sat_add (x y lim : int) : int := let r := x + y in if lim <? r then lim else r.\nDefinition fxmul (x y : int) : int := (x * y) >> 16.\nFixpoint powf (k : nat) (x acc : int) : int := match k with O => acc | S m => powf m x (sat_add (fxmul acc x) 1 1000000) end.\n')
+addA('zq_isqrt', "", 'bis 40 0 (a + 1) a',
+     'Fixpoint bis (k : nat) (lo hi x : int) : int :=\n  match k with\n  | O => lo\n  | S m => let mid := (lo + hi) / 2 in\n           if mid * mid <=? x then bis m mid hi x else bis m lo mid x\n  end.\n')
+addA('zq_knapsack', "", 'rd 0 a (outer n 0 a s)',
+     'Fixpoint inner (k : nat) (w wi vi : int) (t : mem) : mem :=\n  match k with\n  | O => t\n  | S m =>\n      if w <? wi then t else\n      let c := rd 0 (w - wi) t + vi in\n      inner m (w - 1) wi vi (if rd 0 w t <? c then upd 0 w c t else t)\n  end.\nFixpoint outer (k : nat) (i cap : int) (t : mem) : mem :=\n  match k with\n  | O => t\n  | S m => outer m (i + 1) cap (inner 100 cap (rd 1 i t) (rd 2 i t) t)\n  end.\n')
+addA('zq_matmul_loops', "", 'rd 2 a (rows n 0 s)',
+     'Fixpoint dot (k : nat) (i j z acc : int) (t : mem) : int :=\n  match k with O => acc | S m => dot m i j (z + 1) (acc + rd 0 (i * 4 + z) t * rd 1 (z * 4 + j) t) t end.\nFixpoint row (k : nat) (i j : int) (t : mem) : mem :=\n  match k with O => t | S m => row m i (j + 1) (upd 2 (i * 4 + j) (dot 4 i j 0 0 t) t) end.\nFixpoint rows (k : nat) (i : int) (t : mem) : mem :=\n  match k with O => t | S m => rows m (i + 1) (row 4 i 0 t) end.\n')
+addA('zq_strings', "", 'let t := rev2 n 0 a s in let (e, u) := itoa n b 0 t in slen n a 0 u + atoi n 0 0 u + e',
+     'Fixpoint slen (k : nat) (i acc : int) (t : mem) : int :=\n  match k with O => acc | S m => if rd8 0 i t =? 0 then acc else slen m (i + 1) (acc + 1) t end.\nFixpoint rev2 (k : nat) (i j : int) (t : mem) : mem :=\n  match k with\n  | O => t\n  | S m => if i <? j then rev2 m (i + 1) (j - 1) (upd8 0 i (rd8 0 j t) (upd8 0 j (rd8 0 i t) t)) else t\n  end.\nFixpoint atoi (k : nat) (i acc : int) (t : mem) : int :=\n  match k with O => acc | S m => let c := rd8 0 i t in if (48 <=? c) && (c <=? 57) then atoi m (i + 1) (acc * 10 + c - 48) t else acc end.\nFixpoint itoa (k : nat) (v i : int) (t : mem) : int * mem :=\n  match k with\n  | O => (i, t)\n  | S m => if v =? 0 then (i, t) else itoa m (v / 10) (i + 1) (upd8 1 i (48 + v mod 10) t)\n  end.\n')
+addA('zq_list_in_mem', "", 'match rev_list n a 0 s with (r, t) => sum_list n r 0 t end',
+     'Definition nextp (p : int) (t : mem) : int := rd 0 (p + 1) t.\nDefinition valp (p : int) (t : mem) : int := rd 0 p t.\nFixpoint sum_list (k : nat) (p acc : int) (t : mem) : int :=\n  match k with O => acc | S m => if p =? 0 then acc else sum_list m (nextp p t) (acc + valp p t) t end.\nFixpoint rev_list (k : nat) (p prev : int) (t : mem) : int * mem :=\n  match k with\n  | O => (prev, t)\n  | S m => if p =? 0 then (prev, t) else let q := nextp p t in rev_list m q p (upd 0 (p + 1) prev t)\n  end.\n')
+addA('zq_tree_ptrs', "", 'sum_tree n a (insert n a b 50 s)',
+     'Fixpoint sum_tree (k : nat) (p : int) (t : mem) : int :=\n  match k with\n  | O => 0\n  | S m => if p =? 0 then 0 else rd 0 p t + sum_tree m (rd 0 (p + 1) t) t + sum_tree m (rd 0 (p + 2) t) t\n  end.\nFixpoint insert (k : nat) (p v fresh : int) (t : mem) : mem :=\n  match k with\n  | O => t\n  | S m =>\n      let u := rd 0 p t in\n      let side := if v <? u then p + 1 else p + 2 in\n      let c := rd 0 side t in\n      if c =? 0 then upd 0 side fresh (upd 0 fresh v t) else insert m c v fresh t\n  end.\n')
+addA('zq_dfs_mutual', "", 'rd 1 a (dfs n a s)',
+     'Fixpoint dfs (k : nat) (u : int) (t : mem) : mem :=\n  match k with\n  | O => t\n  | S m => if rd 1 u t =? 1 then t else nbrs m (rd 2 u t) (upd 1 u 1 t)\n  end\nwith nbrs (k : nat) (e : int) (t : mem) : mem :=\n  match k with\n  | O => t\n  | S m => if rd 0 e t =? 0 then t else nbrs m (e + 1) (dfs m (rd 0 e t) t)\n  end.\n')
+addA('zq_generic_hash', "", 'probe n (fun i => (i * 31 + b) mod 64) a a s',
+     'Fixpoint probe (k : nat) (h : int -> int) (i x : int) (t : mem) : int :=\n  match k with O => 0 | S m => if rd 0 (h i) t =? x then h i else probe m h (i + 1) x t end.\n')
+addA('zq_class_container', "", 'bget a (fillb n a b s)',
+     'Class Bag (B : Type) := { bget : int -> B -> int; bput : int -> int -> B -> B }.\n#[export] Instance bag_mem : Bag mem := { bget := fun i t => rd 0 i t; bput := fun i v t => upd 0 i v t }.\nFixpoint fillb {B} `{Bag B} (k : nat) (i v : int) (x : B) : B :=\n  match k with O => x | S m => fillb m (i + 1) v (bput i v x) end.\n')
+addA('zq_functor_mem', "", 'O1.get a (O1.clear n a s)',
+     'Module Type STORE. Parameter blk : int. End STORE.\nModule Ops (X : STORE).\n  Definition get (i : int) (t : mem) : int := rd X.blk i t.\n  Definition put (i v : int) (t : mem) : mem := upd X.blk i v t.\n  Fixpoint clear (k : nat) (i : int) (t : mem) : mem := match k with O => t | S m => clear m (i + 1) (put i 0 t) end.\nEnd Ops.\nModule B1 <: STORE. Definition blk : int := 1. End B1.\nModule O1 := Ops B1.\n')
+addA('zq_section_blk', "", 'tget 2 a (tfill 2 n a b s)',
+     'Section Tab.\nVariable blk : int.\nDefinition tget (i : int) (t : mem) : int := rd blk i t.\nDefinition tput (i v : int) (t : mem) : mem := upd blk i v t.\nFixpoint tfill (k : nat) (i v : int) (t : mem) : mem := match k with O => t | S m => tfill m (i + 1) v (tput i v t) end.\nEnd Tab.\n')
+addA('zq_local_fn_mem', "", 'rd 0 a (upd2 a s)',
+     'Definition upd2 (i : int) (t : mem) : mem :=\n  let w := fun j (u : mem) => upd 0 j (rd 0 j u + 1) u in\n  w i (w (i + 1) t).\n')
+addA('zq_iter_closure', "", 'rd 0 a (iter_range n a (fun i t => upd 0 i (i + b) t) s)',
+     'Fixpoint iter_range (k : nat) (i : int) (f : int -> mem -> mem) (t : mem) : mem :=\n  match k with O => t | S m => iter_range m (i + 1) f (f i t) end.\n')
+addA('zq_nat_match3', "", 'lvl n + lvl 2 + lvl 7',
+     'Definition lvl (k : nat) : int := match k with 0%nat => 10 | 1%nat => 20 | 2%nat => 30 | _ => 40 end.\n')
+addA('zq_list_nth_table', "", 'lookup tbl 3 + List.nth 4 tbl 0 + fold_right PrimInt63.add 0 tbl',
+     'Definition tbl : list int := 3 :: 1 :: 4 :: 1 :: 5 :: 9 :: 2 :: 6 :: nil.\nFixpoint lookup (l : list int) (i : nat) : int := match l, i with nil, _ => 0 | x :: _, O => x | _ :: r, S j => lookup r j end.\n')
+addA('zq_fnv_u64', "", 'let r := fnv n a (u64_of_halves 3421674724 2216829733) s in w_lo r',
+     'Fixpoint fnv (k : nat) (i : int) (h : u64) (t : mem) : u64 :=\n  match k with\n  | O => h\n  | S m => fnv m (i + 1) (u64_mul (u64_xor h (u64_of_int (rd8 0 i t))) (u64_of_halves 256 435)) t\n  end.\n')
+addA('zq_early_exit_fold', "", 'match findf n a (fun i => rd 0 i s =? b) with Some i => i | None => 0 - 1 end',
+     'Fixpoint findf (k : nat) (i : int) (p : int -> bool) : option int :=\n  match k with O => None | S m => if p i then Some i else findf m (i + 1) p end.\n')
+addA('zq_acc_record_fold', "", 'let z := scan n a (mks 1000000 0) s in mx z - mn z',
+     'Record st2 := mks { mn : int; mx : int }.\nDefinition upd_st (z : st2) (v : int) : st2 := mks (if v <? mn z then v else mn z) (if mx z <? v then v else mx z).\nFixpoint scan (k : nat) (i : int) (z : st2) (t : mem) : st2 := match k with O => z | S m => scan m (i + 1) (upd_st z (rd 0 i t)) t end.\n')
+addA('zq_pair_ret_nontail', "", 'let (l, h0) := minmax n a s in h0 - l',
+     'Fixpoint minmax (k : nat) (i : int) (t : mem) : int * int :=\n  match k with\n  | O => (1000000, 0)\n  | S m => let (lo, hi) := minmax m (i + 1) t in let v := rd 0 i t in (if v <? lo then v else lo, if hi <? v then v else hi)\n  end.\n')
 # tests that cannot be moves, many in one expression (step 86)
 addA('ze_mod_8', "", '(a + 0) mod (b + 1) + (a + 1) mod (b + 1) + (a + 2) mod (b + 1) + (a + 3) mod (b + 1) + (a + 4) mod (b + 1) + (a + 5) mod (b + 1) + (a + 6) mod (b + 1) + (a + 7) mod (b + 1)',
      '')

@@ -1,0 +1,34 @@
+(* a memory in a value of a data type of the program's and of a sum, given back by a recursion and by a helper; an error monad over a sum *)
+Inductive res := Ok (v : int) (t : mem) | Err (e : int).
+Definition put (i v : int) (t : mem) : res :=
+  if i <? 8 then Ok v (upd 1 i v t) else Err i.
+Fixpoint fill (k : nat) (i v : int) (t : mem) : res :=
+  match k with
+  | O => Ok i t
+  | S m =>
+      match put i v t with
+      | Ok w u => fill m (i + 1) (w + 1) u
+      | Err e => Err (e + 100)
+      end
+  end.
+Definition R (A : Type) := mem -> int + (A * mem).
+Definition rok {A} (x : A) : R A := fun t => inr (x, t).
+Definition rbind {A B} (m : R A) (f : A -> R B) : R B := fun t => match m t with inr (x, u) => f x u | inl e => inl e end.
+Definition get (i : int) : R int := fun t => if i <? 8 then inr (rd 1 i t, t) else inl i.
+Fixpoint total (k : nat) (i : int) : R int :=
+  match k with
+  | O => rok 0
+  | S m => rbind (get i) (fun v => rbind (total m (i + 1)) (fun r => rok (v + r)))
+  end.
+Definition solve (n : nat) (a : int) (s : mem) : int :=
+  match fill n a 10 s with
+  | Ok e t =>
+      match total n a t with
+      | inr (x, u) => x * 1000 + e * 10 + rd 1 a u
+      | inl f => 1 + f
+      end
+  | Err e => e
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve (kq_nat (kq_arg 0)) (kq_arg 1) (kq_input 0).
