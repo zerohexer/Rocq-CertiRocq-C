@@ -5404,6 +5404,16 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   refused**; `check_trust.py`: `trust unchanged`.  Next: what a fifth probe found: a memory inside an option, a helper's choice of
   a value and a memory.
 
+**Step 85, what a fifth probe found: a memory inside an option, a helper's choice of a value and a memory (§3.1, §12.A) — the design (2026-11-07).**  34 larger programs written as one writes them, several features at once: a hash table, an allocator, a tokenizer, a stack machine, a heap, a BFS, a big number, a CRC, a matrix power, a class of numbers, dates, a quicksort, a driver's ring, a scheduler, a tree in an array, UTF-8, base64, functors, closures, an error monad.  26 are read as they stand.  What was left are classes, each with its cells:
+- *A match on a helper's choice of a value and a memory* (`match alloc s with (Some p, t) => ..`, `let (y, u) := step x t in ..`, `step` a chain of tests over a record and a memory): the helper written out (step 77), then the match in each arm where it reduces (`cf_on`, `cf_fl`, `cf_red`); not where that would repeat a long text over many ends: a gap with its cell.  The same in what stands in a recursive function's place.
+- *A memory inside an option from a helper* (`push : .. -> option mem`, `pop : .. -> option (int * mem)`): written out, as a value and a memory are (`cf_opt`); `Some x` taken apart by a let of what it holds.
+- *A memory inside an option from a recursion* (`mem -> option (A * mem)`, an error monad over the memory; `option mem`): a function of its own in its place gives back the value and the memory apart, `option A * mem` (`int * mem` for `option mem`, 1 for `Some`), and the function is the one in its place wrapped, at every argument, by induction (`om_wrap`, `om_wrap0`, `om_tr`, `om_rows`, `om_stmt`, `om_sub`, mark `rp_om`, `__m<rarg>`).  `None` hands back the newest memory in scope: where there is no value the memory is not looked at, so nothing depends on which, and no fact is added.  Its value goes through the slot block by step 78.
+- *A method through a helper over a class* (`same {T} `{EqDec T} x y`): written out at a closed instance; what a class's program unfolds is named to the proof (`__clu__wy`).
+- *The C*: a program with no such function: byte-identical.  Written out in each arm, where it was refused before.
+- *Left, with cells*: a memory in a data type of the program's or in a `sum` (`A_zd_d_*`), the memory before a call that gave nothing (`A_zd_r_default`).  And the matrix power (`A_zp_mat_pow`): many tests that cannot be moves in one expression make the C a power of them: step 86.
+- *The acceptance*: `proved/examples/optm_fix`: an allocator's helper, a ring's helper, a fill by recursion over it, a copy in an error monad; the answer worked out apart: 1674.
+- *Cells*: 76: 42 `A_zd_*`, the probe's 34 `A_zp_*`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5588,7 +5598,8 @@ Pushed to the public repository up to `413a349` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 84 (a class or a record of functions given to a recursive function: the construct table 3331 of 3464, 54 by design, 78 gaps, 4 gaps read), the C, the gate |
+| (this commit) | §12.V: step 85's design -- what a fifth probe found: a memory inside an option, a helper's choice of a value and a memory |
+| `c5eaa9b` | §12.V: step 84 (a class or a record of functions given to a recursive function: the construct table 3331 of 3464, 54 by design, 78 gaps, 4 gaps read), the C, the gate |
 | `413a349` | `proved/KQRReify.v` step 84: a function given to a class's method is put in |
 | `248f2d4` | `proved/KQRReify.v` + `kitc.py` + `matrix` + `examples/cls_fix` step 84: a class or a record of functions given to a recursive function; 38 cells |
 | `02c4d50` | §12.V: step 84's design -- a class's instance read as a type, a record of functions given to a recursive function |
