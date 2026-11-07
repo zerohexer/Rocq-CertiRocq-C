@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3098 of 3224, 77 gaps, 48 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3146 of 3272, 76 gaps, 49 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -5302,6 +5302,17 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The acceptance*: `proved/examples/stat_fix`: a state record through a step function and a recursion, the memory before the number in a pair; the answer worked out apart: 228.
 - *Cells*: 48, `A_x_*`.
 
+**Step 80, a memory in a record or a pair — the result (2026-11-07).**
+- *The reader*: `vm_sh`, `vm_needs`, `vm_qs`, `vm_qdef`, `vm_qcalls`, `vm_qtail`, `vm_qrows`, `vm_qstmt`, `vm_qsub`, `vm_pj`, `vm_open`, `vm_fs`, `vm_yr`, a row's mark 993; `vm_lets` of any such type, the function's own call too; `um_inl` writes out a helper holding such a value, not a number and a memory, which is read as it was (the first version wrote that out too, and the chain stopped on `monad_fix`'s C); on a function read as a pair the value may be a boolean or nothing (`vm_ty_q`); `vm_with_prod`, `vm_with_unit`.  *`KQRWf.v`*: `kq_rw2`; a match on a value not told apart by a test is taken apart last.  *`kitc.py`*: such a row's lemma goes to `kq_rw2`; what it is of stays folded.  `KQR.v` unchanged.
+- *The acceptance*: `proved/examples/stat_fix`: proved, built, 228.
+- *Cells*: 48 more: 44 proved; `A_x_p_two_states` by design, its control in its own text; gaps `A_x_f_three`, `A_x_p_var_rec`, `A_x_r_local`.  Four gaps read: `A_q_mem_record`, `A_v_o_record_mem`, `_o_value_mem_param`, `_o_ret_in_pair_rev`.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62; step 79's files / these): `HWP_kernel` 3.16 / 3.12 s, `HWP_own` 2.12 / 2.14, `HWP_irqnow` 1.80 / 1.82 — the same.
+- The C: the 86 programs byte-identical.  The construct table (on `d9b85b2`): **3146 of 3272 through the verified compiler**, 49
+  by design, 76 gaps, 1 not Rocq (was 3098 of 3224: 44 of the 48 new cells read, 1 by design, 3 gaps; 4 gaps read; no cell lost).
+  The gate on `d9b85b2`, the walk switched off: `make.sh` `core-ok`; examples 51 / 51; corpus 36 / 36; the five kernels (16 / 17 /
+  19 / 16 / 16 s); **95 programs through the verified compiler, 0 refused**; `check_trust.py`: `trust unchanged`.  Next: a proof
+  as a parameter, a value with its proof as a parameter.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5482,11 +5493,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `4000208` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `d9b85b2` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 80's design -- a memory in a record or a pair, at any place |
+| (this commit) | §12.V: step 80 (a memory in a record or a pair: the construct table 3146 of 3272, 49 by design, 76 gaps, 4 gaps read), the C, the gate |
+| `d9b85b2` | `proved/KQRWf.v` + `KQRReify.v` + `kitc.py` + `matrix` + `examples/stat_fix` step 80: a memory in a record or a pair, at any place; 48 cells |
+| `2b4f456` | §12.V: step 80's design -- a memory in a record or a pair, at any place |
 | `c2120b8` | §12.V: step 79 (a value and a memory from the other forms of recursion: the construct table 3098 of 3224, 48 by design, 77 gaps, 6 gaps read), the C, the gate |
 | `4000208` | `proved/KQRWf.v` + `KQRReify.v` + `kitc.py` + `matrix` + `examples/sect_fix` step 79: a value and a memory under parameters and from a local fix; 41 cells |
 | `86d090f` | §12.V: step 79's design -- what is left of a value and a memory given back |
