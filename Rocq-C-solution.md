@@ -5380,6 +5380,17 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   refused**; `check_trust.py`: `trust unchanged`.  Next: a class's instance read as a type, a record of functions given to a
   recursive function.
 
+**Step 84, a class or a record of functions given to a recursive function (§3.5, §12.A, D22) — the design (2026-11-07).**  `Fixpoint rep {T} `{Monoid T} (k : nat) (x : T)`, `Fixpoint use (k : nat) (o : ops) (x : int)`: ordinary Rocq, and the instance or the record is known where it is called.  A function value not known from the text needs a runtime; these are known.  Step 69's route takes them: a function of its own in the function's place, equal at every argument.
+- *A class after the types a fixpoint starts with* (`lead_inst`, `cl_ty`): what it is given, closed, is read as a type is: a row per type and instance, `rep'` for `rep int add_m`.  A class counts if its record holds a function or it is a record of the program's over a type.
+- *A method at a closed instance* (`cl_red`, `cl_whnf`, `cl_proj`, `cl_beta`): what the instance says, written out where the row or the text has it: the instance's definition unfolded, an instance built from others (`d_pair d_int d_int`) included, the field taken, what it is given put in, a call by a `let`, so that a method using an argument twice is one call of it in the C.
+- *A record of functions among a recursive function's parameters* (`sp_sh`, step 81's route for a value with its proof): its fields as parameters, functions given as functions are at step 10, so a field that names the caller's variables is a capture.  A helper given such a record is written out (`sp_uh`); a projection takes what follows the record (`sp_pj`).
+- *A record over a type in the table*: its constructor takes the type (`kitc.py`): `@Build_Dflt int`.
+- *What is proved*: each row equal to the function at every argument, by the kernel; `denote s = f'`.  Nothing assumed, nothing changed in `KQR.v`.  *The C*: a program with no such function: byte-identical.
+- *By design*: a record of functions built anew at each round from the data (`A_zc_r_gives_record`): §0.5's first refusal; its control `A_zc_r_capture`.
+- *Left, with cells*: a mutual block (`A_zc_c_mutual`, `A_zc_r_mutual`), a type after the counter (`A_zc_c_counter_late`), a record of functions inside a record (`A_zc_r_nested`).
+- *The acceptance*: `proved/examples/cls_fix`: two instances of a class at a number and at a record, a class giving a boolean, a record of functions that reads and writes the memory, naming the caller's variable; the answer worked out apart: 4109666.
+- *Cells*: 38, `A_zc_*`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5564,7 +5575,8 @@ Pushed to the public repository up to `95d192b` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 83 (a counter a function gives back, used as a counter: the construct table 3294 of 3426, 53 by design, 78 gaps, 7 cells read), the C, the gate |
+| (this commit) | §12.V: step 84's design -- a class's instance read as a type, a record of functions given to a recursive function |
+| `5d67ece` | §12.V: step 83 (a counter a function gives back, used as a counter: the construct table 3294 of 3426, 53 by design, 78 gaps, 7 cells read), the C, the gate |
 | `95d192b` | `proved/KQR.v` + `KQRWf.v` + `KQRReify.v` + `kitc.py` + `matrix` + `examples/cuse_fix` step 83: a counter a function gives back, used as a counter; 70 cells |
 | `90820ee` | §12.V: step 83's design -- a counter expression as a counter, its bound proved by induction |
 | `1029a00` | §12.V: step 82 (a function giving back a counter: the construct table 3227 of 3356, 49 by design, 79 gaps, 4 gaps read), the C, the gate |
