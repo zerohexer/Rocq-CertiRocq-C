@@ -5584,6 +5584,18 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   `check_trust.py`: `trust unchanged`, 90 assumptions each by its full name.  Next: the recursive functions of the library on
   counters, `gcd`, `log2`, `sqrt` (step 93).
 
+**Step 93, the recursive functions of Rocq's library on counters: `gcd`, `sqrt`, `log2` (§2.1, §3.5, §12.A) — the design (2026-11-09).**  `Nat.gcd a b`, `Nat.sqrt n`, `Nat.log2 n`: natural, each has a definition in Rocq, and each needs a loop, which in KQL is a function of its own.  So each is a call of a function of the kit, an ordinary Rocq function over machine numbers proved equal to the library's, compiled with the program as any of its functions; nothing is added to what is assumed.
+- *The kit* (`KQRun.v`): `kq_gcdg k a b`, Euclid's loop, its budget the first operand (it decreases at every round, so no bound has to be guessed or proved); `kq_sqrtg k lo hi a`, a search between 0 and 3037000500 in 32 rounds, the square of the middle below `2^63`; `kq_log2g k x r s`, a search of six rounds over the shifts 32, 16 .. 1.  Ordinary Rocq over `PrimInt63`.
+- *What is proved* (`KQR.v`), from Rocq's lemmas on `Nat` and `Z` and its axioms of the machine's numbers alone: `kq_gcdg a (ofn a) (ofn b) = ofn (Nat.gcd a b)` for `a`, `b` below `wB` (by induction on the budget: what it is given is at most it); `kq_sqrtg 32 0 3037000500 (ofn a) = ofn (Nat.sqrt a)` (the search's invariant, `lo^2 <= a < hi^2`); `kq_log2g 6 (ofn a) 0 32 = ofn (Nat.log2 a)`.
+- *`S`*: `CLib o f a b`, `o` one of `LGcd`, `LSqrt`, `LLog2`, its meaning the library's function by conversion; its code a call of the program's function `f` with the budget and the start of the search.  `wf` asks `f`'s signature to be `o`'s (`kit_sig o`) and the operands to fit.
+- *Which function `f` is*: a kit function stands in the program's table of callees under a signature no other call reaches: the pair flag of step 44 without a memory, which every other call refuses, and its own bound (`2^63`, 33, 7), so the three are distinct.  The theorem takes one more premise, `KitsOk cs`: every callee under such a signature is the kit's function.  It is proved for each program by its constructors, the signatures compared by computation; its function is compiled under the same signature without the flag, which for a function that takes no memory is the same type and the same call, so the callee's theorem is the function's by conversion.
+- *Bounds*: each at most the larger operand (`Nat.gcd_le`, `Nat.sqrt_le_lin`, `Nat.log2_le_lin`); in the linear bound the sum.
+- *The reader*: the three by name, after the program's helpers (step 92's lesson); the kit functions put among the program's functions when its text names one; `log2_up`, `sqrt_up` opened to their definitions.
+- *By design* (§0.5, second reason): `Nat.lcm`, a product of two counters, as `Nat.mul n n` (step 70), its control `A_c2_mul_r`.
+- *The C*: a program with no such call: byte-identical.  One that has one gets the kit's function once.
+- *The acceptance*: `proved/examples/libn_fix`: gcds, square roots and logarithms over a block's cells, as budgets, tests and numbers, in a recursion; the answer worked out apart.
+- *Cells*: `A_zi_*`: each function as a budget, a number, a test, a match, a let, in a recursion, nested, on a counter of a machine number, under `Require Import Arith`, at 0 and at the largest numbers; `log2_up`, `sqrt_up`; `lcm` and its control.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5769,7 +5781,8 @@ Pushed to the public repository up to `da6b1d1` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 92 (the bit operations of Rocq's library on counters: the construct table 3680 of 3817, 59 by design, 77 gaps), the C, the gate; F76, the trust check made exact; §12.T's follow-up |
+| (this commit) | §12.V: step 93's design -- the recursive functions of Rocq's library on counters: gcd, sqrt, log2 |
+| `347d98a` | §12.V: step 92 (the bit operations of Rocq's library on counters: the construct table 3680 of 3817, 59 by design, 77 gaps), the C, the gate; F76, the trust check made exact; §12.T's follow-up |
 | `da6b1d1` | `proved/make.sh` + `TRUSTED.txt` step 92: what every lemma of the route rests on, printed from a file that imports nothing; each assumption listed once by its full name, `compare_spec` and `compares` among them (F76) |
 | `af6b6ca` | `proved/KQR.v` + `KQRReify.v` + matrix + `examples/bitn_fix` step 92: the bit operations of Rocq's library on counters, each a case of the compiler's proof; a let in a counter named once |
 | `e6e275c` | §12.V: step 92's design -- the bit operations of Rocq's library on counters |
