@@ -5495,6 +5495,14 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   (15 / 15 / 18 / 15 / 15 s); **103 programs through the verified compiler, 0 refused**; `check_trust.py`: `trust unchanged`.
   Next: an ordinary `.v` file, as simply as `lean --c`.
 
+**Step 89, an ordinary `.v` file, as simply as `lean --c` (§12.B, §0.10's fourth) — the design (2026-11-07).**  `python3 proved/kitc.py prog.v`: no `.body`, no `main` to write, no special command in the file.  A command in the file (`Kq Compile solve.`) would need a plugin under every file and adds nothing: the tool reads the file as `lean --c` reads one, and the file stays one Rocq compiles on its own.
+- *The start*: the last function of the file, or `--main=NAME`.
+- *The arguments, from the signature* (`sig_args`, `last_def`): Rocq's `Check` says the type; a number or a boolean from the command line, a counter from the command line, the memory from the memory file; a number given back is printed, a memory summed.  Any other type at the entry is refused with the type and the reason.  The `main` of a `.body` was never proved: the driver writes the same call.
+- *Libraries*: a program that requires `KQ.lib.CInt` gets no text in front of it; the reader reads a library's functions as any other file's (step 51).  One that only names them still gets the text, as a `.body` does, but then it does not compile on its own.
+- *A `.body`*: unchanged, its C byte-identical.
+- *The acceptance* (`tests/vroute.py`): every example and corpus program written as a `.v` with no `main`: the C of its functions the same as the `.body` route's, the answers the same.  `proved/vfiles/plain.v` is in the gate: compiled by Rocq on its own, then by `kitc.py`, the answer worked out apart: 1345105947.
+- *Not here*: refusals that say what to write instead (§12.B's last item), the driver proved (§12.H).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5679,7 +5687,8 @@ Pushed to the public repository up to `42c08a7` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 88 (the integer types of C: the construct table 3609 of 3742, 54 by design, 78 gaps), the C, the gate; F74 |
+| (this commit) | §12.V: step 89's design -- an ordinary .v file, as simply as lean --c |
+| `4869f65` | §12.V: step 88 (the integer types of C: the construct table 3609 of 3742, 54 by design, 78 gaps), the C, the gate; F74 |
 | `42c08a7` | `KQRun.v` + `proved/KQW64.v` + `KQLGen.v` + `KQM.v` + `lib/CInt.v` + `lib/CIntSpec.v` + `proved/KQRReify.v` + `kitc.py` + `make.sh` + `matrix` + `examples/cint_fix` step 88: the integer types of C as ordinary functions, what each computes proved, `uint64_t`'s `/` and `%` a case of the generator's proof; 128 cells |
 | `6b29fdd` | §12.V: step 88's design -- the integer types of C as ordinary functions, what each computes proved |
 | `6b5e6e1` | §12.V: step 87 (a memory in a value of any data type: the construct table 3481 of 3614, 54 by design, 78 gaps, 3 gaps read), the C, the gate; D30, the proof ends at Clight |
