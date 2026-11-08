@@ -146,6 +146,45 @@ def parse_main(mt):
                 raise SystemExit("main passes something this tool does not read: " + t)
     return entry, args, wrap
 
+def last_def(prog):
+    """the name of the last function of a file"""
+    ns = re.findall(r"(?m)^\s*(?:#\[[^\]]*\]\s*)?(?:Program\s+)?(?:Definition|Fixpoint|Function|Equations|Let)\s+([A-Za-z_][\w']*)", prog)
+    if not ns:
+        raise SystemExit("no function in the file")
+    return ns[-1]
+
+def sig_args(name, prog, entry):
+    """an entry read from its signature: -> (args, wrap), or None and the reason: a number or a boolean from the command line, a
+    counter from the command line, the memory from the memory file; a number given back is printed, a memory given back summed"""
+    f0 = os.path.join(GEN, f"{name}_sig.v")
+    open(f0, "w").write(HDR + prog + f"\nSet Printing Width 100000.\nCheck {entry}.\n")
+    rc, out = coqc(f0)
+    if rc != 0:
+        m = re.search(r"Error:\s*(.*?)(?:\n\n|$)", out, re.S)
+        return None, "Rocq refused the file: " + (" ".join(m.group(1).split())[:200] if m else "it did not compile")
+    ms = re.findall(r"(?m)^\s+:\s*(.+)$", out)
+    if not ms:
+        return None, "the type of " + entry + " was not read"
+    ty = ms[-1].strip()
+    if "forall" in ty or "(" in ty:
+        return None, f"{entry} : {ty}: the entry takes numbers, counters, booleans and a memory, and gives back a number or a memory"
+    parts = [p.strip() for p in ty.split("->")]
+    args, k = [], 0
+    for p in parts[:-1]:
+        if p == "nat":
+            args.append(("N", k)); k += 1
+        elif p in ("int", "bool"):
+            args.append(("I", k)); k += 1
+        elif p == "mem":
+            args.append(("M",))
+        else:
+            return None, f"{entry} : {ty}: the entry takes numbers, counters, booleans and a memory; {p} is not one"
+    if parts[-1] in ("int", "bool"):
+        return (args, "int"), None
+    if parts[-1] == "mem":
+        return (args, "sum"), None
+    return None, f"{entry} : {ty}: the entry gives back a number or a memory; {parts[-1]} is not one"
+
 def translate_cmd(prog, entry, name):
     # a program that shares narrow blocks with another processor lists them: Definition kq_shared : list int := [6].
     if re.search(r"Definition\s+kq_shared\b", prog):
@@ -1116,6 +1155,8 @@ def main():
     # the verified compiler is the route (step 29: the walk retired); --walk (or KQ_WALK=1) the translator and the walk
     # alone, the yardstick a moved program is timed against; --reflect and KQ_REFLECT are accepted and change nothing
     walk_mode = bool(os.environ.get("KQ_WALK"))
+    # an ordinary .v file: the function the program starts with, by default the last of the file
+    start = None
     for a in sys.argv[1:]:
         if a == "--reflect":
             pass
@@ -1133,6 +1174,8 @@ def main():
             secondary = True
         elif a.startswith("--prefix="):
             prefix = a[len("--prefix="):]
+        elif a.startswith("--main="):
+            start = a[len("--main="):]
         elif a.startswith("--entry="):
             entry_name = a[len("--entry="):]
         elif a.startswith("--ext="):
@@ -1140,19 +1183,21 @@ def main():
         else:
             names.append(a)
     for src in names:
-        path = src if src.endswith(".body") else f"hand/{src}.body"
-        name = re.sub(r"[^A-Za-z0-9_]", "_", os.path.basename(path)[:-5])
+        path = src if src.endswith((".body", ".v")) else f"hand/{src}.body"
+        name = re.sub(r"[^A-Za-z0-9_]", "_", os.path.splitext(os.path.basename(path))[0])
         body = open(path).read()
         # a program that names a function of a library of lib/ gets the library's text in front of it, as compile.sh does
         for pre, lib, mark in (("slab_", "Slab", "SLAB"), ("view_", "View", "VIEW"), ("(?:loop_|wfix)", "Loop", "LOOP"),
                                (r"(?:(?:[ui](?:8|16|32)|i64)_[a-z]+|rot[lr](?:32|64)|bswap(?:16|32|64)|popcount(?:32|64)|clz(?:32|64)|ctz(?:32|64)|u64_mulhi)\b", "CInt", "CINT")):
-            if re.search(r"\b" + pre, body) and f"(* {mark}-BEGIN *)" not in body:
+            if re.search(r"\b" + pre, body) and f"(* {mark}-BEGIN *)" not in body and not re.search(r"Require\b[^.]*\b" + lib + r"\b", body):
                 lt = open(os.path.join(ROOT, "lib", lib + ".v")).read()
                 text = lt[lt.index(f"(* {mark}-BEGIN *)") + len(f"(* {mark}-BEGIN *)"):lt.index(f"(* {mark}-END *)")]
                 if mark == "CINT":
                     text = "Module KQCInt.\n" + text + "End KQCInt.\nImport KQCInt.\n"
                 body = text + "\n" + body
-        prog, mt = split_main(body)
+        # a .body has a main of the kit's form; an ordinary file needs none, and a function of its own may be called main
+        has_main = path.endswith(".body") or "kq_keep" in body
+        prog, mt = split_main(body) if has_main else (body, None)
         err = build_user_files(body, path)
         if err:
             m = re.search(r"Error:\s*(.*?)(?:\n\n|$)", err, re.S)
@@ -1160,10 +1205,17 @@ def main():
                   + (" ".join(m.group(1).split())[:200] if m else "it did not compile") + ")" + FOLLOW, flush=True)
             print(name, "REFUSED: not compiled by the verified compiler (the reasons above)", flush=True)
             continue
-        try:
-            entry, args, wrap = parse_main(mt)
-        except SystemExit as ex:
-            print(name, "NOT READ:", ex); continue
+        if has_main:
+            try:
+                entry, args, wrap = parse_main(mt)
+            except SystemExit as ex:
+                print(name, "NOT READ:", ex); continue
+        else:
+            entry = start or last_def(prog)
+            r, why = sig_args(name, prog, entry)
+            if not r:
+                print(name, "NOT READ:", why); continue
+            args, wrap = r
         if not walk_mode:
             r = reflect(name, entry, prog, no_proof)
             if not r:

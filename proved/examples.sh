@@ -16,5 +16,14 @@ for b in proved/examples/*.body; do
   got=$(KQ_MEM=$mem bin/P_$n $(cat $args) 2>&1 | head -1 | awk '{print $2}')
   if [ "$got" = "$(cat proved/examples/$n.expect)" ]; then ok=$((ok + 1)); else bad=$((bad + 1)); echo "$n: got $got, expected $(cat proved/examples/$n.expect)"; fi
 done
+# an ordinary Rocq file: Rocq compiles it on its own, kitc.py reads the entry's arguments from its signature (Rocq-C-solution.md §12.B)
+for v in proved/vfiles/*.v; do
+  n=$(basename $v .v)
+  rm -f bin/P_$n
+  coqc -w -all -R . KQ $v > /dev/null 2>&1 || { bad=$((bad + 1)); echo "$n: Rocq refused the file on its own"; continue; }
+  python3 proved/kitc.py $v 2>&1 | grep -v "^Warning\|^to KQC" | grep -v "^$n built" | head -3
+  got=$(KQ_MEM=proved/vfiles/$n.mem bin/P_$n $(cat proved/vfiles/$n.args) 2>&1 | head -1 | awk '{print $2}')
+  if [ "$got" = "$(cat proved/vfiles/$n.expect)" ]; then ok=$((ok + 1)); else bad=$((bad + 1)); echo "$n: got $got, expected $(cat proved/vfiles/$n.expect)"; fi
+done
 echo "examples: $ok give the expected answer, $bad do not"
 [ $bad = 0 ]
