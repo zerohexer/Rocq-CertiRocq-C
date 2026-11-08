@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3609 of 3742, 78 gaps, 54 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3680 of 3817, 77 gaps, 59 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -568,8 +568,10 @@ changes no wide cell, the trace records it); a proof about a program holds for e
 
 ### 1.10 What is trusted, exactly
 
-`Print Assumptions kit_function_correct` (`ASSUME=1 proved/make.sh`): Rocq's 63-bit integer axioms; the kit's
-memory primitives `KQRun.rd` / `upd` / `kq_size` / `mem` and `KQSpec.real_laws`; classical axioms CompCert uses.  No admits.
+`Print Assumptions` of every lemma of `KQMTop.v` (the generator's `kit_function_correct` among them), `KQR.v` (the verified
+compiler's `compile_f_ok`), `KQRWf.v` and `KQPrim.v`, from a file that imports nothing, so that each name is the one constant it
+names (`ASSUME=1 proved/make.sh`, since step 92, F76): Rocq's 63-bit integer axioms; the kit's memory primitives `KQRun.rd` / `upd`
+/ `kq_size` / `mem` and `KQSpec.real_laws`; the machine's operations; classical axioms CompCert uses.  No admits.
 Outside the proofs: the loader that fills the tables, the driver in `kitc.py`, the printer, clang, and the C bodies of the
 machine operations with the laws the theorem assumes of them.  The per-program statements add nothing: the translator's output
 is checked by the kernel every time.
@@ -1658,6 +1660,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F73 | `compile` writes what follows an operand in each arm of a test that cannot be a conditional move, so `k` of them in one expression are `2^k` copies, and `x mod p` is three arms: a matrix power modulo `p` was read, its check passed, and printing its C ran out of memory; nothing had measured the size of the C (found by the fifth probe, step 85) | step 86: above 1024 copies by a count from the text, such operands are functions.  A join point in KQL would need no function: §6.4 |
 | F74 | The first `u64_divu`, a loop of 64 rounds in `lib/CInt.v` before it became an instruction, shifted the remainder and lost its top bit: wrong for a divisor above `2^63`.  It was read and its C proved equal to it: the verified compiler says the C computes the function, and nothing about whether the function is what its name says.  Writing the theorem against `Z` found it, at the case the invariant needed.  So a library of ours carries its theorems (`lib/CIntSpec.v`), and "proved" about a library names which of the two is meant |
 | F75 | The printed C left-shifted negative numbers: `tagup` of a signed number.  Clight defines that, C does not, so the text clang read said less than the Clight the theorem is about.  No answer was wrong: clang's IR has no `nsw` on a signed left shift.  Undefined behaviour trapped found it on its first run, 4 of 59 examples.  Fixed in the generator with a cast, the assembly the same.  So a difference between Clight and the printed C is a real class, and the printer is not the place to fix one |
+| F76 | The trust check compared printed names as text.  Each file prints an axiom by the shortest name valid in its own scope, so one axiom was listed under two spellings (14 lines), and a short name printed elsewhere could have been another constant and still matched; every line `name :` after the first `Axioms:` of `make.sh`'s whole output was taken as an assumption, `Check`'s outputs included (`eq_refl`, `int`); and the set came from three end theorems plus what files happened to print, so `KQRWf.kq_compares_def` (step 64), which a program using `compares` rests on, was never printed: `PrimInt63.compares` and `Sint63Axioms.compare_spec`, Rocq's own, were not on the list.  Found at step 92, when `lxor_spec` was printed short | `make.sh` prints what every lemma of `KQMTop.v`, `KQR.v`, `KQRWf.v`, `KQPrim.v` rests on, from a file that imports nothing, between two markers, and the gate reads only that; `proved/TRUSTED.txt` lists that set, each axiom once by its full name (90): the short spellings, the artifacts and two primitive types only the untrusted reader's prints reached out, the two of `compares` in, with the owner's agreement that Rocq's own axioms are the floor (2026-11-09) |
 | F69 | `rewrite` compares up to unfolding, full, whatever `Strategy opaque` says: a lemma about a function whose body is one operation fires on that operation where the function is not written, and with a tactic turning the operation back the proof never ended | the lemma only where the function is in the goal (`match goal with |- context [F]`); a proof that looks for what to rewrite is stepped by hand when it times out |
 | F68 | A program's own file (`Require`d by its text) was compiled again only when older than its source, not than the kit, so after `KQRun.v` changed the program failed once on Rocq's inconsistent assumptions and `kitc.py` wrote no C; the comparison showed `none`, at steps 65 and 73 | `build_user_files` counts the kit's `.vo` |
 | F67 | A budget written as `S (S ..)` makes a conversion unroll the fixpoint: both sides reduce on the constructor, and with two branches in each round the comparison is exponential.  `reflexivity` on `(fix go ..) 63 c 0 a b = kq_d21_go 63 c 0 a b` did not end, nor `rewrite` of a term holding it, with the fixpoints' bodies identical | a written budget is `kq_nat 63`, opaque to a conversion (D18); a lemma about it is stated with the budget a variable, and the number put in with `exact` |
@@ -1684,6 +1687,10 @@ through `ccomp`) → **G** → **M** → **J**; **F**, **I** and **N** when thei
 - ~~*`hw_copy`, `hw_fill`, `hw_cmp`*~~ — **done, step 75**: loops over the byte loads and stores in the kit, no operation of their own.  *`kq_grow`*: stays assumed, class `env`: the allocator under the memory's tables, with the loader and the driver (§12.H).
 - ~~*`divs_min_neg1`*~~ — **done, step 74**: `Bdivs` means `kq_divs`, which says what the smallest number over -1 is by its definition; `/` needs no test, and a written-out `divs` where the text rules the case out.
 - *The printer, clang, the loader, the driver*: §12.H, unless the owner wants them sooner.
+- *Each program's own end theorem in the gate* (F76's follow-up, owner 2026-11-09): since step 92 the gate checks what every lemma of the route
+  rests on, from a file that imports nothing.  Left: what each gate program's final theorem rests on, printed the same way and compared with
+  the list, so that the check is the end-to-end claim itself and not the lemmas it is built from.  Accepted when the gate prints it for every
+  example, corpus program and kernel and `check_trust.py --gate` compares it.
 Accepted when: no line of the classes `remove` and `audit` is left in `proved/TRUSTED.txt`, and §1.10 says so.  **Done on `4898663`**, the printer, clang, the loader and the driver left at §12.H.
 
 **A. The construct-table gaps (20 cells, §3.5), then the by-design pins.**  The categories of §3.5: proof search for
@@ -5560,6 +5567,23 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The acceptance*: `proved/examples/bitn_fix`: a count of the bits set by `testbit`, masks by `land`, `lor`, `lxor`, `ldiff`, `clearbit`, shifts, `b2n`, `setbit`, `ones`, `lnot` at written numbers, as budgets, tests and numbers, in a recursion; the answer worked out apart.
 - *Cells*: `A_zh_*`: each operation as a budget, a number, a test, a match, a let, in a recursion, under `Require Import Arith`, nested, on a counter of a machine number; `testbit` in a test, a value, a conditional move, under `&&` and `negb`; the pins and controls above; the rows left.
 
+**Step 92, the bit operations of Rocq's library on counters — the result (2026-11-09).**  Built as designed, the bounds made exact:
+- *`S`* (`KQR.v`): `nbop`, `nbop_nat`, `CBitN`, `CShl`, `BTestN`; `cbitn` (the code), `cbitm` (the bound); `nbit_z`, `z_land` .. `z_shiftl`, `ofn_land` .. `ofn_testbit`, `cbitn_ok`, `cbitm_bound`, `cbitm_mono`, `nbop_le_add`: from Rocq's lemmas on `Nat` and `Z` and its axioms of the machine's numbers, nothing more.  The cases of `cexp_all` and of the bounds' lemmas.
+- *The bounds, exact*: the design wrote them as the larger operand, so that the whole fitting would show each part fits, as `CDivN`.  Then `Nat.shiftl (Nat.land n 3) 2`, at most 12, would have been refused as a number past a word: an over-rejection.  `wf` asks each operand to fit, as `testbit`'s does, and the bound is the smaller for `land`, the first for `ldiff`, `shiftr`, `clearbit`, the power of two above the larger for `lor`, `lxor`.
+- *The reader* (`KQRReify.v`): `nbop_of`, the six by name, `CShl` at a written count, `BTestN`; `shiftr` no longer opened; `setbit`, `ones`, `lnot` opened.
+- *Found by `b2n`*: a counter that is a helper's call on a test, `Nat.b2n (a <? b)` or a function of the program's, was refused: writing a helper out binds what it is given by a `let` when it is not a variable, and a counter had no reading of a `let`.  A `let` in a counter named at most once is put in its place (`rel_occ`), what the kernel's check does (zeta), with nothing written twice.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62, in clean copies of both trees; step 91's files / these): `HWP_kernel` 3.16 / 3.14 s, `HWP_own` 2.15 / 2.14, `HWP_irqnow` 1.81 / 1.79 — the same.  The first version cost 5% on `HWP_own` (2.13 / 2.25): the six names were tested at every call of a constant in a counter, before the program's helpers, and `testbit` before the comparisons of the machine's numbers, the common test (F64 again).  They are tested last now.
+- *The trust check stopped the step* on `lxor_spec`: `Uint63Axioms.lxor_spec`, already listed, printed short since `KQR.v`'s theorem now reaches it.  Taken to the owner; looking at it found the check weak (F76): names compared as text, `Check`'s outputs taken as assumptions, and `PrimInt63.compares`, `Sint63Axioms.compare_spec`, which `KQRWf.kq_compares_def` (step 64) rests on, never printed.  The owner: Rocq's own axioms are the floor.  `make.sh` prints what every lemma of the route rests on, from a file that imports nothing; `proved/TRUSTED.txt` lists that, 90 names, each once by its full name; the gate reads only that.  Nothing assumed changed: the two of `compares` were assumed since step 64 and not listed.
+- *The acceptance*: `proved/examples/bitn_fix`: proved, built, 734603704.
+- *Cells*: 75 more: 67 proved; by design, each with a control: `A_zh_shiftl_var`, `_shiftl_big`, `_setbit_var`, `_ones_var`, `_lnot_var` (a power of two of a counter, a counter shifted past a word; controls `A_zh_shiftl_lit`, `_setbit_lit`, `_ones_lit`, `_lnot_lit`); gaps `A_zh_row_land`, `_row_shiftr`, `_row_testbit_own`: a function giving back a counter built by a bit operation, step 82's rows.  `A_zh_row_testbit`, a test on a parameter in such a function, is read.  Four gaps read: `A_c2_nat_land`, `_shiftr`, `_testbit`, `_b2n`.  The code commit says 73 cells: the control `A_zh_shiftl_masked` and the gap `A_zh_row_testbit_own` were added after its message was written.
+- The C: the 95 programs byte-identical, and `bitn_fix`, new.  The construct table (on `af6b6ca`): **3680 of 3817 through the
+  verified compiler**, 59 by design, 77 gaps, 1 not Rocq (was 3609 of 3742: 67 of the 75 new cells read, 5 by design, 3 gaps; 4
+  gaps read; no cell lost).  The gate on `da6b1d1` (`af6b6ca` and the trust check of F76), the walk switched off: `make.sh` `core-ok`; examples 61 / 61, 60 / 60
+  freestanding; the same C: undefined behaviour trapped 60 / 60, `-O0` 60 / 60, `ccomp` 57 / 57 and 3 not built with it; corpus 36
+  / 36; the five kernels and `grow` (15 / 16 / 19 / 16 / 16 / 6 s); **106 programs through the verified compiler, 0 refused**;
+  `check_trust.py`: `trust unchanged`, 90 assumptions each by its full name.  Next: the recursive functions of the library on
+  counters, `gcd`, `log2`, `sqrt` (step 93).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5741,11 +5765,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `95b1f77` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `da6b1d1` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 92's design -- the bit operations of Rocq's library on counters |
+| (this commit) | §12.V: step 92 (the bit operations of Rocq's library on counters: the construct table 3680 of 3817, 59 by design, 77 gaps), the C, the gate; F76, the trust check made exact; §12.T's follow-up |
+| `da6b1d1` | `proved/make.sh` + `TRUSTED.txt` step 92: what every lemma of the route rests on, printed from a file that imports nothing; each assumption listed once by its full name, `compare_spec` and `compares` among them (F76) |
+| `af6b6ca` | `proved/KQR.v` + `KQRReify.v` + matrix + `examples/bitn_fix` step 92: the bit operations of Rocq's library on counters, each a case of the compiler's proof; a let in a counter named once |
+| `e6e275c` | §12.V: step 92's design -- the bit operations of Rocq's library on counters |
 | `cf1639c` | §12.V: step 91 (the printed C says what the Clight says: the construct table 3609 of 3742, 54 by design, 78 gaps), the C, the gate; F75 |
 | `95b1f77` | `proved/KQLGen.v` + `KQLProof.v` + `kitc.py` + `examples.sh` + `sup/v4/kq_io.h` step 91: a signed number made unsigned before it is shifted left; the printed C through undefined behaviour traps, `-O0` and `ccomp` |
 | `959bc83` | §12.V: step 91's design -- the printed C says what the Clight says, and the tools are asked |
