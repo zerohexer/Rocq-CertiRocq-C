@@ -5527,6 +5527,13 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   the five kernels and `grow` (16 / 16 / 18 / 15 / 16 / 6 s); **105 programs through the verified compiler, 0 refused**;
   `check_trust.py`: `trust unchanged`.  Next: the printed C says what the Clight says, and the tools are asked.
 
+**Step 91, the printed C says what the Clight says, and the tools are asked (§12.H) — the design (2026-11-08).**  The theorem ends at Clight; the text clang reads is the printer's.  §12.H's interim is to check that text with other tools.  Doing so found a difference at once.
+- *The difference* (F75): `tagup` shifts a number left by one, and for a signed one the printed C is `(((long long)x >> 1) / ..) << 1`.  Clight defines the left shift of a negative number; C leaves it undefined.  So the C text said less than the theorem's Clight.  clang gives it the meaning Clight does (its IR has no `nsw` on it), so no answer was wrong, and nothing in the theorem said so.
+- *The fix*, in the generator, not the printer, since the generator is proved: `ucast`: a signed number goes to the unsigned type first (`KQLGen.tagup`, `KQLProof.eval_tagup`).  Unsigned operands print as before.
+- *The C*: the text of the programs with a signed operation changes by that cast, and only those; clang's assembly for them is the same, line for line.
+- *The checks* (`proved/examples.sh`), each the same printed functions, each to the expected answer: undefined behaviour trapped (`-fsanitize=undefined -fsanitize-trap`, no runtime); `-O0 -fno-strict-aliasing`; CompCert's `ccomp`, where it is installed (`KQ_NO_CCOMP=1` leaves it out): `sup/v4/kq_io.h` gives it the plain `?:` in place of the asm of a conditional move, so the printed C compiles with it as it is, for whoever holds its licence (D30).  A program that calls an operation of the machine is left out of `ccomp` only: their C bodies are GNU C.
+- *What this is not*: a proof.  The printer, clang and the driver stay unproved, and the CompCert route of §12.H stays open.  Each of these checks a few runs, of the examples only.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5712,7 +5719,8 @@ Pushed to the public repository up to `925e035` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 90 (the generated C on its own: the construct table 3608 of 3742, 54 by design, 79 gaps), the C, the gate |
+| (this commit) | §12.V: step 91's design -- the printed C says what the Clight says, and the tools are asked |
+| `64dac81` | §12.V: step 90 (the generated C on its own: the construct table 3608 of 3742, 54 by design, 79 gaps), the C, the gate |
 | `925e035` | `sup/free` + `proved/kitc.py` + `examples.sh` + `hw/kq_bare.c` + `hw/grow` step 90: the generated C with no hosted header and no libc, `kq_grow` on the machine |
 | `7cb061c` | §12.V: step 90's design -- the generated C on its own: no hosted header, no libc |
 | `7f60eb1` | §12.V: step 89 (an ordinary `.v` file, as simply as `lean --c`: the construct table 3609 of 3742, 54 by design, 78 gaps), the C, the gate |
