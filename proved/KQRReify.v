@@ -55,8 +55,9 @@ Definition lib_open (kn : kername) : bool :=
     "bool_rect"%bs; "bool_rec"%bs; "bool_ind"%bs; "prod_rect"%bs; "prod_rec"%bs; "prod_ind"%bs; "option_rect"%bs; "option_rec"%bs; "option_map"%bs;
     "sum_rect"%bs; "sum_rec"%bs; "unit_rect"%bs; "unit_rec"%bs; "prod_curry"%bs; "prod_uncurry"%bs]
   else if String.eqb f "Logic"%bs then existsb (String.eqb (snd kn)) ["eq_rect"%bs; "eq_rec"%bs; "eq_ind"%bs; "eq_rect_r"%bs; "eq_rec_r"%bs]
-  else if String.eqb f "Nat"%bs then existsb (String.eqb (snd kn)) ["iter"%bs; "even"%bs; "odd"%bs; "double"%bs; "succ"%bs; "b2n"%bs; "square"%bs; "shiftr"%bs; "one"%bs; "zero"%bs; "two"%bs]
-  else if String.eqb f "PeanoNat"%bs then String.eqb (snd kn) "b2n"%bs
+  else if String.eqb f "Nat"%bs then existsb (String.eqb (snd kn)) ["iter"%bs; "even"%bs; "odd"%bs; "double"%bs; "succ"%bs; "b2n"%bs; "square"%bs; "one"%bs; "zero"%bs; "two"%bs]
+  (* (step 92) what is defined by the bit operations: their definitions; [shiftr] is read as one *)
+  else if String.eqb f "PeanoNat"%bs then existsb (String.eqb (snd kn)) ["b2n"%bs; "setbit"%bs; "ones"%bs; "lnot"%bs]
   else if String.eqb f "Specif"%bs then existsb (String.eqb (snd kn)) ["proj1_sig"%bs; "sumbool_rect"%bs; "sumbool_rec"%bs]
   else false.
 (** a constant of the program: of the root's module first (the common case, one comparison), else of any file not a library's
@@ -111,6 +112,19 @@ Definition kn_c_mod := kn_of <% Nat.modulo %>.
 Definition kn_c_even := kn_of <% Nat.even %>.
 Definition kn_c_odd := kn_of <% Nat.odd %>.
 Definition kn_c_pow := kn_of <% Nat.pow %>.
+(* (step 92) the bit operations of the library on counters *)
+Definition kn_c_land := kn_of <% Nat.land %>.
+Definition kn_c_lor := kn_of <% Nat.lor %>.
+Definition kn_c_lxor := kn_of <% Nat.lxor %>.
+Definition kn_c_ldiff := kn_of <% Nat.ldiff %>.
+Definition kn_c_shiftr := kn_of <% Nat.shiftr %>.
+Definition kn_c_clearbit := kn_of <% Nat.clearbit %>.
+Definition kn_c_shiftl := kn_of <% Nat.shiftl %>.
+Definition kn_c_testbit := kn_of <% Nat.testbit %>.
+Definition nbop_of (kn : kername) : option nbop :=
+  if Kername.eqb kn kn_c_land then Some NLand else if Kername.eqb kn kn_c_lor then Some NLor
+  else if Kername.eqb kn kn_c_lxor then Some NLxor else if Kername.eqb kn kn_c_ldiff then Some NLdiff
+  else if Kername.eqb kn kn_c_shiftr then Some NShiftr else if Kername.eqb kn kn_c_clearbit then Some NClear else None.
 Definition kn_zton := kn_of <% Z.to_nat %>.
 Definition kn_zofn := kn_of <% Z.of_nat %>.
 Definition kn_s2z := kn_of <% Sint63.to_Z %>.
@@ -301,6 +315,27 @@ Fixpoint cnt_lit (t : term) : bool :=
   end.
 
 (** (step 70) the number a counter written as [O] / [S ..] is; a [Z] written in the program *)
+(** (step 92) how many times a variable is named, up to 2 ("more than once"), counting types too *)
+Fixpoint rel_occ (fuel d : nat) (t : term) {struct fuel} : nat :=
+  match fuel with
+  | O => 2
+  | S fuel =>
+      let go := rel_occ fuel in
+      let sum := fold_left Nat.add in
+      match t with
+      | tRel i => if Nat.eqb i d then 1 else 0
+      | tApp f args => sum (map (go d) args) (go d f)
+      | tLambda _ ty b | tProd _ ty b => go d ty + go (S d) b
+      | tLetIn _ v ty b => go d v + go d ty + go (S d) b
+      | tCase _ p c brs => sum (map (go d) (pparams p)) (go d c) + go (d + length (pcontext p)) (preturn p)
+                           + sum (map (fun br => go (d + length (bcontext br)) (bbody br)) brs) 0
+      | tProj _ c => go d c
+      | tCast c _ ty => go d c + go d ty
+      | tFix mfix _ | tCoFix mfix _ => sum (map (fun df => go d (dtype df) + go (d + length mfix) (dbody df)) mfix) 0
+      | tConst _ _ | tInd _ _ | tConstruct _ _ _ | tSort _ | tInt _ | tFloat _ | tString _ | tVar _ => 0
+      | _ => 2
+      end
+  end.
 Fixpoint cnt_val (t : term) : nat :=
   match t with tApp (tConstruct _ 1 _) [c] => S (cnt_val c) | _ => O end.
 Fixpoint cnt_term (n : nat) : scnt := match n with O => CO | S m => CS (cnt_term m) end.
@@ -1496,7 +1531,16 @@ with reify_c (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sc
         | [tApp (tConst k _) [e]] => if Kername.eqb k kn_s2z then option_map CToNat (reify fuel ctx e)
                                      else if Kername.eqb k kn_u2z then option_map CToNatU (reify fuel ctx e) else None
         | _ => None end
-      else match hb kn with Some b => reify_c fuel ctx (wout b args) | None => None end
+      else match hb kn with Some b => reify_c fuel ctx (wout b args) | None =>
+        (* (step 92) a bit operation of the library, looked for after the program's helpers, so that their calls pay nothing for it *)
+        match nbop_of kn, args with
+        | Some o, [a; b] => match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (CBitN o x y) | _, _ => None end
+        | None, [a; b] => if Kername.eqb kn kn_c_shiftl then (if cnt_lit b then option_map (CShl (cnt_val b)) (reify_c fuel ctx a) else None) else None
+        | _, _ => None
+        end end
+  (* (step 92) a let in a counter, named at most once: put in its place, as the kernel's check does (zeta); a helper written out
+     binds what it is given so (a test given to [Nat.b2n]) *)
+  | tLetIn _ v _ b => if Nat.leb (rel_occ 1000 0 b) 1 then reify_c fuel ctx (subst10 v b) else None
   | tCase ci p c0 [b0; b1] =>
       if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_bool) then
         match reify_b fuel ctx c0, reify_c fuel ctx (bbody b0), reify_c fuel ctx (bbody b1) with
@@ -1778,7 +1822,10 @@ with reify_b (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sb
             | None =>
             match (if eq_mp (fst kn) prim_mp then cmp_v (snd kn) else None) with
             | Some c => match reify fuel ctx a, reify fuel ctx b with Some x, Some y => Some (BCmp c x y) | _, _ => None end
-            | None => helper tt
+            (* (step 92) after the comparisons, the common case *)
+            | None => if Kername.eqb kn kn_c_testbit then
+                        match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (BTestN x y) | _, _ => None end
+                      else helper tt
             end
             end
       | _ => helper tt
@@ -3185,7 +3232,7 @@ with cl_es (B : Z) (bs : list cbe) (es : sexps) {struct es} : list site :=
   | SConsR x r => cl_r B bs x ++ cl_es B bs r
   end
 with cl_c (B : Z) (bs : list cbe) (c : scnt) {struct c} : list site :=
-  match c with CVar _ | CO => [] | CS c | KQR.CPred c | CDiv2 c | CMulK _ _ c => cl_c B bs c | CAdd a b | CMin a b | CMax a b | CSub a b | CDivN a b | CModN a b => cl_c B bs a ++ cl_c B bs b | CNat e | CToNat e | CToNatU e => cl_e B bs e | CIf b x y => cl_b B bs b ++ cl_c B bs x ++ cl_c B bs y end
+  match c with CVar _ | CO => [] | CS c | KQR.CPred c | CDiv2 c | CMulK _ _ c | CShl _ c => cl_c B bs c | CAdd a b | CMin a b | CMax a b | CSub a b | CDivN a b | CModN a b | CBitN _ a b => cl_c B bs a ++ cl_c B bs b | CNat e | CToNat e | CToNatU e => cl_e B bs e | CIf b x y => cl_b B bs b ++ cl_c B bs x ++ cl_c B bs y end
 with cl_cs (B : Z) (bs : list cbe) (cs : scnts) {struct cs} : list site :=
   match cs with CNil => [] | CCons c r => cl_c B bs c ++ cl_cs B bs r end
 with cl_b (B : Z) (bs : list cbe) (b : sbool) {struct b} : list site :=
@@ -3205,6 +3252,7 @@ with cl_b (B : Z) (bs : list cbe) (b : sbool) {struct b} : list site :=
   | BxLetR y x | BxMatchR y x | BxSplitR _ y x => cl_r B bs y ++ cl_b B bs x
   | BOfRec y => cl_r B bs y
   | BEven c => cl_c B bs c
+  | BTestN a c => cl_c B bs a ++ cl_c B bs c
   end
 with cl_r (B : Z) (bs : list cbe) (x : srec) {struct x} : list site :=
   match x with

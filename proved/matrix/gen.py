@@ -3103,6 +3103,157 @@ addA('zg_p_bool_param', "", 'k (u8_ltb a b) (i8_leb a b)',
      'Definition k (x y : bool) : int := if andb x y then 1 else 0.\n')
 addA('zg_p_memory_read', "", 'u8_add (rd 0 a s) (i32_mul (rd 0 b s) (rd8 0 a s))',
      '')
+# the bit operations of Rocq's library on counters (step 92)
+addA('zh_land_budget', "", 'ff (Nat.land n 6) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_land_num', "", 'Uint63.of_Z (Z.of_nat (Nat.land n (Z.to_nat (Uint63.to_Z b))))',
+     'From Stdlib Require Import ZArith.\n')
+addA('zh_land_cmp', "", 'if Nat.leb (Nat.land n 3) 2 then a else b',
+     '')
+addA('zh_land_rec', "", 'lp n a',
+     'From Stdlib Require Import ZArith.\nFixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (x + Uint63.of_Z (Z.of_nat (Nat.land j 5))) end.\n')
+addA('zh_land_let', "", 'let c := Nat.land n 6 in ff c a + ff c b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_land_match', "", 'match Nat.land n 6 with O => a | S m => ff m b end',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_lor_budget', "", 'ff (Nat.lor n 6) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_lor_num', "", 'Uint63.of_Z (Z.of_nat (Nat.lor n (Z.to_nat (Uint63.to_Z b))))',
+     'From Stdlib Require Import ZArith.\n')
+addA('zh_lor_cmp', "", 'if Nat.leb (Nat.lor n 3) 2 then a else b',
+     '')
+addA('zh_lor_rec', "", 'lp n a',
+     'From Stdlib Require Import ZArith.\nFixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (x + Uint63.of_Z (Z.of_nat (Nat.lor j 5))) end.\n')
+addA('zh_lor_let', "", 'let c := Nat.lor n 6 in ff c a + ff c b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_lor_match', "", 'match Nat.lor n 6 with O => a | S m => ff m b end',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_lxor_budget', "", 'ff (Nat.lxor n 6) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_lxor_num', "", 'Uint63.of_Z (Z.of_nat (Nat.lxor n (Z.to_nat (Uint63.to_Z b))))',
+     'From Stdlib Require Import ZArith.\n')
+addA('zh_lxor_cmp', "", 'if Nat.leb (Nat.lxor n 3) 2 then a else b',
+     '')
+addA('zh_lxor_rec', "", 'lp n a',
+     'From Stdlib Require Import ZArith.\nFixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (x + Uint63.of_Z (Z.of_nat (Nat.lxor j 5))) end.\n')
+addA('zh_lxor_let', "", 'let c := Nat.lxor n 6 in ff c a + ff c b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_lxor_match', "", 'match Nat.lxor n 6 with O => a | S m => ff m b end',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_ldiff_budget', "", 'ff (Nat.ldiff n 6) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_ldiff_num', "", 'Uint63.of_Z (Z.of_nat (Nat.ldiff n (Z.to_nat (Uint63.to_Z b))))',
+     'From Stdlib Require Import ZArith.\n')
+addA('zh_ldiff_cmp', "", 'if Nat.leb (Nat.ldiff n 3) 2 then a else b',
+     '')
+addA('zh_ldiff_rec', "", 'lp n a',
+     'From Stdlib Require Import ZArith.\nFixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (x + Uint63.of_Z (Z.of_nat (Nat.ldiff j 5))) end.\n')
+addA('zh_ldiff_let', "", 'let c := Nat.ldiff n 6 in ff c a + ff c b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_ldiff_match', "", 'match Nat.ldiff n 6 with O => a | S m => ff m b end',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_shiftr_budget', "", 'ff (Nat.shiftr n 6) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_shiftr_num', "", 'Uint63.of_Z (Z.of_nat (Nat.shiftr n (Z.to_nat (Uint63.to_Z b))))',
+     'From Stdlib Require Import ZArith.\n')
+addA('zh_shiftr_cmp', "", 'if Nat.leb (Nat.shiftr n 3) 2 then a else b',
+     '')
+addA('zh_shiftr_rec', "", 'lp n a',
+     'From Stdlib Require Import ZArith.\nFixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (x + Uint63.of_Z (Z.of_nat (Nat.shiftr j 5))) end.\n')
+addA('zh_shiftr_let', "", 'let c := Nat.shiftr n 6 in ff c a + ff c b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_shiftr_match', "", 'match Nat.shiftr n 6 with O => a | S m => ff m b end',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_clearbit_budget', "", 'ff (Nat.clearbit n 6) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_clearbit_num', "", 'Uint63.of_Z (Z.of_nat (Nat.clearbit n (Z.to_nat (Uint63.to_Z b))))',
+     'From Stdlib Require Import ZArith.\n')
+addA('zh_clearbit_cmp', "", 'if Nat.leb (Nat.clearbit n 3) 2 then a else b',
+     '')
+addA('zh_clearbit_rec', "", 'lp n a',
+     'From Stdlib Require Import ZArith.\nFixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (x + Uint63.of_Z (Z.of_nat (Nat.clearbit j 5))) end.\n')
+addA('zh_clearbit_let', "", 'let c := Nat.clearbit n 6 in ff c a + ff c b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_clearbit_match', "", 'match Nat.clearbit n 6 with O => a | S m => ff m b end',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_testbit_if', "", 'if Nat.testbit n 2 then a else b',
+     '')
+addA('zh_testbit_and', "", 'if andb (Nat.testbit n 1) (a <? b) then a else b',
+     '')
+addA('zh_testbit_neg', "", 'if negb (Nat.testbit n 0) then a else b',
+     '')
+addA('zh_testbit_sel', "", 'if Nat.testbit (Nat.shiftr n 1) 0 then a + 1 else b',
+     '')
+addA('zh_testbit_value', "", 'k (Nat.testbit n 3) a',
+     'Definition k (t : bool) (x : int) : int := if t then x else 0.\n')
+addA('zh_testbit_rec', "", 'pc n n a',
+     'Fixpoint pc (k m : nat) (x : int) : int := match k with O => x | S j => pc j m (if Nat.testbit m j then x + 1 else x) end.\n')
+addA('zh_testbit_big', "", 'if Nat.testbit (Z.to_nat (Uint63.to_Z a)) (Nat.modulo n 70) then a else b',
+     'From Stdlib Require Import ZArith.\n')
+addA('zh_testbit_let', "", 'let t := Nat.testbit n 1 in if t then a else b',
+     '')
+addA('zh_testbit_b2n', "", 'ff (Nat.b2n (Nat.testbit n 2)) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_b2n_num', "", 'Uint63.of_Z (Z.of_nat (Nat.b2n (a <? b))) + a',
+     'From Stdlib Require Import ZArith.\n')
+addA('zh_b2n_sum', "", 'ff (Nat.b2n (a <? b) + Nat.b2n (b <? a)) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_shiftl_lit', "", 'ff (Nat.shiftl n 1) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_shiftl_masked', "", 'ff (Nat.shiftl (Nat.land n 7) 3) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_shiftl_one', "", 'ff (Nat.shiftl 1 5) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_shiftl_var', "", 'ff (Nat.shiftl 1 n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_shiftl_big', "", 'ff (Nat.shiftl n 62) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_setbit_lit', "", 'ff (Nat.setbit n 2) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_setbit_var', "", 'ff (Nat.setbit 0 n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_ones_lit', "", 'ff (Nat.ones 4) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_ones_var', "", 'ff (Nat.ones n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_lnot_lit', "", 'ff (Nat.lnot n 4) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_lnot_var', "", 'ff (Nat.lnot 3 n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_clearbit_var', "", 'ff (Nat.clearbit n n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_nested', "", 'ff (Nat.land (Nat.lor n 12) (Nat.shiftr n 2)) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_nested_test', "", 'if Nat.testbit (Nat.lxor n (Nat.ldiff n 5)) 1 then a else b',
+     '')
+addA('zh_mach_lor', "", 'Uint63.of_Z (Z.of_nat (Nat.lor (Z.to_nat (Uint63.to_Z a)) (Z.to_nat (Uint63.to_Z b))))',
+     'From Stdlib Require Import ZArith.\n')
+addA('zh_mach_lxor', "", 'Uint63.of_Z (Z.of_nat (Nat.lxor (Z.to_nat (Uint63.to_Z a)) (Z.to_nat (Uint63.to_Z b))))',
+     'From Stdlib Require Import ZArith.\n')
+addA('zh_mach_shiftr', "", 'Uint63.of_Z (Z.of_nat (Nat.shiftr (Z.to_nat (Uint63.to_Z a)) (Z.to_nat (Uint63.to_Z b))))',
+     'From Stdlib Require Import ZArith.\n')
+addA('zh_ar_land', "", 'ff (Nat.land n 6) a',
+     'From Stdlib Require Import Arith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_ar_testbit', "", 'if Nat.testbit n 1 then a else b',
+     'From Stdlib Require Import Arith.\n')
+addA('zh_ar_shiftl', "", 'ff (Nat.shiftl n 1) a',
+     'From Stdlib Require Import Arith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_ar_setbit', "", 'ff (Nat.setbit n 1) a',
+     'From Stdlib Require Import Arith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_let_once', "", 'ff (let t := a <? b in if t then 1 else 0) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_let_twice', "", 'ff (let t := Nat.land n 6 in t + t) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zh_helper_bool', "", 'ff (bn (a <? b)) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition bn (t : bool) : nat := if t then 1 else 0.\n')
+addA('zh_row_land', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.land (cb j m) 7 end.\n')
+addA('zh_row_shiftr', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.shiftr (cb j m) 1 end.\n')
+addA('zh_row_testbit', "", 'Uint63.of_Z (Z.of_nat (pc n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint pc (k m : nat) : nat := match k with O => O | S j => if Nat.testbit m j then S (pc j m) else pc j m end.\n')
+addA('zh_row_testbit_own', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => if Nat.testbit (cb j m) 1 then S (cb j m) else cb j m end.\n')
 # a memory in a value of any data type; a sixth probe (step 87)
 addA('zf_h_user', "", 'match st1 a s with Ok v t => v + rd 0 a t | Err e => e end',
      'Inductive res := Ok (v : int) (t : mem) | Err (e : int).\nDefinition st1 (i : int) (t : mem) : res := if i =? 0 then Err 1 else Ok i (upd 0 i i t).\n')

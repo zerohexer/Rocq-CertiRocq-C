@@ -1,0 +1,25 @@
+(* the bit operations of Rocq's library on counters: a count of the bits set by testbit, masks by land, lor, lxor, ldiff,
+   clearbit, shifts, b2n, setbit, ones, lnot at written numbers, as budgets, tests and numbers, in a recursion.
+   With a = 0, n = 45 (masked to 8 bits, so that it is below pc's bound) and the cells 1, 3, .., 23: the bits set among the 8 lowest of 45, 4; the masks over the cells, 6037,
+   times 100; land 45 3 shifted by 2, 4, as a budget, times 1000000; b2n (testbit 45 0) + setbit 45 1 + ones 3 + lnot 45 6,
+   1 + 47 + 7 + 18 = 73, times 10000000: worked out apart, 734603704. *)
+From Stdlib Require Import ZArith.
+Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.
+Fixpoint pc (k m : nat) (x : int) : int := match k with O => x | S j => pc j m (if Nat.testbit m j then x + 1 else x) end.
+Fixpoint mix (k : nat) (acc : int) (s : mem) : int :=
+  match k with
+  | O => acc
+  | S j =>
+      let c := Uint63.to_nat (rd 0 (Uint63.of_nat j) s) in
+      mix j (acc + Uint63.of_nat (Nat.land c 6) + Uint63.of_nat (Nat.lor c j) * 3 + Uint63.of_nat (Nat.lxor c 5) * 7
+                 + Uint63.of_nat (Nat.ldiff c 3) * 11 + Uint63.of_nat (Nat.shiftr c 1) * 13 + Uint63.of_nat (Nat.clearbit c j) * 17) s
+  end.
+Definition solve (a : int) (s : mem) : int :=
+  let n := Nat.land (Uint63.to_nat (a + 45)) 255 in
+  pc 8 n 0
+    + mix 12 0 s * 100
+    + ff (Nat.shiftl (Nat.land n 3) 2) a * 1000000
+    + Uint63.of_nat (Nat.b2n (Nat.testbit n 0) + Nat.setbit n 1 + Nat.ones 3 + Nat.lnot n 6) * 10000000.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve 0 (kq_input 0).

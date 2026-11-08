@@ -85,17 +85,16 @@ DESIGN_CELLS = {
   # through marked operations (§9.4), wherever the list stands; control: A_mod_shared, A_file_shared, a plain access to another block
   "A_mod_shared_plain",
   "A_file_shared_plain",
+  # a power of two of a counter, or a counter shifted past a word: a number that may need more than a word (Rocq-C-solution.md §0.5, second reason);
+  # controls: A_zh_shiftl_lit, A_zh_setbit_lit, A_zh_ones_lit, A_zh_lnot_lit, the same at a written number (step 92)
+  "A_zh_shiftl_var", "A_zh_shiftl_big", "A_zh_setbit_var", "A_zh_ones_var", "A_zh_lnot_var",
 }
 # gaps whose refusal message is shared with another category: classified by name
 BY_NAME = {
   "A_rp_poly_measure": "a measure recursion polymorphic in a type",
-  "A_c2_nat_gcd": "a function of the library on counters that recurses or gives functions to a recursion: gcd, log2, sqrt, land, shiftr, testbit, b2n",
-  "A_c2_nat_log2": "a function of the library on counters that recurses or gives functions to a recursion: gcd, log2, sqrt, land, shiftr, testbit, b2n",
-  "A_c2_nat_sqrt": "a function of the library on counters that recurses or gives functions to a recursion: gcd, log2, sqrt, land, shiftr, testbit, b2n",
-  "A_c2_nat_land": "a function of the library on counters that recurses or gives functions to a recursion: gcd, log2, sqrt, land, shiftr, testbit, b2n",
-  "A_c2_nat_shiftr": "a function of the library on counters that recurses or gives functions to a recursion: gcd, log2, sqrt, land, shiftr, testbit, b2n",
-  "A_c2_nat_testbit": "a function of the library on counters that recurses or gives functions to a recursion: gcd, log2, sqrt, land, shiftr, testbit, b2n",
-  "A_c2_nat_b2n": "a function of the library on counters that recurses or gives functions to a recursion: gcd, log2, sqrt, land, shiftr, testbit, b2n",
+  "A_c2_nat_gcd": "a function of the library on counters that recurses: gcd, log2, sqrt (a loop of its own, step 93)",
+  "A_c2_nat_log2": "a function of the library on counters that recurses: gcd, log2, sqrt (a loop of its own, step 93)",
+  "A_c2_nat_sqrt": "a function of the library on counters that recurses: gcd, log2, sqrt (a loop of its own, step 93)",
   "A_c2_match_cnt": "a counter chosen by a match on a counter",
   "A_c2_min_clamp": "a counter clamped by a number: the bound of a min is not yet the smaller one",
   "A_q_st_mem_iter": "a memory as a field of a data type",
@@ -176,6 +175,9 @@ BY_NAME = {
   "A_zc_r_nested": "a record of functions inside a record, given to a recursion",
   "A_zd_r_default": "the memory before a call that gave nothing, used after it",
   "A_ze_own_call_12": "tests that cannot be moves in one expression, an own call in each: what follows written in each arm",
+  "A_zh_row_land": "a function giving back a counter built by a bit operation of the library",
+  "A_zh_row_shiftr": "a function giving back a counter built by a bit operation of the library",
+  "A_zh_row_testbit_own": "a function giving back a counter built by a bit operation of the library",
   "A_zf_r_three": "three constructors or more holding a memory, through a recursion: a sum in a sum",
   "A_l_ack": "a fixpoint inside a fixpoint that gives back a function",
   "A_l_dec_proof_used": "a proof a test gives, named by what follows",
