@@ -128,7 +128,7 @@ KQ_INL value kq_fits(value L, value e, value n) {
 // kq_select takes a test that was worked out before (a combination of comparisons); it is handed over as 0 or 1, so
 // that the C compiler stays free in how it works the combination out.  The `n` / ne / ge / gt forms are the same
 // choices on the test turned round.
-#if defined(KQ_SELECT_PLAIN)
+#if defined(KQ_SELECT_PLAIN) || defined(__COMPCERT__)
 #define KQ_SELDEF(name, T, cond, cc) KQ_INL value name(value x, value y, value a, value b) { return ((T) x cond (T) y) ? a : b; }
 KQ_INL value kq_select(value c, value a, value b)  { return c == KQ_TRUE ? a : b; }
 KQ_INL value kq_selectn(value c, value a, value b) { return c == KQ_TRUE ? b : a; }

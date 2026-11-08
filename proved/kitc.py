@@ -1345,14 +1345,16 @@ def write_c(name, eid, kinds, res, args, wrap, bare, prefix, entry_name, seconda
     if prefix:
         c = re.sub(r"\bf(1\d{3})\b", prefix + r"f\1", c)
     grows = re.search(r"\bf91019\b", c) is not None
-    def text(b):
-        return ('#include "gc_stack.h"\n#include "kq_io.h"\n' + ('#include "kq_hw.h"\n' if uses_hw else "") + c
-                + driver(name, eid, kinds, res, args, wrap, uses_hw, b, prefix, entry_name, secondary, ext, grows,
+    def text(b, hw):
+        return ('#include "gc_stack.h"\n#include "kq_io.h"\n' + ('#include "kq_hw.h"\n' if hw else "") + c
+                + driver(name, eid, kinds, res, args, wrap, hw, b, prefix, entry_name, secondary, ext, grows,
                          max(8, slots) if slots else (8 if pairfns else 0)))
-    open(cfile, "w").write(text(bare))
+    open(cfile, "w").write(text(bare, uses_hw))
     if not bare and not secondary:
-        # the same functions with no hosted header: sup/free/ builds it (proved/freestanding.sh)
-        open(os.path.join(GEN, f"{name}_bare.c"), "w").write(text(True))
+        # the same functions with no hosted header: sup/free/ builds it (proved/examples.sh); the wrappers of the machine's
+        # operations only if one is called (a declaration of the others stays, as in the theorem's program)
+        called = re.search(r"(?m)^(?!unsigned long long f91).*\bf91[01]\d\d\(", c) is not None
+        open(os.path.join(GEN, f"{name}_bare.c"), "w").write(text(True, uses_hw and called))
 
 def build_bin(name, bare):
     """build bin/P_NAME as the kit builds its programs"""

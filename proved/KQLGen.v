@@ -37,7 +37,10 @@ Definition sh1 (e : expr) : expr := Ebinop Oshr e c1 tyl.
 Definition sg (e : expr) : expr := Ecast e tls.
 Definition ssh1 (e : expr) : expr := Ebinop Oshr (sg e) c1 tls.
 (** [(q << 1) | 1]: the word of the number [q] *)
-Definition tagup (e : expr) : expr := Ebinop Oor (Ebinop Oshl e c1 tyl) c1 tyl.
+(** C leaves the left shift of a negative number undefined, Clight defines it: so a signed number goes to the unsigned type first,
+    and the printed C says what the Clight says *)
+Definition ucast (e : expr) : expr := match typeof e with Tlong Signed _ => Ecast e tyl | _ => e end.
+Definition tagup (e : expr) : expr := Ebinop Oor (Ebinop Oshl (ucast e) c1 tyl) c1 tyl.
 
 Definition tr_cmpe (c : cmpop) (A B : expr) : expr :=
   match c with

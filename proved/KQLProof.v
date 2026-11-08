@@ -184,9 +184,14 @@ Lemma eval_tagup : forall E q,
   eval_expr ge e le m (tagup E) (Vlong (Int64.or (Int64.shl q Int64.one) Int64.one)).
 Proof.
   intros E q EE TE. unfold tagup.
+  assert (EU : eval_expr ge e le m (ucast E) (Vlong q) /\ typeof (ucast E) = tyl).
+  { unfold ucast. destruct TE as [T | T]; rewrite T.
+    - split; [exact EE | exact T].
+    - split; [ | reflexivity]. econstructor; [exact EE | ]. rewrite T. reflexivity. }
+  destruct EU as [EU TU].
   eapply eval_binT; [ | apply eval_c1 | reflexivity | reflexivity | ].
-  - eapply eval_binT; [exact EE | apply eval_c1 | exact (eq_refl (typeof E)) | reflexivity | ].
-    destruct TE as [T | T]; rewrite T; simpl; unfold sem_shl, sem_shift; simpl; rewrite lt1_iword; reflexivity.
+  - eapply eval_binT; [exact EU | apply eval_c1 | exact TU | reflexivity | ].
+    simpl; unfold sem_shl, sem_shift; simpl; rewrite lt1_iword; reflexivity.
   - simpl. unfold sem_or, sem_binarith. simpl. reflexivity.
 Qed.
 
