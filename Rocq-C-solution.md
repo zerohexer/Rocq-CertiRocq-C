@@ -5512,6 +5512,14 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   among them; corpus 36 / 36; the five kernels (15 / 15 / 18 / 15 / 16 s); **104 programs through the verified compiler, 0
   refused**; `check_trust.py`: `trust unchanged`.  Next: the generated C on its own, no hosted header and no libc.
 
+**Step 90, the generated C on its own: no hosted header, no libc (§12.D, §9.5, §0.10's fifth) — the design (2026-11-07).**  The kernels were built freestanding, but with CertiRocq's runtime headers on the include path and with no `kq_grow`.  What a program's C needs from anything else is now small and written down.
+- *`sup/free/`*: `values.h`, `gc_stack.h`: a value is a word, and the entry's pointer is never read: no heap, no collector, no runtime in the generated C.  `kq_mem.c`: the memory's tables, the slow paths, `kq_grow` over free memory someone hands it, the checksum, `memcpy` and its kin: no operating system, no instruction set, no hosted header.  `kq_start_linux.c`: a start for the gate on x86-64 Linux, with raw system calls: the arguments, the memory file, the answer.  A kernel has `hw/boot.S` and `hw/kq_bare.c` in its place.
+- *`kitc.py`*: a hosted program's `NAME_bare.c` is written beside its `NAME_proved.c`: the same functions, the driver without `sys/mman.h`.  `NAME_proved.c` is byte-identical.  A bare program that grows a block gets the wrapper `f91019`.
+- *`hw/kq_bare.c`*: `kq_grow` from a fixed room in the kernel's own memory; no more room stops the program, as the hosted one does.  `hw/grow.body`: a kernel that grows a block and checks old and new cells; the gate builds it through the proved route; booted under QEMU's processor by hand: it answers 0.
+- *The check* (`proved/examples.sh`): every example also built with `-ffreestanding -nostdinc -nostdlib -static` and only clang's own `stdint.h`, `stddef.h`, run, and compared with its expected answer.
+- *What stays assumed*: `kq_grow` stays on `proved/TRUSTED.txt` as the allocator under the tables (§12.H): this writes its C, it does not prove it.  Nothing is added to the list; `sup/free/` is support code like `sup/v4/`, outside the theorem, as the driver and the loader are.
+- *Not here*: the kit route's support (`sup/v4/`, `gc_stack.c`) stays for the hosted test, where it is linked and not used by the functions; the corpus has its own speed run and is not built this way.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5697,7 +5705,8 @@ Pushed to the public repository up to `ec163ad` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 89 (an ordinary `.v` file, as simply as `lean --c`: the construct table 3609 of 3742, 54 by design, 78 gaps), the C, the gate |
+| (this commit) | §12.V: step 90's design -- the generated C on its own: no hosted header, no libc |
+| `7f60eb1` | §12.V: step 89 (an ordinary `.v` file, as simply as `lean --c`: the construct table 3609 of 3742, 54 by design, 78 gaps), the C, the gate |
 | `ec163ad` | `proved/kitc.py` + `examples.sh` + `vfiles` + `tests/vroute.py` step 89: an ordinary `.v` file, the entry read from its signature |
 | `14d30b2` | §12.V: step 89's design -- an ordinary .v file, as simply as lean --c |
 | `4869f65` | §12.V: step 88 (the integer types of C: the construct table 3609 of 3742, 54 by design, 78 gaps), the C, the gate; F74 |
