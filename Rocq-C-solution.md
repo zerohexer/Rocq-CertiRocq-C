@@ -5548,6 +5548,18 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   programs through the verified compiler, 0 refused**; `check_trust.py`: `trust unchanged`.  Next: the construct table's gaps, and
   the general speed passes (§6.4).
 
+**Step 92, the bit operations of Rocq's library on counters (§2.1, §3.5, §12.A) — the design (2026-11-08).**  `Nat.land n 6`, `Nat.shiftr n 1`, `Nat.testbit n k`, `Nat.b2n`: natural, and a counter is one machine number (step 70).  Each has a definition in Rocq and is one to three instructions of the machine, so each is a case of the generator's proof, proved from Rocq's lemmas and its axioms of the machine's numbers; nothing is added to what is assumed (§0.3, F66).
+- *The family*, Stdlib's `Nat` (`Init.Nat`, `PeanoNat`): `land`, `lor`, `lxor`, `ldiff`, `shiftr`, `clearbit`, `testbit`, `shiftl`, and what is defined by them, `b2n`, `setbit`, `ones`, `lnot`.  `gcd`, `log2`, `sqrt`, `log2_up`, `sqrt_up`, `lcm` recurse, and a loop is a function of its own in KQL: step 93.
+- *`S`* (`KQR.v`): `CBitN o a b`, `o` one of `NLand`, `NLor`, `NLxor`, `NLdiff`, `NShiftr`, `NClear`, its meaning the library's function by conversion (`nbop_nat`); `CShl k c`, `Nat.shiftl c k` with `k` written; `BTestN a k`, `Nat.testbit a k`.  The code: `land`, `lor`, `lxor`, `lsr` of the two machine numbers; `ldiff` the `land` of the first and the `lxor` of the second with the 63 ones; `clearbit` the same with `lsl 1 k` for the second; `testbit` the `land` of `lsr a k` with 1, then a test, a value or a conditional move, as `BEven` is; `shiftl` `lsl` by the written number.
+- *What is proved*, each from Rocq's lemmas on `Nat`, `Z` and its axioms of `PrimInt63` alone: the machine's `land`, `lor`, `lxor` of two counters below `wB` are those of the counters (`Nat.land_spec`, `Z.land_spec`, bit by bit, `Z.bits_inj'`); `lsr` is `Nat.shiftr` for any count below `wB`, 63 and above included; `ldiff` and `clearbit` by the 63 ones, `clearbit` by a count of 63 and above too, which `lsl` makes 0; the bit is `(a / 2^k) mod 2` on both sides; `lsl` is `Nat.shiftl` modulo `wB` at every counter, as a product is (step 70).
+- *Their bounds* (`cmax`, `cmaxv`, `clinf`): `land`, `ldiff`, `shiftr`, `clearbit` at most the first, written as the larger of the two so that the whole fitting shows each part fits, as `CDivN`; `lor`, `lxor` below the power of two above the larger (`Z.log2_lor`, `Z.log2_lxor`), so that two counters below `2^63` give one below it; in the linear bound the sum (`Z.add_lor_land`); `shiftl` the bound times `2^k`.  `wf` asks both operands below `2^63`, the bound of the whole below it where it is a counter, as for any.
+- *The reader*: the six by name in `reify_c`, `testbit` in `reify_b`, `shiftl` when its count is a written number; `shiftr` is no longer opened to its `nat_rect`; `b2n`, `setbit`, `ones`, `lnot` opened to their definitions.  The same under `Require Import Arith`.
+- *By design* (§0.5, second reason), each with a control: `Nat.shiftl` by a counter, `Nat.setbit`, `Nat.ones`, `Nat.lnot` at a counter, and `shiftl` by a written number past a word: a number that may need more than a word, as `Nat.pow 2 n` (step 70); the controls the same at a written number.  `clearbit` at a counter is read: its value is at most the first.
+- *Left, with cells*: a function giving back a counter (step 82's rows) built with one of them: `land`, `lor`, `lxor`, `ldiff` agree modulo `wB` at every counter, `shiftr`, `testbit`, `clearbit` do not and want step 83's bounds.
+- *The C*: a program with no such operation: byte-identical.
+- *The acceptance*: `proved/examples/bitn_fix`: a count of the bits set by `testbit`, masks by `land`, `lor`, `lxor`, `ldiff`, `clearbit`, shifts, `b2n`, `setbit`, `ones`, `lnot` at written numbers, as budgets, tests and numbers, in a recursion; the answer worked out apart.
+- *Cells*: `A_zh_*`: each operation as a budget, a number, a test, a match, a let, in a recursion, under `Require Import Arith`, nested, on a counter of a machine number; `testbit` in a test, a value, a conditional move, under `&&` and `negb`; the pins and controls above; the rows left.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5733,7 +5745,8 @@ Pushed to the public repository up to `95b1f77` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 91 (the printed C says what the Clight says: the construct table 3609 of 3742, 54 by design, 78 gaps), the C, the gate; F75 |
+| (this commit) | §12.V: step 92's design -- the bit operations of Rocq's library on counters |
+| `cf1639c` | §12.V: step 91 (the printed C says what the Clight says: the construct table 3609 of 3742, 54 by design, 78 gaps), the C, the gate; F75 |
 | `95b1f77` | `proved/KQLGen.v` + `KQLProof.v` + `kitc.py` + `examples.sh` + `sup/v4/kq_io.h` step 91: a signed number made unsigned before it is shifted left; the printed C through undefined behaviour traps, `-O0` and `ccomp` |
 | `959bc83` | §12.V: step 91's design -- the printed C says what the Clight says, and the tools are asked |
 | `64dac81` | §12.V: step 90 (the generated C on its own: the construct table 3608 of 3742, 54 by design, 79 gaps), the C, the gate |
