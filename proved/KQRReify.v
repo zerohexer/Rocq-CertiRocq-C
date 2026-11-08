@@ -121,6 +121,18 @@ Definition kn_c_shiftr := kn_of <% Nat.shiftr %>.
 Definition kn_c_clearbit := kn_of <% Nat.clearbit %>.
 Definition kn_c_shiftl := kn_of <% Nat.shiftl %>.
 Definition kn_c_testbit := kn_of <% Nat.testbit %>.
+(* (step 93) the recursive functions of the library on counters, and the kit's function for each *)
+Definition kn_c_gcd := kn_of <% Nat.gcd %>.
+Definition kn_c_sqrt := kn_of <% Nat.sqrt %>.
+Definition kn_c_log2 := kn_of <% Nat.log2 %>.
+Definition kit_kn (o : nlop) : kername :=
+  match o with LGcd => kn_of <% KQ.KQRun.kq_gcdg %> | LSqrt => kn_of <% KQ.KQRun.kq_sqrtg %> | LLog2 => kn_of <% KQ.KQRun.kq_log2g %> end.
+Definition nlop_of (kn : kername) : option nlop :=
+  if Kername.eqb kn kn_c_gcd then Some LGcd else if Kername.eqb kn kn_c_sqrt then Some LSqrt
+  else if Kername.eqb kn kn_c_log2 then Some LLog2 else None.
+Definition kit_of_kn (kn : kername) : option nlop :=
+  if Kername.eqb kn (kit_kn LGcd) then Some LGcd else if Kername.eqb kn (kit_kn LSqrt) then Some LSqrt
+  else if Kername.eqb kn (kit_kn LLog2) then Some LLog2 else None.
 Definition nbop_of (kn : kername) : option nbop :=
   if Kername.eqb kn kn_c_land then Some NLand else if Kername.eqb kn kn_c_lor then Some NLor
   else if Kername.eqb kn kn_c_lxor then Some NLxor else if Kername.eqb kn kn_c_ldiff then Some NLdiff
@@ -1532,12 +1544,29 @@ with reify_c (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sc
                                      else if Kername.eqb k kn_u2z then option_map CToNatU (reify fuel ctx e) else None
         | _ => None end
       else match hb kn with Some b => reify_c fuel ctx (wout b args) | None =>
+        (* (step 93) a recursive function of the library on counters: a call of the kit's function, read with the program *)
+        match nlop_of kn with
+        | Some o =>
+            match find_callee (kit_kn o) callees 0, args with
+            | Some (f, gs), [a; b] =>
+                if kit_sigb gs o then match o with
+                                      | LGcd => match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (CLib o f x y) | _, _ => None end
+                                      | _ => None end
+                else None
+            | Some (f, gs), [a] =>
+                if kit_sigb gs o then match o with
+                                      | LGcd => None
+                                      | _ => option_map (fun x => CLib o f x CO) (reify_c fuel ctx a) end
+                else None
+            | _, _ => None
+            end
+        | None =>
         (* (step 92) a bit operation of the library, looked for after the program's helpers, so that their calls pay nothing for it *)
         match nbop_of kn, args with
         | Some o, [a; b] => match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (CBitN o x y) | _, _ => None end
         | None, [a; b] => if Kername.eqb kn kn_c_shiftl then (if cnt_lit b then option_map (CShl (cnt_val b)) (reify_c fuel ctx a) else None) else None
         | _, _ => None
-        end end
+        end end end
   (* (step 92) a let in a counter, named at most once: put in its place, as the kernel's check does (zeta); a helper written out
      binds what it is given so (a test given to [Nat.b2n]) *)
   | tLetIn _ v _ b => if Nat.leb (rel_occ 1000 0 b) 1 then reify_c fuel ctx (subst10 v b) else None
@@ -3232,7 +3261,7 @@ with cl_es (B : Z) (bs : list cbe) (es : sexps) {struct es} : list site :=
   | SConsR x r => cl_r B bs x ++ cl_es B bs r
   end
 with cl_c (B : Z) (bs : list cbe) (c : scnt) {struct c} : list site :=
-  match c with CVar _ | CO => [] | CS c | KQR.CPred c | CDiv2 c | CMulK _ _ c | CShl _ c => cl_c B bs c | CAdd a b | CMin a b | CMax a b | CSub a b | CDivN a b | CModN a b | CBitN _ a b => cl_c B bs a ++ cl_c B bs b | CNat e | CToNat e | CToNatU e => cl_e B bs e | CIf b x y => cl_b B bs b ++ cl_c B bs x ++ cl_c B bs y end
+  match c with CVar _ | CO => [] | CS c | KQR.CPred c | CDiv2 c | CMulK _ _ c | CShl _ c => cl_c B bs c | CAdd a b | CMin a b | CMax a b | CSub a b | CDivN a b | CModN a b | CBitN _ a b | CLib _ _ a b => cl_c B bs a ++ cl_c B bs b | CNat e | CToNat e | CToNatU e => cl_e B bs e | CIf b x y => cl_b B bs b ++ cl_c B bs x ++ cl_c B bs y end
 with cl_cs (B : Z) (bs : list cbe) (cs : scnts) {struct cs} : list site :=
   match cs with CNil => [] | CCons c r => cl_c B bs c ++ cl_cs B bs r end
 with cl_b (B : Z) (bs : list cbe) (b : sbool) {struct b} : list site :=
@@ -9969,6 +9998,32 @@ Definition rp_topo (Σ : global_env) (rows : list rprow) : list rprow :=
 Definition pm_kit : global_env :=
   ltac:(run_template_program (tmQuoteRecTransp (fun x y : PrimInt63.int => (KQ.KQRun.kq_h0 x, KQ.KQRun.kq_t0 x, KQ.KQRun.kq_mh x y, KQ.KQRun.kq_d21 x y x)) false)
           (fun q => let r := eval vm_compute in (fst q) in exact r)).
+(** (step 93) the kit's functions for the library's recursive functions on counters: a program names the library's, not them *)
+Definition lk_kit : global_env :=
+  ltac:(run_template_program (tmQuoteRecTransp (fun x y : PrimInt63.int => (KQ.KQRun.kq_gcdg O x y, KQ.KQRun.kq_sqrtg O x y x, KQ.KQRun.kq_log2g O x y x)) false)
+          (fun q => let r := eval vm_compute in (fst q) in exact r)).
+(* asked of every program: one pass comparing short names first, the lookups only where one is there (F64) *)
+Definition lk_short (s : string) : bool :=
+  if String.eqb s "gcd"%bs then true else if String.eqb s "sqrt"%bs then true else String.eqb s "log2"%bs.
+Definition lk_ops (Σ : global_env) : list nlop :=
+  if existsb (fun e => lk_short (snd (fst e))) (declarations Σ) then
+    filter (fun o => match lookup_env Σ (match o with LGcd => kn_c_gcd | LSqrt => kn_c_sqrt | LLog2 => kn_c_log2 end) with Some _ => true | None => false end)
+      [LGcd; LSqrt; LLog2]
+  else [].
+Definition lk_with (os : list nlop) (Σ : global_env) : global_env :=
+  match os with
+  | [] => Σ
+  | _ => fold_left (fun S e => match lookup_env S (fst e) with
+                               | Some _ => S
+                               | None => {| universes := universes S; declarations := e :: declarations S; retroknowledge := retroknowledge S |}
+                               end) (declarations lk_kit) Σ
+  end.
+(** a kit function read: its kit signature, which only a call of the library's function reaches *)
+Definition kit_fix (kn : kername) (r : option (list (kername * sig * fbody) * copytab)) : option (list (kername * sig * fbody) * copytab) :=
+  match kit_of_kn kn, r with
+  | Some o, Some (es, tbl) => Some (map (fun e : kername * sig * fbody => if Kername.eqb (fst (fst e)) kn then (fst (fst e), kit_sig o, snd e) else e) es, tbl)
+  | _, _ => r
+  end.
 Definition pm_add (Σ : global_env) : global_env :=
   fold_left (fun S e => match lookup_env S (fst e) with
                         | Some _ => S
@@ -10610,9 +10665,11 @@ Definition y_rows (Σ : global_env) : copytab :=
     else []) (rev (firstn 200 (declarations Σ))).
 Definition reify_prog2c (lo : bool) (bt0 : kername -> option Z) (chk : bool) (p : program) : option (list (kername * sig * fbody) * list (string * term)) :=
   match p with
-  | (Σ000, tConst root _) =>
+  | (Σ0000, tConst root _) =>
       let mp := fst root in
-      (* (step 83) *)
+      (* (step 93) the kit's functions a call of the library's needs *)
+      let lko := lk_ops Σ0000 in
+      let Σ000 := lk_with lko Σ0000 in
       let ncos := filter (fun e => if eq_mp (fst (fst e)) copy_mp then ends_nco (snd (fst e)) else false) (firstn 200 (declarations Σ000)) in
       let bt := match ncos with
                 | [] => bt0
@@ -10624,7 +10681,9 @@ Definition reify_prog2c (lo : bool) (bt0 : kername -> option Z) (chk : bool) (p 
       let ltp := y_rows Σ000 ++ ltp0 in
       let '(Σ0, lt0) := if lo then lift_ops Σ00 mp root else (Σ00, []) in
       let kns0 := reach 1000 Σ0 mp root root [] in
-      let '(Σ, kns, lts1) := lift_all (float_all Σ0 kns0) mp kns0 in
+      let '(Σ, kns1, lts1) := lift_all (float_all Σ0 kns0) mp kns0 in
+      (* (step 93) the kit's functions first: the program's functions call them *)
+      let kns := map kit_kn lko ++ filter (fun k => match kit_of_kn k with Some _ => false | None => true end) kns1 in
       let lts := ltp ++ lt0 ++ lts1 in
       let hb := helper_of Σ mp kns in
       let rt := rtab_of Σ hb (kns ++ vm_phantoms Σ) in
@@ -10652,8 +10711,8 @@ Definition reify_prog2c (lo : bool) (bt0 : kername -> option Z) (chk : bool) (p 
                                 (* a member of a mutual block (step 45): its part, after the parts it calls, each read once *)
                                 let g := map (mcalls (length mfix)) mfix in
                                 add_member Σ (fst kn) hb rt bt chk mfix (part_of g (length mfix) k) k (ensure_part 100 Σ (fst kn) hb rt bt chk mfix g k (Some (es, tbl)))
-                              else read_add Σ hb (tc_of Σ mp tbl) rt kn bt chk es tbl
-                          | _ => read_add Σ hb (tc_of Σ mp tbl) rt kn bt chk es tbl
+                              else kit_fix kn (read_add Σ hb (tc_of Σ mp tbl) rt kn bt chk es tbl)
+                          | _ => kit_fix kn (read_add Σ hb (tc_of Σ mp tbl) rt kn bt chk es tbl)
                           end
                       | None => None
                       end

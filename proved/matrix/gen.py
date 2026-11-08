@@ -3254,6 +3254,79 @@ addA('zh_row_testbit', "", 'Uint63.of_Z (Z.of_nat (pc n n))',
      'From Stdlib Require Import ZArith.\nFixpoint pc (k m : nat) : nat := match k with O => O | S j => if Nat.testbit m j then S (pc j m) else pc j m end.\n')
 addA('zh_row_testbit_own', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
      'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => if Nat.testbit (cb j m) 1 then S (cb j m) else cb j m end.\n')
+# the recursive functions of Rocq's library on counters: a call of the kit's function (step 93)
+addA('zi_gcd_budget', "", 'ff (Nat.gcd n 6) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_gcd_num', "", 'Uint63.of_Z (Z.of_nat (Nat.gcd n (Z.to_nat (Uint63.to_Z b))))',
+     'From Stdlib Require Import ZArith.\n')
+addA('zi_gcd_cmp', "", 'if Nat.leb (Nat.gcd n 6) 2 then a else b',
+     '')
+addA('zi_gcd_rec', "", 'lp n a',
+     'From Stdlib Require Import ZArith.\nFixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (x + Uint63.of_Z (Z.of_nat (Nat.gcd j 6))) end.\n')
+addA('zi_gcd_let', "", 'let c := Nat.gcd n 6 in ff c a + ff c b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_gcd_match', "", 'match Nat.gcd n 6 with O => a | S m => ff m b end',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_gcd_ar', "", 'ff (Nat.gcd n 6) a',
+     'From Stdlib Require Import Arith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_gcd_twice', "", 'ff (Nat.gcd n 6) a + ff (S (Nat.gcd n 6)) b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_gcd_callee', "", 'g2 n a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (n : nat) (x : int) : int := ff (Nat.gcd n 6) x.\n')
+addA('zi_sqrt_budget', "", 'ff (Nat.sqrt n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_sqrt_num', "", 'Uint63.of_Z (Z.of_nat (Nat.sqrt (Z.to_nat (Uint63.to_Z b))))',
+     'From Stdlib Require Import ZArith.\n')
+addA('zi_sqrt_cmp', "", 'if Nat.leb (Nat.sqrt n) 2 then a else b',
+     '')
+addA('zi_sqrt_rec', "", 'lp n a',
+     'From Stdlib Require Import ZArith.\nFixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (x + Uint63.of_Z (Z.of_nat (Nat.sqrt j))) end.\n')
+addA('zi_sqrt_let', "", 'let c := Nat.sqrt n in ff c a + ff c b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_sqrt_match', "", 'match Nat.sqrt n with O => a | S m => ff m b end',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_sqrt_ar', "", 'ff (Nat.sqrt n) a',
+     'From Stdlib Require Import Arith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_sqrt_twice', "", 'ff (Nat.sqrt n) a + ff (S (Nat.sqrt n)) b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_sqrt_callee', "", 'g2 n a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (n : nat) (x : int) : int := ff (Nat.sqrt n) x.\n')
+addA('zi_log2_budget', "", 'ff (Nat.log2 n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_log2_num', "", 'Uint63.of_Z (Z.of_nat (Nat.log2 (Z.to_nat (Uint63.to_Z b))))',
+     'From Stdlib Require Import ZArith.\n')
+addA('zi_log2_cmp', "", 'if Nat.leb (Nat.log2 n) 2 then a else b',
+     '')
+addA('zi_log2_rec', "", 'lp n a',
+     'From Stdlib Require Import ZArith.\nFixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (x + Uint63.of_Z (Z.of_nat (Nat.log2 j))) end.\n')
+addA('zi_log2_let', "", 'let c := Nat.log2 n in ff c a + ff c b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_log2_match', "", 'match Nat.log2 n with O => a | S m => ff m b end',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_log2_ar', "", 'ff (Nat.log2 n) a',
+     'From Stdlib Require Import Arith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_log2_twice', "", 'ff (Nat.log2 n) a + ff (S (Nat.log2 n)) b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_log2_callee', "", 'g2 n a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (n : nat) (x : int) : int := ff (Nat.log2 n) x.\n')
+addA('zi_gcd_vars', "", 'Uint63.of_Z (Z.of_nat (Nat.gcd (Z.to_nat (Uint63.to_Z a)) (Z.to_nat (Uint63.to_Z b))))',
+     'From Stdlib Require Import ZArith.\n')
+addA('zi_gcd_zero_l', "", 'ff (Nat.gcd 0 n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_gcd_zero_r', "", 'ff (Nat.gcd n 0) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_nested', "", 'ff (Nat.gcd (Nat.sqrt n) (Nat.log2 n)) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_bits', "", 'ff (Nat.log2 (Nat.land n 255)) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_all_three', "", 'ff (Nat.gcd n 4) a + ff (Nat.sqrt n) b + ff (Nat.log2 n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_log2_up', "", 'ff (Nat.log2_up n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_sqrt_up', "", 'ff (Nat.sqrt_up n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zi_lcm', "", 'ff (Nat.lcm n 6) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
 # a memory in a value of any data type; a sixth probe (step 87)
 addA('zf_h_user', "", 'match st1 a s with Ok v t => v + rd 0 a t | Err e => e end',
      'Inductive res := Ok (v : int) (t : mem) | Err (e : int).\nDefinition st1 (i : int) (t : mem) : res := if i =? 0 then Err 1 else Ok i (upd 0 i i t).\n')

@@ -159,6 +159,28 @@ Fixpoint kq_d21g (k : nat) (c q r l : int) {struct k} : int * int :=
       else kq_d21g k' c (PrimInt63.add (PrimInt63.lsl q 1) 1) (PrimInt63.sub n c) (PrimInt63.lsl l 1)
   end.
 Definition kq_d21 (a b c : int) : int * int := kq_d21g (kq_nat 63) c 0 a b.
+(* (step 93) what Nat.gcd, Nat.sqrt, Nat.log2 compute on numbers below 2^63, as loops of the kit, each a function of the program
+   that names one (proved/KQR.v: kq_gcdg_ok, kq_sqrt_ok, kq_log2_ok).  Euclid's loop, its budget the first number: it decreases at
+   every round *)
+Fixpoint kq_gcdg (k : nat) (a b : int) {struct k} : int :=
+  match k with
+  | O => b
+  | S k' => if PrimInt63.eqb a 0 then b else kq_gcdg k' (PrimInt63.mod b a) a
+  end.
+(* a search between lo and hi, the square of the middle below 2^63: 32 rounds from 0 and 3037000500 *)
+Fixpoint kq_sqrtg (k : nat) (lo hi a : int) {struct k} : int :=
+  match k with
+  | O => lo
+  | S k' => let m := PrimInt63.lsr (PrimInt63.add lo hi) 1 in
+            if PrimInt63.leb (PrimInt63.mul m m) a then kq_sqrtg k' m hi a else kq_sqrtg k' lo m a
+  end.
+(* a search over the shifts 32, 16, .., 1: six rounds *)
+Fixpoint kq_log2g (k : nat) (x r s : int) {struct k} : int :=
+  match k with
+  | O => r
+  | S k' => if PrimInt63.eqb (PrimInt63.lsr x s) 0 then kq_log2g k' x r (PrimInt63.lsr s 1)
+            else kq_log2g k' (PrimInt63.lsr x s) (PrimInt63.add r s) (PrimInt63.lsr s 1)
+  end.
 (* Rocq is told NOT to open `kq_nat` when it compares two programs (KQFast.v proves `main_kq = main` by having the
    kernel compare them).  A program's budget is `kq_nat (kq_arg 0)`: a number nobody knows before the run.  Opened,
    it is 63 nested tests each naming the next one twice, and comparing two of those never ends.  Computing with it

@@ -1,0 +1,19 @@
+(* the recursive functions of Rocq's library on counters, each a call of the kit's function: gcds, square roots and logarithms
+   over a block's cells, in a recursion; gcd as a budget, sqrt in a test, log2 of a counter of a machine number.  With a = 0 and the
+   cells 0, 1, 2, 12, 100, 200, 255, 256, 360, 1000, 4095, 99999, each masked to 8 bits: the walk 51784, times 10; gcd 200 48 = 8, a budget, times
+   100000000; sqrt 200 = 14, above 13, so 2, times 1000000000; log2 123456789 = 26: worked out apart, 2800517866. *)
+From Stdlib Require Import ZArith.
+Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.
+Fixpoint walk (k : nat) (acc : int) (s : mem) : int :=
+  match k with
+  | O => acc
+  | S j => let c := Nat.land (Uint63.to_nat (rd 0 (Uint63.of_nat j) s)) 255 in
+           walk j (acc + Uint63.of_nat (Nat.gcd c 36) + Uint63.of_nat (Nat.sqrt c) * 7 + Uint63.of_nat (Nat.log2 c) * 1000) s
+  end.
+Definition solve (a : int) (s : mem) : int :=
+  let n := Nat.land (Uint63.to_nat (a + 200)) 255 in
+  walk 12 0 s * 10 + ff (Nat.gcd n 48) a * 100000000 + (if Nat.leb (Nat.sqrt n) 13 then 1 else 2) * 1000000000
+    + Uint63.of_nat (Nat.log2 (Uint63.to_nat (a + 123456789))).
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve 0 (kq_input 0).

@@ -556,6 +556,9 @@ def reflect(name, entry, prog, no_proof):
     kl = lambda f: "[" + "; ".join(kc(c) for c in f[2] if c != "p") + "]"
     # the last number and the memory one parameter, a pair (step 44): "p" after the kinds
     isp = lambda f: f[2].endswith("p")
+    # (step 93) a kit function for the library's recursive functions on counters: the pair flag without a memory, which only it has
+    iskit = lambda f: isp(f) and f[3] == "false"
+    kitop = lambda f: "KQR.LGcd" if f[0].endswith("kq_gcdg") else "KQR.LSqrt" if f[0].endswith("kq_sqrtg") else "KQR.LLog2"
     # the result: a record of the program's type 0 .. 7 (a .. h), a boolean (B, step 24), a number and a memory (P, step 26),
     # or none
     rq = lambda f: ("None" if f[6] == "" else "(Some KQR.KBool)" if f[6] == "B" else "(Some KQR.KNum)" if f[6] == "P"
@@ -1048,7 +1051,7 @@ def reflect(name, entry, prog, no_proof):
     if not no_proof:
         for j, f in enumerate(fs):
             cs = "[" + "; ".join(f"existT (@KQR.ftype {inst}) {sig(g)} {g[0]}" for g in fs[:j]) + "]"
-            oks = "".join(f"(conj {name}_rok{i} " for i in range(j)) + "Logic.I" + ")" * j
+            oks = "".join(f"(conj {f'(conj (KQR.kit_entry_ok {kitop(fs[i])}) {name}_rok{i})' if iskit(fs[i]) else f'{name}_rok{i}'} " for i in range(j)) + "Logic.I" + ")" * j
             if f[0] in pfs or f[0] in pfc or f[0] in yf:
                 # (step 56) the theorem of its budget function's call, then equal to it at every argument
                 # (step 59) a copy: the same, its equation the function's at the functions given
@@ -1074,8 +1077,12 @@ def reflect(name, entry, prog, no_proof):
             t += f"Lemma {name}_rok{j} : @KQR.callee_ok {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {sig(f)} {f[0]}.\n"
             # (step 45) a member of a mutual block is one call of its block: not a fix over its counter
             # (step 46) a copy is a fix over its counter too
-            prec = isp(f) and (iscp(f[0]) or f[0] in fix1)
-            if iscp(f[0]) or isw(f[0]) or prec or f[0] in cv:
+            prec = isp(f) and not iskit(f) and (iscp(f[0]) or f[0] in fix1)
+            if iskit(f):
+                # (step 93) its theorem under the signature without the flag, the same for a function that takes no memory
+                t += (f"Proof. exact_no_check (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sigc(f)} (KQRReify.body_at {name}_funs {j})"
+                      f" eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl). Qed.\n")
+            elif iscp(f[0]) or isw(f[0]) or prec or f[0] in cv:
                 # a copy: not a fix over its counter, so its statement comes from its two equations, each by conversion
                 # (a copy that writes the memory and gives back a number has a memory: no memory argument)
                 # (step 41) a boolean, a number and a memory, a record given back: their own copies' theorems
