@@ -91,6 +91,9 @@ cbody kq_hw_store64  # hw
 cbody kq_hw_sym  # hw
 cbody kq_hw_wide  # hw
 
+# The assumptions: what every lemma of the generator's last file (KQMTop.v) and of the verified compiler's files (KQR.v, KQRWf.v,
+# KQPrim.v) rests on, printed by proved/make.sh (ASSUME=1) from a file that imports nothing, each by its full name (step 92, F76).
+# What proved/KQPrim.v rests on: a program using head0, tail0, mulc or diveucl_21 rests on Uint63Axioms.head0_spec, tail0_spec, mulc_spec, diveucl_21_spec.
 assumption Axioms.proof_irr
 assumption ClassicalDedekindReals.sig_forall_dec
 assumption ClassicalDedekindReals.sig_not_dec
@@ -125,9 +128,9 @@ assumption KQRun.upd
 assumption KQRun.upd32
 assumption KQSpec.hw_trace
 assumption KQSpec.real_laws
-assumption PrimFloat.float
 assumption PrimInt63.add
 assumption PrimInt63.asr
+assumption PrimInt63.compares  # Rocq's own: as Sint63Axioms.compare_spec
 assumption PrimInt63.div
 assumption PrimInt63.diveucl_21
 assumption PrimInt63.divs
@@ -149,21 +152,23 @@ assumption PrimInt63.mul
 assumption PrimInt63.mulc
 assumption PrimInt63.sub
 assumption PrimInt63.tail0
-assumption PrimString.string
 assumption Runtime.hw_cpu_code
 assumption Runtime.hw_irq_entry
 assumption Runtime.hw_irq_info
 assumption Runtime.hw_irq_take
 assumption Runtime.hw_sym
 assumption Sint63Axioms.asr_spec
+assumption Sint63Axioms.compare_spec  # Rocq's own: KQRWf.kq_compares_def (step 64) rests on it, and no print of the old check reached it (F76)
 assumption Sint63Axioms.div_spec
 assumption Sint63Axioms.leb_spec
 assumption Sint63Axioms.ltb_spec
 assumption Sint63Axioms.mod_spec
 assumption Uint63Axioms.add_spec
 assumption Uint63Axioms.div_spec
+assumption Uint63Axioms.diveucl_21_spec
 assumption Uint63Axioms.eqb_correct
 assumption Uint63Axioms.eqb_refl
+assumption Uint63Axioms.head0_spec
 assumption Uint63Axioms.land_spec
 assumption Uint63Axioms.leb_spec
 assumption Uint63Axioms.lor_spec
@@ -173,47 +178,9 @@ assumption Uint63Axioms.ltb_spec
 assumption Uint63Axioms.lxor_spec
 assumption Uint63Axioms.mod_spec
 assumption Uint63Axioms.mul_spec
+assumption Uint63Axioms.mulc_spec
 assumption Uint63Axioms.of_to_Z
 assumption Uint63Axioms.sub_spec
+assumption Uint63Axioms.tail0_spec
 assumption User.hw_user
 assumption User.hw_userf
-assumption add
-assumption add_spec
-assumption asr
-assumption div
-assumption divs
-assumption eq_refl
-assumption eqb
-assumption eqb_correct
-assumption eqb_refl
-assumption int
-assumption land
-assumption land_spec
-assumption leb
-assumption leb_spec
-assumption lesb
-assumption lor
-assumption lor_spec
-assumption lsl
-assumption lsl_spec
-assumption lsr
-assumption lsr_spec
-assumption ltb
-assumption ltb_spec
-assumption ltsb
-assumption lxor
-assumption mod
-assumption mods
-assumption mul
-assumption of_to_Z
-assumption sub
-assumption sub_spec
-# Rocq's own: Uint63Axioms.div_spec, mod_spec, mul_spec, printed short where a file names them through Uint63
-assumption div_spec
-assumption mod_spec
-assumption mul_spec
-# Rocq's own axioms, what proved/KQPrim.v rests on: a program using head0, tail0, mulc or diveucl_21 rests on these
-assumption Uint63Axioms.diveucl_21_spec
-assumption Uint63Axioms.head0_spec
-assumption Uint63Axioms.mulc_spec
-assumption Uint63Axioms.tail0_spec

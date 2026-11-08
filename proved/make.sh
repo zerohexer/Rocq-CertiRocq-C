@@ -12,7 +12,12 @@ for f in KQPrim KQLSigned KQL KQTArith KQW64 KQByteArith KQBytes KQLGen KQMSem K
   coqc -w -all -R .. KQ -Q . KQC $f.v || { echo "FAILED $f"; exit 1; }
 done
 if [ -n "$ASSUME" ]; then
-  printf 'From KQC Require Import KQMTop.\nPrint Assumptions kit_function_correct.\nFrom KQC Require KQPrim.\nPrint Assumptions KQPrim.kq_mulc_def.\nPrint Assumptions KQPrim.kq_h0_eq.\nPrint Assumptions KQPrim.kq_t0_eq.\nPrint Assumptions KQPrim.kq_d21_eq.\nPrint Assumptions KQPrim.kq_d21_le.\n' > /tmp/Assump.v
-  coqc -w -all -R .. KQ -Q . KQC /tmp/Assump.v
+  # what the route rests on: the assumptions of every lemma of the generator's last file and of the verified compiler's files, printed
+  # from a file that imports nothing, so that each name is the one constant it names (step 92, F76)
+  { echo "From KQC Require KQMTop KQR KQRWf KQPrim."
+    for m in KQMTop KQR KQRWf KQPrim; do grep -oE "^ *(Lemma|Theorem|Corollary|Fact|Remark|Proposition|Property) [A-Za-z_][A-Za-z_0-9']*" $m.v | awk -v m=$m '{print "Print Assumptions " m "." $2 "."}'; done; } > /tmp/Assump.v
+  echo "== the assumptions"
+  coqc -w -all -R .. KQ -Q . KQC /tmp/Assump.v 2>&1 | grep -E "^[A-Za-z_][A-Za-z_0-9.']* :" | sed 's/ :.*//' | sort -u
+  echo "== end of the assumptions"
 fi
 echo core-ok
