@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3608 of 3742, 79 gaps, 54 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3609 of 3742, 78 gaps, 54 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1657,6 +1657,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F70 | The record table was built in three places, `rec_info` with the made functions that name a value's type and the reader's two without them: a syntax tree numbering its records by one table, its meaning read by the other.  Nothing wrong was accepted: the kernel's check `denote s = f` refused it (`A_v_callee_other_value`, two types of the same width, found at step 78) | one list for all three |
 | F73 | `compile` writes what follows an operand in each arm of a test that cannot be a conditional move, so `k` of them in one expression are `2^k` copies, and `x mod p` is three arms: a matrix power modulo `p` was read, its check passed, and printing its C ran out of memory; nothing had measured the size of the C (found by the fifth probe, step 85) | step 86: above 1024 copies by a count from the text, such operands are functions.  A join point in KQL would need no function: §6.4 |
 | F74 | The first `u64_divu`, a loop of 64 rounds in `lib/CInt.v` before it became an instruction, shifted the remainder and lost its top bit: wrong for a divisor above `2^63`.  It was read and its C proved equal to it: the verified compiler says the C computes the function, and nothing about whether the function is what its name says.  Writing the theorem against `Z` found it, at the case the invariant needed.  So a library of ours carries its theorems (`lib/CIntSpec.v`), and "proved" about a library names which of the two is meant |
+| F75 | The printed C left-shifted negative numbers: `tagup` of a signed number.  Clight defines that, C does not, so the text clang read said less than the Clight the theorem is about.  No answer was wrong: clang's IR has no `nsw` on a signed left shift.  Undefined behaviour trapped found it on its first run, 4 of 59 examples.  Fixed in the generator with a cast, the assembly the same.  So a difference between Clight and the printed C is a real class, and the printer is not the place to fix one |
 | F69 | `rewrite` compares up to unfolding, full, whatever `Strategy opaque` says: a lemma about a function whose body is one operation fires on that operation where the function is not written, and with a tactic turning the operation back the proof never ended | the lemma only where the function is in the goal (`match goal with |- context [F]`); a proof that looks for what to rewrite is stepped by hand when it times out |
 | F68 | A program's own file (`Require`d by its text) was compiled again only when older than its source, not than the kit, so after `KQRun.v` changed the program failed once on Rocq's inconsistent assumptions and `kitc.py` wrote no C; the comparison showed `none`, at steps 65 and 73 | `build_user_files` counts the kit's `.vo` |
 | F67 | A budget written as `S (S ..)` makes a conversion unroll the fixpoint: both sides reduce on the constructor, and with two branches in each round the comparison is exponential.  `reflexivity` on `(fix go ..) 63 c 0 a b = kq_d21_go 63 c 0 a b` did not end, nor `rewrite` of a term holding it, with the fixpoints' bodies identical | a written budget is `kq_nat 63`, opaque to a conversion (D18); a lemma about it is stated with the budget a variable, and the number put in with `exact` |
@@ -5534,6 +5535,19 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The checks* (`proved/examples.sh`), each the same printed functions, each to the expected answer: undefined behaviour trapped (`-fsanitize=undefined -fsanitize-trap`, no runtime); `-O0 -fno-strict-aliasing`; CompCert's `ccomp`, where it is installed (`KQ_NO_CCOMP=1` leaves it out): `sup/v4/kq_io.h` gives it the plain `?:` in place of the asm of a conditional move, so the printed C compiles with it as it is, for whoever holds its licence (D30).  A program that calls an operation of the machine is left out of `ccomp` only: their C bodies are GNU C.
 - *What this is not*: a proof.  The printer, clang and the driver stay unproved, and the CompCert route of §12.H stays open.  Each of these checks a few runs, of the examples only.
 
+**Step 91, the printed C says what the Clight says, and the tools are asked — the result (2026-11-08).**  Built as designed:
+- *The generator*: `ucast`, `tagup`, `eval_tagup`.  *`kitc.py`*: the freestanding form leaves out the machine's wrappers when none is called.  *`proved/examples.sh`*: the three builds.
+- *The C*: the text of 41 of the 95 programs differs, by the cast; clang's assembly is the same for all 41, compared at `-O2` before and after.
+- *The checks*, on the 59 examples: undefined behaviour trapped 59 right; `-O0` 59 right; `ccomp` 56 right, 3 call an operation of the machine.  Before the fix the first stopped 4 programs: `cint_fix`, `reflect_helpers`, `sdiv`, `views`.
+- *No cell*: the reader is unchanged.
+- The C: 54 of the 95 programs byte-identical, the 41 others different by the cast and only by it, their assembly the same.  The
+  construct table (on `95b1f77`): **3609 of 3742 through the verified compiler**, 54 by design, 78 gaps, 1 not Rocq (was 3608 of
+  3742: `A_ze_mod_5` read again, the run having had the memory this time).  The gate on `95b1f77`, the walk switched off:
+  `make.sh` `core-ok`; examples 60 / 60, 59 / 59 freestanding; the same C: undefined behaviour trapped 59 / 59, `-O0` 59 / 59,
+  `ccomp` 56 / 56 and 3 not built with it; corpus 36 / 36; the five kernels and `grow` (15 / 15 / 17 / 15 / 16 / 5 s); **105
+  programs through the verified compiler, 0 refused**; `check_trust.py`: `trust unchanged`.  Next: the construct table's gaps, and
+  the general speed passes (§6.4).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5715,11 +5729,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `925e035` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `95b1f77` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 91's design -- the printed C says what the Clight says, and the tools are asked |
+| (this commit) | §12.V: step 91 (the printed C says what the Clight says: the construct table 3609 of 3742, 54 by design, 78 gaps), the C, the gate; F75 |
+| `95b1f77` | `proved/KQLGen.v` + `KQLProof.v` + `kitc.py` + `examples.sh` + `sup/v4/kq_io.h` step 91: a signed number made unsigned before it is shifted left; the printed C through undefined behaviour traps, `-O0` and `ccomp` |
+| `959bc83` | §12.V: step 91's design -- the printed C says what the Clight says, and the tools are asked |
 | `64dac81` | §12.V: step 90 (the generated C on its own: the construct table 3608 of 3742, 54 by design, 79 gaps), the C, the gate |
 | `925e035` | `sup/free` + `proved/kitc.py` + `examples.sh` + `hw/kq_bare.c` + `hw/grow` step 90: the generated C with no hosted header and no libc, `kq_grow` on the machine |
 | `7cb061c` | §12.V: step 90's design -- the generated C on its own: no hosted header, no libc |
