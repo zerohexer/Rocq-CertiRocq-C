@@ -1,0 +1,19 @@
+(* hw/grow.body -- A BLOCK GROWN ON THE MACHINE, with no libc under it (hw/kq_bare.c kq_grow).  The answer: 0 when a cell written before
+   the block grew is still there, the new cells hold 0, and the cells written after it read back. *)
+Fixpoint fill (f : nat) (i n : int) (s : mem) : mem :=
+  match f with
+  | O => s
+  | S f => if n <=? i then s else fill f (i + 1) n (upd 2 i (i * 3) s)
+  end.
+Fixpoint sum (f : nat) (i n acc : int) (s : mem) : int :=
+  match f with
+  | O => acc
+  | S f => if n <=? i then acc else sum f (i + 1) n (acc + rd 2 i s) s
+  end.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  let s0 := upd 2 7 41 (kq_input 0) in
+  let s1 := kq_grow 2 10000 s0 in
+  let z := rd 2 9000 s1 in
+  let s2 := fill (kq_nat 1000) 9000 10000 s1 in
+  if (rd 2 7 s2 =? 41) && (z =? 0) && (kq_size 2 s2 =? 10000) && (sum (kq_nat 1000) 9000 10000 0 s2 =? 28498500) then 0 else 1.

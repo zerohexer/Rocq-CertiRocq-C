@@ -87,6 +87,29 @@ value kq_sum(value s) { return KQ_V(kq_checksum()); }
 value kq_in(value h, value i, value s) { return kq_updb(h, i, KQ_V(-1), s); }          /* no input here */
 value kq_out(value v, value s) { kq_puts("KQ-OUT "); kq_putn(KQ_N(v)); kq_putc('\n'); return s; }
 value kq_nat(value n) { return n; }
+// KQRun.v kq_grow: block h holds at least n cells; the cells it had keep their numbers, the new ones hold 0.  From a fixed room in the
+// kernel's own memory; what a block leaves when it moves is not used again.  No more room: the program stops, as the hosted one does,
+// because the laws cannot hold then and nothing is computed past that point.
+#ifndef KQ_BARE_ROOM
+#define KQ_BARE_ROOM (1L << 20)     /* bytes */
+#endif
+static char kq_room[KQ_BARE_ROOM] __attribute__((aligned(16)));
+static unsigned long kq_room_used;
+__attribute__((noreturn)) static void kq_exit(long code);
+value kq_grow(value h, value n, value s) {
+  kq_u hh = (kq_u) h >> 1; long nn = KQ_N(n);
+  if (hh >= KQ_MAXB || nn < 0 || nn >= (1L << 31)) return s;
+  if ((long) hh >= kq_nb) kq_nb = (long) hh + 1;
+  kq_block *b = &kq_b[hh];
+  if ((unsigned long) nn <= b->len) return s;
+  unsigned long need = (((unsigned long) nn + 1) * sizeof(value) + 15) & ~15UL;
+  if (need > KQ_BARE_ROOM - kq_room_used) { kq_puts("KQ-STOP kq_grow: no room\n"); kq_exit(3); }
+  value *p = (value *) (kq_room + kq_room_used); kq_room_used += need;
+  for (long i = 0; i < (long) b->len; i++) p[i] = b->p[i];
+  for (long i = (long) b->len; i <= nn; i++) p[i] = KQ_V(0);
+  b->p = p; b->len = (unsigned int) nn; b->lim = 2 * (unsigned int) nn;
+  return s;
+}
 
 // ---- values the program builds: one fixed area, handed out once, never taken back
 #ifndef KQ_BARE_HEAP

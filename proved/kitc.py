@@ -391,7 +391,7 @@ def ext_dispatch(extfile):
             "static inline value kq_hw_userf(value k, value a, value b, value c, value d) {\n"
             "  switch (KQ_N(k)) {\n" + "\n".join(pure) + "\n    default: return KQ_V(0); } }\n")
 
-def driver(name, entry_id, kinds, res, args, wrap, uses_hw=False, bare=False, prefix="", entry_name="body", secondary=False, ext=None, slots=False):
+def driver(name, entry_id, kinds, res, args, wrap, uses_hw=False, bare=False, prefix="", entry_name="body", secondary=False, ext=None, grows=False, slots=False):
     # the entry's parameters, in order, from what `main` passes
     vals = [a for a in args if a[0] != "M"]
     ks = [k for k in kinds if k != "M"]
@@ -415,7 +415,7 @@ def driver(name, entry_id, kinds, res, args, wrap, uses_hw=False, bare=False, pr
                 f"    kq_b[63].p = kq_slot_cells; kq_b[63].len = {slots}; kq_b[63].lim = {2 * slots}; }}\n") if slots else ""
     ret = "return kq_sum(KQ_V(0));" if res == "M" else "return (value) r;"
     hwdef = ("/* ---- the machine's operations: the kit's C bodies (hw/kq_hw.h) behind the external functions of the theorem */\n"
-             + ("" if bare else "#include <sys/mman.h>\nuintptr_t kq_hw_wlo, kq_hw_whi;\n") + ext_dispatch(ext) + HW_WRAPPERS + ("" if bare else HW_GROW)) if (uses_hw and not secondary) else ""
+             + ("" if bare else "#include <sys/mman.h>\nuintptr_t kq_hw_wlo, kq_hw_whi;\n") + ext_dispatch(ext) + HW_WRAPPERS + ("" if bare and not grows else HW_GROW)) if (uses_hw and not secondary) else ""
     hwset = "" if (bare or secondary) else ("  kq_hw_wlo = (uintptr_t) -1; kq_hw_whi = 0;\n"
              "  for (int h = 0; h < KQ_MAXB; h++) if (kq_b[h].lim) { uintptr_t p = (uintptr_t) kq_b[h].p, e = p + 4 * (uintptr_t) kq_b[h].lim;\n"
              "    if (p < kq_hw_wlo) kq_hw_wlo = p; if (e > kq_hw_whi) kq_hw_whi = e; }\n"
@@ -1344,9 +1344,15 @@ def write_c(name, eid, kinds, res, args, wrap, bare, prefix, entry_name, seconda
     uses_hw = re.search(r"\bf91[01]\d\d\b", c) is not None
     if prefix:
         c = re.sub(r"\bf(1\d{3})\b", prefix + r"f\1", c)
-    open(cfile, "w").write('#include "gc_stack.h"\n#include "kq_io.h"\n' + ('#include "kq_hw.h"\n' if uses_hw else "") + c
-                           + driver(name, eid, kinds, res, args, wrap, uses_hw, bare, prefix, entry_name, secondary, ext,
-                                    max(8, slots) if slots else (8 if pairfns else 0)))
+    grows = re.search(r"\bf91019\b", c) is not None
+    def text(b):
+        return ('#include "gc_stack.h"\n#include "kq_io.h"\n' + ('#include "kq_hw.h"\n' if uses_hw else "") + c
+                + driver(name, eid, kinds, res, args, wrap, uses_hw, b, prefix, entry_name, secondary, ext, grows,
+                         max(8, slots) if slots else (8 if pairfns else 0)))
+    open(cfile, "w").write(text(bare))
+    if not bare and not secondary:
+        # the same functions with no hosted header: sup/free/ builds it (proved/freestanding.sh)
+        open(os.path.join(GEN, f"{name}_bare.c"), "w").write(text(True))
 
 def build_bin(name, bare):
     """build bin/P_NAME as the kit builds its programs"""
