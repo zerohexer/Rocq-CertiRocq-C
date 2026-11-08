@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3680 of 3817, 77 gaps, 59 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3716 of 3853, 76 gaps, 60 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1719,6 +1719,10 @@ down, halving), so `wfixN` needs no measure written for them; loops whose end de
 
 **E. The general speed passes (§6.4):** bounds-test removal where the index is proved in range; forwarding; hoisting.  Each
 proved once, measured against C written the same way.
+- *A counter written as a number* (found at step 93): it is read as a chain of successors, so its code is as long as the number:
+  `Nat.land n 4095` is 4095 additions, and printing that C ran out of 3 GB.  Read a written counter above a few as one number,
+  `CNat (SInt k)`, equal to the chain by computation; the C of programs with such counters changes, so it is its own step, timed.
+  Accepted when a written counter of any size is one constant in the C and the corpus is timed.
 
 **F. Proof speed, only if it becomes the bottleneck (§7.5):** segmenting long straight-line functions; reflection.
 
@@ -5596,6 +5600,24 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The acceptance*: `proved/examples/libn_fix`: gcds, square roots and logarithms over a block's cells, as budgets, tests and numbers, in a recursion; the answer worked out apart.
 - *Cells*: `A_zi_*`: each function as a budget, a number, a test, a match, a let, in a recursion, nested, on a counter of a machine number, under `Require Import Arith`, at 0 and at the largest numbers; `log2_up`, `sqrt_up`; `lcm` and its control.
 
+**Step 93, the recursive functions of Rocq's library on counters: `gcd`, `sqrt`, `log2` — the result (2026-11-09).**  Built as designed:
+- *The kit* (`KQRun.v`): `kq_gcdg`, `kq_sqrtg`, `kq_log2g`.  *What is proved* (`KQR.v`): `kq_gcdg_ok`, `kq_sqrtg_inv` and `kq_sqrt_ok`, `kq_log2g_inv` and `kq_log2_ok`, `nsqrt_z`, `nlog2_z`, `nlop_le`, from Rocq's lemmas and its axioms of the machine's numbers alone.
+- *`S`*: `nlop`, `nlop_nat`, `CLib`; `kit_bound`, `kit_sig`, `kit_fun`, `kit_mark`, `kit_sigb`, `kits_ok`, `kit_entry`, `kit_entry_ok`, `kit_args`, `kit_call`; the cases of `cexp_all` and of the bounds' lemmas.
+- *Where the premise went*: the design put it beside `callees_ok`, which would have added an argument to every theorem built on the compiler's and to every call of them.  It is `callees_ok`'s second half, `kits_ok`, and `all_ok` asks of a callee under a kit's signature that it be the kit's function as well (`if kit_mark gs then ..`): for any other callee its obligation is what it was, so no proof of a program or of the tests changed but a kit entry's, which gives `kit_entry_ok`.
+- *A written budget unrolls a loop* (F67 again): in `kit_call` the budget 32 written in `sqrt`'s call made `cbn` unroll both branches of its 32 rounds and the proof never ended; the budget is a variable through the reduction, put in by an equation after.
+- *The reader* (`KQRReify.v`): `kit_kn`, `nlop_of`, `kit_of_kn`, `lk_kit`, `lk_ops`, `lk_with`, `kit_fix`; the three after the program's helpers; the kit's functions quoted in, read first, under their kit signatures.  *`kitc.py`*: a kit entry's theorem by `compile_f_ok` under its signature without the flag, its entry of `all_ok` with `kit_entry_ok`.
+- *Left, with cells*: `log2_up`, `sqrt_up` match on `Nat.compare`, which shows only once they are opened, after the step that rewrites it: a gap with its cells.  *Found*: a counter written as a number is read as a chain of successors: §12.E.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62, in clean copies of both trees; step 92's files / these): `HWP_kernel` 3.05 / 3.05 s, `HWP_own` 2.13 / 2.10, `HWP_irqnow` 1.80 / 1.78 — the same.  The first version cost 4% on `HWP_kernel` (3.07 / 3.20): every program looked the three library names up in its whole environment, three times; one pass comparing short names first now (F64 again).
+- *The acceptance*: `proved/examples/libn_fix`: proved, built, 2800517866.
+- *Cells*: 36 more: 33 proved; `A_zi_lcm` by design, a product of two counters, its control `A_c2_mul_r`; gaps `A_zi_log2_up`, `_sqrt_up`.  Three gaps read: `A_c2_nat_gcd`, `_sqrt`, `_log2`.
+- The C: the 96 programs byte-identical, and `libn_fix`, new.  The construct table (on `b8758c7`): **3716 of 3853 through the
+  verified compiler**, 60 by design, 76 gaps, 1 not Rocq (was 3680 of 3817: 33 of the 36 new cells read, 1 by design, 2 gaps; 3
+  gaps read; no cell lost).  The gate on `b8758c7`, the walk switched off: `make.sh` `core-ok`; examples 62 / 62, 61 / 61
+  freestanding; the same C: undefined behaviour trapped 61 / 61, `-O0` 61 / 61, `ccomp` 58 / 58 and 3 not built with it; corpus 36
+  / 36; the five kernels and `grow` (15 / 15 / 18 / 15 / 16 / 6 s); **107 programs through the verified compiler, 0 refused**;
+  `check_trust.py`: `trust unchanged`.  Next: the follow-ups of §12 (a program's own theorem in the gate, §12.T; a written counter
+  as one number, §12.E), and the table's gaps.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5777,11 +5799,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `da6b1d1` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `b8758c7` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 93's design -- the recursive functions of Rocq's library on counters: gcd, sqrt, log2 |
+| (this commit) | §12.V: step 93 (the recursive functions of Rocq's library on counters: the construct table 3716 of 3853, 60 by design, 76 gaps), the C, the gate; §12.E's follow-up |
+| `b8758c7` | `KQRun.v` + `proved/KQR.v` + `KQRReify.v` + `kitc.py` + matrix + `examples/libn_fix` step 93: `Nat.gcd`, `Nat.sqrt`, `Nat.log2` on counters, a call of the kit's function; its signature known by the table of callees |
+| `31d8f0e` | §12.V: step 93's design -- the recursive functions of Rocq's library on counters: gcd, sqrt, log2 |
 | `347d98a` | §12.V: step 92 (the bit operations of Rocq's library on counters: the construct table 3680 of 3817, 59 by design, 77 gaps), the C, the gate; F76, the trust check made exact; §12.T's follow-up |
 | `da6b1d1` | `proved/make.sh` + `TRUSTED.txt` step 92: what every lemma of the route rests on, printed from a file that imports nothing; each assumption listed once by its full name, `compare_spec` and `compares` among them (F76) |
 | `af6b6ca` | `proved/KQR.v` + `KQRReify.v` + matrix + `examples/bitn_fix` step 92: the bit operations of Rocq's library on counters, each a case of the compiler's proof; a let in a counter named once |
