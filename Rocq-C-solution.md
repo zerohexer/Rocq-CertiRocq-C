@@ -76,8 +76,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
 4. **Rocq's own measure recursion** (`Program Fixpoint {measure ..}`, `Function`, `Equations`): what the owner asked for as
    loops "level 2".  `Program Fixpoint` is read since step 56, `Function` since step 57, `Equations` since step 60; `{wf R x}` on a relation of the user's is the gap left (§4.5, §12.P).
 5. **The operations of freestanding C** (§2.1): `lib/CInt.v` and `uint64_t`'s `/`, `%` since step 88.
-6. Compiling from an ordinary `.v` file with one command (`Kq Compile`), entry arguments read from the signature, C printed at
-   once and the proofs checked behind it (§12.B).
+6. Compiling from an ordinary `.v` file with one command: since step 89 (§12.B); refusals that say what to write instead are left.
 7. Freestanding: the generated C built and checked on its own; a freestanding `kq_grow` (§9.5).
 8. The general passes, each proved once: removal of the bounds test on an access whose index is in range, forwarding a stored
    value to a later read, hoisting loop-invariant reads (§6.4).
@@ -1698,13 +1697,13 @@ constructs of `S`.  Then the pins of §0.5's boundaries, each with its control (
 the gate (examples, corpus, kernels if the walk changed) passes.
 
 **B. Compiling from an ordinary `.v` file, as simply as `lean --c`.**
-- A command (`Kq Compile solve.`) in an ordinary Rocq file: the entry's arguments are read from its signature (numbers from the
-  command line, the memory from the memory file), replacing the `main` convention of `.body` files.
+- ~~A command in an ordinary Rocq file~~ — **done at step 89**, without a command: `python3 proved/kitc.py prog.v [--main=NAME]`: the entry's arguments are read from its signature (numbers and counters from the
+  command line, the memory from the memory file), and the file is one Rocq compiles on its own.  A `.body` still works.
 - ~~Emit first, prove behind~~ — **done 2026-10-30**: `kitc.py --emit-first` (the C and the binary right after the
   translation, the proofs behind; §1.7).
 - ~~A check-only mode~~ — **done 2026-10-30**: `kitc.py --no-proof --no-build` (the translation alone, with its refusals).
 - Refusal messages that say what to write instead (the library, the rewrite), with a pointer into this file.
-Accepted when: every example and corpus program compiles from a `.v` file with the command, with the same C as today.
+Accepted when: every example and corpus program compiles from a `.v` file with the command, with the same C as today (`tests/vroute.py`, step 89).  Left: the refusal messages.
 
 **C. Language beyond the table.**  Records of k numbers as results (the slot block with k-1 cells); strings and a formatting
 library on byte blocks (`printf`-like, written in Rocq); an address type with proved arithmetic, and pointers beyond views;
@@ -5503,6 +5502,16 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The acceptance* (`tests/vroute.py`): every example and corpus program written as a `.v` with no `main`: the C of its functions the same as the `.body` route's, the answers the same.  `proved/vfiles/plain.v` is in the gate: compiled by Rocq on its own, then by `kitc.py`, the answer worked out apart: 1345105947.
 - *Not here*: refusals that say what to write instead (§12.B's last item), the driver proved (§12.H).
 
+**Step 89, an ordinary `.v` file — the result (2026-11-07).**  Built as designed:
+- *`kitc.py`*: `.v` accepted, `--main=NAME`, `last_def`, `sig_args`; `proved/examples.sh` runs `proved/vfiles/*.v`, each compiled by Rocq on its own first.
+- *The acceptance*: `tests/vroute.py`: 93 of 95 programs, the 59 examples and 34 of the corpus's 36: the same C and, for the examples, the expected answer.  The other two, `CF868F` and `CF868Fv2`, have a `main` that computes an argument, which a signature cannot say: in a `.v` that computation is a function of the program, and its C has one function more.  An entry that takes a list is refused with its type and the reason.  `proved/vfiles/plain`: proved, built, 1345105947.
+- *No cell*: the reader is unchanged and the table's programs are `.body` files.
+- The C: the 95 programs byte-identical.  The construct table (on `ec163ad`): **3609 of 3742 through the verified compiler**, 54
+  by design, 78 gaps, 1 not Rocq (was 3609 of 3742: unchanged, the reader being unchanged; the table run again after the laptop it
+  ran on stopped).  The gate on `ec163ad`, the walk switched off: `make.sh` `core-ok`; examples 60 / 60, `proved/vfiles/plain`
+  among them; corpus 36 / 36; the five kernels (15 / 15 / 18 / 15 / 16 s); **104 programs through the verified compiler, 0
+  refused**; `check_trust.py`: `trust unchanged`.  Next: the generated C on its own, no hosted header and no libc.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5557,6 +5566,7 @@ Everything runs in the repository's CertiRocq image (Rocq 9 with MetaRocq, CompC
 ```
 bash proved/make.sh                     # every proof of the route, "core-ok" at the end (ASSUME=1: print the assumptions)
 python3 proved/kitc.py NAME ...         # the verified compiler: read, check by conversion, print the C, build bin/P_NAME
+python3 proved/kitc.py prog.v [--main=F]  # the same from an ordinary Rocq file: no main, the arguments from F's signature (the last function by default)
 python3 proved/kitc.py --no-proof --no-build NAME   # what the reifier reads, what it refuses (with its reasons)
 python3 proved/kitc.py --walk NAME      # the retired route (translator + walk), the yardstick a program is timed against
 python3 proved/kitc.py --walk --emit-first NAME  # the same, with the C and the binary first and the proofs behind
@@ -5683,11 +5693,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `42c08a7` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `ec163ad` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 89's design -- an ordinary .v file, as simply as lean --c |
+| (this commit) | §12.V: step 89 (an ordinary `.v` file, as simply as `lean --c`: the construct table 3609 of 3742, 54 by design, 78 gaps), the C, the gate |
+| `ec163ad` | `proved/kitc.py` + `examples.sh` + `vfiles` + `tests/vroute.py` step 89: an ordinary `.v` file, the entry read from its signature |
+| `14d30b2` | §12.V: step 89's design -- an ordinary .v file, as simply as lean --c |
 | `4869f65` | §12.V: step 88 (the integer types of C: the construct table 3609 of 3742, 54 by design, 78 gaps), the C, the gate; F74 |
 | `42c08a7` | `KQRun.v` + `proved/KQW64.v` + `KQLGen.v` + `KQM.v` + `lib/CInt.v` + `lib/CIntSpec.v` + `proved/KQRReify.v` + `kitc.py` + `make.sh` + `matrix` + `examples/cint_fix` step 88: the integer types of C as ordinary functions, what each computes proved, `uint64_t`'s `/` and `%` a case of the generator's proof; 128 cells |
 | `6b29fdd` | §12.V: step 88's design -- the integer types of C as ordinary functions, what each computes proved |
