@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3481 of 3614, 78 gaps, 54 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3609 of 3742, 78 gaps, 54 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -75,8 +75,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    step 41, functions of any module and file since step 51, a second memory parameter since step 53.
 4. **Rocq's own measure recursion** (`Program Fixpoint {measure ..}`, `Function`, `Equations`): what the owner asked for as
    loops "level 2".  `Program Fixpoint` is read since step 56, `Function` since step 57, `Equations` since step 60; `{wf R x}` on a relation of the user's is the gap left (§4.5, §12.P).
-5. **The operations of freestanding C not yet in KQL** (§2.1): `uint64_t` division and remainder, signed 64-bit arithmetic, the
-   high half of a product, 8/16/32-bit arithmetic with C's wrap-around.
+5. **The operations of freestanding C** (§2.1): `lib/CInt.v` and `uint64_t`'s `/`, `%` since step 88.
 6. Compiling from an ordinary `.v` file with one command (`Kq Compile`), entry arguments read from the signature, C printed at
    once and the proofs checked behind it (§12.B).
 7. Freestanding: the generated C built and checked on its own; a freestanding `kq_grow` (§9.5).
@@ -903,12 +902,12 @@ finite checklist against what freestanding C offers, not an open question:
 | function call, return, recursion | `Ecall`, `Eret` | proved |
 | function pointers | a dispatch on an id (clang makes a jump table) | proved |
 | `uint64_t` `+ - * & | ^ << >> < <= ==` | `Ew64` (`W_add` .. `W_eq`) | proved |
-| **`uint64_t` `/ %`**, signed 64-bit (`int64_t`) arithmetic beyond 63 bits, the high half of a 64×64 product | — | **missing** (add `W_divu`, `W_modu`, signed variants, `W_mulhi` to `w64op`) |
-| `int8/16/32_t`, `uint8/16/32_t` arithmetic with C's wrap-around | a library over `int` with masks and sign extension (`sx32` exists) | **library to write** |
+| `uint64_t` `/ %`, signed 64-bit (`int64_t`) arithmetic, the high half of a 64×64 product | `W_divu`, `W_modu` of `Ew64`, one instruction, a test at 0 (`KQRun.v` `u64_divu`, `u64_modu`); `lib/CInt.v`: `u64_mulhi`, `i64_*`, over `Ew64` | proved, with what each computes (`lib/CIntSpec.v`, step 88) |
+| `int8/16/32_t`, `uint8/16/32_t` arithmetic with C's wrap-around | `lib/CInt.v`: `u8_add` .. `i32_shr`, over `int`; a signed overflow wraps | proved, with what each computes (step 88) |
 | loads and stores of 8, 16, 32, 64 bits | `Ekld8`/`Ekst8`, `rd16`/`upd16` (two bytes), `Ekld32`/`Ekst32`, `Ekld`/`Ekst`, views | proved |
 | `volatile`, atomics, fences | `Ehw` machine operations | laws, C bodies assumed |
 | `memcpy`, `memset`, `memcmp` | `hw_copy`, `hw_fill`, `hw_cmp`: loops over the byte loads and stores, ordinary functions of the kit (step 75) | proved |
-| `__builtin_popcount`, `clz`, `ctz`, `bswap`, rotate | Rocq functions, proved (`head0`, `tail0`: step 73) | a single instruction only as a case of the generator's proof, measured; never as a machine operation (F66) |
+| `__builtin_popcount`, `clz`, `ctz`, `bswap`, rotate | `lib/CInt.v`: `popcount32`, `clz32`, `ctz32`, `bswap32`, `rotl32` and the 64-bit ones, Rocq functions (`head0`, `tail0`: step 73) | proved, with what each computes (step 88); a single instruction only as a case of the generator's proof, measured; never as a machine operation (F66) |
 | `malloc`, `free` | a library on growing blocks | proved library |
 | `float`, `double` | — | hosted, not started |
 | `setjmp`/`longjmp`, variadic functions, `alloca` | — | not planned (not needed by freestanding programs written this way) |
@@ -1661,6 +1660,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F71 | A rule added to the proof tactic for one class took a cell that was read: step 76's `kq_convoy` on a variable left `A_l_convoy_b` unproved, and the count of proved cells, which rose by 39 where 40 were expected, was the only sign: no line of the gate says a cell was lost | the rule fixed (step 78); each landing now compares the table's results with the last one's, cell by cell, and says what was lost |
 | F70 | The record table was built in three places, `rec_info` with the made functions that name a value's type and the reader's two without them: a syntax tree numbering its records by one table, its meaning read by the other.  Nothing wrong was accepted: the kernel's check `denote s = f` refused it (`A_v_callee_other_value`, two types of the same width, found at step 78) | one list for all three |
 | F73 | `compile` writes what follows an operand in each arm of a test that cannot be a conditional move, so `k` of them in one expression are `2^k` copies, and `x mod p` is three arms: a matrix power modulo `p` was read, its check passed, and printing its C ran out of memory; nothing had measured the size of the C (found by the fifth probe, step 85) | step 86: above 1024 copies by a count from the text, such operands are functions.  A join point in KQL would need no function: §6.4 |
+| F74 | The first `u64_divu`, a loop of 64 rounds in `lib/CInt.v` before it became an instruction, shifted the remainder and lost its top bit: wrong for a divisor above `2^63`.  It was read and its C proved equal to it: the verified compiler says the C computes the function, and nothing about whether the function is what its name says.  Writing the theorem against `Z` found it, at the case the invariant needed.  So a library of ours carries its theorems (`lib/CIntSpec.v`), and "proved" about a library names which of the two is meant |
 | F69 | `rewrite` compares up to unfolding, full, whatever `Strategy opaque` says: a lemma about a function whose body is one operation fires on that operation where the function is not written, and with a tactic turning the operation back the proof never ended | the lemma only where the function is in the goal (`match goal with |- context [F]`); a proof that looks for what to rewrite is stepped by hand when it times out |
 | F68 | A program's own file (`Require`d by its text) was compiled again only when older than its source, not than the kit, so after `KQRun.v` changed the program failed once on Rocq's inconsistent assumptions and `kitc.py` wrote no C; the comparison showed `none`, at steps 65 and 73 | `build_user_files` counts the kit's `.vo` |
 | F67 | A budget written as `S (S ..)` makes a conversion unroll the fixpoint: both sides reduce on the constructor, and with two branches in each round the comparison is exponential.  `reflexivity` on `(fix go ..) 63 c 0 a b = kq_d21_go 63 c 0 a b` did not end, nor `rewrite` of a term holding it, with the fixpoints' bodies identical | a written budget is `kq_nat 63`, opaque to a conversion (D18); a lemma about it is stated with the budget a variable, and the number put in with `exact` |
@@ -1752,10 +1752,7 @@ cache as an ordinary layer over the same RAM with a locality bound; space read o
 functions; a C loop matched step for step to the Rocq loop).  Not started here; it needs the cost monad's charges to erase to
 nothing in the C, which is a translator rule plus a theorem.
 
-**O. The operation checklist (§2.1):** `uint64_t` division and remainder, signed 64-bit arithmetic, the high half of a product;
-a library for 8/16/32-bit signed and unsigned arithmetic with C's wrap-around; `popcount`, `clz`, `ctz`, `bswap`, rotate as Rocq
-functions, proved (a single instruction only as a case of the generator's proof, measured; never a machine operation: F66).  Each is
-a Rocq function, or a constructor, a case of the generator's proof, its C, and an example.
+**O. The operation checklist (§2.1):** **done at step 88**: `uint64_t` division and remainder as one instruction, a case of the generator's proof; `lib/CInt.v`: signed 64-bit arithmetic, the high half of a product, 8/16/32-bit signed and unsigned arithmetic with C's wrap-around, `popcount`, `clz`, `ctz`, `bswap`, rotate, with what each computes proved (`lib/CIntSpec.v`).  Left, when a program's speed asks for it: `popcount`, `clz`, `ctz` as a single instruction, a case of the generator's proof, measured; never a machine operation (F66).
 
 **R. The kernel's conversion memo, made sound and proved (D28, F46).**  What can be proved, and what not: (1) a Rocq proof of the
 memoized comparison over a model of the closure machine — cells with identities, allocation (a fresh identity), the in-place
@@ -5482,6 +5479,22 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The acceptance*: `proved/examples/cint_fix`: every operation on every pair of 32 numbers, the edges of each type among them, folded into one number; the answer worked out apart in Python from the statements of the theorems: 258591630940955040.
 - *Cells*: 128, `A_zg_*`: one per operation, and places: a name of the program's own beside the library's, many with tests in one expression, nested, a round of SHA-256, in loops, in a memory, as a record's field, given as a function.
 
+**Step 88, the integer types of C as ordinary functions, what each computes proved — the result (2026-11-07).**  Built as designed:
+- *The library*: `lib/CInt.v`; `kitc.py`'s trigger, in a module of its own.  *The theorems*: `lib/CIntSpec.v`, 120; `proved/make.sh` compiles them and stops if they rest on anything but Rocq's axioms of its machine numbers (`PrimInt63`, `Uint63Axioms`, `Sint63Axioms`).
+- *`uint64_t`'s `/` and `%`*: `W_divu`, `W_modu`, `w64_int`, `w64_set`, `exec_w64set`.
+- *Found by the theorem*: the first `u64_divu`, a loop of shift and subtract in the library before it became an instruction, shifted the remainder and lost its top bit, wrong for a divisor above `2^63`: the C was proved equal to a wrong function (F74).  The example found nothing more: its answer, worked out apart from the statements of the theorems, was right at the first run.
+- *The reader*: `jn_in`; `jn_cnt`, `jn_own`, `jn_pre`.
+- *A cell the check refused*: `A_q_nat_field`, read since step 82 and refused by the check, is refused by the reader now, with its reason (`nr_grows`): a counter a helper makes through a successor is not the same term as its number.
+- *The acceptance*: `proved/examples/cint_fix`: proved, built, 258591630940955040.
+- *Cells*: 128 more, all read.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62, in clean copies of both trees; step 87's files / these): `HWP_kernel` 3.45 / 3.43 s, `HWP_own` 2.31 / 2.32, `HWP_irqnow` 1.96 / 1.95: no difference, with the first test now true for most programs.
+- The C: the 94 programs byte-identical, and `cint_fix`, new.  The construct table (on `42c08a7`): **3609 of 3742 through the
+  verified compiler**, 54 by design, 78 gaps, 1 not Rocq (was 3481 of 3614: the 128 new cells all read; no cell lost; the table's
+  one cell read and refused by the check now refused by the reader).  The gate on `42c08a7`, the walk switched off: `make.sh`
+  `core-ok`, `lib/CIntSpec.v` on Rocq's axioms of its machine numbers alone; examples 59 / 59; corpus 36 / 36; the five kernels
+  (15 / 15 / 18 / 15 / 15 s); **103 programs through the verified compiler, 0 refused**; `check_trust.py`: `trust unchanged`.
+  Next: an ordinary `.v` file, as simply as `lean --c`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5662,11 +5675,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `720c58c` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `42c08a7` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 88's design -- the integer types of C as ordinary functions, what each computes proved |
+| (this commit) | §12.V: step 88 (the integer types of C: the construct table 3609 of 3742, 54 by design, 78 gaps), the C, the gate; F74 |
+| `42c08a7` | `KQRun.v` + `proved/KQW64.v` + `KQLGen.v` + `KQM.v` + `lib/CInt.v` + `lib/CIntSpec.v` + `proved/KQRReify.v` + `kitc.py` + `make.sh` + `matrix` + `examples/cint_fix` step 88: the integer types of C as ordinary functions, what each computes proved, `uint64_t`'s `/` and `%` a case of the generator's proof; 128 cells |
+| `6b29fdd` | §12.V: step 88's design -- the integer types of C as ordinary functions, what each computes proved |
 | `6b5e6e1` | §12.V: step 87 (a memory in a value of any data type: the construct table 3481 of 3614, 54 by design, 78 gaps, 3 gaps read), the C, the gate; D30, the proof ends at Clight |
 | `720c58c` | `proved/KQRReify.v` + `matrix` + `examples/resm_fix` step 87: a memory in a value of any data type; a sixth probe; 51 cells |
 | `9eccf19` | §12.V: step 87's design -- a memory in a value of any data type; a sixth probe |
