@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3609 of 3742, 78 gaps, 54 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3608 of 3742, 79 gaps, 54 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -77,7 +77,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    loops "level 2".  `Program Fixpoint` is read since step 56, `Function` since step 57, `Equations` since step 60; `{wf R x}` on a relation of the user's is the gap left (§4.5, §12.P).
 5. **The operations of freestanding C** (§2.1): `lib/CInt.v` and `uint64_t`'s `/`, `%` since step 88.
 6. Compiling from an ordinary `.v` file with one command: since step 89 (§12.B); refusals that say what to write instead are left.
-7. Freestanding: the generated C built and checked on its own; a freestanding `kq_grow` (§9.5).
+7. Freestanding: since step 90 (§9.5).
 8. The general passes, each proved once: removal of the bounds test on an access whose index is in range, forwarding a stored
    value to a later read, hoisting loop-invariant reads (§6.4).
 9. An interleaving semantics for two programs (protocol properties proved once), a fair lock; checks of the trusted tools
@@ -1541,10 +1541,7 @@ stated and proved once for all programs; a lock with fairness (ticket lock).
 
 ### 9.5 Freestanding
 
-The generated C is built today with the kit's support code, hosted (tests) or bare (`hw/kq_bare.c` with the kernels).  Left: a
-freestanding build of the generated C checked on its own (no hosted headers, no libc beyond what the support code provides), and
-a freestanding `kq_grow` (today its hosted body is a `realloc`; on the machine, the program's own allocator does the same, and the
-law is the same).
+The generated C is built three ways: hosted with the kit's support code (tests), bare with `hw/kq_bare.c` (kernels), and since step 90 on its own: `sup/free/` holds all it needs, no hosted header and no libc, and `proved/examples.sh` builds every example that way, runs it and compares its answer.  `kq_grow` has a freestanding body in `sup/free/kq_mem.c` and in `hw/kq_bare.c`, over free memory the start hands it or a fixed room; it is C, on `proved/TRUSTED.txt` with the loader and the driver (§12.H).
 
 ---
 
@@ -1710,8 +1707,7 @@ library on byte blocks (`printf`-like, written in Rocq); an address type with pr
 specialization of type and instance arguments; optional: `Z` where a proof gives the range (D3).  A tactic that proposes the measure itself for the common loop shapes (counting up to a bound, counting
 down, halving), so `wfixN` needs no measure written for them; loops whose end depends on the data still take one.
 
-**D. Freestanding.**  The generated C built and checked on its own (no hosted headers, the support code only); a freestanding
-`kq_grow`.
+**D. Freestanding.**  **Done at step 90** (§9.5): the generated C built and checked on its own, no hosted headers, the support code only (`sup/free/`); a freestanding `kq_grow`.
 
 **E. The general speed passes (§6.4):** bounds-test removal where the index is proved in range; forwarding; hoisting.  Each
 proved once, measured against C written the same way.
@@ -5520,6 +5516,17 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *What stays assumed*: `kq_grow` stays on `proved/TRUSTED.txt` as the allocator under the tables (§12.H): this writes its C, it does not prove it.  Nothing is added to the list; `sup/free/` is support code like `sup/v4/`, outside the theorem, as the driver and the loader are.
 - *Not here*: the kit route's support (`sup/v4/`, `gc_stack.c`) stays for the hosted test, where it is linked and not used by the functions; the corpus has its own speed run and is not built this way.
 
+**Step 90, the generated C on its own — the result (2026-11-07).**  Built as designed:
+- *`sup/free/`*: `values.h`, `gc_stack.h`, `kq_mem.c`, `kq_start_linux.c`.  *`kitc.py`*: `NAME_bare.c` beside `NAME_proved.c`, the wrapper of `kq_grow` in a bare program that grows.  *`hw/kq_bare.c`*: `kq_grow` from a fixed room.  *`hw/grow.body`*: built through the proved route, booted under QEMU's processor: `QEMU exit status 1: the program answered 0`; `irqnow` still boots, 10 interrupts handled.
+- *The check*: all 59 examples with no hosted header and no libc, statically linked, nothing left undefined, each its expected answer; `w64` is 14 KB.  Unused wrappers of the machine's operations go with `--gc-sections`, as `-flto` removes them in the hosted build.
+- *No cell*: the reader is unchanged.
+- *One cell refused in the table run, `A_ze_mod_5`, with no reason*: run alone on the same files it is read and proved (14 s, 2.2 GB); three cells at a time under the table's 8 GB, it was stopped for memory.  The reader did not change.  It stays counted as refused here, as the table says.
+- The C: the 95 programs byte-identical.  The construct table (on `925e035`): **3608 of 3742 through the verified compiler**, 54
+  by design, 79 gaps, 1 not Rocq (was 3609 of 3742: `A_ze_mod_5` refused in the run for memory, as above; nothing else changed).
+  The gate on `925e035`, the walk switched off: `make.sh` `core-ok`; examples 60 / 60, and 59 / 59 freestanding; corpus 36 / 36;
+  the five kernels and `grow` (16 / 16 / 18 / 15 / 16 / 6 s); **105 programs through the verified compiler, 0 refused**;
+  `check_trust.py`: `trust unchanged`.  Next: the printed C says what the Clight says, and the tools are asked.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5701,11 +5708,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `ec163ad` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `925e035` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 90's design -- the generated C on its own: no hosted header, no libc |
+| (this commit) | §12.V: step 90 (the generated C on its own: the construct table 3608 of 3742, 54 by design, 79 gaps), the C, the gate |
+| `925e035` | `sup/free` + `proved/kitc.py` + `examples.sh` + `hw/kq_bare.c` + `hw/grow` step 90: the generated C with no hosted header and no libc, `kq_grow` on the machine |
+| `7cb061c` | §12.V: step 90's design -- the generated C on its own: no hosted header, no libc |
 | `7f60eb1` | §12.V: step 89 (an ordinary `.v` file, as simply as `lean --c`: the construct table 3609 of 3742, 54 by design, 78 gaps), the C, the gate |
 | `ec163ad` | `proved/kitc.py` + `examples.sh` + `vfiles` + `tests/vroute.py` step 89: an ordinary `.v` file, the entry read from its signature |
 | `14d30b2` | §12.V: step 89's design -- an ordinary .v file, as simply as lean --c |
