@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3716 of 3853, 76 gaps, 60 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3750 of 3890, 77 gaps, 62 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1661,6 +1661,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F74 | The first `u64_divu`, a loop of 64 rounds in `lib/CInt.v` before it became an instruction, shifted the remainder and lost its top bit: wrong for a divisor above `2^63`.  It was read and its C proved equal to it: the verified compiler says the C computes the function, and nothing about whether the function is what its name says.  Writing the theorem against `Z` found it, at the case the invariant needed.  So a library of ours carries its theorems (`lib/CIntSpec.v`), and "proved" about a library names which of the two is meant |
 | F75 | The printed C left-shifted negative numbers: `tagup` of a signed number.  Clight defines that, C does not, so the text clang read said less than the Clight the theorem is about.  No answer was wrong: clang's IR has no `nsw` on a signed left shift.  Undefined behaviour trapped found it on its first run, 4 of 59 examples.  Fixed in the generator with a cast, the assembly the same.  So a difference between Clight and the printed C is a real class, and the printer is not the place to fix one |
 | F76 | The trust check compared printed names as text.  Each file prints an axiom by the shortest name valid in its own scope, so one axiom was listed under two spellings (14 lines), and a short name printed elsewhere could have been another constant and still matched; every line `name :` after the first `Axioms:` of `make.sh`'s whole output was taken as an assumption, `Check`'s outputs included (`eq_refl`, `int`); and the set came from three end theorems plus what files happened to print, so `KQRWf.kq_compares_def` (step 64), which a program using `compares` rests on, was never printed: `PrimInt63.compares` and `Sint63Axioms.compare_spec`, Rocq's own, were not on the list.  Found at step 92, when `lxor_spec` was printed short | `make.sh` prints what every lemma of `KQMTop.v`, `KQR.v`, `KQRWf.v`, `KQPrim.v` rests on, from a file that imports nothing, between two markers, and the gate reads only that; `proved/TRUSTED.txt` lists that set, each axiom once by its full name (90): the short spellings, the artifacts and two primitive types only the untrusted reader's prints reached out, the two of `compares` in, with the owner's agreement that Rocq's own axioms are the floor (2026-11-09) |
+| F77 | A written counter turned into a number, `Uint63.of_nat 100000`, took 97 s to check and `Uint63.of_nat 0xFFFFF` over 300 s, against 1.5 s for the rest of the program: the meaning says `ofn c`, the text `of_Z (Z.of_nat c)` (`Uint63.of_nat` is a notation for it), and the kernel opened the program's `of_Z` first, whose match worked `Z.of_nat` out on the number in unary.  It was there before step 94 for any written counter turned into a number, under a second at 4095 (found by step 94's cells) | the check files `kitc.py` writes unfold `ofn`, our abbreviation, first (`Strategy expand`): 3.4 s; the order only, as F50 |
 | F69 | `rewrite` compares up to unfolding, full, whatever `Strategy opaque` says: a lemma about a function whose body is one operation fires on that operation where the function is not written, and with a tactic turning the operation back the proof never ended | the lemma only where the function is in the goal (`match goal with |- context [F]`); a proof that looks for what to rewrite is stepped by hand when it times out |
 | F68 | A program's own file (`Require`d by its text) was compiled again only when older than its source, not than the kit, so after `KQRun.v` changed the program failed once on Rocq's inconsistent assumptions and `kitc.py` wrote no C; the comparison showed `none`, at steps 65 and 73 | `build_user_files` counts the kit's `.vo` |
 | F67 | A budget written as `S (S ..)` makes a conversion unroll the fixpoint: both sides reduce on the constructor, and with two branches in each round the comparison is exponential.  `reflexivity` on `(fix go ..) 63 c 0 a b = kq_d21_go 63 c 0 a b` did not end, nor `rewrite` of a term holding it, with the fixpoints' bodies identical | a written budget is `kq_nat 63`, opaque to a conversion (D18); a lemma about it is stated with the budget a variable, and the number put in with `exact` |
@@ -1719,10 +1720,13 @@ down, halving), so `wfixN` needs no measure written for them; loops whose end de
 
 **E. The general speed passes (§6.4):** bounds-test removal where the index is proved in range; forwarding; hoisting.  Each
 proved once, measured against C written the same way.
-- *A counter written as a number* (found at step 93): it is read as a chain of successors, so its code is as long as the number:
-  `Nat.land n 4095` is 4095 additions, and printing that C ran out of 3 GB.  Read a written counter above a few as one number,
-  `CNat (SInt k)`, equal to the chain by computation; the C of programs with such counters changes, so it is its own step, timed.
-  Accepted when a written counter of any size is one constant in the C and the corpus is timed.
+- ~~*A counter written as a number*~~ — **done, step 94**: a chain of successors on 0 is `CLit k`, the digits Rocq writes from 5000 on
+  are `CNumU u`, a product by such a number `CMulU`; each is one constant in the C; the 33 changed programs' C
+  and clang's assembly compared: the corpus programs' machine code is the same, so the timing is too.
+- *A power of two written numbers above 4096* (found at step 94): `Nat.pow 2 13` is read only up to 4096, its value as a `CLit`;
+  above, refused (`A_zj_pow_big`).  Its general form: a node meaning `Nat.pow` of the two written numbers, its code the value worked
+  out in `Z`, refused past a word by the fitting.  Accepted when `A_zj_pow_big` is proved and a power past a word is a pin with its
+  control.
 
 **F. Proof speed, only if it becomes the bottleneck (§7.5):** segmenting long straight-line functions; reflection.
 
@@ -5627,6 +5631,24 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The acceptance*: `proved/examples/lit_fix`: budgets of 12 and 4095, a test against 100000, a mask of 65535, a hexadecimal one, a budget of 1000000 in a loop that stops early; the answer worked out apart.
 - *Cells*: `A_zj_*`: a written counter as a budget, a number, a test, a let, an operand, in a recursion, below and from 5000, decimal and hexadecimal, at the edges (1, 4999, 5000, `2^63 - 1`); the pin past a word and its control.
 
+**Step 94, a counter written as a number, one number in the C — the result (2026-11-09).**  Built as designed, with one node more:
+- *`S`* (`KQR.v`): `CLit`, `CNumU`; `du_z`, `hu_z`, `nu_z`; `du_z_ok`, `hu_z_ok`, `nu_z_ok`, closed under the global context; the cases of `cexp_all` and of the bounds' lemmas.
+- *A product by a number written from 5000 on* (`Nat.mul n 100000`): the reader's tree is computed (`vm_compute`), so a `nat` in it is unary, and `CMulK`'s factor, a `nat`, would carry 100000 as 100000 successors.  `CMulU l u c`, the factor as its digits, its meaning `Nat.mul (Nat.of_num_uint u) c` (or the other order), its code the product by `of_Z (nu_z u)`, its bounds `CMulK`'s with `nu_z u` for the factor; each case of the proofs is `CMulK`'s after `nu_z_ok`.
+- *The reader* (`KQRReify.v`): a chain of successors on 0 is `CLit`; `Nat.of_num_uint` of written digits is `CNumU` (`ddig_of`, `hdig_of`, `uint_of`, `num_lit`), looked for after the program's helpers; `Nat.mul` by such a number is `CMulU`; a power of two written numbers up to 4096 is the `CLit` of its value, where it was a chain; such a number given to a helper is put in its parameter's place, as one below 5000 is.  The reader's pinned trees say `CLit` now; `KQR.v`'s hand-written ones keep their chains, which test `CS`.
+- *Found by the cells* (F77): `Uint63.of_nat 100000` took 97 s to check, `Uint63.of_nat 0xFFFFF` over 300 s.  The meaning says `ofn c`, the text `of_Z (Z.of_nat c)` (`Uint63.of_nat` is a notation for it), and the kernel opened the program's `of_Z` first, whose match worked `Z.of_nat` out on the number in unary.  It was there before this step for any written counter turned into a number, under a second at 4095.  The check files `kitc.py` writes unfold `ofn`, our abbreviation, first: 3.4 s, the C the same.
+- *Left, with a cell*: a power of two written numbers above 4096 (`A_zj_pow_big`, `Nat.pow 2 13`): read only up to 4096; the refusal's hint said "may need more than a word" of 8192 and names both cases now; §12.E.
+- *The C*: 33 of the 97 programs change, 19 of them corpus programs, and each gets shorter: every chain of additions on a written counter is its constant (`CF61E` 506 to 338 lines, `libn_fix` 1556 to 318, `bitn_fix` 904 to 310); the other 64 byte-identical; `lit_fix` new.  clang's assembly (`-O2`) before and after: the same for 32, the file's name aside; `conv_fix` has its 1355 instructions with two of them placed elsewhere and other registers.  The corpus programs' machine code is the same, so no timing changes.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62, in clean copies of both trees; step 93's files / these): `HWP_kernel` 2.97 / 2.98 s, `HWP_own` 2.05 / 2.04, `HWP_irqnow` 1.73 / 1.72 — the same.
+- *The acceptance*: `proved/examples/lit_fix`: budgets of 12, 4095, `2^10` and 6000 named twice, masks of 65535 and `0xFFFF0`, a test against 100000, products by 100000 and 7000, a budget of 1000000 in a loop that stops at 1000: proved, built, 134643534.  Its C holds each number once.
+- *Cells*: 37 more: 34 proved, at 1, 4999, 5000 and `2^63 - 1`, decimal and hexadecimal, as budgets, numbers, tests, lets, operands, in a match, a recursion and a callee; by design, each with a control: `A_zj_land_past` (a written number past a word, control `A_zj_land_max`), `A_zj_mul_big` (a counter times 100000, past a word, control `A_zj_mul_r`); gap `A_zj_pow_big`.
+- The C: 33 programs changed as above, 64 byte-identical, and `lit_fix`, new.  The construct table (on `da8f5f1`): **3750 of 3890
+  through the verified compiler**, 62 by design, 77 gaps, 1 not Rocq (was 3716 of 3853: 34 of the 37 new cells read, 2 by design,
+  1 gap; no cell lost).  The gate on `da8f5f1`, the walk switched off: `make.sh` `core-ok`; examples 63 / 63, 62 / 62
+  freestanding; the same C: undefined behaviour trapped 62 / 62, `-O0` 62 / 62, `ccomp` 59 / 59 and 3 not built with it; corpus 36
+  / 36; the five kernels and `grow` (15 / 16 / 18 / 15 / 16 / 6 s); **108 programs through the verified compiler, 0 refused**;
+  `check_trust.py`: `trust unchanged`.  Next: §12.E's new follow-up (a power of two written numbers above 4096), §12.T's (each
+  gate program's own theorem in the gate), and the table's gaps.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5808,11 +5830,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `b8758c7` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `da8f5f1` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 94's design -- a counter written as a number, one number in the C |
+| (this commit) | §12.V: step 94 (a counter written as a number, one number in the C: the construct table 3750 of 3890, 62 by design, 77 gaps), the C and its assembly, the gate; F77; §12.E's follow-up |
+| `da8f5f1` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + matrix + `examples/lit_fix` step 94: a counter written as a number, one number in the C: `CLit`, `CNumU`, `CMulU`; the check files unfold `ofn` first; 37 cells |
+| `8128bb2` | §12.V: step 94's design -- a counter written as a number, one number in the C |
 | `564e5a8` | §12.V: step 93 (the recursive functions of Rocq's library on counters: the construct table 3716 of 3853, 60 by design, 76 gaps), the C, the gate; §12.E's follow-up |
 | `b8758c7` | `KQRun.v` + `proved/KQR.v` + `KQRReify.v` + `kitc.py` + matrix + `examples/libn_fix` step 93: `Nat.gcd`, `Nat.sqrt`, `Nat.log2` on counters, a call of the kit's function; its signature known by the table of callees |
 | `31d8f0e` | §12.V: step 93's design -- the recursive functions of Rocq's library on counters: gcd, sqrt, log2 |
