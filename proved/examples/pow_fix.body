@@ -1,0 +1,17 @@
+(* a power of two written numbers, its value one number in the C: 2 ^ 13 as a budget, 10 ^ 18 in a test, 2 ^ 40 - 1 as a mask,
+   3 ^ 39 modulo 1000003, 0 ^ 0 and 1 ^ 100000 as budgets, under Require Import Arith.  With a = 0 and the cell 123456789012:
+   8192 + (123456789012 below 10 ^ 18: yes) 1 * 10000 + (123456789012 land (2 ^ 40 - 1) = 123456789012)
+   + (4052555153018976267 mod 1000003 = 990100) * 7 + 1 * 100 + 1 * 1000: worked out apart, 123463739004. *)
+From Stdlib Require Import ZArith Arith.
+Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.
+Definition solve (a : int) (s : mem) : int :=
+  let c := Uint63.to_nat (rd 0 0 s + a) in
+  ff (2 ^ 13)%nat a
+  + (if Nat.ltb c (Nat.pow 10 18) then 1 else 2) * 10000
+  + Uint63.of_nat (Nat.land c (Nat.pow 2 40 - 1))
+  + Uint63.of_nat (Nat.modulo (Nat.pow 3 39) 1000003) * 7
+  + ff (Nat.pow 0 0) 0 * 100
+  + ff (Nat.pow 1 100000) 0 * 1000.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve 0 (kq_input 0).

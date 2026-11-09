@@ -3402,6 +3402,57 @@ addA('zj_callee_small', "", 'g2 4000 a',
      'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (k : nat) (x : int) : int := ff k x + ff k 1.\n')
 addA('zj_callee_big', "", 'g2 100000 a',
      'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (k : nat) (x : int) : int := ff k x + ff k 1.\n')
+# a power of two written numbers, its value one number in the C (step 95)
+addA('zk_budget', "", 'ff (Nat.pow 2 13) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zk_budget_notation', "", 'ff (2 ^ 13)%nat a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zk_budget_ar', "", 'ff (Nat.pow 2 13) a',
+     'From Stdlib Require Import Arith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zk_num_40', "", 'a + Uint63.of_nat (Nat.pow 2 40)',
+     'From Stdlib Require Import ZArith.\n')
+addA('zk_num_62', "", 'a + Uint63.of_nat (Nat.pow 2 62)',
+     'From Stdlib Require Import ZArith.\n')
+addA('zk_num_ten18', "", 'a + Uint63.of_nat (Nat.pow 10 18)',
+     'From Stdlib Require Import ZArith.\n')
+addA('zk_num_three39', "", 'a + Uint63.of_nat (Nat.pow 3 39)',
+     'From Stdlib Require Import ZArith.\n')
+addA('zk_num_hex_exp', "", 'a + Uint63.of_nat (Nat.pow 2 0x20)',
+     'From Stdlib Require Import ZArith.\n')
+addA('zk_num_big_base', "", 'a + Uint63.of_nat (Nat.pow 100000 3)',
+     'From Stdlib Require Import ZArith.\n')
+addA('zk_zero_zero', "", 'ff (Nat.pow 0 0) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zk_zero_big', "", 'ff (Nat.pow 0 100000) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zk_one_big', "", 'ff (Nat.pow 1 100000) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zk_cmp', "", 'if Nat.ltb n (Nat.pow 10 18) then a else b',
+     '')
+addA('zk_let', "", 'let c := Nat.pow 2 20 in ff c a + ff c b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zk_land', "", 'ff (Nat.land n (Nat.pow 2 40 - 1)) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zk_mod', "", 'ff (Nat.modulo n (Nat.pow 10 9)) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zk_rec', "", 'lp n a',
+     'Fixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (if Nat.ltb j (Nat.pow 2 14) then x + 1 else x) end.\n')
+addA('zk_callee', "", 'g2 (Nat.pow 2 13) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (k : nat) (x : int) : int := ff k x + ff k 1.\n')
+addA('zk_closed_add', "", 'ff (Nat.add 5000 100000) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zk_closed_land', "", 'ff (Nat.land 1000000 65535) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zk_closed_cmp', "", 'if Nat.ltb 100000 1000000 then a else b',
+     '')
+addA('zk_closed_gcd', "", 'ff (Nat.gcd 100000 6) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zk_closed_mul', "", 'ff (Nat.mul 7000 3) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zk_past_63', "", 'a + Uint63.of_nat (Nat.pow 2 63)',
+     'From Stdlib Require Import ZArith.\n')
+addA('zk_past_ten19', "", 'a + Uint63.of_nat (Nat.pow 10 19)',
+     'From Stdlib Require Import ZArith.\n')
 # a memory in a value of any data type; a sixth probe (step 87)
 addA('zf_h_user', "", 'match st1 a s with Ok v t => v + rd 0 a t | Err e => e end',
      'Inductive res := Ok (v : int) (t : mem) | Err (e : int).\nDefinition st1 (i : int) (t : mem) : res := if i =? 0 then Err 1 else Ok i (upd 0 i i t).\n')

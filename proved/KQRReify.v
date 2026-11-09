@@ -382,6 +382,8 @@ Definition uint_of (t : term) : option Number.uint :=
   end.
 Definition num_lit (t : term) : option Number.uint :=
   match t with tApp (tConst kn _) [u] => if Kername.eqb kn kn_num_uint then uint_of u else None | _ => None end.
+(** (step 95) a written number, below 5000 or from 5000 on *)
+Definition wnum_of (t : term) : option wnum := if cnt_lit t then Some (WLit (cnt_val t)) else option_map WNum (num_lit t).
 Fixpoint pos_lit (t : term) : option positive :=
   match t with
   | tConstruct i 2 _ => if String.eqb (snd (inductive_mind i)) "positive"%bs then Some xH else None
@@ -1569,10 +1571,9 @@ with reify_c (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sc
         match args with [a; b] => match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (CModN x y) | _, _ => None end | _ => None end
       else if Kername.eqb kn kn_c_pow then
         match args with
-        | [a; b] => if cnt_lit a && cnt_lit b then
-                      let v := Nat.pow (cnt_val a) (cnt_val b) in
-                      if Nat.leb v 4096 then Some (CLit v) else None
-                    else None
+        | [a; b] => match wnum_of a, wnum_of b with
+                    | Some x, Some y => if (2 <=? wz x)%Z then (if (63 <=? wz y)%Z then None else Some (CPowL x y)) else Some (CPowL x y)
+                    | _, _ => None end
         | _ => None end
       else if Kername.eqb kn kn_zton then
         match args with
@@ -3299,7 +3300,7 @@ with cl_es (B : Z) (bs : list cbe) (es : sexps) {struct es} : list site :=
   | SConsR x r => cl_r B bs x ++ cl_es B bs r
   end
 with cl_c (B : Z) (bs : list cbe) (c : scnt) {struct c} : list site :=
-  match c with CVar _ | CO | CLit _ | CNumU _ => [] | CS c | KQR.CPred c | CDiv2 c | CMulK _ _ c | CMulU _ _ c | CShl _ c => cl_c B bs c | CAdd a b | CMin a b | CMax a b | CSub a b | CDivN a b | CModN a b | CBitN _ a b | CLib _ _ a b => cl_c B bs a ++ cl_c B bs b | CNat e | CToNat e | CToNatU e => cl_e B bs e | CIf b x y => cl_b B bs b ++ cl_c B bs x ++ cl_c B bs y end
+  match c with CVar _ | CO | CLit _ | CNumU _ | CPowL _ _ => [] | CS c | KQR.CPred c | CDiv2 c | CMulK _ _ c | CMulU _ _ c | CShl _ c => cl_c B bs c | CAdd a b | CMin a b | CMax a b | CSub a b | CDivN a b | CModN a b | CBitN _ a b | CLib _ _ a b => cl_c B bs a ++ cl_c B bs b | CNat e | CToNat e | CToNatU e => cl_e B bs e | CIf b x y => cl_b B bs b ++ cl_c B bs x ++ cl_c B bs y end
 with cl_cs (B : Z) (bs : list cbe) (cs : scnts) {struct cs} : list site :=
   match cs with CNil => [] | CCons c r => cl_c B bs c ++ cl_cs B bs r end
 with cl_b (B : Z) (bs : list cbe) (b : sbool) {struct b} : list site :=
@@ -11158,7 +11159,7 @@ Definition why_fun (Σ : global_env) (hb : kername -> option term) (tc : kername
           let r4 := if existsb (Kername.eqb kn_divs) (fold_left (fun a t => consts 10000 t a) texts [])
                     then add_s "divs a b with nothing showing it is not the smallest number over -1: Rocq's axioms say nothing there, so nothing says what it computes (Rocq-C-solution.md 0.5, fourth reason); test the divisor or use /, which says what it is" r4 else r4 in
           let r4 := if existsb (Kername.eqb kn_c_pow) (fold_left (fun a t => consts 10000 t a) texts [])
-                    then add_s "a power of a counter: a number that may need more than a word (Rocq-C-solution.md 0.5, second reason); a power of two written numbers above 4096 is not yet read (12.E)" r4 else r4 in
+                    then add_s "a power of a counter, or of two written numbers past a word: a number that may need more than a word (Rocq-C-solution.md 0.5, second reason)" r4 else r4 in
           let r4 := if existsb (Kername.eqb kn_c_mul) (fold_left (fun a t => consts 10000 t a) texts [])
                     then add_s "a product of two counters, neither written in the program: a number that may need more than a word (Rocq-C-solution.md 0.5, second reason)" r4 else r4 in
           match r4 with [] => ["a construct in a place not read (not classified)"] | _ => r4 end

@@ -1048,9 +1048,12 @@ def reflect(name, entry, prog, no_proof):
                   + (f"Proof. cbn [KQR.eqC KQR.eqN]. fix IH 1. intros kqn; destruct kqn as [|kqn]; intros; cbn [{W} {f[0]}]; first [solve [KQRWf.own_step IH] | solve [cbn; KQRWf.own_step IH] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step IH]{altn}]. Qed.\n" if f[0] in fix1 else
                      f"Proof. cbn [KQR.eqC KQR.eqN]. intros. unfold {W}, {f[0]}. first [solve [KQRWf.own_step0] | solve [cbn; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0p]{alt0}]. Qed.\n"))
     t += "Strategy opaque [" + " ".join([f[0] for f in fs if not iswr(f[0])] + tmpls) + "].\n"   # a copy is unfolded first
-    # (step 94) ofn, our abbreviation of of_Z (Z.of_nat n), is unfolded first: else the kernel opens the program's of_Z on a written
-    # counter and works the number out in unary (F77)
-    t += "Strategy expand [KQC.KQLAuto.ofn].\n"
+    # (step 94, 95) our abbreviations are unfolded first and the library's functions a node of S means last, so that the meaning and
+    # the text meet at the same call and its arguments are compared: else the kernel opens the program's call on written numbers
+    # and works it out in unary (F77, F78)
+    t += "Strategy expand [KQC.KQLAuto.ofn KQR.cmpn KQR.nbop_nat KQR.nlop_nat].\n"
+    t += ("Strategy opaque [Nat.pow Nat.add Nat.mul Nat.sub Nat.pred Nat.min Nat.max Nat.div2 Nat.div Nat.modulo Nat.land Nat.lor Nat.lxor"
+          " Nat.ldiff Nat.shiftl Nat.shiftr Nat.testbit Nat.gcd Nat.sqrt Nat.log2 Nat.eqb Nat.ltb Nat.leb Nat.of_num_uint].\n")
     if not no_proof:
         for j, f in enumerate(fs):
             cs = "[" + "; ".join(f"existT (@KQR.ftype {inst}) {sig(g)} {g[0]}" for g in fs[:j]) + "]"

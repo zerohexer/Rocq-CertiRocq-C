@@ -94,6 +94,8 @@ DESIGN_CELLS = {
   # a written number past a word as a counter, a counter times a number past 2^63 (Rocq-C-solution.md §0.5, second reason);
   # controls: A_zj_land_max, A_zj_mul_r, the same below a word (step 94)
   "A_zj_land_past", "A_zj_mul_big",
+  # a power of two written numbers past a word (Rocq-C-solution.md §0.5, second reason); controls: A_zk_num_62, A_zk_num_ten18 (step 95)
+  "A_zk_past_63", "A_zk_past_ten19",
 }
 # gaps whose refusal message is shared with another category: classified by name
 BY_NAME = {
@@ -181,7 +183,6 @@ BY_NAME = {
   "A_zh_row_land": "a function giving back a counter built by a bit operation of the library",
   "A_zh_row_shiftr": "a function giving back a counter built by a bit operation of the library",
   "A_zh_row_testbit_own": "a function giving back a counter built by a bit operation of the library",
-  "A_zj_pow_big": "a power of two written numbers above 4096: its value is read only up to 4096 (12.E)",
   "A_zi_log2_up": "a definition of the library that matches on a comparison of counters: log2_up, sqrt_up",
   "A_zi_sqrt_up": "a definition of the library that matches on a comparison of counters: log2_up, sqrt_up",
   "A_zf_r_three": "three constructors or more holding a memory, through a recursion: a sum in a sum",
