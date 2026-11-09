@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3774 of 3915, 76 gaps, 64 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3790 of 3932, 75 gaps, 66 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -5707,6 +5707,19 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: unchanged, bounds are not code.
 - *Cells*: `A_zl_*`: a min with the number first and second, of two counters, nested, in a let, a test, a number, a call's counter, a callee's; a subtraction the same; a subtraction of a min; the pins: an operand past a word in a min and in a subtraction, each with its control, the operand masked.  `A_c2_min_clamp` read.
 
+**Step 97, the bounds of a min and of a subtraction of counters exact — the result (2026-11-10).**  Built as designed:
+- *Bounds* (`KQR.v`): in `cmax` and `cmaxv` a min is `Z.min` of its operands', a subtraction its first operand's; in `clinf` a subtraction its first's, a min `lmin`, the second's linear bound where `lle_c` finds it below the first's at every place, else the first's.  `wfc` asks each operand of a min and of a subtraction to fit, as for `CBitN`.
+- *The proofs*: the bounds' lemmas as they were, `lia` taking `Nat.min` and `Nat.sub` under `Z.of_nat`, but for `clinf_bound`'s two cases (a case on `lmin`'s choice; the first operand alone) and `cmaxv_cmax`'s cases of two operands, whose second rewrite a subtraction no longer has.  `cexp_all`'s two cases take the operands' fits from `wf`, and `auto` closes with them what `lia` closed: the two `lia`s left met the continuation and failed.
+- *The C*: the 99 programs byte-identical: bounds are not code.
+- *Cells*: 17 more: 15 proved, a min with the number first and second, of two counters, nested, in a let, a test, a number, a call's counter, a callee's; a subtraction the same; a subtraction of a min; by design, each with a control: `A_zl_min_past`, `A_zl_sub_past` (an operand past a word; controls `A_zl_min_past_ctl`, `A_zl_sub_past_ctl`, the operand masked).  One gap read: `A_c2_min_clamp`.
+- The C: the 99 programs byte-identical.  The construct table (on `94e26b0`): **3790 of 3932 through the verified compiler**, 66
+  by design, 75 gaps, 1 not Rocq (was 3774 of 3915: 15 of the 17 new cells read, 2 by design; 1 gap read; no cell lost).  The gate
+  on `94e26b0`, the walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding; the same C: undefined
+  behaviour trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels and `grow`
+  (21 / 21 / 24 / 18 / 18 / 9 s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems each within
+  the list; `check_trust.py`: `trust unchanged`.  Next: a match on a comparison in any place, `log2_up`, `sqrt_up` (step 98),
+  built and its cells read locally.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5889,11 +5902,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `e73b49b` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `94e26b0` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 97's design -- the bounds of a min and of a subtraction of counters exact |
+| (this commit) | §12.V: step 97 (the bounds of a min and of a subtraction of counters exact: the construct table 3790 of 3932, 66 by design, 75 gaps), the gate |
+| `94e26b0` | `proved/KQR.v` + matrix step 97: the bounds of a min and of a subtraction of counters exact, each operand asked to fit |
+| `46e4f1f` | §12.V: step 97's design -- the bounds of a min and of a subtraction of counters exact |
 | `73dddcb` | §12.V: step 96 (each program's own end theorem, and what it rests on, in the gate: the construct table 3774 of 3915, 64 by design, 76 gaps), the gate; F79, F80; §12.T's follow-up done |
 | `e73b49b` | `proved/TRUSTED.txt` + `check_trust.py` step 96: what the programs' end theorems rest on besides the route's, Rocq's own definitions of five primitives the reader writes out, listed (the owner's decision); every name listed used by the route or by a program |
 | `ca0513c` | `proved/KQREnd.v` + `kitc.py` + `check_trust.py` + `make.sh` + the gate's scripts step 96: each program's end theorem, the entry's said of the Clight; what it rests on printed and compared with the list |
