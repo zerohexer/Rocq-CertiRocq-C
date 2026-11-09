@@ -68,8 +68,7 @@ def main():
             print("NO ASSUMPTIONS IN THE GATE'S LOG"); bad += 1
         for n in sorted(got - w["assumption"]):
             print(f"NOT ON THE LIST: assumption {n}"); bad += 1
-        for n in sorted(w["assumption"] - got):
-            print(f"ON THE LIST, NOT IN THE GATE: assumption {n}"); bad += 1
+
         # (step 96) each program's end theorem: every name it rests on on the list, and one line for each program through
         ends = {}
         for l in lines:
@@ -92,6 +91,9 @@ def main():
             for n in names:
                 if n not in w["assumption"]:
                     print(f"NOT ON THE LIST: assumption {n} (the end theorem of {prog})"); bad += 1
+        # every name on the list is what the route or a program's end theorem rests on: nothing listed that nothing uses
+        for n in sorted(w["assumption"] - got - {x for v in ends.values() for x in v}):
+            print(f"ON THE LIST, NOT IN THE GATE: assumption {n}"); bad += 1
         if ends:
             print(f"end theorems: {len(ends)} programs, each within the list" if not bad else f"end theorems: {len(ends)} programs")
     if bad:
