@@ -10,6 +10,7 @@
 # What the proof assumes of the machine and of the C bodies of its operations (hw/kq_hw.h, the routines) is `hw_law` and
 # `hwf_law` (proved/README.md).
 cd /w; eval $(opam env); ulimit -s unlimited
+export KQ_ENDAX=1   # each program's end theorem: what it rests on, one line (step 96)
 x=${1:-kernel}; B=bld/hwp; mkdir -p $B proved/gen
 RT=$(ls -d ~/.opam/*/lib/coq/user-contrib/CertiRocq/Plugin/runtime)
 ISA=${ISA:-X86}
@@ -22,7 +23,7 @@ prog() {  # prog SUFFIX [kitc flags]: hw/NAME{SUFFIX}.body -> one object; prog "
   local src=hw/$y.body; [ -f hw/${y}_p.body ] && src=hw/${y}_p.body
   python3 hw/p_prep.py $src hw/$x.ext $B/$n.prep $B/$n.ext || return 1
   { echo "Require Import KQ.hw.Runtime."; echo "Require Import KQ.hw.User."; cat hw/$ISA.v; echo; cat hw/lib.body; echo; cat $B/$n.prep; } > $B/$n.body
-  KQ_STRICT=1 python3 proved/kitc.py --bare --ext=$B/$n.ext "$@" $B/$n.body 2>&1 | grep -v "^Warning\|^to KQC" | awk '{ print substr($0, (length($0) > 700 ? length($0) - 700 : 1)) }'
+  KQ_STRICT=1 python3 proved/kitc.py --bare --ext=$B/$n.ext "$@" $B/$n.body 2>&1 | grep -v "^Warning\|^to KQC" | awk '/ END-ASSUM / { print; next } { print substr($0, (length($0) > 700 ? length($0) - 700 : 1)) }'
   local C=proved/gen/${n}_bare.c; [ -f $C ] || { echo "$y: no C was made"; return 1; }
   clang -w $CF $FLAGS -c $C -o $B/$n.o || return 1
   objs="$objs $B/$n.o"

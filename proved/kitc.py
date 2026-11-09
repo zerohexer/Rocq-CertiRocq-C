@@ -495,7 +495,7 @@ def reflect(name, entry, prog, no_proof):
         + "   | false => k q0\n"
         + "   | true => run_template_program (KQRReify.quote_function q0) (fun q => k q)\n"
         + "   end)).\n"
-        + f"Definition {name}_src := option_map fst (fst (fst (fst (fst (fst {name}_res))))).\n"
+        + f"Definition {name}_src := ltac:(let r := eval vm_compute in (option_map fst (fst (fst (fst (fst (fst {name}_res)))))) in exact r).\n"
         + f"Definition {name}_mts := match fst (fst (fst (fst (fst {name}_res)))) with Some x => snd x | None => [] end.\n"
         # a copy of a recursive function for the functions it is given: its meaning, the function applied to them (step 10)
         + f"MetaRocq Run (monad_iter (fun p => tmMkDefinition (fst p) (snd p)) (KQRReify.plain_mts {name}_mts)).\n")
@@ -579,7 +579,7 @@ def reflect(name, entry, prog, no_proof):
     # (step 60) a fixpoint whose match on its counter gives a function: not a measure's, its theorem a copy's
     cv = {k for k, m in pfs.items() if m[5] == "c"}
     pfs = {k: m for k, m in pfs.items() if m[5] != "c"}
-    t = HDR + "From KQC Require KQR KQRReify" + (" KQRWf" if pfs or (os.path.exists(os.path.join(GEN, f"{name}_rmts.out")) and "__wy" in open(os.path.join(GEN, f"{name}_rmts.out")).read()) else "") + ".\nImport ListNotations.\n" + ("From Stdlib Require Import FunInd.\n" if any(m[5] == "f" for m in pfs.values()) else "") + f"From KQG Require Import {name}_r.\n"
+    t = HDR + "From KQC Require KQR KQRReify KQREnd" + (" KQRWf" if pfs or (os.path.exists(os.path.join(GEN, f"{name}_rmts.out")) and "__wy" in open(os.path.join(GEN, f"{name}_rmts.out")).read()) else "") + ".\nImport ListNotations.\n" + ("From Stdlib Require Import FunInd.\n" if any(m[5] == "f" for m in pfs.values()) else "") + f"From KQG Require Import {name}_r.\n"
     # the program's record types (step 12): each its type, its constructor and match, a value of it; the laws by a fixed script
     rp = os.path.join(GEN, f"{name}_rrec.out")
     # each entry: its type, its constructor (a data type's: its constructors), its number of fields, a data type's widths
@@ -1129,6 +1129,9 @@ def reflect(name, entry, prog, no_proof):
             if shared:
                 # the sequential meaning describes the program only if it reaches its shared blocks through marked operations
                 t += f"Lemma {name}_rsh{j} : KQR.sh_ok {shared} (KQRReify.body_at {name}_funs {j}) = true.\nProof. exact eq_refl. Qed.\n"
+    if not no_proof:
+        # (step 96) the program's end theorem: the entry's theorem said of the Clight the generator makes (KQREnd.callee_end)
+        t += f"Definition {name}_end := @KQREnd.callee_end {inst} _ _ _ _ _ {name}_rok{len(fs) - 1} eq_refl eq_refl.\n"
     t += c_print(name)
     f1 = os.path.join(GEN, f"{name}_rp.v")
     # (step 86) a function named p1 or p2: `.p1` is a token of MetaRocq's notations: by its short name, the program's file being imported
@@ -1138,6 +1141,16 @@ def reflect(name, entry, prog, no_proof):
     if rc != 0:
         print(name, "REFLECT CHECK FAILED" + FOLLOW + ":", out[-400:].replace("\n", " "), flush=True)
         return None
+    if not no_proof and os.environ.get("KQ_ENDAX"):
+        # (step 96) what the end theorem rests on, printed from a file that imports nothing: each name the one constant it names (F76)
+        fa = os.path.join(GEN, f"{name}_ra.v")
+        open(fa, "w").write(f"From KQG Require {name}_rp.\nPrint Assumptions KQG.{name}_rp.{name}_end.\n")
+        rca, outa = coqc(fa)
+        ax = sorted({m.group(1) for m in re.finditer(r"(?m)^([A-Za-z_][A-Za-z_0-9.']*) :", outa)})
+        if rca != 0 or not (ax or "Closed under the global context" in outa):
+            print(name, "REFLECT CHECK FAILED" + FOLLOW + ": the end theorem's assumptions not printed:", outa[-300:].replace("\n", " "), flush=True)
+            return None
+        print(name, f"END-ASSUM {len(ax)}:", " ".join(ax), flush=True)
     idx = len(fs) - 1   # the entry is the last function read: every function is read after those it calls
     e = fs[idx]
     if any(c not in "IB" for c in e[2]) or e[6] not in ("", "B"):   # an entry taking or giving back a record: main gives and takes numbers

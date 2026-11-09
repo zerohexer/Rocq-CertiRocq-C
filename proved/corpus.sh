@@ -8,6 +8,7 @@
 #   and its answer checked against the C++ run, and the last line counts it apart.
 # The last line says how many agree.
 cd /w && ulimit -s unlimited; eval $(opam env)
+export KQ_ENDAX=1   # each program's end theorem: what it rests on, one line (step 96)
 mkdir -p dbg
 bash proved/make.sh | tail -1
 SKIP=${SKIP-}

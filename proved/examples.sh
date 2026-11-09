@@ -4,6 +4,7 @@
 # NAME.expect (worked out apart from Rocq).  They run on the memory and the arguments of tests/mkworst.py.
 cd /w && ulimit -s unlimited; eval $(opam env)
 export KQ_STRICT=1
+export KQ_ENDAX=1   # each program's end theorem: what it rests on, one line (step 96)
 D=dbg/examples; mkdir -p $D
 python3 tests/mkworst.py $D > /dev/null || exit 1
 ok=0; bad=0; fok=0; fbad=0; uok=0; ubad=0; ook=0; obad=0; cok=0; cbad=0; cskip=0
@@ -11,7 +12,7 @@ FREE="-w -O2 -ffreestanding -fno-builtin -nostdinc -isystem $(clang -print-resou
 for b in proved/examples/*.body; do
   n=$(basename $b .body)
   rm -f bin/P_$n   # no answer from a binary an earlier run left (F72)
-  python3 proved/kitc.py $b 2>&1 | grep -v "^Warning\|^to KQC" | grep -v "^$n built" | head -3
+  python3 proved/kitc.py $b 2>&1 | grep -v "^Warning\|^to KQC" | grep -v "^$n built" | head -4
   mem=$D/same.mem; args=$D/same.args   # an example with its own memory and arguments has NAME.mem, NAME.args
   [ -f proved/examples/$n.mem ] && mem=proved/examples/$n.mem; [ -f proved/examples/$n.args ] && args=proved/examples/$n.args
   got=$(KQ_MEM=$mem bin/P_$n $(cat $args) 2>&1 | head -1 | awk '{print $2}')
@@ -46,7 +47,7 @@ for v in proved/vfiles/*.v; do
   n=$(basename $v .v)
   rm -f bin/P_$n
   coqc -w -all -R . KQ $v > /dev/null 2>&1 || { bad=$((bad + 1)); echo "$n: Rocq refused the file on its own"; continue; }
-  python3 proved/kitc.py $v 2>&1 | grep -v "^Warning\|^to KQC" | grep -v "^$n built" | head -3
+  python3 proved/kitc.py $v 2>&1 | grep -v "^Warning\|^to KQC" | grep -v "^$n built" | head -4
   got=$(KQ_MEM=proved/vfiles/$n.mem bin/P_$n $(cat proved/vfiles/$n.args) 2>&1 | head -1 | awk '{print $2}')
   if [ "$got" = "$(cat proved/vfiles/$n.expect)" ]; then ok=$((ok + 1)); else bad=$((bad + 1)); echo "$n: got $got, expected $(cat proved/vfiles/$n.expect)"; fi
 done

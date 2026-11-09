@@ -6,7 +6,8 @@ rests on.  A name in the tree and not on the list, or on the list and not in the
 push stop.  Adding to the list is the owner's decision.
 
   check_trust.py                the tree
-  check_trust.py --gate LOG     also the gate's `Print Assumptions` list in LOG
+  check_trust.py --gate LOG     also the gate's `Print Assumptions` list in LOG, and what each program's end theorem rests on
+                                (its `NAME END-ASSUM n: names` lines, one for each program through the verified compiler, step 96)
 """
 import re, subprocess, sys, os
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -69,6 +70,30 @@ def main():
             print(f"NOT ON THE LIST: assumption {n}"); bad += 1
         for n in sorted(w["assumption"] - got):
             print(f"ON THE LIST, NOT IN THE GATE: assumption {n}"); bad += 1
+        # (step 96) each program's end theorem: every name it rests on on the list, and one line for each program through
+        ends = {}
+        for l in lines:
+            m = re.match(r"^(\S+) END-ASSUM (\d+):(.*)$", l)
+            if m:
+                ends[m.group(1)] = m.group(3).split()
+                if len(ends[m.group(1)]) != int(m.group(2)):
+                    print(f"END THEOREM LINE CUT: {m.group(1)}"); bad += 1
+        thr = set()
+        if any("== through the verified compiler" in l for l in lines):
+            k = [j for j, l in enumerate(lines) if "== through the verified compiler" in l][0] + 1
+            while k < len(lines) and not lines[k].startswith("=="):
+                if "by the verified compiler" in lines[k]: thr.add(lines[k].split()[0])
+                k += 1
+        if not ends:
+            print("NO END THEOREMS IN THE GATE'S LOG"); bad += 1
+        for prog in sorted(thr - set(ends)):
+            print(f"NO END THEOREM PRINTED: {prog}"); bad += 1
+        for prog, names in sorted(ends.items()):
+            for n in names:
+                if n not in w["assumption"]:
+                    print(f"NOT ON THE LIST: assumption {n} (the end theorem of {prog})"); bad += 1
+        if ends:
+            print(f"end theorems: {len(ends)} programs, each within the list" if not bad else f"end theorems: {len(ends)} programs")
     if bad:
         print(f"TRUST CHANGED: {bad} differences (Rocq-C-solution.md §13.9: the owner's decision)")
         return 1
