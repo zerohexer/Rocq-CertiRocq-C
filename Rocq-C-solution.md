@@ -5618,6 +5618,15 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   `check_trust.py`: `trust unchanged`.  Next: the follow-ups of §12 (a program's own theorem in the gate, §12.T; a written counter
   as one number, §12.E), and the table's gaps.
 
+**Step 94, a counter written as a number, one number in the C (§12.E's follow-up, §3.5) — the design (2026-11-09).**  A counter written as a number was read as a chain of successors: its code as long as the number, `Nat.land n 4095` 4095 additions, and printing that C ran out of 3 GB (found at step 93).  And from 5000 on Rocq writes a `nat` as `Nat.of_num_uint` of its digits, which was not read at all: `go 100000 ..`, as one writes a budget.  Both are one number of the machine.
+- *`S`* (`KQR.v`): `CLit k`, its meaning the number `k` itself, what Rocq writes below 5000; `CNumU u`, its meaning `Nat.of_num_uint u`, the digits Rocq writes from 5000 on, decimal or hexadecimal.  The code of each: the constant, `ofn k`, and `of_Z (nu_z u)`, `nu_z` the digits read into `Z` as `Nat.of_uint_acc` reads them into `nat`.
+- *What is proved*: `nu_z_ok : Z.of_nat (Nat.of_num_uint u) = nu_z u`, by induction on the digits, closed under the global context (no axiom at all); the rest is the constant's value.
+- *Bounds*: exact, `k` and `nu_z u`.  A number past a word as a counter is refused by the fitting every counter has (§0.5, second reason): a pin, its control the same below `2^63`.  `CLit` keeps what the chain had for a `let`'s bound (its depth `k`, no addition), so a `let` of a written counter is bounded as before; `CNumU` has its own bound.
+- *The reader*: a written counter of 1 or more, a chain of successors on 0, is `CLit`; `Nat.of_num_uint` of written digits is `CNumU`.
+- *The C*: a program with a counter written as a number changes: each chain of additions becomes its constant.  Each changed program's C compared, and clang's assembly before and after; the answers the same, the corpus timed if a corpus program changes.
+- *The acceptance*: `proved/examples/lit_fix`: budgets of 12 and 4095, a test against 100000, a mask of 65535, a hexadecimal one, a budget of 1000000 in a loop that stops early; the answer worked out apart.
+- *Cells*: `A_zj_*`: a written counter as a budget, a number, a test, a let, an operand, in a recursion, below and from 5000, decimal and hexadecimal, at the edges (1, 4999, 5000, `2^63 - 1`); the pin past a word and its control.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5803,7 +5812,8 @@ Pushed to the public repository up to `b8758c7` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 93 (the recursive functions of Rocq's library on counters: the construct table 3716 of 3853, 60 by design, 76 gaps), the C, the gate; §12.E's follow-up |
+| (this commit) | §12.V: step 94's design -- a counter written as a number, one number in the C |
+| `564e5a8` | §12.V: step 93 (the recursive functions of Rocq's library on counters: the construct table 3716 of 3853, 60 by design, 76 gaps), the C, the gate; §12.E's follow-up |
 | `b8758c7` | `KQRun.v` + `proved/KQR.v` + `KQRReify.v` + `kitc.py` + matrix + `examples/libn_fix` step 93: `Nat.gcd`, `Nat.sqrt`, `Nat.log2` on counters, a call of the kit's function; its signature known by the table of callees |
 | `31d8f0e` | §12.V: step 93's design -- the recursive functions of Rocq's library on counters: gcd, sqrt, log2 |
 | `347d98a` | §12.V: step 92 (the bit operations of Rocq's library on counters: the construct table 3680 of 3817, 59 by design, 77 gaps), the C, the gate; F76, the trust check made exact; §12.T's follow-up |
