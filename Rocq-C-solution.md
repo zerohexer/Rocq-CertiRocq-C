@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3750 of 3890, 77 gaps, 62 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3774 of 3915, 76 gaps, 64 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1662,6 +1662,7 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F75 | The printed C left-shifted negative numbers: `tagup` of a signed number.  Clight defines that, C does not, so the text clang read said less than the Clight the theorem is about.  No answer was wrong: clang's IR has no `nsw` on a signed left shift.  Undefined behaviour trapped found it on its first run, 4 of 59 examples.  Fixed in the generator with a cast, the assembly the same.  So a difference between Clight and the printed C is a real class, and the printer is not the place to fix one |
 | F76 | The trust check compared printed names as text.  Each file prints an axiom by the shortest name valid in its own scope, so one axiom was listed under two spellings (14 lines), and a short name printed elsewhere could have been another constant and still matched; every line `name :` after the first `Axioms:` of `make.sh`'s whole output was taken as an assumption, `Check`'s outputs included (`eq_refl`, `int`); and the set came from three end theorems plus what files happened to print, so `KQRWf.kq_compares_def` (step 64), which a program using `compares` rests on, was never printed: `PrimInt63.compares` and `Sint63Axioms.compare_spec`, Rocq's own, were not on the list.  Found at step 92, when `lxor_spec` was printed short | `make.sh` prints what every lemma of `KQMTop.v`, `KQR.v`, `KQRWf.v`, `KQPrim.v` rests on, from a file that imports nothing, between two markers, and the gate reads only that; `proved/TRUSTED.txt` lists that set, each axiom once by its full name (90): the short spellings, the artifacts and two primitive types only the untrusted reader's prints reached out, the two of `compares` in, with the owner's agreement that Rocq's own axioms are the floor (2026-11-09) |
 | F77 | A written counter turned into a number, `Uint63.of_nat 100000`, took 97 s to check and `Uint63.of_nat 0xFFFFF` over 300 s, against 1.5 s for the rest of the program: the meaning says `ofn c`, the text `of_Z (Z.of_nat c)` (`Uint63.of_nat` is a notation for it), and the kernel opened the program's `of_Z` first, whose match worked `Z.of_nat` out on the number in unary.  It was there before step 94 for any written counter turned into a number, under a second at 4095 (found by step 94's cells) | the check files `kitc.py` writes unfold `ofn`, our abbreviation, first (`Strategy expand`): 3.4 s; the order only, as F50 |
+| F78 | F77 was one case: a call of the library on written numbers in the program's text is opened by the kernel and worked out in unary whenever the meaning reaches the same call by another road.  `Nat.ltb n (Nat.pow 10 18)` did not end in 120 s with the meaning `cmpn Clt n (Nat.pow 10 18)`, nor with our meaning functions unfolded first; `Nat.land 1000000 65535` written out failed (found by step 95's cells) | the check files unfold our abbreviations first and every library function a node of `S` means last, so both sides meet at the call and its arguments are compared: 1.5 to 3.6 s, the gate's programs the same or faster, measured without the cache |
 | F69 | `rewrite` compares up to unfolding, full, whatever `Strategy opaque` says: a lemma about a function whose body is one operation fires on that operation where the function is not written, and with a tactic turning the operation back the proof never ended | the lemma only where the function is in the goal (`match goal with |- context [F]`); a proof that looks for what to rewrite is stepped by hand when it times out |
 | F68 | A program's own file (`Require`d by its text) was compiled again only when older than its source, not than the kit, so after `KQRun.v` changed the program failed once on Rocq's inconsistent assumptions and `kitc.py` wrote no C; the comparison showed `none`, at steps 65 and 73 | `build_user_files` counts the kit's `.vo` |
 | F67 | A budget written as `S (S ..)` makes a conversion unroll the fixpoint: both sides reduce on the constructor, and with two branches in each round the comparison is exponential.  `reflexivity` on `(fix go ..) 63 c 0 a b = kq_d21_go 63 c 0 a b` did not end, nor `rewrite` of a term holding it, with the fixpoints' bodies identical | a written budget is `kq_nat 63`, opaque to a conversion (D18); a lemma about it is stated with the budget a variable, and the number put in with `exact` |
@@ -1723,10 +1724,8 @@ proved once, measured against C written the same way.
 - ~~*A counter written as a number*~~ — **done, step 94**: a chain of successors on 0 is `CLit k`, the digits Rocq writes from 5000 on
   are `CNumU u`, a product by such a number `CMulU`; each is one constant in the C; the 33 changed programs' C
   and clang's assembly compared: the corpus programs' machine code is the same, so the timing is too.
-- *A power of two written numbers above 4096* (found at step 94): `Nat.pow 2 13` is read only up to 4096, its value as a `CLit`;
-  above, refused (`A_zj_pow_big`).  Its general form: a node meaning `Nat.pow` of the two written numbers, its code the value worked
-  out in `Z`, refused past a word by the fitting.  Accepted when `A_zj_pow_big` is proved and a power past a word is a pin with its
-  control.
+- ~~*A power of two written numbers above 4096*~~ — **done, step 95**: `CPowL` over two written numbers, its code the value worked
+  out in `Z` by squaring; past a word, a pin with its control.
 
 **F. Proof speed, only if it becomes the bottleneck (§7.5):** segmenting long straight-line functions; reflection.
 
@@ -5659,6 +5658,21 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The acceptance*: `proved/examples/pow_fix`: `2 ^ 13`, `Nat.pow 10 18` as a test, `2 ^ 40` as a mask's bound, `Nat.pow 3 39`, `0 ^ 0`, `1 ^ 100000`, under `Require Import Arith`; the answer worked out apart.
 - *Cells*: `A_zk_*`: as a budget, a number, a test, a let, an operand, in a recursion; at 0 ^ 0, 1 ^ 100000, 2 ^ 62, 10 ^ 18, a hexadecimal exponent; the pins `2 ^ 63`, `10 ^ 19` and their controls; `A_zj_pow_big` read.
 
+**Step 95, a power of two written numbers, its value one number in the C — the result (2026-11-09).**  Built as designed, its operands a type of their own:
+- *`S`* (`KQR.v`): `wnum` (`WLit k`, `WNum u`: a written number, below 5000 or as its digits), `wval`, `wz`; `ppw`, `zpw`, a power by squaring in `Z`; `CPowL a b` over two `wnum`s; `ppw_ok`, `wz_ok`, `cpw_ok`, closed under the global context; the cases of `cexp_all` and of the bounds' lemmas.  The design gave `CPowL` two counters with `wf` asking both to be written: but the bounds' lemmas hold for every tree, with no `wf` premise, and the linear bound has nothing to bound a power of two counters with.  Its operands are written numbers by their type, so it is a constant as `CNumU` is, its bound exact, and `wf` has nothing to ask.
+- *The reader* (`KQRReify.v`): `Nat.pow` of two written numbers (`wnum_of`) is `CPowL`, whatever the value; a base of 2 or more with an exponent of 63 or more is refused before any computing.  The 4096 limit is gone; the hint for a refused power names a power of a counter and one past a word.
+- *The check* (F78): with the meaning `Nat.pow a b` and the text `Nat.pow 10 18` the kernel still worked the number out in unary when it sat in a comparison: `Nat.ltb n (Nat.pow 10 18)` did not end in 120 s, unfolding our meaning functions first did not help, unfolding `Nat.pow` last did (1.5 s); `Nat.land 1000000 65535` written out failed the same way.  F77 was one case of it.  The check files `kitc.py` writes unfold our abbreviations first (`ofn`, `cmpn`, `nbop_nat`, `nlop_nat`) and every library function a node of `S` means last, so that the meaning and the text meet at the same call and its arguments are compared.  Measured against the order of step 94 and against `Nat.pow` alone last, without the cache, on the new cells and nine gate programs: the same or faster (`CF622F` 13.1 to 10.5 s, `vals_fix` 13.0 to 10.0 s), and the two cells the old order failed proved (3.6 s).
+- *The C*: the 98 programs byte-identical: `lit_fix`'s `Nat.pow 2 10` is a `CPowL` now, the same constant.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62, in clean copies of both trees; step 94's files / these): `HWP_kernel` 3.05 / 3.10 s, `HWP_own` 2.11 / 2.09, `HWP_irqnow` 1.78 / 1.80 — the same, these the faster in two rounds of three.
+- *The acceptance*: `proved/examples/pow_fix`: `2 ^ 13` as a budget, `10 ^ 18` in a test, `2 ^ 40 - 1` as a mask, `3 ^ 39` modulo 1000003, `0 ^ 0` and `1 ^ 100000` as budgets, under `Require Import Arith`: proved, built, 123463739004.
+- *Cells*: 25 more: 23 proved, at `0 ^ 0`, `0 ^ 100000`, `1 ^ 100000`, `2 ^ 62`, `10 ^ 18`, `3 ^ 39`, `100000 ^ 3`, a hexadecimal exponent, as budgets, numbers, tests, lets, operands, in a recursion and a callee, with the notation, under `Arith`, and five calls of the library on written numbers alone; by design, each with a control: `A_zk_past_63`, `A_zk_past_ten19` (past a word; controls `A_zk_num_62`, `A_zk_num_ten18`).  One gap read: `A_zj_pow_big`.
+- The C: the 98 programs byte-identical, and `pow_fix`, new.  The construct table (on `c938ac6`): **3774 of 3915 through the
+  verified compiler**, 64 by design, 76 gaps, 1 not Rocq (was 3750 of 3890: 23 of the 25 new cells read, 2 by design; 1 gap read;
+  no cell lost).  The gate on `c938ac6`, the walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding; the
+  same C: undefined behaviour trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five
+  kernels and `grow` (15 / 16 / 18 / 15 / 15 / 6 s); **109 programs through the verified compiler, 0 refused**; `check_trust.py`:
+  `trust unchanged`.  Next: §12.T's follow-up (each gate program's own theorem in the gate), then the table's gaps.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5840,11 +5854,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `da8f5f1` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `c938ac6` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 95's design -- a power of two written numbers, its value one number in the C |
+| (this commit) | §12.V: step 95 (a power of two written numbers, its value one number in the C: the construct table 3774 of 3915, 64 by design, 76 gaps), the C, the gate; F78; §12.E's follow-up done |
+| `c938ac6` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + matrix + `examples/pow_fix` step 95: a power of two written numbers, its value one number in the C: `CPowL`; the check files unfold the library's functions last; 25 cells |
+| `1b3a620` | §12.V: step 95's design -- a power of two written numbers, its value one number in the C |
 | `77d6540` | §12.V: step 94 (a counter written as a number, one number in the C: the construct table 3750 of 3890, 62 by design, 77 gaps), the C and its assembly, the gate; F77; §12.E's follow-up |
 | `da8f5f1` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + matrix + `examples/lit_fix` step 94: a counter written as a number, one number in the C: `CLit`, `CNumU`, `CMulU`; the check files unfold `ofn` first; 37 cells |
 | `8128bb2` | §12.V: step 94's design -- a counter written as a number, one number in the C |
