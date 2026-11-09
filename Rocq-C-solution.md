@@ -5700,6 +5700,13 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   it).  Next: step 97 (the bounds of a min and of a subtraction of counters exact), built and its cells read locally; then the
   comparisons in any place (`log2_up`, `sqrt_up`, step 98).
 
+**Step 97, the bounds of a min and of a subtraction of counters exact (§3.5, §12.A; the gap `A_c2_min_clamp`) — the design (2026-11-10).**  `Nat.mul 3 (Nat.min (Uint63.to_nat a) 1000)`: at most 3000, refused as a number past a word, since the bound of a min was the larger of its operands' (`Z.max`) and its linear bound their sum.  The same for `Nat.sub 1000 x`, at most 1000, bounded by the larger of the two.
+- *Bounds* (`KQR.v`): a min, the smaller of its operands' (`Z.min`); a subtraction, its first operand's; in the linear bound, a subtraction its first operand's, a min the second operand's where it is below the first at every place, else the first's (`lmin`): any of the two bounds a min, so the choice needs no proof.
+- *`wf`*: with an exact bound the whole fitting no longer shows that each operand fits, and the code computes both: `wf` asks each operand of a min and of a subtraction to fit, as for the bit operations (step 92).  Every program read before still is: an operand fitted there since the larger bound did.
+- *What is proved*: the bounds' lemmas' cases (`Nat.min`, `Nat.sub` under `Z.of_nat`), `cexp_all`'s two cases taking the operands' fits from `wf`.
+- *The C*: unchanged, bounds are not code.
+- *Cells*: `A_zl_*`: a min with the number first and second, of two counters, nested, in a let, a test, a number, a call's counter, a callee's; a subtraction the same; a subtraction of a min; the pins: an operand past a word in a min and in a subtraction, each with its control, the operand masked.  `A_c2_min_clamp` read.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5886,7 +5893,8 @@ Pushed to the public repository up to `e73b49b` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 96 (each program's own end theorem, and what it rests on, in the gate: the construct table 3774 of 3915, 64 by design, 76 gaps), the gate; F79, F80; §12.T's follow-up done |
+| (this commit) | §12.V: step 97's design -- the bounds of a min and of a subtraction of counters exact |
+| `73dddcb` | §12.V: step 96 (each program's own end theorem, and what it rests on, in the gate: the construct table 3774 of 3915, 64 by design, 76 gaps), the gate; F79, F80; §12.T's follow-up done |
 | `e73b49b` | `proved/TRUSTED.txt` + `check_trust.py` step 96: what the programs' end theorems rest on besides the route's, Rocq's own definitions of five primitives the reader writes out, listed (the owner's decision); every name listed used by the route or by a program |
 | `ca0513c` | `proved/KQREnd.v` + `kitc.py` + `check_trust.py` + `make.sh` + the gate's scripts step 96: each program's end theorem, the entry's said of the Clight; what it rests on printed and compared with the list |
 | `30908ae` | §12.V: step 96's design -- each program's own end theorem, and what it rests on, in the gate |
