@@ -186,6 +186,26 @@ Inductive nlop := LGcd | LSqrt | LLog2.
 Definition nlop_nat (o : nlop) (x y : nat) : nat :=
   match o with LGcd => Nat.gcd x y | LSqrt => Nat.sqrt x | LLog2 => Nat.log2 x end.
 
+(** (step 94) a counter written as a number from 5000 on: Rocq writes it [Nat.of_num_uint] of its digits; the digits read into [Z] as
+    [Nat.of_uint_acc] reads them into [nat] *)
+Fixpoint du_z (d : Decimal.uint) (acc : Z) : Z :=
+  match d with
+  | Decimal.Nil => acc | Decimal.D0 d => du_z d (10 * acc) | Decimal.D1 d => du_z d (10 * acc + 1) | Decimal.D2 d => du_z d (10 * acc + 2)
+  | Decimal.D3 d => du_z d (10 * acc + 3) | Decimal.D4 d => du_z d (10 * acc + 4) | Decimal.D5 d => du_z d (10 * acc + 5)
+  | Decimal.D6 d => du_z d (10 * acc + 6) | Decimal.D7 d => du_z d (10 * acc + 7) | Decimal.D8 d => du_z d (10 * acc + 8)
+  | Decimal.D9 d => du_z d (10 * acc + 9)
+  end%Z.
+Fixpoint hu_z (d : Hexadecimal.uint) (acc : Z) : Z :=
+  match d with
+  | Hexadecimal.Nil => acc | Hexadecimal.D0 d => hu_z d (16 * acc) | Hexadecimal.D1 d => hu_z d (16 * acc + 1)
+  | Hexadecimal.D2 d => hu_z d (16 * acc + 2) | Hexadecimal.D3 d => hu_z d (16 * acc + 3) | Hexadecimal.D4 d => hu_z d (16 * acc + 4)
+  | Hexadecimal.D5 d => hu_z d (16 * acc + 5) | Hexadecimal.D6 d => hu_z d (16 * acc + 6) | Hexadecimal.D7 d => hu_z d (16 * acc + 7)
+  | Hexadecimal.D8 d => hu_z d (16 * acc + 8) | Hexadecimal.D9 d => hu_z d (16 * acc + 9) | Hexadecimal.Da d => hu_z d (16 * acc + 10)
+  | Hexadecimal.Db d => hu_z d (16 * acc + 11) | Hexadecimal.Dc d => hu_z d (16 * acc + 12) | Hexadecimal.Dd d => hu_z d (16 * acc + 13)
+  | Hexadecimal.De d => hu_z d (16 * acc + 14) | Hexadecimal.Df d => hu_z d (16 * acc + 15)
+  end%Z.
+Definition nu_z (u : Number.uint) : Z := match u with Number.UIntDecimal d => du_z d 0 | Number.UIntHexadecimal d => hu_z d 0 end.
+
 Inductive sexp : Type :=
 | SVar (i : nat)                     (* a number: the i-th of the function's numbers and lets, the nearest first *)
 | SInt (n : i63)
@@ -235,6 +255,9 @@ with scnt : Type :=
 | CBitN (o : nbop) (a b : scnt)      (* Nat.land, lor, lxor, ldiff, shiftr, clearbit of two counters (step 92) *)
 | CShl (k : nat) (c : scnt)          (* Nat.shiftl c k, k written (step 92) *)
 | CLib (o : nlop) (f : nat) (a b : scnt)   (* Nat.gcd a b, Nat.sqrt a, Nat.log2 a: a call of the kit's function f (step 93) *)
+| CLit (k : nat)                     (* a counter written as a number below 5000: the number (step 94) *)
+| CNumU (u : Number.uint)            (* a counter written as a number from 5000 on: Nat.of_num_uint u (step 94) *)
+| CMulU (l : bool) (u : Number.uint) (c : scnt)   (* Nat.mul of a counter and a number written from 5000 on, the number first if l (step 94) *)
 with scnts : Type :=
 | CNil
 | CCons (c : scnt) (r : scnts)
@@ -692,6 +715,9 @@ with denote_c (cs : list callee) (rec : list nat -> list val -> mem -> i63) (cen
   | CBitN o a b => nbop_nat o (denote_c cs rec cenv benv renv env s a) (denote_c cs rec cenv benv renv env s b)
   | CShl k c => Nat.shiftl (denote_c cs rec cenv benv renv env s c) k
   | CLib o _ a b => nlop_nat o (denote_c cs rec cenv benv renv env s a) (denote_c cs rec cenv benv renv env s b)
+  | CLit k => k
+  | CNumU u => Nat.of_num_uint u
+  | CMulU l u c => if l then Nat.mul (Nat.of_num_uint u) (denote_c cs rec cenv benv renv env s c) else Nat.mul (denote_c cs rec cenv benv renv env s c) (Nat.of_num_uint u)
   end
 with denote_cs (cs : list callee) (rec : list nat -> list val -> mem -> i63) (cenv : list nat) (benv : list bool) (renv : list val)
   (env : list i63) (s : mem) (ccs : scnts) {struct ccs} : list nat :=
@@ -1463,7 +1489,7 @@ Fixpoint kinds_s (rk : list nat) (es : sexps) : list kind :=
   match es with SNil => [] | SCons _ es => KNum :: kinds_s rk es | SConsB _ es => KBool :: kinds_s rk es
               | SConsR x es => KRec (rtype rk x) :: kinds_s rk es end.
 Fixpoint len_c (cs : scnts) : nat := match cs with CNil => O | CCons _ cs => S (len_c cs) end.
-Fixpoint cdepth (c : scnt) : nat := match c with CS c => S (cdepth c) | CPred c => cdepth c | _ => O end.
+Fixpoint cdepth (c : scnt) : nat := match c with CS c => S (cdepth c) | CPred c => cdepth c | CLit k => k | _ => O end.
 Fixpoint all_c (p : scnt -> bool) (cs : scnts) : bool := match cs with CNil => true | CCons c r => p c && all_c p r end.
 Fixpoint all_s (p : sexp -> bool) (es : sexps) : bool :=
   match es with SNil => true | SCons e r => p e && all_s p r | SConsB _ r | SConsR _ r => all_s p r end.
@@ -1472,7 +1498,7 @@ Fixpoint all_s (p : sexp -> bool) (es : sexps) : bool :=
     chosen by conditional moves (the translator's merging of calls, D17): arguments that are plain arithmetic (no read, no
     call), each chosen when the two differ ([same_e]: the same variable or the same number) *)
 Definition simple (e : sexp) : bool := spec e && Nat.eqb (nrd e) 0.
-Definition simple_c (c : scnt) : bool := match c with CVar _ | CO => true | CNat e => simple e | CS _ | CPred _ | CAdd _ _ | CMin _ _ | CMax _ _ | CSub _ _ | CDiv2 _ | CMulK _ _ _ | CToNat _ | CToNatU _ | CDivN _ _ | CModN _ _ | CIf _ _ _ | CBitN _ _ _ | CShl _ _ | CLib _ _ _ _ => false end.
+Definition simple_c (c : scnt) : bool := match c with CVar _ | CO => true | CNat e => simple e | CS _ | CPred _ | CAdd _ _ | CMin _ _ | CMax _ _ | CSub _ _ | CDiv2 _ | CMulK _ _ _ | CToNat _ | CToNatU _ | CDivN _ _ | CModN _ _ | CIf _ _ _ | CBitN _ _ _ | CShl _ _ | CLib _ _ _ _ | CLit _ | CNumU _ | CMulU _ _ _ => false end.
 Definition binop_eqb (o1 o2 : binop) : bool :=
   match o1, o2 with
   | Badd, Badd | Bsub, Bsub | Bmul, Bmul | Bland, Bland | Blor, Blor | Blxor, Blxor | Bdiv, Bdiv | Bmod, Bmod
@@ -1689,6 +1715,10 @@ with ccnt (c : scnt) (cenv benv : list atom) (renv : list (list atom)) (env : li
                  Eop n1 Blsl A (Aint (ofn k)) (K (Avar n1) (Pos.succ n1)))
   | CLib o f a b => ccnt a cenv benv renv env nxt (fun A n1 => ccnt b cenv benv renv env n1 (fun B n2 =>
                  Ecall n2 (gidf f) (kit_args o A B) (K (Avar n2) (Pos.succ n2))))
+  | CLit k => K (Aint (ofn k)) nxt
+  | CNumU u => K (Aint (of_Z (nu_z u))) nxt
+  | CMulU _ u c => ccnt c cenv benv renv env nxt (fun A n1 =>
+                 Eop n1 Bmul A (Aint (of_Z (nu_z u))) (K (Avar n1) (Pos.succ n1)))
   end
 with ccnts (ccs : scnts) (cenv benv : list atom) (renv : list (list atom)) (env : list atom) (nxt : ident) (K : list atom -> ident -> exp) {struct ccs} : exp :=
   match ccs with
@@ -2105,7 +2135,7 @@ Fixpoint ctailb (b : sbb) (cenv benv : list atom) (renv : list (list atom)) (env
 End C.
 
 (** a callee's counters nest S at most 2^20 deep; the recursive call's counters after the first are not grown *)
-Fixpoint noadd (c : scnt) : bool := match c with CAdd _ _ | CMin _ _ | CMax _ _ | CSub _ _ | CDiv2 _ | CMulK _ _ _ | CToNat _ | CToNatU _ | CDivN _ _ | CModN _ _ | CIf _ _ _ | CBitN _ _ _ | CShl _ _ | CLib _ _ _ _ => false | CS c | CPred c => noadd c | _ => true end.
+Fixpoint noadd (c : scnt) : bool := match c with CAdd _ _ | CMin _ _ | CMax _ _ | CSub _ _ | CDiv2 _ | CMulK _ _ _ | CToNat _ | CToNatU _ | CDivN _ _ | CModN _ _ | CIf _ _ _ | CBitN _ _ _ | CShl _ _ | CLib _ _ _ _ | CNumU _ | CMulU _ _ _ => false | CS c | CPred c => noadd c | _ => true end.
 Definition shallow (c : scnt) : bool := (Z.of_nat (cdepth c) <=? 1048576)%Z && noadd c.
 Definition flat (c : scnt) : bool := Nat.eqb (cdepth c) 0 && noadd c.
 (** a counter bound by a let joins the function's counters, all below its bound: a variable or a budget with no successor
@@ -2171,12 +2201,15 @@ Fixpoint cmax (B : Z) (c : scnt) : Z :=
   | CMin a b | CMax a b | CSub a b => Z.max (cmax B a) (cmax B b)
   | CDiv2 c => cmax B c
   | CMulK _ k c => Z.max (cmax B c) (Z.of_nat k * cmax B c)%Z
+  | CMulU _ u c => Z.max (cmax B c) (nu_z u * cmax B c)%Z
   | CToNat _ => 4611686018427387903%Z
   | CToNatU _ => 9223372036854775807%Z
   | CDivN a b | CModN a b | CIf _ a b => Z.max (cmax B a) (cmax B b)
   | CBitN o a b => cbitm o (cmax B a) (cmax B b)
   | CShl k c => Z.max (cmax B c) (cmax B c * 2 ^ Z.of_nat k)%Z
   | CLib _ _ a b => Z.max (cmax B a) (cmax B b)
+  | CLit k => Z.of_nat k
+  | CNumU u => nu_z u
   end.
 (** [wf]'s first argument: the callees' signatures, the function's own bound if it has one, and the bounds of the counters in
     scope (step 35), the nearest first -- none for a counter below the function's own bound (a parameter, a let or a match of
@@ -2203,11 +2236,14 @@ Fixpoint clinf (bs : list cbe) (c : scnt) : linf :=
   | CNat e => ([], cnat_max e)
   | CPred c | CDiv2 c => clinf bs c | CAdd a b | CMin a b | CMax a b | CSub a b => ladd (clinf bs a) (clinf bs b)
   | CMulK _ k c => lscale (Z.of_nat k) (clinf bs c)
+  | CMulU _ u c => lscale (nu_z u) (clinf bs c)
   | CToNat _ => ([], 4611686018427387903%Z)
   | CToNatU _ => ([], 9223372036854775807%Z)
   | CDivN a b | CModN a b | CIf _ a b | CBitN _ a b => ladd (clinf bs a) (clinf bs b)
   | CShl k c => lscale (2 ^ Z.of_nat k)%Z (clinf bs c)
   | CLib _ _ a b => ladd (clinf bs a) (clinf bs b)
+  | CLit k => ([], Z.of_nat k)
+  | CNumU u => ([], nu_z u)
   end.
 Definition wfctx : Type := (list sig * ((option Z * list poly) * list cbe))%type.
 Definition ub (sigs : wfctx) : Z :=
@@ -2220,18 +2256,21 @@ Fixpoint cmaxv (B : Z) (bs : list cbe) (c : scnt) : Z :=
   | CPred c | CDiv2 c => cmaxv B bs c | CAdd a b => (cmaxv B bs a + cmaxv B bs b)%Z
   | CMin a b | CMax a b | CSub a b => Z.max (cmaxv B bs a) (cmaxv B bs b)
   | CMulK _ k c => Z.max (cmaxv B bs c) (Z.of_nat k * cmaxv B bs c)%Z
+  | CMulU _ u c => Z.max (cmaxv B bs c) (nu_z u * cmaxv B bs c)%Z
   | CToNat _ => 4611686018427387903%Z
   | CToNatU _ => 9223372036854775807%Z
   | CDivN a b | CModN a b | CIf _ a b => Z.max (cmaxv B bs a) (cmaxv B bs b)
   | CBitN o a b => cbitm o (cmaxv B bs a) (cmaxv B bs b)
   | CShl k c => Z.max (cmaxv B bs c) (cmaxv B bs c * 2 ^ Z.of_nat k)%Z
   | CLib _ _ a b => Z.max (cmaxv B bs a) (cmaxv B bs b)
+  | CLit k => Z.of_nat k
+  | CNumU u => nu_z u
   end.
 (** a counter whose variables are all below the function's own bound *)
 Fixpoint pvars (bs : list cbe) (c : scnt) : bool :=
   match c with
   | CVar i => match fst (nth i bs cbe0) with None => true | Some _ => false end
-  | CS c | CPred c | CDiv2 c | CMulK _ _ c | CShl _ c => pvars bs c | CAdd a b | CMin a b | CMax a b | CSub a b | CDivN a b | CModN a b | CIf _ a b | CBitN _ a b | CLib _ _ a b => pvars bs a && pvars bs b | _ => true
+  | CS c | CPred c | CDiv2 c | CMulK _ _ c | CMulU _ _ c | CShl _ c => pvars bs c | CAdd a b | CMin a b | CMax a b | CSub a b | CDivN a b | CModN a b | CIf _ a b | CBitN _ a b | CLib _ _ a b => pvars bs a && pvars bs b | _ => true
   end.
 Definition pushc (sigs : wfctx) (o : cbe) : wfctx :=
   (fst sigs, (fst (snd sigs), o :: snd (snd sigs))).
@@ -2341,8 +2380,8 @@ with wfs (sigs : wfctx) (r mok : bool) (nx : nat) (k : list kind) (rk : list nat
              | SConsB b es => wfb sigs r mok nx k rk b && wfs sigs r mok nx k rk es
              | SConsR x es => wfr sigs r mok nx k rk x && wfs sigs r mok nx k rk es end
 with wfc (sigs : wfctx) (r mok : bool) (nx : nat) (k : list kind) (rk : list nat) (c : scnt) {struct c} : bool :=
-  match c with CVar _ | CO => true | CS c | CPred c | CDiv2 c => wfc sigs r mok nx k rk c | CAdd a b | CMin a b | CMax a b | CSub a b => wfc sigs r mok nx k rk a && wfc sigs r mok nx k rk b
-             | CMulK _ _ c => wfc sigs r mok nx k rk c
+  match c with CVar _ | CO | CLit _ | CNumU _ => true | CS c | CPred c | CDiv2 c => wfc sigs r mok nx k rk c | CAdd a b | CMin a b | CMax a b | CSub a b => wfc sigs r mok nx k rk a && wfc sigs r mok nx k rk b
+             | CMulK _ _ c | CMulU _ _ c => wfc sigs r mok nx k rk c
              | CToNat e | CToNatU e => wf sigs r mok nx k rk e
              | CDivN a b | CModN a b => wfc sigs r mok nx k rk a && wfc sigs r mok nx k rk b
              | CIf b x y => wfb sigs r mok nx k rk b && wfc sigs r mok nx k rk x && wfc sigs r mok nx k rk y
@@ -2667,7 +2706,7 @@ with sh_es (sh : list i63) (es : sexps) {struct es} : bool :=
   | SConsR x r => sh_r sh x && sh_es sh r
   end
 with sh_c (sh : list i63) (c : scnt) {struct c} : bool :=
-  match c with CVar _ | CO => true | CS c | CPred c | CDiv2 c | CMulK _ _ c | CShl _ c => sh_c sh c | CAdd a b | CMin a b | CMax a b | CSub a b | CDivN a b | CModN a b | CBitN _ a b | CLib _ _ a b => sh_c sh a && sh_c sh b | CNat e | CToNat e | CToNatU e => sh_e sh e | CIf b x y => sh_b sh b && sh_c sh x && sh_c sh y end
+  match c with CVar _ | CO | CLit _ | CNumU _ => true | CS c | CPred c | CDiv2 c | CMulK _ _ c | CMulU _ _ c | CShl _ c => sh_c sh c | CAdd a b | CMin a b | CMax a b | CSub a b | CDivN a b | CModN a b | CBitN _ a b | CLib _ _ a b => sh_c sh a && sh_c sh b | CNat e | CToNat e | CToNatU e => sh_e sh e | CIf b x y => sh_b sh b && sh_c sh x && sh_c sh y end
 with sh_cs (sh : list i63) (cs : scnts) {struct cs} : bool :=
   match cs with CNil => true | CCons c r => sh_c sh c && sh_cs sh r end
 with sh_b (sh : list i63) (b : sbool) {struct b} : bool :=
@@ -3572,6 +3611,9 @@ Proof.
   - intros o fi a IHa b IHb cs rec cenv benv renv env s s' r nx k rk cbo Hr W. cbn [wfc denote_c] in *. apply andb_true_iff in W as [W Wb]. apply andb_true_iff in W as [_ Wa].
     rewrite (IHa _ _ _ _ _ _ s s' _ _ _ _ _ Hr Wa), (IHb _ _ _ _ _ _ s s' _ _ _ _ _ Hr Wb). reflexivity.
   - intros; reflexivity.
+  - intros; reflexivity.
+  - intros l w c IH cs rec cenv benv renv env s s' r nx k rk cbo Hr W. cbn [wfc denote_c] in *. rewrite (IH _ _ _ _ _ _ s s' _ _ _ _ _ Hr W). reflexivity.
+  - intros; reflexivity.
   - intros c IHc ccs IHs cs rec cenv benv renv env s s' r nx k rk cbo Hr W. simpl in *. apply andb_true_iff in W as [Wc Ws].
     rewrite (IHc _ _ _ _ _ _ s s' _ _ _ _ _ Hr Wc), (IHs _ _ _ _ _ _ s s' _ _ _ _ _ Hr Ws). reflexivity.
   - intros c x IHx y IHy cs rec cenv benv renv env s s' r nx k rk cbo Hr W. simpl in *. apply andb_true_iff in W as [Wx Wy].
@@ -3870,6 +3912,9 @@ Proof.
   - intros w c IH cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [wfc denote_c] in *. apply andb_true_iff in W as [W _]. rewrite (IH _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr W T). reflexivity.
   - intros o fi a IHa b IHb cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [wfc denote_c] in *. apply andb_true_iff in W as [W Wb]. apply andb_true_iff in W as [_ Wa].
     rewrite (IHa _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wa T), (IHb _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wb T). reflexivity.
+  - intros; reflexivity.
+  - intros; reflexivity.
+  - intros l w c IH cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [wfc denote_c] in *. rewrite (IH _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr W T). reflexivity.
   - intros; reflexivity.
   - intros c IHc ccs IHs cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [wfcs denote_cs] in *. apply andb_true_iff in W as [Wc Ws].
     rewrite (IHc _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wc T), (IHs _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Ws T). reflexivity.
@@ -4284,6 +4329,9 @@ Proof.
   - intros w c IH cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [wfc denote_c] in *. apply andb_true_iff in W as [W _]. rewrite (IH _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr W T). reflexivity.
   - intros o fi a IHa b IHb cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [wfc denote_c] in *. apply andb_true_iff in W as [W Wb]. apply andb_true_iff in W as [_ Wa].
     rewrite (IHa _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wa T), (IHb _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wb T). reflexivity.
+  - intros; reflexivity.
+  - intros; reflexivity.
+  - intros l w c IH cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [wfc denote_c] in *. rewrite (IH _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr W T). reflexivity.
   - intros; reflexivity.
   - intros c IHc ccs IHs cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [wfcs denote_cs] in *. apply andb_true_iff in W as [Wc Ws].
     rewrite (IHc _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wc T), (IHs _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Ws T). reflexivity.
@@ -4877,9 +4925,17 @@ Proof.
   - pose proof (Nat.sqrt_le_lin a). lia.
   - pose proof (Nat.log2_le_lin a). lia.
 Qed.
+(** (step 94) the digits of a written number read into [Z]: the number; no axiom *)
+Lemma du_z_ok : forall d acc, Z.of_nat (Nat.of_uint_acc d acc) = du_z d (Z.of_nat acc).
+Proof. induction d; intros acc; cbn [Nat.of_uint_acc du_z]; try rewrite IHd; f_equal; rewrite ?Nat.tail_mul_spec; lia. Qed.
+Lemma hu_z_ok : forall d acc, Z.of_nat (Nat.of_hex_uint_acc d acc) = hu_z d (Z.of_nat acc).
+Proof. induction d; intros acc; cbn [Nat.of_hex_uint_acc hu_z]; try rewrite IHd; f_equal; rewrite ?Nat.tail_mul_spec; lia. Qed.
+Lemma nu_z_ok : forall u, Z.of_nat (Nat.of_num_uint u) = nu_z u.
+Proof. intros [d|d]; cbn [Nat.of_num_uint nu_z Nat.of_uint Nat.of_hex_uint]; [apply (du_z_ok d 0) | apply (hu_z_ok d 0)]. Qed.
 Lemma cmax_mono : forall c B1 B2, (B1 <= B2)%Z -> (cmax B1 c <= cmax B2 c)%Z.
-Proof. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb]; intros B1 B2 L; cbn [cmax]; try specialize (IH B1 B2 L); try lia.
-  all: first [specialize (IHa B1 B2 L); specialize (IHb B1 B2 L); first [lia | apply cbitm_mono; lia]
+Proof. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH]; intros B1 B2 L; cbn [cmax]; try specialize (IH B1 B2 L); try lia.
+  all: first [(rewrite <- nu_z_ok; apply Z.max_le_compat; [lia | apply Z.mul_le_mono_nonneg_l; lia])
+             | specialize (IHa B1 B2 L); specialize (IHb B1 B2 L); first [lia | apply cbitm_mono; lia]
              | apply Z.max_le_compat; [nia | pose proof (Z.pow_nonneg 2 (Z.of_nat w) ltac:(lia)); nia]]. Qed.
 (** a budget's largest value (step 37): at least its value, at most 2^60 *)
 Lemma cnat_max_range : forall e, (0 <= cnat_max e <= 1152921504606846976)%Z.
@@ -4903,7 +4959,7 @@ Ltac cn_range := repeat match goal with
 Lemma cmax_bound : forall B c cs rec cenv benv renv denv M, cbound B cenv ->
   (Z.of_nat (denote_c cs rec cenv benv renv denv M c) <= cmax B c)%Z.
 Proof.
-  intros B c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb]; intros cs rec cenv benv renv denv M Cb; cbn [denote_c cmax].
+  intros B c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH]; intros cs rec cenv benv renv denv M Cb; cbn [denote_c cmax].
   - specialize (Cb i). lia.
   - lia.
   - specialize (IH cs rec cenv benv renv denv M Cb). lia.
@@ -4927,12 +4983,15 @@ Proof.
   - specialize (IH cs rec cenv benv renv denv M Cb). rewrite z_shiftl. pose proof (Z.pow_nonneg 2 (Z.of_nat w) ltac:(lia)). nia.
   - specialize (IHa cs rec cenv benv renv denv M Cb). specialize (IHb cs rec cenv benv renv denv M Cb).
     pose proof (nlop_le o (denote_c cs rec cenv benv renv denv M a) (denote_c cs rec cenv benv renv denv M b)). lia.
+  - lia.
+  - rewrite nu_z_ok. lia.
+  - specialize (IH cs rec cenv benv renv denv M Cb). rewrite <- nu_z_ok. destruct l; rewrite Nat2Z.inj_mul; nia.
 Qed.
 Lemma cmax_depth : forall B c, noadd c = true -> (1152921504606846976 <= B - 1)%Z -> (cmax B c <= B - 1 + Z.of_nat (cdepth c))%Z.
-Proof. intros B c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb]; intros NA L; cbn [cmax cdepth noadd] in *; try discriminate NA;
+Proof. intros B c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH]; intros NA L; cbn [cmax cdepth noadd] in *; try discriminate NA;
   try specialize (IH NA L); cn_range; lia. Qed.
 Lemma cmax_nonneg : forall B c, (1 <= B)%Z -> (0 <= cmax B c)%Z.
-Proof. intros B c L. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb]; cbn [cmax]; cn_range; first [lia | nia | pose proof (cbitm_nonneg o (cmax B a) (cmax B b) IHa IHb); lia | pose proof (Z.pow_nonneg 2 (Z.of_nat w) ltac:(lia)); nia]. Qed.
+Proof. intros B c L. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH]; cbn [cmax]; cn_range; first [lia | nia | pose proof (cbitm_nonneg o (cmax B a) (cmax B b) IHa IHb); lia | pose proof (Z.pow_nonneg 2 (Z.of_nat w) ltac:(lia)); nia | rewrite <- nu_z_ok; lia]. Qed.
 
 (** each counter below its own bound (step 35): [B] the function's, an entry of [bs] its own when it has one *)
 (** each counter below its own bound; the counters bound since the body's start below their linear bounds over the function's
@@ -4959,7 +5018,7 @@ Qed.
 Lemma cmaxv_bound : forall B bs pv c cs rec cenv benv renv denv M, cboundv B bs pv cenv ->
   (Z.of_nat (denote_c cs rec cenv benv renv denv M c) <= cmaxv B bs c)%Z.
 Proof.
-  intros B bs pv c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb]; intros cs rec cenv benv renv denv M Cb; cbn [denote_c cmaxv].
+  intros B bs pv c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH]; intros cs rec cenv benv renv denv M Cb; cbn [denote_c cmaxv].
   - pose proof (proj1 Cb i). lia.
   - lia.
   - specialize (IH cs rec cenv benv renv denv M Cb). lia.
@@ -4983,10 +5042,13 @@ Proof.
   - specialize (IH cs rec cenv benv renv denv M Cb). rewrite z_shiftl. pose proof (Z.pow_nonneg 2 (Z.of_nat w) ltac:(lia)). nia.
   - specialize (IHa cs rec cenv benv renv denv M Cb). specialize (IHb cs rec cenv benv renv denv M Cb).
     pose proof (nlop_le o (denote_c cs rec cenv benv renv denv M a) (denote_c cs rec cenv benv renv denv M b)). lia.
+  - lia.
+  - rewrite nu_z_ok. lia.
+  - specialize (IH cs rec cenv benv renv denv M Cb). rewrite <- nu_z_ok. destruct l; rewrite Nat2Z.inj_mul; nia.
 Qed.
 Lemma cmaxv_mono : forall bs c B1 B2, (B1 <= B2)%Z -> (cmaxv B1 bs c <= cmaxv B2 bs c)%Z.
 Proof.
-  intros bs c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb]; intros B1 B2 L; cbn [cmaxv]; try specialize (IH B1 B2 L); try lia.
+  intros bs c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH]; intros B1 B2 L; cbn [cmaxv]; try specialize (IH B1 B2 L); try lia.
   - unfold cbv. destruct (fst (nth i bs cbe0)); lia.
   - specialize (IHa B1 B2 L). specialize (IHb B1 B2 L). lia.
   - specialize (IHa B1 B2 L). specialize (IHb B1 B2 L). lia.
@@ -4999,10 +5061,11 @@ Proof.
   - specialize (IHa B1 B2 L). specialize (IHb B1 B2 L). apply cbitm_mono; lia.
   - apply Z.max_le_compat; [lia | pose proof (Z.pow_nonneg 2 (Z.of_nat w) ltac:(lia)); nia].
   - specialize (IHa B1 B2 L). specialize (IHb B1 B2 L). lia.
+  - rewrite <- nu_z_ok. apply Z.max_le_compat; [lia | apply Z.mul_le_mono_nonneg_l; lia].
 Qed.
 Lemma cmaxv_cmax : forall B bs c, (1 <= B)%Z -> pvars bs c = true -> cmaxv B bs c = cmax B c.
 Proof.
-  intros B bs c L. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb]; intros P; cbn [cmaxv cmax pvars] in *; try reflexivity;
+  intros B bs c L. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH]; intros P; cbn [cmaxv cmax pvars] in *; try reflexivity;
     try (rewrite IH by exact P; reflexivity).
   - destruct (fst (nth i bs cbe0)); [discriminate P | cbn [cbv]; lia].
   - apply andb_true_iff in P as [Pa Pb]. rewrite IHa, IHb by auto. reflexivity.
@@ -5016,10 +5079,10 @@ Proof.
   - apply andb_true_iff in P as [Pa Pb]. rewrite IHa, IHb by auto. reflexivity.
 Qed.
 Lemma cmaxv_nonneg : forall B bs c, (0 <= cmaxv B bs c)%Z.
-Proof. intros B bs c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb]; cbn [cmaxv]; cn_range; first [lia | nia | pose proof (cbitm_nonneg o (cmaxv B bs a) (cmaxv B bs b) IHa IHb); lia | pose proof (Z.pow_nonneg 2 (Z.of_nat w) ltac:(lia)); nia]. Qed.
+Proof. intros B bs c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH]; cbn [cmaxv]; cn_range; first [lia | nia | pose proof (cbitm_nonneg o (cmaxv B bs a) (cmaxv B bs b) IHa IHb); lia | pose proof (Z.pow_nonneg 2 (Z.of_nat w) ltac:(lia)); nia | rewrite <- nu_z_ok; lia]. Qed.
 
 Lemma cmax_free : forall B c, cfree c = true -> noadd c = true -> (cmax B c <= 1152921504606846976 + Z.of_nat (cdepth c))%Z.
-Proof. intros B c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb]; intros F NA; cbn [cfree noadd cmax cdepth] in *; try discriminate;
+Proof. intros B c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH]; intros F NA; cbn [cfree noadd cmax cdepth] in *; try discriminate;
   try specialize (IH F NA); cn_range; lia. Qed.
 
 (** linear bounds (step 37) *)
@@ -5054,7 +5117,7 @@ Qed.
 Lemma clinf_bound : forall B bs pv c cs rec cenv benv renv denv M, cboundv B bs pv cenv ->
   (Z.of_nat (denote_c cs rec cenv benv renv denv M c) <= leval (clinf bs c) pv)%Z.
 Proof.
-  intros B bs pv c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb]; intros cs rec cenv benv renv denv M Cb; cbn [denote_c clinf].
+  intros B bs pv c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH]; intros cs rec cenv benv renv denv M Cb; cbn [denote_c clinf].
   - eapply linat_bound; eauto.
   - rewrite leval_zero. lia.
   - rewrite leval_shift. specialize (IH cs rec cenv benv renv denv M Cb). lia.
@@ -5080,6 +5143,9 @@ Proof.
   - rewrite leval_scale. specialize (IH cs rec cenv benv renv denv M Cb). rewrite z_shiftl. pose proof (Z.pow_nonneg 2 (Z.of_nat w) ltac:(lia)). nia.
   - rewrite leval_add. specialize (IHa cs rec cenv benv renv denv M Cb). specialize (IHb cs rec cenv benv renv denv M Cb).
     pose proof (nlop_le o (denote_c cs rec cenv benv renv denv M a) (denote_c cs rec cenv benv renv denv M b)). lia.
+  - unfold leval. cbn [fst snd evc]. lia.
+  - unfold leval. cbn [fst snd evc]. rewrite nu_z_ok. lia.
+  - rewrite leval_scale. specialize (IH cs rec cenv benv renv denv M Cb). rewrite <- nu_z_ok. destruct l; rewrite Nat2Z.inj_mul; nia.
 Qed.
 Lemma clinf_bounds : forall B bs pv ccs cs rec cenv benv renv denv M, cboundv B bs pv cenv ->
   Forall2 (fun v c => (Z.of_nat v <= leval (clinf bs c) pv)%Z) (denote_cs cs rec cenv benv renv denv M ccs) (lc ccs).
@@ -6745,6 +6811,21 @@ Proof.
     + lia.
     + lia.
     + intros rho' n' X A' Le' LX VX. apply HK; [eapply (agree_3 rho rho1 rho2 rho' nxt n1 n2); eauto | lia | exact LX | exact VX].
+  - (* CLit *) intros kw cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W D Iv Rt HK. simpl.
+    apply HK; [apply agree_refl | lia | exact Logic.I | reflexivity].
+  - (* CNumU *) intros uw cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W D Iv Rt HK. simpl.
+    apply HK; [apply agree_refl | lia | exact Logic.I | ].
+    cbn [aval]. f_equal. unfold ofn. rewrite <- nu_z_ok. reflexivity.
+  - (* CMulU *) intros l w c IH cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W D Iv Rt HK. simpl in *.
+    assert (Lc : (cmaxv cbj cbs c < wB)%Z) by lia.
+    rename W into Wc. apply IH with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto.
+    intros rho1 n1 A A1 Le1 LA VA.
+    eapply K_op; [exact VA | reflexivity | ].
+    apply HK.
+    + apply agree_set1; [exact A1 | lia].
+    + lia.
+    + simpl. lia.
+    + cbn [aval]. rewrite PTree.gss. cbn [binop_sem]. replace (of_Z (nu_z w)) with (ofn (Nat.of_num_uint w)) by (unfold ofn; rewrite nu_z_ok; reflexivity). rewrite ofn_mul. f_equal. f_equal. destruct l; [apply Nat.mul_comm | reflexivity].
   - (* CNil *) intros cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W Sh Iv Rt HK. simpl.
     apply HK; [apply agree_refl | lia | constructor | reflexivity].
   - (* CCons *) intros c IHc ccs IHs cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W Sh Iv Rt HK. simpl in *.

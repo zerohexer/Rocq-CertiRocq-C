@@ -3327,6 +3327,81 @@ addA('zi_sqrt_up', "", 'ff (Nat.sqrt_up n) a',
      'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
 addA('zi_lcm', "", 'ff (Nat.lcm n 6) a',
      'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+# a counter written as a number, one number in the C (step 94)
+addA('zj_budget_one', "", 'ff 1 a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_budget_small', "", 'ff 12 a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_budget_4999', "", 'ff 4999 a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_budget_5000', "", 'ff 5000 a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_budget_big', "", 'ff 1000000 a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_budget_hex_small', "", 'ff 0xFF a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_budget_hex', "", 'ff 0x1F40 a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_budget_max', "", 'ff 9223372036854775807 a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_budget_ar', "", 'ff 100000 a',
+     'From Stdlib Require Import Arith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_num_small', "", 'a + Uint63.of_nat 4095',
+     'From Stdlib Require Import ZArith.\n')
+addA('zj_num_big', "", 'a + Uint63.of_nat 100000',
+     'From Stdlib Require Import ZArith.\n')
+addA('zj_num_hex', "", 'a + Uint63.of_nat 0xFFFFF',
+     'From Stdlib Require Import ZArith.\n')
+addA('zj_cmp_small', "", 'if Nat.leb n 4095 then a else b',
+     '')
+addA('zj_cmp_big', "", 'if Nat.ltb n 100000 then a else b',
+     '')
+addA('zj_cmp_eq', "", 'if Nat.eqb n 5000 then a else b',
+     '')
+addA('zj_cmp_hex', "", 'if Nat.ltb 0x10000 n then a else b',
+     '')
+addA('zj_let_small', "", 'let c := 300%nat in ff c a + ff c b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_let_big', "", 'let c := 6000%nat in ff c a + ff c b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_add', "", 'ff (n + 100000) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_sub', "", 'ff (n - 5000) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_land', "", 'ff (Nat.land n 65535) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_land_hex', "", 'ff (Nat.land n 0xFFFF) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_land_max', "", 'ff (Nat.land n 9223372036854775807) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_land_past', "", 'ff (Nat.land n 9223372036854775808) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_mod', "", 'ff (Nat.modulo n 10007) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_div', "", 'ff (Nat.div n 10000) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_min', "", 'ff (Nat.min n 100000) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_mul_r', "", 'ff (Nat.mul (Nat.land n 255) 100000) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_mul_l', "", 'ff (Nat.mul 7000 (Nat.land n 1023)) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_mul_small', "", 'ff (Nat.mul (Nat.land n 255) 4000) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_mul_big', "", 'ff (Nat.mul n 100000) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_pow_lit', "", 'ff (Nat.pow 2 12) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_pow_big', "", 'ff (Nat.pow 2 13) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_match', "", 'match Nat.min n 6000 with O => a | S m => ff m b end',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zj_rec', "", 'lp n a',
+     'Fixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (if Nat.ltb j 5000 then x + 1 else x) end.\n')
+addA('zj_callee_small', "", 'g2 4000 a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (k : nat) (x : int) : int := ff k x + ff k 1.\n')
+addA('zj_callee_big', "", 'g2 100000 a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (k : nat) (x : int) : int := ff k x + ff k 1.\n')
 # a memory in a value of any data type; a sixth probe (step 87)
 addA('zf_h_user', "", 'match st1 a s with Ok v t => v + rd 0 a t | Err e => e end',
      'Inductive res := Ok (v : int) (t : mem) | Err (e : int).\nDefinition st1 (i : int) (t : mem) : res := if i =? 0 then Err 1 else Ok i (upd 0 i i t).\n')

@@ -351,6 +351,37 @@ Fixpoint rel_occ (fuel d : nat) (t : term) {struct fuel} : nat :=
 Fixpoint cnt_val (t : term) : nat :=
   match t with tApp (tConstruct _ 1 _) [c] => S (cnt_val c) | _ => O end.
 Fixpoint cnt_term (n : nat) : scnt := match n with O => CO | S m => CS (cnt_term m) end.
+(** (step 94) a number Rocq writes from 5000 on: [Nat.of_num_uint] of its digits, decimal or hexadecimal *)
+Definition kn_num_uint := kn_of <% Nat.of_num_uint %>.
+Definition kn_dec_uint := inductive_mind (ind_of <% Decimal.uint %>).
+Definition kn_hex_uint := inductive_mind (ind_of <% Hexadecimal.uint %>).
+Definition kn_num_u := inductive_mind (ind_of <% Number.uint %>).
+Fixpoint ddig_of (t : term) : option Decimal.uint :=
+  match t with
+  | tConstruct i 0 _ => if Kername.eqb (inductive_mind i) kn_dec_uint then Some Decimal.Nil else None
+  | tApp (tConstruct i n _) [d] =>
+      if Kername.eqb (inductive_mind i) kn_dec_uint then
+        match ddig_of d with Some x => match n with 1 => Some (Decimal.D0 x) | 2 => Some (Decimal.D1 x) | 3 => Some (Decimal.D2 x) | 4 => Some (Decimal.D3 x) | 5 => Some (Decimal.D4 x) | 6 => Some (Decimal.D5 x) | 7 => Some (Decimal.D6 x) | 8 => Some (Decimal.D7 x) | 9 => Some (Decimal.D8 x) | 10 => Some (Decimal.D9 x) | _ => None end | None => None end
+      else None
+  | _ => None
+  end.
+Fixpoint hdig_of (t : term) : option Hexadecimal.uint :=
+  match t with
+  | tConstruct i 0 _ => if Kername.eqb (inductive_mind i) kn_hex_uint then Some Hexadecimal.Nil else None
+  | tApp (tConstruct i n _) [d] =>
+      if Kername.eqb (inductive_mind i) kn_hex_uint then
+        match hdig_of d with Some x => match n with 1 => Some (Hexadecimal.D0 x) | 2 => Some (Hexadecimal.D1 x) | 3 => Some (Hexadecimal.D2 x) | 4 => Some (Hexadecimal.D3 x) | 5 => Some (Hexadecimal.D4 x) | 6 => Some (Hexadecimal.D5 x) | 7 => Some (Hexadecimal.D6 x) | 8 => Some (Hexadecimal.D7 x) | 9 => Some (Hexadecimal.D8 x) | 10 => Some (Hexadecimal.D9 x) | 11 => Some (Hexadecimal.Da x) | 12 => Some (Hexadecimal.Db x) | 13 => Some (Hexadecimal.Dc x) | 14 => Some (Hexadecimal.Dd x) | 15 => Some (Hexadecimal.De x) | 16 => Some (Hexadecimal.Df x) | _ => None end | None => None end
+      else None
+  | _ => None
+  end.
+Definition uint_of (t : term) : option Number.uint :=
+  match t with
+  | tApp (tConstruct i 0 _) [d] => if Kername.eqb (inductive_mind i) kn_num_u then option_map Number.UIntDecimal (ddig_of d) else None
+  | tApp (tConstruct i 1 _) [d] => if Kername.eqb (inductive_mind i) kn_num_u then option_map Number.UIntHexadecimal (hdig_of d) else None
+  | _ => None
+  end.
+Definition num_lit (t : term) : option Number.uint :=
+  match t with tApp (tConst kn _) [u] => if Kername.eqb kn kn_num_uint then uint_of u else None | _ => None end.
 Fixpoint pos_lit (t : term) : option positive :=
   match t with
   | tConstruct i 2 _ => if String.eqb (snd (inductive_mind i)) "positive"%bs then Some xH else None
@@ -367,7 +398,7 @@ Definition z_lit (t : term) : option Z :=
   end.
 (** an argument put in where its parameter stands: a variable, a number, a constant or a constructor written in the program *)
 Definition plain_arg (t : term) : bool :=
-  match t with tRel _ | tInt _ | tConst _ _ | tConstruct _ _ _ => true | _ => cnt_lit t end.
+  match t with tRel _ | tInt _ | tConst _ _ | tConstruct _ _ _ => true | _ => if cnt_lit t then true else match num_lit t with Some _ => true | None => false end end.
 
 Definition fun_or_type (ty : term) : bool := match ty with tProd _ _ _ | tSort _ => true | _ => false end.
 
@@ -1503,7 +1534,8 @@ with reify_c (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sc
   | tRel i => option_map CVar (cnt_index ctx i)
   | tConstruct i 0 _ => if Kername.eqb (inductive_mind i) (inductive_mind ind_nat) then Some CO else None
   | tApp (tConstruct i 1 _) [c] =>
-      if Kername.eqb (inductive_mind i) (inductive_mind ind_nat) then option_map CS (reify_c fuel ctx c) else None
+      if Kername.eqb (inductive_mind i) (inductive_mind ind_nat) then
+        (if cnt_lit c then Some (CLit (S (cnt_val c))) else option_map CS (reify_c fuel ctx c)) else None
   | tConst kn _ => match hb kn with Some b => reify_c fuel ctx b | None => None end
   | tApp (tLambda _ _ _ as f) args => reify_c fuel ctx (wout f args)
   | tApp (tLetIn _ _ _ _ as f) args => reify_c fuel ctx (wout f args)
@@ -1525,7 +1557,11 @@ with reify_c (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sc
       else if Kername.eqb kn kn_c_mul then
         match args with
         | [a; b] => if cnt_lit a then option_map (CMulK true (cnt_val a)) (reify_c fuel ctx b)
-                    else if cnt_lit b then option_map (CMulK false (cnt_val b)) (reify_c fuel ctx a) else None
+                    else if cnt_lit b then option_map (CMulK false (cnt_val b)) (reify_c fuel ctx a)
+                    else match num_lit a, num_lit b with
+                         | Some u, _ => option_map (CMulU true u) (reify_c fuel ctx b)
+                         | None, Some u => option_map (CMulU false u) (reify_c fuel ctx a)
+                         | None, None => None end
         | _ => None end
       else if Kername.eqb kn kn_c_div then
         match args with [a; b] => match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (CDivN x y) | _, _ => None end | _ => None end
@@ -1535,7 +1571,7 @@ with reify_c (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sc
         match args with
         | [a; b] => if cnt_lit a && cnt_lit b then
                       let v := Nat.pow (cnt_val a) (cnt_val b) in
-                      if Nat.leb v 4096 then Some (cnt_term v) else None
+                      if Nat.leb v 4096 then Some (CLit v) else None
                     else None
         | _ => None end
       else if Kername.eqb kn kn_zton then
@@ -1544,6 +1580,8 @@ with reify_c (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sc
                                      else if Kername.eqb k kn_u2z then option_map CToNatU (reify fuel ctx e) else None
         | _ => None end
       else match hb kn with Some b => reify_c fuel ctx (wout b args) | None =>
+        (* (step 94) a number written from 5000 on *)
+        if Kername.eqb kn kn_num_uint then match args with [u] => option_map CNumU (uint_of u) | _ => None end else
         (* (step 93) a recursive function of the library on counters: a call of the kit's function, read with the program *)
         match nlop_of kn with
         | Some o =>
@@ -3261,7 +3299,7 @@ with cl_es (B : Z) (bs : list cbe) (es : sexps) {struct es} : list site :=
   | SConsR x r => cl_r B bs x ++ cl_es B bs r
   end
 with cl_c (B : Z) (bs : list cbe) (c : scnt) {struct c} : list site :=
-  match c with CVar _ | CO => [] | CS c | KQR.CPred c | CDiv2 c | CMulK _ _ c | CShl _ c => cl_c B bs c | CAdd a b | CMin a b | CMax a b | CSub a b | CDivN a b | CModN a b | CBitN _ a b | CLib _ _ a b => cl_c B bs a ++ cl_c B bs b | CNat e | CToNat e | CToNatU e => cl_e B bs e | CIf b x y => cl_b B bs b ++ cl_c B bs x ++ cl_c B bs y end
+  match c with CVar _ | CO | CLit _ | CNumU _ => [] | CS c | KQR.CPred c | CDiv2 c | CMulK _ _ c | CMulU _ _ c | CShl _ c => cl_c B bs c | CAdd a b | CMin a b | CMax a b | CSub a b | CDivN a b | CModN a b | CBitN _ a b | CLib _ _ a b => cl_c B bs a ++ cl_c B bs b | CNat e | CToNat e | CToNatU e => cl_e B bs e | CIf b x y => cl_b B bs b ++ cl_c B bs x ++ cl_c B bs y end
 with cl_cs (B : Z) (bs : list cbe) (cs : scnts) {struct cs} : list site :=
   match cs with CNil => [] | CCons c r => cl_c B bs c ++ cl_cs B bs r end
 with cl_b (B : Z) (bs : list cbe) (b : sbool) {struct b} : list site :=
@@ -11120,7 +11158,7 @@ Definition why_fun (Σ : global_env) (hb : kername -> option term) (tc : kername
           let r4 := if existsb (Kername.eqb kn_divs) (fold_left (fun a t => consts 10000 t a) texts [])
                     then add_s "divs a b with nothing showing it is not the smallest number over -1: Rocq's axioms say nothing there, so nothing says what it computes (Rocq-C-solution.md 0.5, fourth reason); test the divisor or use /, which says what it is" r4 else r4 in
           let r4 := if existsb (Kername.eqb kn_c_pow) (fold_left (fun a t => consts 10000 t a) texts [])
-                    then add_s "a power of a counter: a number that may need more than a word (Rocq-C-solution.md 0.5, second reason)" r4 else r4 in
+                    then add_s "a power of a counter: a number that may need more than a word (Rocq-C-solution.md 0.5, second reason); a power of two written numbers above 4096 is not yet read (12.E)" r4 else r4 in
           let r4 := if existsb (Kername.eqb kn_c_mul) (fold_left (fun a t => consts 10000 t a) texts [])
                     then add_s "a product of two counters, neither written in the program: a number that may need more than a word (Rocq-C-solution.md 0.5, second reason)" r4 else r4 in
           match r4 with [] => ["a construct in a place not read (not classified)"] | _ => r4 end
@@ -11256,8 +11294,8 @@ Definition c_twice (n : nat) (a : i63) : i63 := match n with O => a | S p => c_i
 Definition c_bud (x : i63) : i63 := c_inner (KQ.KQRun.kq_nat x) 0.
 Definition cnt_all (x : i63) : i63 := PrimInt63.add (c_rounds 3 4 x) (PrimInt63.add (c_twice 2 x) (c_bud x)).
 Definition cnt_all_g := mksig 0 (nk 1) false false false None.
-Definition cnt_all_b := FPlain (SOp Badd (SCall 1 (CCons (CS (CS (CS CO))) (CCons (CS (CS (CS (CS CO)))) CNil)) (SCons (SVar 0) SNil))
-                                 (SOp Badd (SCall 0 (CCons (CS (CS (CS CO))) CNil) (SCons (SVar 0) SNil))
+Definition cnt_all_b := FPlain (SOp Badd (SCall 1 (CCons (CLit 3) (CCons (CLit 4) CNil)) (SCons (SVar 0) SNil))
+                                 (SOp Badd (SCall 0 (CCons (CLit 3) CNil) (SCons (SVar 0) SNil))
                                            (SCall 0 (CCons (CNat (SVar 0)) CNil) (SCons (SInt 0) SNil)))).
 Definition cnt_src := ltac:(run_template_program (tmQuoteRec cnt_all)
   (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
@@ -11411,7 +11449,7 @@ Time Qed.
 Fixpoint lc_fill (n : nat) (k : i63) (s : mem) : mem :=
   match n with O => s | S m => lc_fill m (PrimInt63.add k 1) (KQ.KQRun.upd 0 k k s) end.
 Definition lc (n : nat) (a : i63) (s : mem) : mem := let w := 3%nat in let v := KQ.KQRun.kq_nat a in lc_fill w a (lc_fill v 1 s).
-Definition lc_b := FPlainM (MLetC (CS (CS (CS CO))) (MLetC (CNat (SVar 0))
+Definition lc_b := FPlainM (MLetC (CLit 3) (MLetC (CNat (SVar 0))
   (MCall 0 (CCons (CVar 1) CNil) (SCons (SVar 0) SNil) (MCall 0 (CCons (CVar 0) CNil) (SCons (SInt 1) SNil) MCur)))).
 Definition lc_src := ltac:(run_template_program (tmQuoteRec lc)
   (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
@@ -11431,7 +11469,7 @@ Check (eq_refl : body_at lcn_src 1 = FPlain (SLetC (CVar 0) (SCall 0 (CCons (CVa
 Definition lcx (a : i63) (s : mem) : i63 := let w := 2%nat in let s2 := lc_fill w a s in KQ.KQRun.rd 0 a s2.
 Definition lcx_src := ltac:(run_template_program (tmQuoteRec lcx)
   (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
-Check (eq_refl : body_at lcx_src 1 = FPlainX (XLetC (CS (CS CO)) (XLetM (MCall 0 (CCons (CVar 0) CNil) (SCons (SVar 0) SNil) MCur) (XRet (SRd (SInt 0) (SVar 0)))))).
+Check (eq_refl : body_at lcx_src 1 = FPlainX (XLetC (CLit 2) (XLetM (MCall 0 (CCons (CVar 0) CNil) (SCons (SVar 0) SNil) MCur) (XRet (SRd (SInt 0) (SVar 0)))))).
 Definition lcx_Pr := mkprog (funs_of 0 lcx_src) [].
 Time Lemma lc_fill_okx : callee_ok lcx_Pr (gid1 0) (cbz 0) (sig_at lcx_src 0) lc_fill.
 Proof. Time exact_no_check (compile_f_ok lcx_Pr [] gid1 0 (sig_at lcx_src 0) (body_at lcx_src 0) eq_refl eq_refl (no_callees lcx_Pr gid1) eq_refl eq_refl). Time Qed.
@@ -12287,7 +12325,7 @@ Definition zof1_src := ltac:(run_template_program (tmQuoteRec zof1)
 (* the copy of zfold for zouter's function, taking the captured number before its own; zouter's copy calls it, passing it on *)
 Check (eq_refl : map (fun x => snd x) zof1_src =
   [FRec (SVar 0) (SRec CNil (SCons (SVar 2) (SCons (SOp Badd (SVar 1) (SInt 1)) (SCons (SOp Badd (SVar 0) (SOp Bmul (SVar 1) (SVar 2))) SNil))));
-   FRec (SVar 0) (SRec CNil (SCons (SVar 1) (SCons (SCall 0 (CCons (CS (CS (CS CO))) CNil) (SCons (SVar 1) (SCons (SInt 0) (SCons (SVar 0) SNil)))) SNil)));
+   FRec (SVar 0) (SRec CNil (SCons (SVar 1) (SCons (SCall 0 (CCons (CLit 3) CNil) (SCons (SVar 1) (SCons (SInt 0) (SCons (SVar 0) SNil)))) SNil)));
    FPlain (SCall 1 (CCons (CVar 0) CNil) (SCons (SVar 0) (SCons (SVar 1) SNil)))]).
 MetaRocq Run (tmMkDefinition "zof1_c0"%bs (meaning_of (snd zof1_res) "zfold__c0"%bs)).
 MetaRocq Run (tmMkDefinition "zof1_c1"%bs (meaning_of (snd zof1_res) "zouter__c1"%bs)).
@@ -12407,8 +12445,8 @@ Definition w30pred_src := ltac:(run_template_program (tmQuoteRec w30pred)
   (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
 Definition w30go_src := ltac:(run_template_program (tmQuoteRec w30go)
   (fun q => let r := eval vm_compute in (reify_prog q) in match r with Some ?x => exact x end)).
-Check (eq_refl : map snd w30eq_src = [nceq_b]).
-Check (eq_refl : map snd w30lt_src = [nclt_b]).
+Check (eq_refl : map snd w30eq_src = [FPlain (SIfB (BCmpC Ceq (CVar 0) (CLit 3)) (SVar 1) (SVar 0))]).
+Check (eq_refl : map snd w30lt_src = [FPlain (SIfB (BCmpC Clt (CVar 0) (CLit 10)) (SVar 1) (SVar 0))]).
 Check (eq_refl : map snd w30pred_src = [npk_b; FPlain (SCall 0 (CCons (KQR.CPred (CVar 0)) CNil) (SCons (SVar 1) SNil))]).
 Definition w30pred_Pr := mkprog (funs_of 0 w30pred_src) [].
 Time Lemma w30k_ok : callee_ok w30pred_Pr (gid1 0) (cbz 0) (sig_at w30pred_src 0) w30k.
@@ -12593,7 +12631,7 @@ Check (eq_refl : body_at w35_src 1 =
   FPlain (SOp Badd
     (SOp Badd (SLetC (CAdd (CVar 0) (CVar 0)) (SCall 0 (CCons (CVar 0) CNil) (SCons (SVar 1) SNil)))
               (SLetC (CS (CVar 0)) (SCall 0 (CCons (CVar 0) CNil) (SCons (SVar 1) SNil))))
-    (SOp Badd (SIfB (BCmpC Ceq (CAdd (CVar 0) (CVar 0)) (CS (CS (CS (CS CO))))) (SVar 1) (SVar 0))
+    (SOp Badd (SIfB (BCmpC Ceq (CAdd (CVar 0) (CVar 0)) (CLit 4)) (SVar 1) (SVar 0))
               (SLetC (CAdd (CVar 0) (CVar 0)) (SMatch 0 (SVar 1) (SCall 0 (CCons (CVar 0) CNil) (SCons (SVar 1) SNil))))))).
 Definition w35_Pr := mkprog (funs_of 0 w35_src) [].
 Time Lemma w35k_ok : callee_ok w35_Pr (gid1 0) (fbound (sig_at w35_src 0) 0) (sig_at w35_src 0) w35k.
@@ -12697,12 +12735,12 @@ Check (eq_refl : map (fun x => (sv (snd (fst x)), sb (snd (fst x)))) w37_src =
    ([], Some own_bound)]).
 Check (eq_refl : map (fun x => snd x) w37_src =
   [FRec (SVar 0) (SRec (CCons (CS (CVar 1)) CNil) (SCons (SOp Badd (SVar 0) (SInt 1)) SNil));
-   FRec (SVar 0) (SRec (CCons (CAdd (CVar 1) (CS (CS CO))) CNil) (SCons (SOp Badd (SVar 0) (SInt 1)) SNil));
+   FRec (SVar 0) (SRec (CCons (CAdd (CVar 1) (CLit 2)) CNil) (SCons (SOp Badd (SVar 0) (SInt 1)) SNil));
    FRec (SVar 0) (SRec (CCons (CS (CVar 1)) (CCons (CVar 2) CNil)) (SCons (SOp Badd (SVar 0) (SInt 1)) SNil));
    FRec (SVar 0) (SLetC (CS (CVar 1)) (SRec (CCons (CVar 0) CNil) (SCons (SOp Badd (SVar 0) (SInt 1)) SNil)));
    FPlain (SOp Badd (SOp Badd (SCall 0 (CCons (CVar 0) (CCons (CVar 0) CNil)) (SCons (SVar 1) SNil))
                               (SCall 1 (CCons (CVar 0) (CCons CO CNil)) (SCons (SVar 0) SNil)))
-                    (SOp Badd (SCall 2 (CCons (CVar 0) (CCons (CS CO) (CCons (CVar 0) CNil))) (SCons (SVar 1) SNil))
+                    (SOp Badd (SCall 2 (CCons (CVar 0) (CCons (CLit 1) (CCons (CVar 0) CNil))) (SCons (SVar 1) SNil))
                               (SCall 3 (CCons (CVar 0) (CCons (CVar 0) CNil)) (SCons (SVar 0) SNil))))]).
 Definition w37_Pr := mkprog (funs_of 0 w37_src) [].
 Time Lemma w37s_ok_r : callee_ok w37_Pr (gid1 0) (fbound (sig_at w37_src 0) 0) (sig_at w37_src 0) w37s.

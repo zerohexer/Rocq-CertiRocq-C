@@ -1,0 +1,24 @@
+(* a counter written as a number, one number in the C: budgets of 12, 4095, 2^10 and 6000 (named twice), a mask of 65535, a
+   hexadecimal mask 0xFFFF0, a test against 100000, products by 100000 and 7000, a budget of 1000000 in a loop that stops at 1000.
+   With a = 0 and the cell 123456: c = 123456 land 65535 = 57920; 12 + 4095 * 10 + 1024 * 3 + 6000 + 6000 + (57920 * 7 below 100000:
+   no) 2 * 100000 + (123456 land 0xFFFF0 = 123456) * 1000 + (57920 land 255 = 64) * 100000 + 7000 * (57920 land 1023 = 576)
+   + (0 + .. + 999 = 499500): worked out apart, 134643534. *)
+From Stdlib Require Import ZArith.
+Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.
+Fixpoint upto (k : nat) (i acc : int) : int :=
+  match k with
+  | O => acc
+  | S j => if PrimInt63.leb 1000 i then acc else upto j (i + 1) (acc + i)
+  end.
+Definition solve (a : int) (s : mem) : int :=
+  let c := Nat.land (Uint63.to_nat (rd 0 0 s + a)) 65535 in
+  let m := 6000%nat in
+  ff 12 a + ff 4095 0 * 10 + ff (Nat.pow 2 10) 0 * 3 + (ff m 0 + ff m a)
+  + (if Nat.ltb (Nat.mul c 7) 100000 then 1 else 2) * 100000
+  + Uint63.of_nat (Nat.land (Uint63.to_nat (rd 0 0 s)) 0xFFFF0) * 1000
+  + Uint63.of_nat (Nat.mul (Nat.land c 255) 100000)
+  + Uint63.of_nat (Nat.mul 7000 (Nat.land c 1023))
+  + upto 1000000 0 0.
+Definition main : int :=
+  let kq_keep := kq_case (kq_S kq_O) (fun _ => tt) (fun _ => tt) in
+  solve 0 (kq_input 0).
