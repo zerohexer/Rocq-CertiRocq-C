@@ -5720,6 +5720,12 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   the list; `check_trust.py`: `trust unchanged`.  Next: a match on a comparison in any place, `log2_up`, `sqrt_up` (step 98),
   built and its cells read locally.
 
+**Step 98, a match on a comparison in any place: `log2_up`, `sqrt_up`, `Nat.compare` in a counter (§3.5, §12.A; the gaps `A_zi_log2_up`, `A_zi_sqrt_up`) — the design (2026-11-10).**  `Nat.log2_up n` is `match Nat.compare 1 n with Lt => S (log2 (pred n)) | _ => 0 end`.  The reader writes `Nat.compare` as its definition, a choice of `Lt`, `Eq`, `Gt` by tests (step 64), and floats a match on such a choice into the tests at a function's end (`y_tail`, step 69), each by an equation `kitc.py` proves of the program.  Two places were not reached: a definition of Rocq's library that calls `Nat.compare` is written out where the program calls it after that rewriting, so its call never met it; and a match on a choice anywhere but the end, a counter given to a call, was not floated.
+- *The reader* (`KQRReify.v`): a definition of Rocq's libraries, not a fixpoint, whose body calls what the rewriting writes as its definition, written out first (`pm_open`); a match on a choice of constructors floated in any place, inside a fixpoint too, the new match's type the outer one's where that does not depend on the value matched, a constant constructor's branch taken (`y_inner`).  Both inside `y_all`, which runs only where the first reading failed: a program read before is read as before.
+- *What is proved*: nothing new in `KQR.v`; each such program's equation, as for the rewriting it extends, by `kitc.py`.
+- *The C*: a program read before, byte-identical.
+- *Cells*: `A_zm_*`: `log2_up`, `sqrt_up` as a number, a test, a let, under `Arith`, in a recursion, at 0 and at a written number, one of the other; `Nat.compare` matched in a counter, against a counter of a machine number, in a test, nested; a match on a choice written by hand in a counter; `PrimInt63.compare` matched in a counter.  `A_zi_log2_up`, `A_zi_sqrt_up` read.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5906,7 +5912,8 @@ Pushed to the public repository up to `94e26b0` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 97 (the bounds of a min and of a subtraction of counters exact: the construct table 3790 of 3932, 66 by design, 75 gaps), the gate |
+| (this commit) | §12.V: step 98's design -- a match on a comparison in any place: log2_up, sqrt_up, Nat.compare in a counter |
+| `d6b44c0` | §12.V: step 97 (the bounds of a min and of a subtraction of counters exact: the construct table 3790 of 3932, 66 by design, 75 gaps), the gate |
 | `94e26b0` | `proved/KQR.v` + matrix step 97: the bounds of a min and of a subtraction of counters exact, each operand asked to fit |
 | `46e4f1f` | §12.V: step 97's design -- the bounds of a min and of a subtraction of counters exact |
 | `73dddcb` | §12.V: step 96 (each program's own end theorem, and what it rests on, in the gate: the construct table 3774 of 3915, 64 by design, 76 gaps), the gate; F79, F80; §12.T's follow-up done |
