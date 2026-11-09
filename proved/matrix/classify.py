@@ -96,12 +96,14 @@ DESIGN_CELLS = {
   "A_zj_land_past", "A_zj_mul_big",
   # a power of two written numbers past a word (Rocq-C-solution.md §0.5, second reason); controls: A_zk_num_62, A_zk_num_ten18 (step 95)
   "A_zk_past_63", "A_zk_past_ten19",
+  # an operand of a min or a subtraction that may need more than a word (Rocq-C-solution.md §0.5, second reason); controls:
+  # A_zl_min_past_ctl, A_zl_sub_past_ctl, the operand masked (step 97)
+  "A_zl_min_past", "A_zl_sub_past",
 }
 # gaps whose refusal message is shared with another category: classified by name
 BY_NAME = {
   "A_rp_poly_measure": "a measure recursion polymorphic in a type",
   "A_c2_match_cnt": "a counter chosen by a match on a counter",
-  "A_c2_min_clamp": "a counter clamped by a number: the bound of a min is not yet the smaller one",
   "A_q_st_mem_iter": "a memory as a field of a data type",
   "A_q_mem_rec_triple": "a value and a memory given back together by a recursion or a loop, the value not one number",
   "A_q_rec_vtable_rec": "a record of functions or a class's instance given to a recursive function",

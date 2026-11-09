@@ -3453,6 +3453,41 @@ addA('zk_past_63', "", 'a + Uint63.of_nat (Nat.pow 2 63)',
      'From Stdlib Require Import ZArith.\n')
 addA('zk_past_ten19', "", 'a + Uint63.of_nat (Nat.pow 10 19)',
      'From Stdlib Require Import ZArith.\n')
+# the bounds of a min and of a subtraction of counters exact (step 97)
+addA('zl_min_first', "", 'ff (Nat.mul 3 (Nat.min 1000 (Uint63.to_nat a))) b',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zl_min_vars', "", 'ff (Nat.min n (Uint63.to_nat a)) b',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zl_min_nested', "", 'ff (Nat.mul 2 (Nat.min (Nat.min (Uint63.to_nat a) (Uint63.to_nat b)) 500)) b',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zl_min_let', "", 'let c := Nat.min (Uint63.to_nat a) 1000 in ff (Nat.mul 3 c) b + ff c a',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zl_min_test', "", 'if Nat.ltb (Nat.mul 4 (Nat.min (Uint63.to_nat a) 1000)) 3000 then a else b',
+     'From Stdlib Require Import ZArith.\n')
+addA('zl_min_num', "", 'a + Uint63.of_nat (Nat.mul 1000 (Nat.min (Uint63.to_nat a) 1000))',
+     'From Stdlib Require Import ZArith.\n')
+addA('zl_min_call', "", 'lp (Nat.min (Uint63.to_nat a) 1000) a',
+     'From Stdlib Require Import ZArith.\nFixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (x + 1) end.\n')
+addA('zl_min_callee', "", 'g2 (Nat.min (Uint63.to_nat a) 1000) a',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (k : nat) (x : int) : int := ff (Nat.mul 3 k) x.\n')
+addA('zl_sub_clamp', "", 'ff (Nat.mul 3 (Nat.sub 1000 (Uint63.to_nat a))) b',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zl_sub_vars', "", 'ff (Nat.sub n (Uint63.to_nat a)) b',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zl_sub_let', "", 'let c := Nat.sub 1000 (Uint63.to_nat a) in ff (Nat.mul 3 c) b + ff c a',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zl_sub_test', "", 'if Nat.leb (Nat.mul 5 (Nat.sub 1000 (Uint63.to_nat a))) 2000 then a else b',
+     'From Stdlib Require Import ZArith.\n')
+addA('zl_sub_min', "", 'ff (Nat.mul 3 (Nat.sub (Nat.min (Uint63.to_nat a) 1000) (Uint63.to_nat b))) b',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zl_min_past', "", 'ff (Nat.min (Nat.mul (Uint63.to_nat a) 4) 5) b',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zl_min_past_ctl', "", 'ff (Nat.min (Nat.mul (Nat.land (Uint63.to_nat a) 255) 4) 5) b',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zl_sub_past', "", 'ff (Nat.sub 5 (Nat.mul (Uint63.to_nat a) 4)) b',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zl_sub_past_ctl', "", 'ff (Nat.sub 5 (Nat.mul (Nat.land (Uint63.to_nat a) 255) 4)) b',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
 # a memory in a value of any data type; a sixth probe (step 87)
 addA('zf_h_user', "", 'match st1 a s with Ok v t => v + rd 0 a t | Err e => e end',
      'Inductive res := Ok (v : int) (t : mem) | Err (e : int).\nDefinition st1 (i : int) (t : mem) : res := if i =? 0 then Err 1 else Ok i (upd 0 i i t).\n')
