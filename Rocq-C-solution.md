@@ -5673,6 +5673,13 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   kernels and `grow` (15 / 16 / 18 / 15 / 15 / 6 s); **109 programs through the verified compiler, 0 refused**; `check_trust.py`:
   `trust unchanged`.  Next: §12.T's follow-up (each gate program's own theorem in the gate), then the table's gaps.
 
+**Step 96, each program's own end theorem, and what it rests on, in the gate (§12.T's follow-up, F76) — the design (2026-11-10).**  Since step 92 the gate checks what every lemma of the route rests on.  A program's claim is put together per program: the entry's theorem `{name}_rok{j}` (the KQL function computes the Rocq function), and the generator's `kit_function_correct` (the Clight function computes what the KQL run gives).  Nothing stated the two joined for the program, and nothing checked what that rests on.
+- *`proved/KQREnd.v`*: `callee_end`, proved once: from a function's `callee_ok`, the two checks the generator's theorem takes (`names_ok`, `params_ok`, decided by computation), the machine operations as its laws say (`hw_ok`, `kit_function_correct`'s own premises) and the slot block's room, the Clight function the generator makes, called from any Clight memory holding the kit's memory, gives the Rocq function's answer and a memory holding the one the Rocq function gives back (`endk`): `callee_ok` with the KQL run replaced by the Clight run.  In `make.sh` and in the route's list of what it rests on, which it does not change (measured: 79 names, all on the list).
+- *Each program* (`kitc.py`): `{name}_end`, `callee_end` applied to the entry's theorem, the two checks by `eq_refl`.  With `KQ_ENDAX=1` (the gate sets it) what `{name}_end` rests on is printed from a file that imports nothing, so each name is the one constant it names (F76), one line a program: `NAME END-ASSUM n: names`.
+- *The gate*: the lines of every example, corpus program and kernel; `check_trust.py --gate` asks each name to be on the list and one line for each program through the verified compiler, and stops otherwise.
+- *What it does not change*: the C, the per-function theorems, what is assumed.  A program whose end theorem rested on anything off the list would stop the gate: a finding, taken to the owner.
+- *The acceptance*: the gate prints the end theorem's assumptions of all its programs, each within the list, and `check_trust.py --gate` compares them; a program made to rest on an `Axiom` of its own is refused before, by §0.5's fourth reason, and a line naming something off the list makes `check_trust.py` stop (tried on a copy of a log).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5858,7 +5865,8 @@ Pushed to the public repository up to `c938ac6` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 95 (a power of two written numbers, its value one number in the C: the construct table 3774 of 3915, 64 by design, 76 gaps), the C, the gate; F78; §12.E's follow-up done |
+| (this commit) | §12.V: step 96's design -- each program's own end theorem, and what it rests on, in the gate |
+| `0ae566a` | §12.V: step 95 (a power of two written numbers, its value one number in the C: the construct table 3774 of 3915, 64 by design, 76 gaps), the C, the gate; F78; §12.E's follow-up done |
 | `c938ac6` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + matrix + `examples/pow_fix` step 95: a power of two written numbers, its value one number in the C: `CPowL`; the check files unfold the library's functions last; 25 cells |
 | `1b3a620` | §12.V: step 95's design -- a power of two written numbers, its value one number in the C |
 | `77d6540` | §12.V: step 94 (a counter written as a number, one number in the C: the construct table 3750 of 3890, 62 by design, 77 gaps), the C and its assembly, the gate; F77; §12.E's follow-up |
