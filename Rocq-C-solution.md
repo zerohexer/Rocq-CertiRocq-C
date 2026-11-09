@@ -5649,6 +5649,16 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   `check_trust.py`: `trust unchanged`.  Next: §12.E's new follow-up (a power of two written numbers above 4096), §12.T's (each
   gate program's own theorem in the gate), and the table's gaps.
 
+**Step 95, a power of two written numbers, its value one number in the C (§12.E's follow-up of step 94, §3.5) — the design (2026-11-09).**  `Nat.pow 2 13`, `2 ^ 20`, `Nat.pow 10 18`: natural, the value known from the text.  It was read only up to 4096, as a chain of successors (since step 94 the `CLit` of its value); above, refused with a hint that it "may need more than a word" (`A_zj_pow_big`).
+- *`S`* (`KQR.v`): `CPowL a b`, `a` and `b` written numbers (`CLit`, `CNumU`, `CO`), its meaning `Nat.pow a b` by conversion, its code the constant `of_Z (zpw a b)`, `zpw` a power by squaring in `Z`, so that working it out costs the exponent's digits, not its value.  `wf` asks both to be written numbers: the code is a constant only then.
+- *What is proved*: `zpw a b = Z.pow a b`; `Z.of_nat (Nat.pow x y) = Z.pow x y` (Rocq's `Nat2Z.inj_pow`); a written number's `Z` is its meaning's (`nu_z_ok`).
+- *Bounds*: exact, the value.  A power past a word is refused by the fitting every counter has (§0.5, second reason): `Nat.pow 2 63`, a pin, control `Nat.pow 2 62`.  The reader refuses a base of 2 or more with an exponent of 63 or more before any computing (the same reason; the value would have more digits than the exponent says).
+- *The check*: the meaning and the text meet at the same call of `Nat.pow` only if the kernel unfolds our side first; else it works the program's `Nat.pow 2 40` out in unary (measured: 2^12 at once, 2^40 not in 60 s), F77's trap again.  Which order the check files set (our meaning functions first, or the library's function last) is measured on the gate's programs before it is chosen.
+- *The reader*: `Nat.pow` of two written numbers is `CPowL`, whatever the value; the 4096 limit goes.
+- *The C*: a program with a power of written numbers up to 4096: the same constant, byte-identical; any other: byte-identical.
+- *The acceptance*: `proved/examples/pow_fix`: `2 ^ 13`, `Nat.pow 10 18` as a test, `2 ^ 40` as a mask's bound, `Nat.pow 3 39`, `0 ^ 0`, `1 ^ 100000`, under `Require Import Arith`; the answer worked out apart.
+- *Cells*: `A_zk_*`: as a budget, a number, a test, a let, an operand, in a recursion; at 0 ^ 0, 1 ^ 100000, 2 ^ 62, 10 ^ 18, a hexadecimal exponent; the pins `2 ^ 63`, `10 ^ 19` and their controls; `A_zj_pow_big` read.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5834,7 +5844,8 @@ Pushed to the public repository up to `da8f5f1` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 94 (a counter written as a number, one number in the C: the construct table 3750 of 3890, 62 by design, 77 gaps), the C and its assembly, the gate; F77; §12.E's follow-up |
+| (this commit) | §12.V: step 95's design -- a power of two written numbers, its value one number in the C |
+| `77d6540` | §12.V: step 94 (a counter written as a number, one number in the C: the construct table 3750 of 3890, 62 by design, 77 gaps), the C and its assembly, the gate; F77; §12.E's follow-up |
 | `da8f5f1` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + matrix + `examples/lit_fix` step 94: a counter written as a number, one number in the C: `CLit`, `CNumU`, `CMulU`; the check files unfold `ofn` first; 37 cells |
 | `8128bb2` | §12.V: step 94's design -- a counter written as a number, one number in the C |
 | `564e5a8` | §12.V: step 93 (the recursive functions of Rocq's library on counters: the construct table 3716 of 3853, 60 by design, 76 gaps), the C, the gate; §12.E's follow-up |
