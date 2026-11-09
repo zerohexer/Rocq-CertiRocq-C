@@ -573,8 +573,9 @@ compiler's `compile_f_ok`), `KQRWf.v` and `KQPrim.v`, from a file that imports n
 names (`ASSUME=1 proved/make.sh`, since step 92, F76): Rocq's 63-bit integer axioms; the kit's memory primitives `KQRun.rd` / `upd`
 / `kq_size` / `mem` and `KQSpec.real_laws`; the machine's operations; classical axioms CompCert uses.  No admits.
 Outside the proofs: the loader that fills the tables, the driver in `kitc.py`, the printer, clang, and the C bodies of the
-machine operations with the laws the theorem assumes of them.  The per-program statements add nothing: the translator's output
-is checked by the kernel every time.
+machine operations with the laws the theorem assumes of them.  Each program's own end theorem, `{name}_end` (step 96: the entry's
+theorem said of the Clight the generator makes), is printed the same way by the gate's scripts and compared too: a program's proofs can
+rest on more than the route's lemmas, Rocq's axioms of the primitives the reader writes as their definitions (F80).
 
 **So the proof ends at Clight**: the theorem says the Clight the generator makes computes the Rocq function, under the list below.
 Printing that Clight as C, compiling the C, filling the tables and starting it are not proved (§12.H).  Say "proved to Clight, under
@@ -1663,6 +1664,8 @@ Dated where known.  "Fixed" means fixed in the tree; the entry stays so the trap
 | F76 | The trust check compared printed names as text.  Each file prints an axiom by the shortest name valid in its own scope, so one axiom was listed under two spellings (14 lines), and a short name printed elsewhere could have been another constant and still matched; every line `name :` after the first `Axioms:` of `make.sh`'s whole output was taken as an assumption, `Check`'s outputs included (`eq_refl`, `int`); and the set came from three end theorems plus what files happened to print, so `KQRWf.kq_compares_def` (step 64), which a program using `compares` rests on, was never printed: `PrimInt63.compares` and `Sint63Axioms.compare_spec`, Rocq's own, were not on the list.  Found at step 92, when `lxor_spec` was printed short | `make.sh` prints what every lemma of `KQMTop.v`, `KQR.v`, `KQRWf.v`, `KQPrim.v` rests on, from a file that imports nothing, between two markers, and the gate reads only that; `proved/TRUSTED.txt` lists that set, each axiom once by its full name (90): the short spellings, the artifacts and two primitive types only the untrusted reader's prints reached out, the two of `compares` in, with the owner's agreement that Rocq's own axioms are the floor (2026-11-09) |
 | F77 | A written counter turned into a number, `Uint63.of_nat 100000`, took 97 s to check and `Uint63.of_nat 0xFFFFF` over 300 s, against 1.5 s for the rest of the program: the meaning says `ofn c`, the text `of_Z (Z.of_nat c)` (`Uint63.of_nat` is a notation for it), and the kernel opened the program's `of_Z` first, whose match worked `Z.of_nat` out on the number in unary.  It was there before step 94 for any written counter turned into a number, under a second at 4095 (found by step 94's cells) | the check files `kitc.py` writes unfold `ofn`, our abbreviation, first (`Strategy expand`): 3.4 s; the order only, as F50 |
 | F78 | F77 was one case: a call of the library on written numbers in the program's text is opened by the kernel and worked out in unary whenever the meaning reaches the same call by another road.  `Nat.ltb n (Nat.pow 10 18)` did not end in 120 s with the meaning `cmpn Clt n (Nat.pow 10 18)`, nor with our meaning functions unfolded first; `Nat.land 1000000 65535` written out failed (found by step 95's cells) | the check files unfold our abbreviations first and every library function a node of `S` means last, so both sides meet at the call and its arguments are compared: 1.5 to 3.6 s, the gate's programs the same or faster, measured without the cache |
+| F79 | A program's tree, `{name}_src`, was defined as a projection of the reader's whole result, whose type holds MetaRocq's `term`, so every program's theorem reached Rocq's primitive types of floats and strings, `PrimFloat.float` and `PrimString.string`, off the list, while nothing of the claim uses them: F76 met them only in the untrusted reader's prints (found by step 96, the first end theorem printed: 82 names, 2 off the list) | the tree is defined by its computed value, which is in `S` alone: 80 names, all on the list, the C the same |
+| F80 | The list held what the route's lemmas rest on, and a program's own proofs rest on more: since step 64 the reader writes `PrimInt63.compare`, `addc`, `subc`, `addmuldiv`, `diveucl` as their definitions, and a program's proof of that rests on Rocq's axioms of them, `Uint63Axioms.*_def_spec`, never printed (found by step 96's gate, `prim_fix`) | the chain stopped and it went to the owner, who listed the ten, Rocq's own, the floor (2026-11-10); `check_trust.py --gate` asks every listed name to be used by the route or by a program, so the list stays exact both ways |
 | F69 | `rewrite` compares up to unfolding, full, whatever `Strategy opaque` says: a lemma about a function whose body is one operation fires on that operation where the function is not written, and with a tactic turning the operation back the proof never ended | the lemma only where the function is in the goal (`match goal with |- context [F]`); a proof that looks for what to rewrite is stepped by hand when it times out |
 | F68 | A program's own file (`Require`d by its text) was compiled again only when older than its source, not than the kit, so after `KQRun.v` changed the program failed once on Rocq's inconsistent assumptions and `kitc.py` wrote no C; the comparison showed `none`, at steps 65 and 73 | `build_user_files` counts the kit's `.vo` |
 | F67 | A budget written as `S (S ..)` makes a conversion unroll the fixpoint: both sides reduce on the constructor, and with two branches in each round the comparison is exponential.  `reflexivity` on `(fix go ..) 63 c 0 a b = kq_d21_go 63 c 0 a b` did not end, nor `rewrite` of a term holding it, with the fixpoints' bodies identical | a written budget is `kq_nat 63`, opaque to a conversion (D18); a lemma about it is stated with the budget a variable, and the number put in with `exact` |
@@ -1689,10 +1692,9 @@ through `ccomp`) → **G** → **M** → **J**; **F**, **I** and **N** when thei
 - ~~*`hw_copy`, `hw_fill`, `hw_cmp`*~~ — **done, step 75**: loops over the byte loads and stores in the kit, no operation of their own.  *`kq_grow`*: stays assumed, class `env`: the allocator under the memory's tables, with the loader and the driver (§12.H).
 - ~~*`divs_min_neg1`*~~ — **done, step 74**: `Bdivs` means `kq_divs`, which says what the smallest number over -1 is by its definition; `/` needs no test, and a written-out `divs` where the text rules the case out.
 - *The printer, clang, the loader, the driver*: §12.H, unless the owner wants them sooner.
-- *Each program's own end theorem in the gate* (F76's follow-up, owner 2026-11-09): since step 92 the gate checks what every lemma of the route
-  rests on, from a file that imports nothing.  Left: what each gate program's final theorem rests on, printed the same way and compared with
-  the list, so that the check is the end-to-end claim itself and not the lemmas it is built from.  Accepted when the gate prints it for every
-  example, corpus program and kernel and `check_trust.py --gate` compares it.
+- ~~*Each program's own end theorem in the gate*~~ (F76's follow-up, owner 2026-11-09) — **done, step 96**: `{name}_end`, the entry's
+  theorem said of the Clight the generator makes (`KQREnd.callee_end`); what it rests on printed for every example, corpus program and
+  kernel (`KQ_ENDAX=1`, set by the gate's scripts) and compared with the list by `check_trust.py --gate`.
 Accepted when: no line of the classes `remove` and `audit` is left in `proved/TRUSTED.txt`, and §1.10 says so.  **Done on `4898663`**, the printer, clang, the loader and the driver left at §12.H.
 
 **A. The construct-table gaps (20 cells, §3.5), then the by-design pins.**  The categories of §3.5: proof search for
@@ -5680,6 +5682,24 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *What it does not change*: the C, the per-function theorems, what is assumed.  A program whose end theorem rested on anything off the list would stop the gate: a finding, taken to the owner.
 - *The acceptance*: the gate prints the end theorem's assumptions of all its programs, each within the list, and `check_trust.py --gate` compares them; a program made to rest on an `Axiom` of its own is refused before, by §0.5's fourth reason, and a line naming something off the list makes `check_trust.py` stop (tried on a copy of a log).
 
+**Step 96, each program's own end theorem, and what it rests on, in the gate — the result (2026-11-10).**  Built as designed:
+- *`proved/KQREnd.v`*: `hw_ok`, `endk`, `callee_end`; in `make.sh` and in the route's list of what it rests on, which it leaves as it was (79 names, all on the list).
+- *Each program* (`kitc.py`): `{name}_end := callee_end .. {name}_rok{j} eq_refl eq_refl`, the entry `j` the last function read; with `KQ_ENDAX=1`, set by `examples.sh`, `corpus.sh` and `hw/build_proved.sh`, what it rests on, printed from a file that imports nothing, one line a program (`hw/build_proved.sh` keeps that line whole, `examples.sh` four lines a program).  1 to 2 s more a program, in the gate only.
+- *Found by the first one printed* (F79): `lit_fix`'s end theorem rested on 82 names, `PrimFloat.float` and `PrimString.string` among them, off the list.  A program's tree was defined as a projection of the reader's whole result, whose type holds MetaRocq's `term`; the tree is its computed value now, in `S` alone: 80 names, all on the list.
+- *`check_trust.py --gate`*: each name of each `END-ASSUM` line on the list, a line for each program through the verified compiler, the count of names as printed.  Tried on copies of a log: a clean one, `trust unchanged`; a program's line naming one more axiom, `NOT ON THE LIST: assumption KQ.Mine.my_axiom (the end theorem of lit_fix)` and a stop; a program's line missing, `NO END THEOREM PRINTED` and a stop.
+- *Found by the gate* (F80): `prim_fix`'s end theorem rested on ten names off the list, `PrimInt63.compare`, `addc`, `subc`, `addmuldiv`, `diveucl` and Rocq's axioms of their definitions, `Uint63Axioms.*_def_spec`: since step 64 the reader writes those primitives as their definitions and each program's proof of that rests on them, while the list held what the route's lemmas rest on.  The chain stopped; taken to the owner, who listed them, Rocq's own, the floor, as at step 92 (2026-11-10).  `check_trust.py --gate` now asks every listed name to be used by the route or by a program's end theorem, and every name either prints to be listed: 100 names.  The other 108 programs' end theorems were within the list as it was.
+- *The C*: the 99 programs byte-identical.
+- *What it costs*: the gate's five kernels and `grow` 21 / 22 / 24 / 18 / 18 / 9 s, against 15 / 16 / 18 / 15 / 15 / 6: a kernel is several programs, and each prints its end theorem from a file of its own, which loads the route's libraries.  The gate only: a program compiled without `KQ_ENDAX` pays nothing.
+- *The table*: every cell's check file states its end theorem now, and every cell read before is still proved: no cell lost, none read and refused by the check.
+- The C: the 99 programs byte-identical.  The construct table (on `e73b49b`): **3774 of 3915 through the verified compiler**, 64
+  by design, 76 gaps, 1 not Rocq (was 3774 of 3915: no cell new, lost or gained).  The gate on `e73b49b`, the walk switched off:
+  `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding; the same C: undefined behaviour trapped 63 / 63, `-O0` 63 / 63,
+  `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels and `grow` (21 / 22 / 24 / 18 / 18 / 9 s, the end
+  theorems printed); **109 programs through the verified compiler, 0 refused**, and their 109 end theorems each within the list;
+  `check_trust.py`: `trust unchanged` with the list of `e73b49b` (the gate ran on `ca0513c`, the list the owner's decision after
+  it).  Next: step 97 (the bounds of a min and of a subtraction of counters exact), built and its cells read locally; then the
+  comparisons in any place (`log2_up`, `sqrt_up`, step 98).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5759,7 +5779,8 @@ this public file; the rules of §13.3 hold wherever the runs go.
 - `proved/examples.sh`: every example gives its expected answer;
 - `proved/corpus.sh`: 36 of 36 proved, built and equal to the C++ answers;
 - `hw/spec.sh` passes;
-- `proved/check_trust.py --gate LOG` says `trust unchanged`: a difference is a stop (§13.9), never a line to write up;
+- `proved/check_trust.py --gate LOG` says `trust unchanged`: a difference is a stop (§13.9), never a line to write up; it compares the
+  route's list and, since step 96, what each program's end theorem rests on (the `END-ASSUM` lines the gate's scripts print);
 - when the translator or the walk changed: the kernels (`hw/build_proved.sh` for the five, or `hw/check.sh`) and the full
   construct table;
 - for a release: the same with `KQ_MONO=1` (no cache).
@@ -5861,11 +5882,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `c938ac6` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `e73b49b` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 96's design -- each program's own end theorem, and what it rests on, in the gate |
+| (this commit) | §12.V: step 96 (each program's own end theorem, and what it rests on, in the gate: the construct table 3774 of 3915, 64 by design, 76 gaps), the gate; F79, F80; §12.T's follow-up done |
+| `e73b49b` | `proved/TRUSTED.txt` + `check_trust.py` step 96: what the programs' end theorems rest on besides the route's, Rocq's own definitions of five primitives the reader writes out, listed (the owner's decision); every name listed used by the route or by a program |
+| `ca0513c` | `proved/KQREnd.v` + `kitc.py` + `check_trust.py` + `make.sh` + the gate's scripts step 96: each program's end theorem, the entry's said of the Clight; what it rests on printed and compared with the list |
+| `30908ae` | §12.V: step 96's design -- each program's own end theorem, and what it rests on, in the gate |
 | `0ae566a` | §12.V: step 95 (a power of two written numbers, its value one number in the C: the construct table 3774 of 3915, 64 by design, 76 gaps), the C, the gate; F78; §12.E's follow-up done |
 | `c938ac6` | `proved/KQR.v` + `KQRReify.v` + `kitc.py` + matrix + `examples/pow_fix` step 95: a power of two written numbers, its value one number in the C: `CPowL`; the check files unfold the library's functions last; 25 cells |
 | `1b3a620` | §12.V: step 95's design -- a power of two written numbers, its value one number in the C |
