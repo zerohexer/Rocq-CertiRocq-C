@@ -5763,6 +5763,12 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   `trust unchanged`.  Next: a function giving back a counter whose recursion goes more than one step down (step 100), built and
   its cells read locally.
 
+**Step 100, a function giving back a counter whose recursion goes more than one step down (§3.5, §12.A; the gaps `A_z_s_match_counter`, `A_zb_s_deep`) — the design (2026-11-10).**  `tw (S (S m)) = S (tw m)`, a counter given back: the reader reads it, as a row giving a number (step 82) and that row as a recursion two steps down with its copies (step 58), but `kitc.py` stated the copies' equation of `tw` itself, whose copies were never made: the reader's record of such recursions (`pf_info`) is of the program as written, the copies of the row the reading used.
+- *The reader* (`KQRReify.v`): `pf_info_r`, the record of the environment the reading used: the program's own where the copies it names were made, else `y_all`'s, a row named by its short name in the reader's file (`strip_pre`).  `kitc.py` asks for it.
+- *What is proved*: nothing new; the copies' equation, as for any such recursion.
+- *The C*: a program read before, byte-identical.
+- *Cells*: `A_zo_*`: such a counter as a budget, a number, a test, a let, a callee's; three steps down; with an accumulator; with a memory; two of them.  `A_z_s_match_counter`, `A_zb_s_deep` read.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5949,7 +5955,8 @@ Pushed to the public repository up to `5bf8172` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 99 (a counter chosen by a match on a counter: the construct table 3827 of 3966, 66 by design, 72 gaps), the gate |
+| (this commit) | §12.V: step 100's design -- a function giving back a counter whose recursion goes more than one step down |
+| `4a07678` | §12.V: step 99 (a counter chosen by a match on a counter: the construct table 3827 of 3966, 66 by design, 72 gaps), the gate |
 | `5bf8172` | `proved/KQRReify.v` + matrix step 99: a counter chosen by a match on a counter, in a counter's place, the test with 0 and the predecessor |
 | `a954405` | §12.V: step 99's design -- a counter chosen by a match on a counter |
 | `8ef1e56` | §12.V: step 98 (a match on a comparison in any place, `log2_up`, `sqrt_up`: the construct table 3813 of 3953, 66 by design, 73 gaps), the C and its assembly, the gate; F81, F82 |
