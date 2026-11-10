@@ -3577,6 +3577,39 @@ addA('zo_let', "", 'let c := tw n in ff c a + ff c b',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
 addA('zo_callee', "", 'g2 n a',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (k : nat) (x : int) : int := ff (tw k) x.\n')
+# a sum around a counter a function gives back, with an operation of the library or of the program (step 103)
+addA('zt_sum_log2', "", 'ff (cnt n a s + Nat.log2 n) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zt_sum_sqrt', "", 'ff (cnt n a s + Nat.sqrt n) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zt_sum_gcd', "", 'ff (cnt n a s + Nat.gcd n 4) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zt_sum_b2n', "", 'ff (cnt n a s + Nat.b2n (Nat.eqb n 0)) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zt_sum_if', "", 'ff (cnt n a s + (if Nat.eqb n 0 then 1 else 2)) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zt_sum_mul_land', "", 'ff (cnt n a s + Nat.land n 7 * 3) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zt_sum_pow', "", 'ff (cnt n a s + Nat.pow n 2) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zt_sum_lcm', "", 'ff (cnt n a s + Nat.lcm n 4) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zt_sum_setbit_big', "", 'ff (cnt n a s + Nat.setbit n 20) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zt_sum_log2_own', "", 'ff (Nat.log2 (cnt n a s) + cnt n b s) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zt_sum_sqrt_own', "", 'ff (Nat.sqrt (cnt n a s) + cnt n b s) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zt_sum_helper', "", 'ff (cnt n a s + hk n) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition hk (k : nat) : nat := k + 1.\n')
+addA('zt_test_log2', "", 'if Nat.leb (cnt n a s + Nat.log2 n) 5 then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('zt_sum_helper_two', "", 'ff (cnt n a s + hk2 n) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition hk2 (k : nat) : nat := 2 * k.\n')
+addA('zt_sum_helper_seven', "", 'ff (cnt n a s + hk7 n) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition hk7 (k : nat) : nat := 7 * k.\n')
+addA('zt_sum_doubling', "", 'ff (cnt n a s + tw n) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
 # a counter a function gives back, used as a counter inside an operation (step 102)
 addA('zs_land_cnt', "", 'ff (Nat.land (cnt n a s) 255) b',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')

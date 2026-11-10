@@ -625,8 +625,23 @@ Lemma nc_clearbit_le : forall a k, (Nat.clearbit a k <= a)%nat.
 Proof. intros a k. rewrite Nat.clearbit_spec'. apply nb_ldiff. Qed.
 Lemma nc_setbit_le : forall a k, (Nat.setbit a k <= a + Nat.pow 2 k)%nat.
 Proof. intros a k. unfold Nat.setbit. rewrite Nat.shiftl_1_l. apply nb_lor. Qed.
+(** (step 103) and of these *)
+Lemma nc_log2_le : forall a, (Nat.log2 a <= a)%nat.
+Proof. intros a. apply Nat.log2_le_lin; lia. Qed.
+Lemma nc_sqrt_le : forall a, (Nat.sqrt a <= a)%nat.
+Proof. intros a. apply Nat.sqrt_le_lin. Qed.
+Lemma nc_gcd_le : forall a b, (Nat.gcd a b <= a + b)%nat.
+Proof.
+  intros [|a] b; [cbn; lia|]. pose proof (Nat.divide_pos_le (Nat.gcd (S a) b) (S a) ltac:(lia) (Nat.gcd_divide_l (S a) b)). lia.
+Qed.
+Lemma nc_b2n_le : forall b, (Nat.b2n b <= 1)%nat.
+Proof. intros [|]; cbn; lia. Qed.
 Ltac nc_opf :=
   repeat match goal with
+  | |- context [Nat.log2 ?a] => lazymatch goal with _ : (Nat.log2 a <= a)%nat |- _ => fail | _ => pose proof (nc_log2_le a) end
+  | |- context [Nat.sqrt ?a] => lazymatch goal with _ : (Nat.sqrt a <= a)%nat |- _ => fail | _ => pose proof (nc_sqrt_le a) end
+  | |- context [Nat.gcd ?a ?b] => lazymatch goal with _ : (Nat.gcd a b <= a + b)%nat |- _ => fail | _ => pose proof (nc_gcd_le a b) end
+  | |- context [Nat.b2n ?b] => lazymatch goal with _ : (Nat.b2n b <= 1)%nat |- _ => fail | _ => pose proof (nc_b2n_le b) end
   | |- context [Nat.shiftr ?a ?k] => lazymatch goal with _ : (Nat.shiftr a k <= a)%nat |- _ => fail | _ => pose proof (nc_shiftr_le a k) end
   | |- context [Nat.div ?a ?b] => lazymatch goal with _ : (Nat.div a b <= a)%nat |- _ => fail | _ => pose proof (nc_div_le a b) end
   | |- context [Nat.modulo ?a ?b] => lazymatch goal with _ : (Nat.modulo a b <= a)%nat |- _ => fail | _ => pose proof (nc_mod_le a b) end

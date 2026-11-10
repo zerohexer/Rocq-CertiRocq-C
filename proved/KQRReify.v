@@ -10495,8 +10495,27 @@ Fixpoint nc_has (fuel : nat) (rows : list rprow) (tab : list (kername * nbf)) (n
       | _ => false
       end
   end.
+(** (step 103) a call in a site of such a counter: how many times its counters it is at most, by the operation's bound, which the check is
+    given ([KQRWf.nb_bitf], [nc_opf]); a function of the program's, written out by the check, one; another of Rocq's libraries, past the limit,
+    so that no site holds it, where it counted one and the check had no bound of it *)
+Definition kn_c_setbit := kn_of <% Nat.setbit %>.
+Definition kn_c_double := kn_of <% Nat.double %>.
+Definition kn_c_b2n := kn_of <% Nat.b2n %>.
+Definition nc_opc (k : kername) (ms : list nat) (args : list term) : nat :=
+  let m0 := nth 0 ms 1000%nat in
+  let m1 := nth 1 ms 1000%nat in
+  if Kername.eqb k kn_c_land then Nat.min m0 m1
+  else if Kername.eqb k kn_c_min then Nat.min m0 m1
+  else if Kername.eqb k kn_c_lor || Kername.eqb k kn_c_lxor || Kername.eqb k kn_c_max || Kername.eqb k kn_c_gcd then (m0 + m1)%nat
+  else if Kername.eqb k kn_c_ldiff || Kername.eqb k kn_c_shiftr || Kername.eqb k kn_c_div || Kername.eqb k kn_c_mod || Kername.eqb k kn_c_div2
+          || Kername.eqb k kn_c_clearbit || Kername.eqb k kn_c_sub || Kername.eqb k kn_nat_pred || Kername.eqb k kn_c_log2 || Kername.eqb k kn_c_sqrt then m0
+  else if Kername.eqb k kn_c_setbit then
+    match args with [_; b] => if cnt_lit b then (if Nat.ltb (cnt_val b) 13 then m0 else 1000) else 1000 | _ => 1000 end
+  else if Kername.eqb k kn_c_double then (2 * m0)%nat
+  else if Kername.eqb k kn_c_b2n then 0%nat
+  else if lib_file (mp_file (fst k)) then 1000 else 1%nat.
 (** how many times its counters a counter is at most: below [wB] needs at most two, each counter being below [2^62]; at most seven where they are below the smallest own bound *)
-Fixpoint nc_c (fuel : nat) (tab : list (kername * nbf)) (nv : list (nat * nat)) (t : term) {struct fuel} : nat :=
+Fixpoint nc_c (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (tab : list (kername * nbf)) (nv : list (nat * nat)) (t : term) {struct fuel} : nat :=
   match fuel with
   | O => 1000
   | S fuel =>
@@ -10504,14 +10523,14 @@ Fixpoint nc_c (fuel : nat) (tab : list (kername * nbf)) (nv : list (nat * nat)) 
       match t with
       | tRel r => match List.find (fun e => Nat.eqb (fst e) r) nv with Some e => snd e | None => 1 end
       | tConstruct _ 0 _ => 0
-      | tApp (tConstruct _ 1 _) [e] => nc_c fuel tab nv e
+      | tApp (tConstruct _ 1 _) [e] => nc_c fuel Σ mp rows tab nv e
       | tApp (tConst k _) args =>
-          if Kername.eqb k nr_nat_add then fold_left Nat.add (map (nc_c fuel tab nv) args) 0%nat
+          if Kername.eqb k nr_nat_add then fold_left Nat.add (map (nc_c fuel Σ mp rows tab nv) args) 0%nat
           else if Kername.eqb k kn_c_shiftl then
             match args with
             | [a; b] =>
                 if cnt_lit b then
-                  let m := nc_c fuel tab nv a in
+                  let m := nc_c fuel Σ mp rows tab nv a in
                   if Nat.eqb m 0 then 0%nat else if Nat.leb (cnt_val b) 3 then (m * Nat.pow 2 (cnt_val b))%nat else 1000
                 else 1000
             | _ => 1000
@@ -10519,16 +10538,27 @@ Fixpoint nc_c (fuel : nat) (tab : list (kername * nbf)) (nv : list (nat * nat)) 
           else if Kername.eqb k nr_nat_mul then
             match args with
             | [a; b] => match nb_val a, nb_val b with
-                        | Some w, _ => (w * nc_c fuel tab nv b)%nat
-                        | _, Some w => (w * nc_c fuel tab nv a)%nat
+                        | Some w, _ => (w * nc_c fuel Σ mp rows tab nv b)%nat
+                        | _, Some w => (w * nc_c fuel Σ mp rows tab nv a)%nat
                         | _, _ => 1000
                         end
             | _ => 1000
             end
           else match List.find (fun e => Kername.eqb (fst e) k) tab with
                | Some e =>
-                   fold_left Nat.add (map (fun ja : nat * term => (nth (fst ja) (fst (snd e)) 0%nat * nc_c fuel tab nv (snd ja))%nat) (combine (seq 0 (length args)) args)) 0%nat
-               | None => 1
+                   fold_left Nat.add (map (fun ja : nat * term => (nth (fst ja) (fst (snd e)) 0%nat * nc_c fuel Σ mp rows tab nv (snd ja))%nat) (combine (seq 0 (length args)) args)) 0%nat
+               | None =>
+                   if existsb (fun r : rprow => match r with (tConst k0 _, _, sl, _, _) => if rp_is_nr sl then Kername.eqb k0 k else false | _ => false end) rows then 1000
+                   else if in_prog mp (fst k) then
+                     match body_of Σ k with
+                     | Some b =>
+                         match lams b with
+                         | (_, tFix _ _) => 1000
+                         | (tys, _) => if Nat.leb (length tys) (length args) then nc_c fuel Σ mp rows tab nv (al_beta args (al_t 100000 Σ mp b)) else 1000
+                         end
+                     | None => 1000
+                     end
+                   else nc_opc k (map (nc_c fuel Σ mp rows tab nv) args) args
                end
       | _ => 1
       end
@@ -10575,8 +10605,8 @@ Definition nc_uh (Σ : global_env) (mp : modpath) (t : term) : term :=
   | tApp (tConst k _) args => if in_prog mp (fst k) then um_red 1000 Σ mp t else t
   | _ => t
   end.
-Definition nc_ok (rows : list rprow) (tab : list (kername * nbf)) (nv : list (nat * nat)) (t : term) : bool :=
-  if nc_has 1000 rows tab nv t then Nat.leb (nc_c 1000 tab nv t) 7 else false.
+Definition nc_ok (Σ : global_env) (mp : modpath) (rows : list rprow) (tab : list (kername * nbf)) (nv : list (nat * nat)) (t : term) : bool :=
+  if nc_has 1000 rows tab nv t then Nat.leb (nc_c 1000 Σ mp rows tab nv t) 7 else false.
 (** (step 102) a definition of Rocq's libraries around such a counter, written out where that brings the counter into the reading *)
 Definition nc_ul (Σ : global_env) (mp : modpath) (rows : list rprow) (tab : list (kername * nbf)) (nv : list (nat * nat)) (t : term) : term :=
   let t1 := nc_uh Σ mp t in
@@ -10601,7 +10631,7 @@ Fixpoint nc_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
       let under := fun k => nc_sub fuel Σ mp rows tab (nc_shift k nv) in
       if cnt_lit t then t else
       let t1 := nc_ul Σ mp rows tab nv t in
-      if nc_ok rows tab nv t1
+      if nc_ok Σ mp rows tab nv t1
       then tApp (tConst kn_zton []) [tApp (tConst kn_nc_u2z []) [nc_tr 1000 rows tab nv go t1]]
       else
         match t with
@@ -10610,9 +10640,9 @@ Fixpoint nc_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
         | tLetIn na v a b =>
             let v1 := nc_ul Σ mp rows tab nv v in
             (* a let of such a counter: the number, once *)
-            if if is_nat a then nc_ok rows tab nv v1 else false then
+            if if is_nat a then nc_ok Σ mp rows tab nv v1 else false then
               tLetIn na (nc_tr 1000 rows tab nv go v1) (tConst kn_int [])
-                     (nc_sub fuel Σ mp rows tab ((0%nat, nc_c 1000 tab nv v1) :: nc_shift 1 nv) b)
+                     (nc_sub fuel Σ mp rows tab ((0%nat, nc_c 1000 Σ mp rows tab nv v1) :: nc_shift 1 nv) b)
             else tLetIn na (go v) a (under 1 b)
         | tCase ci p c brs => tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := under (length (bcontext br)) (bbody br) |}) brs)
         | tFix mfix k => tFix (map (fun df => {| dname := dname df; dtype := dtype df; rarg := rarg df; dbody := under (length mfix) (dbody df) |}) mfix) k
@@ -10628,16 +10658,16 @@ Fixpoint nc_any (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
       let under := fun k => nc_any fuel Σ mp rows tab (nc_shift k nv) lo in
       if cnt_lit t then false else
       let t1 := nc_ul Σ mp rows tab nv t in
-      if if nc_ok rows tab nv t1 then Nat.leb lo (nc_c 1000 tab nv t1) else false then true
+      if if nc_ok Σ mp rows tab nv t1 then Nat.leb lo (nc_c 1000 Σ mp rows tab nv t1) else false then true
       else
         match t with
         | tApp f args => if go f then true else existsb go args
         | tLambda _ _ b => under 1 b
         | tLetIn _ v a b =>
             let v1 := nc_ul Σ mp rows tab nv v in
-            if if is_nat a then nc_ok rows tab nv v1 else false then
-              if Nat.leb lo (nc_c 1000 tab nv v1) then true
-              else nc_any fuel Σ mp rows tab ((0%nat, nc_c 1000 tab nv v1) :: nc_shift 1 nv) lo b
+            if if is_nat a then nc_ok Σ mp rows tab nv v1 else false then
+              if Nat.leb lo (nc_c 1000 Σ mp rows tab nv v1) then true
+              else nc_any fuel Σ mp rows tab ((0%nat, nc_c 1000 Σ mp rows tab nv v1) :: nc_shift 1 nv) lo b
             else if go v then true else under 1 b
         | tCase _ _ c brs => if go c then true else existsb (fun br => under (length (bcontext br)) (bbody br)) brs
         | tFix mfix _ => existsb (fun df => under (length mfix) (dbody df)) mfix
