@@ -1,7 +1,7 @@
 (** Rocq's own measure recursion (Rocq-C-solution.md §4.5, step 56): [Program Fixpoint f x {measure (m x)} := body] is [Fix_sub] over [MR lt m].  A budget
     function [G] that runs the same body equals it at every budget above the measure, by induction on the [Acc] proof.  [fix_sub_eq]'s extensionality
     premise is not used, so neither functional extensionality nor proof irrelevance is. *)
-From Stdlib Require Import ZArith Lia.
+From Stdlib Require Import ZArith Lia Btauto.
 From Corelib Require Export Program.Wf.
 From Stdlib Require Export Program.Utils.
 From KQ Require Import KQRun.
@@ -484,12 +484,54 @@ Proof.
   intros a b. apply Uint63.to_Z_inj. rewrite Uint63.mul_spec, !Uint63.of_Z_spec.
   rewrite Nat2Z.inj_mul. apply Z.mul_mod. compute; discriminate.
 Qed.
+(** (step 101) a row's bit operations: the machine's, the same modulo a word at every counter (their low 63 bits are those of the
+    operands' low 63 bits), so no bound is asked; [Nat.ldiff] the [land] of the first and the [lxor] of the second with the 63 ones *)
+Lemma nr_nbit : forall a n, Nat.testbit a n = Z.testbit (Z.of_nat a) (Z.of_nat n).
+Proof.
+  intros a n. pose proof (Nat.testbit_spec' a n) as Hn. pose proof (Z.testbit_spec' (Z.of_nat a) (Z.of_nat n) (Nat2Z.is_nonneg n)) as Hz.
+  apply (f_equal Z.of_nat) in Hn. rewrite Nat2Z.inj_mod, Nat2Z.inj_div, Nat2Z.inj_pow in Hn. change (Z.of_nat 2) with 2%Z in Hn.
+  rewrite <- Hz in Hn. destruct (Nat.testbit a n), (Z.testbit (Z.of_nat a) (Z.of_nat n)); cbn in Hn; congruence.
+Qed.
+Lemma nr_nbits : forall x z, (forall n, Nat.testbit x n = Z.testbit z (Z.of_nat n)) -> Z.of_nat x = z.
+Proof. intros x z H. apply Z.bits_inj'. intros n Hn. rewrite <- (Z2Nat.id n Hn), <- H. symmetry. apply nr_nbit. Qed.
+
+Lemma nr_zland : forall a b, Z.of_nat (Nat.land a b) = Z.land (Z.of_nat a) (Z.of_nat b).
+Proof. intros a b. apply nr_nbits. intros n. rewrite Nat.land_spec, Z.land_spec, !nr_nbit. reflexivity. Qed.
+Lemma nr_zlor : forall a b, Z.of_nat (Nat.lor a b) = Z.lor (Z.of_nat a) (Z.of_nat b).
+Proof. intros a b. apply nr_nbits. intros n. rewrite Nat.lor_spec, Z.lor_spec, !nr_nbit. reflexivity. Qed.
+Lemma nr_zlxor : forall a b, Z.of_nat (Nat.lxor a b) = Z.lxor (Z.of_nat a) (Z.of_nat b).
+Proof. intros a b. apply nr_nbits. intros n. rewrite Nat.lxor_spec, Z.lxor_spec, !nr_nbit. reflexivity. Qed.
+Lemma nr_mod63 : forall z, (z mod 9223372036854775808 = Z.land z (Z.ones 63))%Z.
+Proof. intros z. rewrite Z.land_ones by lia. reflexivity. Qed.
+Ltac nr_bits63 := apply Z.bits_inj'; intros i Hi;
+  repeat (rewrite Z.land_spec || rewrite Z.lor_spec || rewrite Z.lxor_spec);
+  destruct (Z.ltb_spec i 63); [rewrite !Z.ones_spec_low by lia | rewrite !Z.ones_spec_high by lia]; btauto.
+Lemma nr_land : forall a b, Uint63.of_Z (Z.of_nat (Nat.land a b)) = PrimInt63.land (Uint63.of_Z (Z.of_nat a)) (Uint63.of_Z (Z.of_nat b)).
+Proof. intros a b. apply Uint63.to_Z_inj. rewrite Uint63.land_spec', !Uint63.of_Z_spec, !nr_mod63, nr_zland. nr_bits63. Qed.
+Lemma nr_lor : forall a b, Uint63.of_Z (Z.of_nat (Nat.lor a b)) = PrimInt63.lor (Uint63.of_Z (Z.of_nat a)) (Uint63.of_Z (Z.of_nat b)).
+Proof. intros a b. apply Uint63.to_Z_inj. rewrite Uint63.lor_spec', !Uint63.of_Z_spec, !nr_mod63, nr_zlor. nr_bits63. Qed.
+Lemma nr_lxor : forall a b, Uint63.of_Z (Z.of_nat (Nat.lxor a b)) = PrimInt63.lxor (Uint63.of_Z (Z.of_nat a)) (Uint63.of_Z (Z.of_nat b)).
+Proof. intros a b. apply Uint63.to_Z_inj. rewrite Uint63.lxor_spec', !Uint63.of_Z_spec, !nr_mod63, nr_zlxor. nr_bits63. Qed.
+Lemma nr_zldiff : forall a b, Z.of_nat (Nat.ldiff a b) = Z.ldiff (Z.of_nat a) (Z.of_nat b).
+Proof. intros a b. apply nr_nbits. intros n. rewrite Nat.ldiff_spec, Z.ldiff_spec, !nr_nbit. reflexivity. Qed.
+Lemma nr_ldiff : forall a b, Uint63.of_Z (Z.of_nat (Nat.ldiff a b)) =
+  PrimInt63.land (Uint63.of_Z (Z.of_nat a)) (PrimInt63.lxor (Uint63.of_Z (Z.of_nat b)) (Uint63.of_Z 9223372036854775807)).
+Proof.
+  intros a b. apply Uint63.to_Z_inj. rewrite Uint63.land_spec', Uint63.lxor_spec', !Uint63.of_Z_spec, !nr_mod63, nr_zldiff.
+  change 9223372036854775807%Z with (Z.ones 63).
+  apply Z.bits_inj'; intros i Hi. repeat (rewrite Z.land_spec || rewrite Z.lxor_spec || rewrite Z.ldiff_spec).
+  destruct (Z.ltb_spec i 63); [rewrite !Z.ones_spec_low by lia | rewrite !Z.ones_spec_high by lia]; btauto.
+Qed.
 (** only as written: a function of the shape of [Nat.add] is [Nat.add] up to conversion *)
 Ltac kq_nr :=
   match goal with
   | |- context [Uint63.of_Z (Z.of_nat (S ?a))] => rewrite (nr_S a)
   | |- context [Uint63.of_Z (Z.of_nat (Nat.add ?a ?b))] => rewrite (nr_add a b)
   | |- context [Uint63.of_Z (Z.of_nat (Nat.mul ?a ?b))] => rewrite (nr_mul a b)
+  | |- context [Uint63.of_Z (Z.of_nat (Nat.land ?a ?b))] => rewrite (nr_land a b)
+  | |- context [Uint63.of_Z (Z.of_nat (Nat.lor ?a ?b))] => rewrite (nr_lor a b)
+  | |- context [Uint63.of_Z (Z.of_nat (Nat.lxor ?a ?b))] => rewrite (nr_lxor a b)
+  | |- context [Uint63.of_Z (Z.of_nat (Nat.ldiff ?a ?b))] => rewrite (nr_ldiff a b)
   | |- context [Uint63.of_Z (Z.of_nat O)] => rewrite nr_O
   end.
 (** (step 83) a counter a function gives back, used as a counter: the same counter, where its bound keeps it below [wB] *)
@@ -518,9 +560,45 @@ Ltac nc_match :=
     lazymatch c with ?f _ => let e := fresh "kqe" in destruct c eqn:e end end.
 Ltac kq_nc := fail.
 (** a bound, by the tests of its text: [tac] says what is known of the calls *)
+(** (step 101) a row's bound through its bit operations: [land] at most each operand, [ldiff] the first, [lor] and [lxor] the sum *)
+Lemma nr_zland_ldiff : forall x y, (0 <= x)%Z -> (0 <= y)%Z -> (Z.land x y + Z.ldiff x y = x)%Z /\ (0 <= Z.land x y)%Z /\ (0 <= Z.ldiff x y)%Z.
+Proof.
+  intros x y Hx Hy. split; [| split; [apply Z.land_nonneg; lia | apply Z.ldiff_nonneg; lia]].
+  rewrite <- Z.add_lor_land.
+  replace (Z.land (Z.land x y) (Z.ldiff x y)) with 0%Z.
+  2:{ apply Z.bits_inj'. intros n Hn. rewrite Z.testbit_0_l, Z.land_spec, Z.land_spec, Z.ldiff_spec. destruct (Z.testbit x n), (Z.testbit y n); reflexivity. }
+  rewrite Z.add_0_r. apply Z.bits_inj'. intros n Hn. rewrite Z.lor_spec, Z.land_spec, Z.ldiff_spec. destruct (Z.testbit x n), (Z.testbit y n); reflexivity.
+Qed.
+Lemma nr_zlxor_add : forall x y, (0 <= x)%Z -> (0 <= y)%Z -> (Z.lxor x y + Z.land x y = Z.lor x y)%Z.
+Proof.
+  intros x y Hx Hy. rewrite <- Z.add_lor_land.
+  replace (Z.land (Z.lxor x y) (Z.land x y)) with 0%Z.
+  2:{ apply Z.bits_inj'. intros n Hn. rewrite Z.testbit_0_l, Z.land_spec, Z.lxor_spec, Z.land_spec. destruct (Z.testbit x n), (Z.testbit y n); reflexivity. }
+  rewrite Z.add_0_r. apply Z.bits_inj'. intros n Hn. rewrite !Z.lor_spec, Z.lxor_spec, Z.land_spec. destruct (Z.testbit x n), (Z.testbit y n); reflexivity.
+Qed.
+Lemma nb_land_l : forall a b, (Nat.land a b <= a)%nat.
+Proof. intros a b. apply Nat2Z.inj_le. rewrite nr_zland. destruct (nr_zland_ldiff (Z.of_nat a) (Z.of_nat b) ltac:(lia) ltac:(lia)) as (E & A & B); lia. Qed.
+Lemma nb_land_r : forall a b, (Nat.land a b <= b)%nat.
+Proof. intros a b. rewrite Nat.land_comm. apply nb_land_l. Qed.
+Lemma nb_ldiff : forall a b, (Nat.ldiff a b <= a)%nat.
+Proof. intros a b. apply Nat2Z.inj_le. rewrite nr_zldiff. destruct (nr_zland_ldiff (Z.of_nat a) (Z.of_nat b) ltac:(lia) ltac:(lia)) as (E & A & B); lia. Qed.
+Lemma nb_lor : forall a b, (Nat.lor a b <= a + b)%nat.
+Proof. intros a b. apply Nat2Z.inj_le. rewrite nr_zlor, Nat2Z.inj_add, <- Z.add_lor_land. pose proof (Z.land_nonneg (Z.of_nat a) (Z.of_nat b)). lia. Qed.
+Lemma nb_lxor : forall a b, (Nat.lxor a b <= a + b)%nat.
+Proof.
+  intros a b. pose proof (nb_lor a b) as L. apply Nat2Z.inj_le in L. apply Nat2Z.inj_le. rewrite nr_zlxor. rewrite nr_zlor in L.
+  pose proof (nr_zlxor_add (Z.of_nat a) (Z.of_nat b) ltac:(lia) ltac:(lia)). pose proof (Z.land_nonneg (Z.of_nat a) (Z.of_nat b)). lia.
+Qed.
+Ltac nb_bitf :=
+  repeat match goal with
+  | |- context [Nat.land ?a ?b] => lazymatch goal with _ : (Nat.land a b <= a)%nat |- _ => fail | _ => pose proof (nb_land_l a b); pose proof (nb_land_r a b) end
+  | |- context [Nat.lor ?a ?b] => lazymatch goal with _ : (Nat.lor a b <= a + b)%nat |- _ => fail | _ => pose proof (nb_lor a b) end
+  | |- context [Nat.lxor ?a ?b] => lazymatch goal with _ : (Nat.lxor a b <= a + b)%nat |- _ => fail | _ => pose proof (nb_lxor a b) end
+  | |- context [Nat.ldiff ?a ?b] => lazymatch goal with _ : (Nat.ldiff a b <= a)%nat |- _ => fail | _ => pose proof (nb_ldiff a b) end
+  end.
 Ltac nb_step tac :=
   repeat (cbn beta iota zeta;
-          first [ solve [tac; lia]
+          first [ solve [tac; nb_bitf; lia]
                 | match goal with |- context [match ?c with _ => _ end] =>
                     lazymatch c with context [match _ with _ => _ end] => fail | _ => destruct c end end ]).
 (** a program's lemmas of a function read as a pair, for when what is known of the pair has been used: [kitc.py] sets it *)

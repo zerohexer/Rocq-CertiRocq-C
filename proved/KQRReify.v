@@ -9839,6 +9839,10 @@ Definition nr_nat_add := kn_of <% Nat.add %>.
 Definition nr_add := kn_of <% PrimInt63.add %>.
 Definition nr_mul := kn_of <% PrimInt63.mul %>.
 Definition nr_nat_mul := kn_of <% Nat.mul %>.
+(* (step 101) a row's bit operations *)
+Definition nr_land_i := kn_of <% PrimInt63.land %>.
+Definition nr_lor_i := kn_of <% PrimInt63.lor %>.
+Definition nr_lxor_i := kn_of <% PrimInt63.lxor %>.
 Fixpoint nr_grows (fuel : nat) (t : term) {struct fuel} : bool :=
   match fuel with
   | O => true
@@ -9929,6 +9933,24 @@ Fixpoint nr_tr (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow)
             | _ => None
             end
           else
+            (* (step 101) a bit operation: the machine's where it is the same modulo a word at every counter; shiftr, clearbit are not *)
+            match match nbop_of k, args with
+                  | Some o, [a; b] =>
+                      match go a, go b with
+                      | Some x, Some y =>
+                          match o with
+                          | NLand => Some (Some (tApp (tConst nr_land_i []) [x; y]))
+                          | NLor => Some (Some (tApp (tConst nr_lor_i []) [x; y]))
+                          | NLxor => Some (Some (tApp (tConst nr_lxor_i []) [x; y]))
+                          | NLdiff => Some (Some (tApp (tConst nr_land_i []) [x; tApp (tConst nr_lxor_i []) [y; tInt 9223372036854775807%uint63]]))
+                          | _ => Some None
+                          end
+                      | _, _ => Some None
+                      end
+                  | _, _ => None
+                  end with
+            | Some r => r
+            | None =>
             (* another function giving back a counter *)
             match List.find (fun r : rprow => let '(h0, _, _, _, d0) := r in
                                match h0 with
@@ -9943,7 +9965,7 @@ Fixpoint nr_tr (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow)
                 | None => None
                 end
             | None => None
-            end
+            end end
       | tCase ci p c brs =>
           match opt_all (map (fun br => let k := length (bcontext br) in
                                  option_map (fun b2 => {| bcontext := bcontext br; bbody := b2 |})
@@ -10333,6 +10355,21 @@ Fixpoint nb_go (fuel : nat) (Σ : global_env) (mp : modpath) (tab : list (kernam
             | _ => None
             end
           else
+            (* (step 101) a bit operation: land at most a written operand, else the first; ldiff the first; lor, lxor the sum *)
+            match nbop_of k, args with
+            | Some NLand, [a; b] =>
+                match nb_val b, nb_val a with
+                | Some w, _ => Some (Some (repeat 0%nat n, w), None)
+                | None, Some w => Some (Some (repeat 0%nat n, w), None)
+                | None, None => go d p cnts env a
+                end
+            | Some NLdiff, [a; _] => go d p cnts env a
+            | Some NLor, [a; b] | Some NLxor, [a; b] =>
+                match go d p cnts env a, go d p cnts env b with
+                | Some x, Some y => nb_sum x y
+                | _, _ => None
+                end
+            | _, _ =>
             match List.find (fun e => Kername.eqb (fst e) k) tab with
             | Some e0 =>
                 let ws := fst (snd e0) in
@@ -10344,7 +10381,7 @@ Fixpoint nb_go (fuel : nat) (Σ : global_env) (mp : modpath) (tab : list (kernam
                 | None => None
                 end
             | None => None
-            end
+            end end
       | tCase ci _ c brs =>
           let cv := if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_nat) then
                       match go d p cnts env c with

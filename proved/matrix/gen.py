@@ -3577,6 +3577,25 @@ addA('zo_let', "", 'let c := tw n in ff c a + ff c b',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
 addA('zo_callee', "", 'g2 n a',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (k : nat) (x : int) : int := ff (tw k) x.\n')
+# a row's bit operations: land, lor, lxor, ldiff, the same modulo a word (step 101)
+addA('zr_lor', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'Fixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.lor (cb j m) 5 end.\n')
+addA('zr_lxor', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'Fixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.lxor (cb j m) 5 end.\n')
+addA('zr_ldiff', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'Fixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.ldiff (cb j m) 5 end.\n')
+addA('zr_land_param', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'Fixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.land (cb j m) m end.\n')
+addA('zr_land_two', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'Fixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.land (S (cb j m)) (cb j m + 3) end.\n')
+addA('zr_lor_deep', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'Fixpoint cb (k m : nat) : nat := match k with O => m | S O => 1 | S (S j) => Nat.lor (cb j m) 6 end.\n')
+addA('zr_land_budget', "", 'ff (Nat.land (cb n n) 255) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.land (S (cb j m)) 1023 end.\n')
+addA('zr_lxor_test', "", 'if Nat.leb (cb n n) 3 then a else b',
+     'Fixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.lxor (cb j m) 1 end.\n')
+addA('zr_mixed', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'Fixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.lor (Nat.land (cb j m) 12) (j + 1) end.\n')
 # a memory in a value of any data type; a sixth probe (step 87)
 addA('zf_h_user', "", 'match st1 a s with Ok v t => v + rd 0 a t | Err e => e end',
      'Inductive res := Ok (v : int) (t : mem) | Err (e : int).\nDefinition st1 (i : int) (t : mem) : res := if i =? 0 then Err 1 else Ok i (upd 0 i i t).\n')
