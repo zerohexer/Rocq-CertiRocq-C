@@ -103,7 +103,6 @@ DESIGN_CELLS = {
 # gaps whose refusal message is shared with another category: classified by name
 BY_NAME = {
   "A_rp_poly_measure": "a measure recursion polymorphic in a type",
-  "A_c2_match_cnt": "a counter chosen by a match on a counter",
   "A_q_st_mem_iter": "a memory as a field of a data type",
   "A_q_mem_rec_triple": "a value and a memory given back together by a recursion or a loop, the value not one number",
   "A_q_rec_vtable_rec": "a record of functions or a class's instance given to a recursive function",

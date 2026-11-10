@@ -3531,6 +3531,33 @@ addA('zm_prim_compare_cnt', "", 'ff (match PrimInt63.compare a b with Lt => 1 | 
      'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
 addA('zm_log2_up_sqrt_up', "", 'ff (Nat.log2_up (Nat.sqrt_up n)) a',
      'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+# a counter chosen by a match on a counter (step 99)
+addA('zn_num', "", 'a + Uint63.of_nat (match n with O => 1 | S m => m end)',
+     'From Stdlib Require Import ZArith.\n')
+addA('zn_test', "", 'if Nat.ltb (match n with O => 1 | S m => m end) 3 then a else b',
+     '')
+addA('zn_let', "", 'let c := match n with O => 1%nat | S m => m end in ff c a + ff c b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zn_twice', "", 'ff (match n with O => 0 | S m => m + m end) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zn_nested', "", 'ff (match n with O => 1 | S m => match m with O => 2 | S k => k end end) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zn_of_expr', "", 'ff (match Nat.min n 5 with O => 1 | S m => m end) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zn_of_mvar', "", 'ff (match Uint63.to_nat b with O => 1 | S m => Nat.min m 10 end) a',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zn_call_in', "", 'ff (match n with O => 0 | S m => Nat.log2 m end) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zn_helper_in', "", 'ff (match n with O => 0 | S m => g2 m end) a',
+     'Definition g2 (k : nat) : nat := Nat.add k 1.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zn_callee', "", 'g3 (match n with O => 1 | S m => m end) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g3 (k : nat) (x : int) : int := ff k x + ff k 1.\n')
+addA('zn_rec', "", 'lp n a',
+     'Fixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (x + Uint63.of_nat (match j with O => 1 | S i => i end)) end.\n')
+addA('zn_rec_arg', "", 'lp n a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (ff (match j with O => 1 | S i => i end) x) end.\n')
+addA('zn_pred_like', "", 'ff (match n with O => 0 | S m => m end) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
 # a memory in a value of any data type; a sixth probe (step 87)
 addA('zf_h_user', "", 'match st1 a s with Ok v t => v + rd 0 a t | Err e => e end',
      'Inductive res := Ok (v : int) (t : mem) | Err (e : int).\nDefinition st1 (i : int) (t : mem) : res := if i =? 0 then Err 1 else Ok i (upd 0 i i t).\n')

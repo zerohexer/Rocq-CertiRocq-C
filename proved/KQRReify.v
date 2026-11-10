@@ -6198,6 +6198,79 @@ Fixpoint y_inner_has (fuel : nat) (t : term) {struct fuel} : bool :=
       | _ => false
       end
   end.
+(** (step 99) a counter chosen by a match on a counter, given as an argument: [if Nat.eqb c 0 then x else y], [y] with the predecessor
+    [Nat.pred c] for the second branch's variable.  Not a conversion: [y_all]'s equation, which [kitc.py] proves, covers it.  Not where a
+    branch applies a variable (a recursion's own call stays on the variable it is structural on), and only where the match gives a counter *)
+Fixpoint calls_rel (fuel : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => true
+  | S fuel =>
+      match t with
+      | tApp (tRel _) _ => true
+      | tApp f args => if calls_rel fuel f then true else existsb (calls_rel fuel) args
+      | tLambda _ _ b => calls_rel fuel b
+      | tLetIn _ v _ b => if calls_rel fuel v then true else calls_rel fuel b
+      | tCase _ _ c brs => if calls_rel fuel c then true else existsb (fun br => calls_rel fuel (bbody br)) brs
+      | tFix _ _ => true
+      | _ => false
+      end
+  end.
+Definition ym_tmpl : term := <% fun (n x y : nat) => if Nat.eqb n 0 then x else y %>.
+Definition ym_nat (t : term) : bool := match t with tInd i [] => Kername.eqb (inductive_mind i) (inductive_mind ind_nat) | _ => false end.
+Definition ym_ok (ci : case_info) (p : predicate term) (b0 b1 : branch term) : bool :=
+  Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_nat) && Nat.eqb (length (bcontext b0)) 0
+  && Nat.eqb (length (bcontext b1)) 1 && Nat.eqb (length (pcontext p)) 1 && ym_nat (preturn p)
+  && negb (calls_rel 1000 (bbody b0)) && negb (calls_rel 1000 (bbody b1)).
+Fixpoint y_natm (fuel : nat) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := y_natm fuel in
+      let arg := fun a =>
+        match a with
+        | tCase ci p c [b0; b1] =>
+            if ym_ok ci p b0 b1
+            then pf_beta ym_tmpl [go c; y_natm_c fuel (bbody b0); y_natm_c fuel (subst10 (tApp (tConst kn_nat_pred []) [c]) (bbody b1))]
+            else go a
+        | _ => go a
+        end in
+      match t with
+      | tApp f args => tApp (go f) (map arg args)
+      | tLambda na a b => tLambda na a (go b)
+      | tLetIn na v a b => tLetIn na (if ym_nat a then y_natm_c fuel v else go v) a (go b)
+      | tCase ci p c brs => tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := go (bbody br) |}) brs)
+      | tFix mfix k => tFix (map (fun d => {| dname := dname d; dtype := dtype d; rarg := rarg d; dbody := go (dbody d) |}) mfix) k
+      | _ => t
+      end
+  end
+with y_natm_c (fuel : nat) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      match t with
+      | tCase ci p c [b0; b1] =>
+          if ym_ok ci p b0 b1
+          then pf_beta ym_tmpl [y_natm fuel c; y_natm_c fuel (bbody b0); y_natm_c fuel (subst10 (tApp (tConst kn_nat_pred []) [c]) (bbody b1))]
+          else y_natm fuel t
+      | _ => y_natm fuel t
+      end
+  end.
+(* whether [y_natm] rewrites something: its condition, by a scan (F81) *)
+Fixpoint y_natm_has (fuel : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      let go := y_natm_has fuel in
+      let argh := fun a => match a with tCase ci p c [b0; b1] => if ym_ok ci p b0 b1 then true else go a | _ => go a end in
+      match t with
+      | tApp f args => if go f then true else existsb argh args
+      | tLambda _ _ b => go b
+      | tLetIn _ v a b => if (if ym_nat a then argh v else go v) then true else go b
+      | tCase _ _ c brs => if go c then true else existsb (fun br => go (bbody br)) brs
+      | tFix mfix _ => existsb (fun d => go (dbody d)) mfix
+      | _ => false
+      end
+  end.
 (** a match on a counter whose constructor is written: its branch, Rocq's own iota: the guard of a fixpoint does not see through it *)
 Fixpoint y_rep (fuel c d : nat) (v t : term) {struct fuel} : term :=
   match fuel with
@@ -10766,7 +10839,10 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
               (* (step 98) a match on a choice of constructors in any place, floated *)
               let yi := y_inner_has 1000 b in
               let b := if yi then y_inner 1000 b else b in
-              let p0 := if p00 then true else if yi then true else r0 in
+              (* (step 99) a counter chosen by a match on a counter *)
+              let yn := y_natm_has 1000 b in
+              let b := if yn then y_natm 1000 b else b in
+              let p0 := if p00 then true else if yi then true else if yn then true else r0 in
               (* (step 68) a function chosen by a match, applied *)
               let f0 := if p0 then false else fc_has 100000 b in
               let S1 := if p00 then pm_add S1 else S1 in
