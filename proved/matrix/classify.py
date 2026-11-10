@@ -13,6 +13,9 @@ import re, sys, collections
 # differs only in the cause.  The cells once listed here (option, sum, a list cell, a function in a pair, a function returned,
 # a dead memory let) build and take apart their value in place, so they are gaps.
 DESIGN_CELLS = {
+  # a counter a function gives back plus a number past a word less one: past a word (Rocq-C-solution.md §0.5, second reason); control:
+  # A_zv_add_big, plus 100000 (step 105)
+  "A_zv_add_word",
   # a counter a function gives back with no bound (2^n) where its whole value counts: a land of two of them, mod 10, its bit 63: a number past a
   # word (Rocq-C-solution.md §0.5, second reason); controls: A_zu_land, A_zu_mod_pow2, A_zu_testbit, where its value modulo a word is enough (step 104)
   "A_zu_land_two", "A_zu_mod_ten", "A_zu_testbit_63",
@@ -191,9 +194,6 @@ BY_NAME = {
   "A_zc_r_nested": "a record of functions inside a record, given to a recursion",
   "A_zd_r_default": "the memory before a call that gave nothing, used after it",
   "A_ze_own_call_12": "tests that cannot be moves in one expression, an own call in each: what follows written in each arm",
-  "A_zt_sum_setbit_big": "a counter a function gives back in a sum with setbit by 13 or more: its constant 2^k from 5000 on, not reckoned yet (12.A)",
-  "A_zu_big_direct": "a counter a function gives back whose bound's constant is 5000 or more: the bound is not kept, its statement would carry the constant as a chain of successors (12.A)",
-  "A_zu_mid_direct": "a counter a function gives back whose bound's constant is 5000 or more: the bound is not kept, its statement would carry the constant as a chain of successors (12.A)",
   "A_zh_row_shiftr": "a function giving back a counter built by shiftr: not the same modulo a word, it wants the row's bound (step 83)",
   "A_zh_row_testbit_own": "a test on what a function giving back a counter gives back, in its own recursion: it wants the row's bound or the test on the machine's number",
   "A_zf_r_three": "three constructors or more holding a memory, through a recursion: a sum in a sum",

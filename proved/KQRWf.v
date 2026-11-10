@@ -523,9 +523,44 @@ Proof.
   destruct (Z.ltb_spec i 63); [rewrite !Z.ones_spec_low by lia | rewrite !Z.ones_spec_high by lia]; btauto.
 Qed.
 (** only as written: a function of the shape of [Nat.add] is [Nat.add] up to conversion *)
+(** (step 105) a number written from 5000 on ([Nat.of_num_uint] of its digits), its value in [Z]: step 94's [nu_z] of [KQR.v], which this
+    file comes before, and its proof, with no axiom; [lia] given it, where the number in unary would be the number's size *)
+Fixpoint nr_du_z (d : Decimal.uint) (acc : Z) : Z :=
+  match d with
+  | Decimal.Nil => acc | Decimal.D0 d => nr_du_z d (10 * acc) | Decimal.D1 d => nr_du_z d (10 * acc + 1) | Decimal.D2 d => nr_du_z d (10 * acc + 2)
+  | Decimal.D3 d => nr_du_z d (10 * acc + 3) | Decimal.D4 d => nr_du_z d (10 * acc + 4) | Decimal.D5 d => nr_du_z d (10 * acc + 5)
+  | Decimal.D6 d => nr_du_z d (10 * acc + 6) | Decimal.D7 d => nr_du_z d (10 * acc + 7) | Decimal.D8 d => nr_du_z d (10 * acc + 8)
+  | Decimal.D9 d => nr_du_z d (10 * acc + 9)
+  end%Z.
+Fixpoint nr_hu_z (d : Hexadecimal.uint) (acc : Z) : Z :=
+  match d with
+  | Hexadecimal.Nil => acc | Hexadecimal.D0 d => nr_hu_z d (16 * acc) | Hexadecimal.D1 d => nr_hu_z d (16 * acc + 1)
+  | Hexadecimal.D2 d => nr_hu_z d (16 * acc + 2) | Hexadecimal.D3 d => nr_hu_z d (16 * acc + 3) | Hexadecimal.D4 d => nr_hu_z d (16 * acc + 4)
+  | Hexadecimal.D5 d => nr_hu_z d (16 * acc + 5) | Hexadecimal.D6 d => nr_hu_z d (16 * acc + 6) | Hexadecimal.D7 d => nr_hu_z d (16 * acc + 7)
+  | Hexadecimal.D8 d => nr_hu_z d (16 * acc + 8) | Hexadecimal.D9 d => nr_hu_z d (16 * acc + 9) | Hexadecimal.Da d => nr_hu_z d (16 * acc + 10)
+  | Hexadecimal.Db d => nr_hu_z d (16 * acc + 11) | Hexadecimal.Dc d => nr_hu_z d (16 * acc + 12) | Hexadecimal.Dd d => nr_hu_z d (16 * acc + 13)
+  | Hexadecimal.De d => nr_hu_z d (16 * acc + 14) | Hexadecimal.Df d => nr_hu_z d (16 * acc + 15)
+  end%Z.
+Definition nr_nu_z (u : Number.uint) : Z := match u with Number.UIntDecimal d => nr_du_z d 0 | Number.UIntHexadecimal d => nr_hu_z d 0 end.
+Lemma nr_du_z_ok : forall d acc, Z.of_nat (Nat.of_uint_acc d acc) = nr_du_z d (Z.of_nat acc).
+Proof. induction d; intros acc; cbn [Nat.of_uint_acc nr_du_z]; try rewrite IHd; f_equal; rewrite ?Nat.tail_mul_spec; lia. Qed.
+Lemma nr_hu_z_ok : forall d acc, Z.of_nat (Nat.of_hex_uint_acc d acc) = nr_hu_z d (Z.of_nat acc).
+Proof. induction d; intros acc; cbn [Nat.of_hex_uint_acc nr_hu_z]; try rewrite IHd; f_equal; rewrite ?Nat.tail_mul_spec; lia. Qed.
+Lemma nr_nu_z_ok : forall u, Z.of_nat (Nat.of_num_uint u) = nr_nu_z u.
+Proof. intros [d|d]; cbn [Nat.of_num_uint nr_nu_z Nat.of_uint Nat.of_hex_uint]; [apply (nr_du_z_ok d 0) | apply (nr_hu_z_ok d 0)]. Qed.
+Ltac nr_numf :=
+  repeat match goal with
+  | |- context [Nat.of_num_uint ?u] =>
+      lazymatch goal with _ : Z.of_nat (Nat.of_num_uint u) = _ |- _ => fail
+      | _ => let v := eval vm_compute in (nr_nu_z u) in pose proof (nr_nu_z_ok u : Z.of_nat (Nat.of_num_uint u) = v) end
+  end.
+Lemma nr_ofnum : forall u, Uint63.of_Z (Z.of_nat (Nat.of_num_uint u)) = Uint63.of_Z (nr_nu_z u).
+Proof. intros u. rewrite nr_nu_z_ok. reflexivity. Qed.
 Ltac nr_numeral a := lazymatch a with O => idtac | S ?b => nr_numeral b end.
 Ltac kq_nr :=
   match goal with
+  | |- context [Uint63.of_Z (Z.of_nat (Nat.of_num_uint ?u))] =>
+      rewrite (nr_ofnum u); let w := eval vm_compute in (Uint63.of_Z (nr_nu_z u)) in change (Uint63.of_Z (nr_nu_z u)) with w
   | |- context [Uint63.of_Z (Z.of_nat (S ?a))] =>
       nr_numeral a; let v := eval vm_compute in (Uint63.of_Z (Z.of_nat (S a))) in change (Uint63.of_Z (Z.of_nat (S a))) with v
   | |- context [Uint63.of_Z (Z.of_nat (S ?a))] => rewrite (nr_S a)
@@ -644,6 +679,9 @@ Proof.
 Qed.
 Lemma nc_b2n_le : forall b, (Nat.b2n b <= 1)%nat.
 Proof. intros [|]; cbn; lia. Qed.
+(** (step 105) [setbit]'s bound in [Z], its [2^k] not a unary number *)
+Lemma nc_setbit_lez : forall a k, (Z.of_nat (Nat.setbit a k) <= Z.of_nat a + 2 ^ Z.of_nat k)%Z.
+Proof. intros a k. pose proof (nc_setbit_le a k) as H. apply Nat2Z.inj_le in H. rewrite Nat2Z.inj_add, Nat2Z.inj_pow in H. exact H. Qed.
 Ltac nc_opf :=
   repeat match goal with
   | |- context [Nat.log2 ?a] => lazymatch goal with _ : (Nat.log2 a <= a)%nat |- _ => fail | _ => pose proof (nc_log2_le a) end
@@ -656,11 +694,11 @@ Ltac nc_opf :=
   | |- context [Nat.div2 ?a] => lazymatch goal with _ : (Nat.div2 a <= a)%nat |- _ => fail | _ => pose proof (nc_div2_le a) end
   | |- context [Nat.clearbit ?a ?k] => lazymatch goal with _ : (Nat.clearbit a k <= a)%nat |- _ => fail | _ => pose proof (nc_clearbit_le a k) end
   | |- context [Nat.setbit ?a ?k] =>
-      lazymatch goal with _ : (Nat.setbit a k <= _)%nat |- _ => fail
-      | _ => let v := eval vm_compute in (Nat.pow 2 k) in pose proof (nc_setbit_le a k : (Nat.setbit a k <= a + v)%nat) end
+      lazymatch goal with _ : (Z.of_nat (Nat.setbit a k) <= _)%Z |- _ => fail
+      | _ => let v := eval vm_compute in (2 ^ Z.of_nat k)%Z in pose proof (nc_setbit_lez a k : (Z.of_nat (Nat.setbit a k) <= Z.of_nat a + v)%Z) end
   | |- context [Nat.double ?a] => lazymatch goal with _ : Nat.double a = _ |- _ => fail | _ => pose proof (Nat.double_twice a) end
   end.
-Ltac nc_side ::= kq_bd; nc_shl; nb_bitf; nc_opf; lia.
+Ltac nc_side ::= kq_bd; nc_shl; nb_bitf; nc_opf; nr_numf; lia.
 (** (step 104) where only the value modulo a word of a counter is used ([land] with a number below a word, [testbit] below 63, [even], [odd],
     [mod] by a divisor of [2^63]): the same at the row's number, whatever the counter is, so no bound of it is asked *)
 Lemma nc_low_of : forall x, Uint63.of_Z (Z.of_nat (Z.to_nat (Uint63.to_Z (Uint63.of_Z (Z.of_nat x))))) = Uint63.of_Z (Z.of_nat x).
@@ -709,7 +747,7 @@ Ltac nc_step rw ::=
   end.
 Ltac nb_step tac :=
   repeat (cbn beta iota zeta;
-          first [ solve [tac; nb_bitf; lia]
+          first [ solve [tac; nb_bitf; nr_numf; lia]
                 | match goal with |- context [match ?c with _ => _ end] =>
                     lazymatch c with context [match _ with _ => _ end] => fail | _ => destruct c end end ]).
 (** a program's lemmas of a function read as a pair, for when what is known of the pair has been used: [kitc.py] sets it *)

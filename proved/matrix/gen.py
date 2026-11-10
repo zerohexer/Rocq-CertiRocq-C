@@ -3577,6 +3577,23 @@ addA('zo_let', "", 'let c := tw n in ff c a + ff c b',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
 addA('zo_callee', "", 'g2 n a',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (k : nat) (x : int) : int := ff (tw k) x.\n')
+# a bound's constant and a written number from 5000 on, where a counter given back is used (step 105)
+addA('zv_add_big', "", 'ff (cnt n a s + 100000) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zv_add_word', "", 'ff (cnt n a s + 9223372036854775807) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zv_two_big', "", 'ff (cnt n a s + cnt n b s + 2000000) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zv_three_big', "", 'ff (cbm n n + cnt n a s) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint cbm (k m : nat) : nat := match k with O => m | S j => Nat.mul (Nat.land (S (cbm j m)) 4095) 300 end.\n')
+addA('zv_let_big', "", 'let c := cbm n n in ff c a + ff c b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint cbm (k m : nat) : nat := match k with O => m | S j => Nat.mul (Nat.land (S (cbm j m)) 4095) 300 end.\n')
+addA('zv_test_big', "", 'if Nat.leb (cbm n n) 5 then a else b',
+     'Fixpoint cbm (k m : nat) : nat := match k with O => m | S j => Nat.mul (Nat.land (S (cbm j m)) 4095) 300 end.\n')
+addA('zv_row_numlit', "", 'ff (cbl n n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint cbl (k m : nat) : nat := match k with O => m | S j => Nat.land (S (cbl j m)) 100000 end.\n')
+addA('zv_sum_numlit_row', "", 'ff (cbl n n + 3) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint cbl (k m : nat) : nat := match k with O => m | S j => Nat.land (S (cbl j m)) 100000 end.\n')
 # a counter a function gives back, used where its value modulo a word is enough (step 104)
 addA('zu_land', "", 'ff (Nat.land (tw n) 255) b',
      'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
