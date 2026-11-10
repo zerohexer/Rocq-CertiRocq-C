@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3813 of 3953, 73 gaps, 66 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3827 of 3966, 72 gaps, 66 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -5750,6 +5750,19 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: a program read before, byte-identical.
 - *Cells*: `A_zn_*`: such a match as a number, in a test, a let, a branch's counter used twice, nested, on an expression, on a counter of a machine number, with a call and a helper in a branch, given to a callee, in a recursion's accumulator and in its counter's argument.  `A_c2_match_cnt` read.
 
+**Step 99, a counter chosen by a match on a counter — the result (2026-11-10).**  Built as designed:
+- *The reader* (`KQRReify.v`): `calls_rel`, `ym_tmpl` (the test and its branches as a quoted `if`, so that no case of the reader's own is built), `ym_nat`, `ym_ok`, `y_natm` and `y_natm_c` (a term in a counter's place: an argument, a branch of such a match), `y_natm_has`; in `y_all` after step 98's floating.  A `let` of a counter takes its value in a counter's place.
+- *Found by the cells*: a branch's own match on a counter (`A_zn_nested`) and a `let` of one (`A_zn_let`) were not in a counter's place in the first version: the branches and a counter's `let` are now.  The equations of a recursion's own body (`A_zn_rec`, `A_zn_rec_arg`) close with step 98's dead-branch step in `own_step`.
+- *The C*: the 99 programs byte-identical.
+- *Cells*: 13 more, all proved: such a match as a number, in a test, a let, a branch's counter used twice, nested, on an expression, on a counter of a machine number, with a call and a helper in a branch, given to a callee, in a recursion's accumulator and in its counter's argument.  One gap read: `A_c2_match_cnt`.
+- The C: the 99 programs byte-identical.  The construct table (on `5bf8172`): **3827 of 3966 through the verified compiler**, 66
+  by design, 72 gaps, 1 not Rocq (was 3813 of 3953: the 13 new cells read; 1 gap read; no cell lost).  The gate on `5bf8172`, the
+  walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding; the same C: undefined behaviour trapped 63 / 63,
+  `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels and `grow` (22 / 22 / 24 / 19 / 19 / 8
+  s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems each within the list; `check_trust.py`:
+  `trust unchanged`.  Next: a function giving back a counter whose recursion goes more than one step down (step 100), built and
+  its cells read locally.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5932,11 +5945,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `a4ac67c` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `5bf8172` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 99's design -- a counter chosen by a match on a counter |
+| (this commit) | §12.V: step 99 (a counter chosen by a match on a counter: the construct table 3827 of 3966, 66 by design, 72 gaps), the gate |
+| `5bf8172` | `proved/KQRReify.v` + matrix step 99: a counter chosen by a match on a counter, in a counter's place, the test with 0 and the predecessor |
+| `a954405` | §12.V: step 99's design -- a counter chosen by a match on a counter |
 | `8ef1e56` | §12.V: step 98 (a match on a comparison in any place, `log2_up`, `sqrt_up`: the construct table 3813 of 3953, 66 by design, 73 gaps), the C and its assembly, the gate; F81, F82 |
 | `a4ac67c` | `proved/KQRReify.v` + `KQRWf.v` + matrix step 98: a match on a comparison in any place: a library definition calling `Nat.compare` written out first, a match on a choice of constructors floated anywhere, a dead branch closed in the equations |
 | `a100b49` | §12.V: step 98's design -- a match on a comparison in any place: log2_up, sqrt_up, Nat.compare in a counter |
