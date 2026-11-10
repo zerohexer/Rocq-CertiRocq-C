@@ -5781,6 +5781,14 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   `trust unchanged`.  Next: the other places of a counter in a value (a local fix giving back one, a closed term computed), from
   the notes of step 100.
 
+**Step 101, a function giving back a counter built by a bit operation (§3.5, §12.A, step 92's follow-up; the gap `A_zh_row_land`) — the design (2026-11-10).**  `cb (S j) = Nat.land (cb j m) 7`: a counter given back is read as a row giving its number (step 82), each operation of the counter the machine's, proved by a lemma (`nr_add`, `nr_mul`); the bit operations had none, and a row's bound (step 83) had no rule for them.
+- *The row* (`KQRReify.v`, `nr_tr`): `land`, `lor`, `lxor` the machine's, `ldiff` the `land` of the first and the `lxor` of the second with the 63 ones: each the same modulo a word at every counter, since their low 63 bits are those of the operands' low 63 bits, so no bound is asked.  `shiftr`, `clearbit` are not the same modulo a word: not read in a row.
+- *What is proved* (`KQRWf.v`): `nr_land`, `nr_lor`, `nr_lxor`, `nr_ldiff`, from Rocq's axioms of its machine numbers alone, by bits; `kq_nr` rewrites by them.
+- *The bound* (`nb_go`, `nb_step`): `land` at most a written operand, else its first; `ldiff` its first; `lor`, `lxor` the sum; `nb_bitf` gives `lia` those facts (`nb_land_l`, `nb_land_r`, `nb_ldiff`, `nb_lor`, `nb_lxor`).
+- *Left, with cells*: a test on a row's own result (`A_zh_row_testbit_own`) and a row's `shiftr` (`A_zh_row_shiftr`), which want the row's bound; a counter a function gives back used inside a bit operation elsewhere (`A_zr_land_budget`): step 83's reading of such a counter takes `S`, `+`, `*`, a §12.A follow-up.
+- *The C*: a program read before, byte-identical.
+- *Cells*: `A_zr_*`: a row's `lor`, `lxor`, `ldiff`, a `land` with a parameter, of two own results, two steps down, mixed, its result in a test and as a budget.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5967,7 +5975,8 @@ Pushed to the public repository up to `1de1259` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 100 (a function giving back a counter whose recursion goes more than one step down: the construct table 3838 of 3975, 66 by design, 70 gaps), the gate |
+| (this commit) | §12.V: step 101's design -- a function giving back a counter built by a bit operation |
+| `2c48ca3` | §12.V: step 100 (a function giving back a counter whose recursion goes more than one step down: the construct table 3838 of 3975, 66 by design, 70 gaps), the gate |
 | `1de1259` | `proved/KQRReify.v` + `kitc.py` + matrix step 100: a function giving back a counter whose recursion goes more than one step down: the record of such recursions of the environment the reading used |
 | `c6d3894` | §12.V: step 100's design -- a function giving back a counter whose recursion goes more than one step down |
 | `4a07678` | §12.V: step 99 (a counter chosen by a match on a counter: the construct table 3827 of 3966, 66 by design, 72 gaps), the gate |
