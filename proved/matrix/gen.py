@@ -3558,6 +3558,25 @@ addA('zn_rec_arg', "", 'lp n a',
      'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (ff (match j with O => 1 | S i => i end) x) end.\n')
 addA('zn_pred_like', "", 'ff (match n with O => 0 | S m => m end) a',
      'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+# a function giving back a counter whose recursion goes more than one step down (step 100)
+addA('zo_budget', "", 'ff (tw n) a',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zo_three', "", 'Uint63.of_nat (t3 n) + a',
+     'Fixpoint t3 (k : nat) : nat := match k with O => 1 | S O => 2 | S (S O) => 3 | S (S (S m)) => S (t3 m) end.\n')
+addA('zo_three_test', "", 'if Nat.leb (t3 n) 3 then a else b',
+     'Fixpoint t3 (k : nat) : nat := match k with O => 1 | S O => 2 | S (S O) => 3 | S (S (S m)) => S (t3 m) end.\n')
+addA('zo_acc', "", 'Uint63.of_nat (ta n 0)',
+     'Fixpoint ta (k : nat) (c : nat) : nat := match k with O => c | S O => S c | S (S m) => ta m (S c) end.\n')
+addA('zo_acc_budget', "", 'ff (ta n 0) a',
+     'Fixpoint ta (k : nat) (c : nat) : nat := match k with O => c | S O => S c | S (S m) => ta m (S c) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zo_mem', "", 'Uint63.of_nat (tm n s)',
+     'Fixpoint tm (k : nat) (t : mem) : nat := match k with O => O | S O => 1 | S (S m) => if 0 <? rd 0 0 t then S (tm m t) else tm m t end.\n')
+addA('zo_two', "", 'Uint63.of_nat (tw n) + Uint63.of_nat (t3 n)',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint t3 (k : nat) : nat := match k with O => 1 | S O => 2 | S (S O) => 3 | S (S (S m)) => S (t3 m) end.\n')
+addA('zo_let', "", 'let c := tw n in ff c a + ff c b',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zo_callee', "", 'g2 n a',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (k : nat) (x : int) : int := ff (tw k) x.\n')
 # a memory in a value of any data type; a sixth probe (step 87)
 addA('zf_h_user', "", 'match st1 a s with Ok v t => v + rd 0 a t | Err e => e end',
      'Inductive res := Ok (v : int) (t : mem) | Err (e : int).\nDefinition st1 (i : int) (t : mem) : res := if i =? 0 then Err 1 else Ok i (upd 0 i i t).\n')

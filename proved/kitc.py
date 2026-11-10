@@ -488,7 +488,7 @@ def reflect(name, entry, prog, no_proof):
     shared = shared_term(prog)
     f0 = os.path.join(GEN, f"{name}_r.v")
     open(f0, "w").write(HDR + "From KQC Require KQR KQRReify.\n" + prog
-        + f"\nDefinition {name}_res := ltac:(let k q := (let r := eval vm_compute in (let r0 := KQRReify.reify_prog2 q in (r0, KQRReify.reify_why q, KQRReify.rec_info2 q r0, KQRReify.entry_perm q, KQRReify.fix1_info q, KQRReify.pf_info q)) in exact r) in\n"
+        + f"\nDefinition {name}_res := ltac:(let k q := (let r := eval vm_compute in (let r0 := KQRReify.reify_prog2 q in (r0, KQRReify.reify_why q, KQRReify.rec_info2 q r0, KQRReify.entry_perm q, KQRReify.fix1_info q, KQRReify.pf_info_r q r0)) in exact r) in\n"
         + f"  run_template_program (tmQuoteRecTransp {entry} false)\n"
         + "  (fun q0 => let b := eval vm_compute in (KQRReify.has_function q0) in\n"
         + "   match b with\n"

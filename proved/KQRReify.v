@@ -11024,6 +11024,29 @@ Definition jn_try (q : program) (r : list (kername * sig * fbody) * list (string
       else Some r
   | _ => Some r
   end.
+Fixpoint strip_pre (pre s : string) : option string :=
+  match pre, s with
+  | String.EmptyString, _ => Some s
+  | String.String c pre', String.String d s' => if Byte.eqb c d then strip_pre pre' s' else None
+  | _, _ => None
+  end.
+(** (step 100) what [pf_info] records, of the environment the reading used: the program's own where the copies it names were made
+    (the stems' [__wg]), else [y_all]'s, where a function giving back a counter is read as its row and the copies are the row's *)
+Definition pf_info_r (p : program) (r : option (list (kername * sig * fbody) * list (string * term))) :
+    list (string * string * nat * string * string * string * nat) :=
+  let pi := pf_info p in
+  match r, p with
+  | Some (_, mts), (Σ, tConst root u) =>
+      let made := fun (n : string) => existsb (fun m => String.eqb (fst m) n) mts in
+      if forallb (fun e => let '(_, _, _, stem, _, _, ph) := e in if Nat.eqb ph 0 then true else made (stem ^ "__wg")) pi then pi
+      else match y_all Σ (fst root) root with
+           | (Σy, true) =>
+               (* a row is a definition the reader's file makes, named by its short name there *)
+               map (fun e => let '(f, a, n, st, t, sp, ph) := e in (match strip_pre "kqcopy."%bs f with Some r => r | None => f end, a, n, st, t, sp, ph))
+                   (pf_info (Σy, tConst root u))
+           | _ => pi end
+  | _, _ => pi
+  end.
 Definition reify_prog2 (p : program) : option (list (kername * sig * fbody) * list (string * term)) :=
   match reify_prog2m false p with
   | Some r => jn_try p r
