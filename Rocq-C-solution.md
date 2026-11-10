@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3929 of 4077, 72 gaps, 75 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3939 of 4085, 69 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1710,7 +1710,8 @@ constructs of `S`.  Then the pins of §0.5's boundaries, each with its control (
 the gate (examples, corpus, kernels if the walk changed) passes.
 - ~~*A counter a function gives back, used as a counter inside a bit operation*~~ (found at step 101) — **done, step 102**: the cause was
   the function's bound not kept (its constant counted with its multiples), not step 83's reading (F83); `A_zr_land_budget` proved.
-- *A bound's constant from 5000 on* (found at step 102): `nb_all` keeps a function's bound only where its constant is below 5000, since
+- ~~*A bound's constant from 5000 on*~~ (found at step 102) — **done, step 105**: the constant in `Z`, counted with the multiples where
+  the counter is used.  `nb_all` kept a function's bound only where its constant is below 5000, since
   the bound's statement carries it as a chain of successors (76500: 18 s and 2.4 GB to check); the constant in `Z`, in the statement
   and in the reader, and counted with the multiples against the counters' bounds where the counter is used (step 83's `nc_c` counts
   multiples only).  Accepted when such a bound is proved and used where the counter is used as itself, which needs it (`ff (cbm n n) a`
@@ -5905,6 +5906,20 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: a program read before, byte-identical.
 - *Cells*: `A_zv_*`, 8: a written number from 5000 on in a site and in a row's text, alone and in a sum; two counters with a constant of 2000000; three; a `let`; a test; one past a word.  Step 104's `A_zu_big_direct`, `A_zu_mid_direct` and step 103's `A_zt_sum_setbit_big`, gaps of this follow-up, are read.
 
+**Step 105, a bound's constant and a written number from 5000 on, where a counter given back is used — the result (2026-11-10).**  Built as designed:
+- *The reader* (`KQRReify.v`): `nbf`'s constant in `Z`; `nb_valz`, `nb_cst`, `pos_tm`, `z_tm`; `nc_pmin`, `nc_padd`, `nc_opd` (where step 103's `nc_opc` was), `nc_cd`, `nc_c` its first part, `nc_needo`, `nc_fits`, `nc_lo`; `nv` with pairs; `nr_tr` reads a written number from 5000 on.
+- *What is proved* (`KQRWf.v`): `nr_du_z`, `nr_hu_z`, `nr_nu_z`, `nr_du_z_ok`, `nr_hu_z_ok`, `nr_nu_z_ok`, `nr_ofnum`, `nr_numf`; `kq_nr`'s rule for such a number; `nc_setbit_lez`.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62, in clean copies of both trees; step 104's files / these; the machine under a desktop's load, as at step 104): `HWP_kernel` 3.18 / 3.15 s, `HWP_own` 2.14 / 2.13, `HWP_irqnow` 1.80 / 1.79 — the same.
+- *The C*: the 99 programs byte-identical.
+- *Cells*: 8 more: 7 proved; by design, with its control: `A_zv_add_word` (`A_zv_add_big`).  Three gaps read: `A_zu_big_direct`, `A_zu_mid_direct`, `A_zt_sum_setbit_big`.
+- The C: the 99 programs byte-identical.  The construct table (on `fa1247e`): **3939 of 4085 through the verified compiler**, 76
+  by design, 69 gaps, 1 not Rocq (was 3929 of 4077: 7 of the 8 new cells read, 1 by design; 3 gaps read; no cell lost).  The gate
+  on `fa1247e`, the walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding; the same C: undefined
+  behaviour trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels and `grow`
+  (22 / 22 / 25 / 19 / 19 / 9 s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems each within
+  the list; `check_trust.py`: `trust unchanged`.  Next: step 106, a value of a type holding a counter built and taken apart in the
+  text, then step 107, the laws of a data type with many constructors in time.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6087,11 +6102,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `ba331f2` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `fa1247e` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 105's design -- a bound's constant and a written number from 5000 on, where a counter given back is used |
+| (this commit) | §12.V: step 105 (a bound's constant and a written number from 5000 on: the construct table 3939 of 4085, 76 by design, 69 gaps), the gate |
+| `fa1247e` | `proved/KQRReify.v` + `KQRWf.v` + matrix step 105: a bound's constant and a written number from 5000 on, where a counter given back is used: in Z, in the statement and the reader, counted with the multiples at the site |
+| `2237437` | §12.V: step 105's design -- a bound's constant and a written number from 5000 on, where a counter given back is used |
 | `72b3ee8` | §12.V: step 104 (a counter a function gives back, used where its value modulo a word is enough: the construct table 3929 of 4077, 75 by design, 72 gaps), the gate |
 | `ba331f2` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + matrix step 104: a counter a function gives back, used where its value modulo a word is enough: the operand the row's number, no bound asked; land with a number below a word, testbit, even, odd, mod by a power of two, a let of one |
 | `244a100` | §12.V: step 104's design -- a counter a function gives back, used where its value modulo a word is enough |
