@@ -5920,6 +5920,13 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   the list; `check_trust.py`: `trust unchanged`.  Next: step 106, a value of a type holding a counter built and taken apart in the
   text, then step 107, the laws of a data type with many constructors in time.
 
+**Step 106, a value of a type holding a counter, built and taken apart in the text (§3.5, §12.A; the gaps `A_q_nat_field`, `A_fx_nat_field`) — the design (2026-11-10).**  `Uint63.of_nat (ct (bump (mkcn n a)))`, `Record cn := mkcn { ct : nat; vl : int }`, `bump` a helper giving back a `cn`: the value is built and taken apart in the text, and nothing of it needs to exist at run time (§0.5), but a record is its fields only where they are numbers (D15), and a counter as a field of a value is read nowhere yet.  Where the value is built in the text, its counter is the field's expression: taken there.
+- *Where* (`nf_red`): a match on a type holding a counter (a constructor with a counter field, `nf_ind`, or a pair or an option at `nat`), a projection of the program's on such a type, `fst`, `snd` of a pair at `nat`, whose value becomes a constructor once the program's helpers on the way are written out (`um_red`): reduced there.  A type with no counter field, as before, so a program read before keeps its C.
+- *What is proved*: nothing new; the program's equation with its reading is by conversion (step 68's `own_step`).
+- *Left*: a value holding a counter given back by a recursion, passed as a parameter, or kept in a memory: the gaps `A_z_o_*`, `A_q_st_mem_iter`, `A_fx_nat_pair`, as before.
+- *The C*: a program read before, byte-identical.
+- *Cells*: `A_zw_*`, 10: a record's counter field after a helper, in a match, as a budget; a record in a record; a pair built and matched, `fst` and `snd` of one; an option; a data type with a counter field, directly and from a helper; a record held in a `let`; a choice of constructors.  Eight of them were read before this step (measured on step 105's reader); they pin those places for counters.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6106,7 +6113,8 @@ Pushed to the public repository up to `fa1247e` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 105 (a bound's constant and a written number from 5000 on: the construct table 3939 of 4085, 76 by design, 69 gaps), the gate |
+| (this commit) | §12.V: step 106's design -- a value of a type holding a counter, built and taken apart in the text |
+| `28a1143` | §12.V: step 105 (a bound's constant and a written number from 5000 on: the construct table 3939 of 4085, 76 by design, 69 gaps), the gate |
 | `fa1247e` | `proved/KQRReify.v` + `KQRWf.v` + matrix step 105: a bound's constant and a written number from 5000 on, where a counter given back is used: in Z, in the statement and the reader, counted with the multiples at the site |
 | `2237437` | §12.V: step 105's design -- a bound's constant and a written number from 5000 on, where a counter given back is used |
 | `72b3ee8` | §12.V: step 104 (a counter a function gives back, used where its value modulo a word is enough: the construct table 3929 of 4077, 75 by design, 72 gaps), the gate |
