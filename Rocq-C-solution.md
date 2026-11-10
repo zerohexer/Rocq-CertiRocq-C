@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3939 of 4085, 69 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3951 of 4095, 67 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1755,6 +1755,12 @@ proved once, measured against C written the same way.
   out in `Z` by squaring; past a word, a pin with its control.
 
 **F. Proof speed, only if it becomes the bottleneck (§7.5):** segmenting long straight-line functions; reflection.
+- *The laws of a data type with many constructors* (found at step 106): `A_q_byte_lit` (`match x with x41 => 1 | _ => 0 end` on a
+  `byte`, 256 constructors) takes about 100 s, there before these steps.  Its proof file spends 88 s in one law, `KQR.kq_rbt_case`:
+  each arm takes 1 ms at its tag, but the loop `destruct c as [|c]` leaves the goal's tag as `S (.. (S c))`, so arm k reduces k
+  levels of a 256-branch match, cubic in the constructors; simplifying the whole goal at each step unfolds the representation and
+  runs out of memory.  A byte match is ordinary in a parser or a driver.  Accepted when `A_q_byte_lit`'s proof file takes under 10 s,
+  every law of every program of the gate and the table proved as before.
 
 **G. Concurrency:** an interleaving semantics of two programs over the marked operations; protocol properties proved once (a
 lock's mutual exclusion, a queue); a ticket lock.
@@ -5927,6 +5933,19 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: a program read before, byte-identical.
 - *Cells*: `A_zw_*`, 10: a record's counter field after a helper, in a match, as a budget; a record in a record; a pair built and matched, `fst` and `snd` of one; an option; a data type with a counter field, directly and from a helper; a record held in a `let`; a choice of constructors.  Eight of them were read before this step (measured on step 105's reader); they pin those places for counters.
 
+**Step 106, a value of a type holding a counter, built and taken apart in the text — the result (2026-11-10).**  Built as designed:
+- *The reader* (`KQRReify.v`): `nf_ind`, `nf_red`, applied to each function's body in `y_all` before the rows' rewriting.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62, in clean copies of both trees; step 105's files / these; the machine under a desktop's load): `HWP_kernel` 3.03 / 3.02 s, `HWP_own` 2.05 / 2.07, `HWP_irqnow` 1.71 / 1.72 — the same.
+- *The C*: the 99 programs byte-identical.
+- *Cells*: 10 more, all proved (two of them read by this step, eight pins of places read before).  Two gaps read: `A_q_nat_field`, `A_fx_nat_field`.
+- *Found*: `A_q_byte_lit` (a match on a `byte`) took about 100 s, there before these steps; the cause measured (§12.F), the next step.
+- The C: the 99 programs byte-identical.  The construct table (on `6f6855a`): **3951 of 4095 through the verified compiler**, 76
+  by design, 67 gaps, 1 not Rocq (was 3939 of 4085: the 10 new cells read; 2 gaps read; no cell lost).  The gate on `6f6855a`, the
+  walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding; the same C: undefined behaviour trapped 63 / 63,
+  `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels and `grow` (22 / 22 / 25 / 19 / 20 / 10
+  s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems each within the list; `check_trust.py`:
+  `trust unchanged`.  Next: step 107, the laws of a data type with many constructors in time (§12.F).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6109,11 +6128,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `fa1247e` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `6f6855a` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 106's design -- a value of a type holding a counter, built and taken apart in the text |
+| (this commit) | §12.V: step 106 (a value of a type holding a counter, built and taken apart in the text: the construct table 3951 of 4095, 76 by design, 67 gaps), the gate; §12.F: the laws of a data type with many constructors |
+| `6f6855a` | `proved/KQRReify.v` + matrix step 106: a value of a type holding a counter, built and taken apart in the text: taken apart where it is built |
+| `382b2b1` | §12.V: step 106's design -- a value of a type holding a counter, built and taken apart in the text |
 | `28a1143` | §12.V: step 105 (a bound's constant and a written number from 5000 on: the construct table 3939 of 4085, 76 by design, 69 gaps), the gate |
 | `fa1247e` | `proved/KQRReify.v` + `KQRWf.v` + matrix step 105: a bound's constant and a written number from 5000 on, where a counter given back is used: in Z, in the statement and the reader, counted with the multiples at the site |
 | `2237437` | §12.V: step 105's design -- a bound's constant and a written number from 5000 on, where a counter given back is used |
