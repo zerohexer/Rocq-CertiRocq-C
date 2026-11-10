@@ -5849,6 +5849,13 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   operation the check knows nothing of (a hang, there since step 83), then step 104, a use where its value modulo a word is
   enough.
 
+**Step 103, a sum around a counter a function gives back, with an operation the check knows nothing of (§3.5, §12.A, found at step 102; there since step 83) — the design (2026-11-10).**  `ff (cnt n a s + Nat.log2 n) b`: step 83's reading takes the whole sum as one site where its count (`nc_c`) says it is at most seven times its counters, and `nc_c` counted any call it has no rule for as one counter.  The check of the site then asks `lia` for a bound of `log2 n`, has none, and falls to a path that unfolds `Nat.log2`: no answer in 120 s, the same with `sqrt`, `gcd` (measured on step 101's tree too).  The same with a helper of the program, `hk k := 7 * k` (`cnt n a s + hk n`, counted one counter where it is seven), and with a function giving back a counter that has no bound (a doubling `tw`, counted one).  The reading's decision counted what the check cannot show.
+- *The count* (`nc_opc`): a call by the bound the check is given of it: `land`, `min` the smaller operand; `lor`, `lxor`, `max`, `gcd` the sum; `ldiff`, `shiftr`, `/`, `mod`, `div2`, `clearbit`, `-`, `pred`, `log2`, `sqrt` the first; `setbit` by a written number below 13 the first (its `2^k` a constant below 5000); `double` twice; `b2n` none; any other function of Rocq's libraries past the limit, so no site holds it and the program is refused at once.  A helper of the program by its body written out, as the check writes it out (step 83's `__nch__wy`); a function giving back a counter with no bound, or a recursive function of the program that is no such row, past the limit.  `nc_c` and `nc_ok` take the environment and the rows for it.
+- *The check* (`KQRWf.v`, `nc_opf`): `nc_log2_le`, `nc_sqrt_le`, `nc_gcd_le`, `nc_b2n_le` beside step 102's facts.
+- *Left, with cells*: a sum with a power or a `lcm` of a counter, by design as for a plain counter (`A_c2_nat_square`, `A_zi_lcm`: a number that may need more than a word), refused at once, with `log2` and `gcd` as controls; a sum eight times its counters (`cnt n a s + hk7 n`: past a word from `2^60`, as `shiftl` by 3) and one with a doubling (`A_zb_s_power`'s reason), by design, with `hk2` as control; `setbit` by 13 or more, whose constant `2^k` is from 5000 on: step 102's follow-up of a constant in `Z`.
+- *The C*: a program read before, byte-identical.
+- *Cells*: `A_zt_*`, 16: such a counter in a sum with `log2`, `sqrt`, `gcd`, `b2n`, an `if`, a product, a power, `lcm`, `setbit` by 20, helpers of the program adding one, two and seven times, a doubling; `log2` and `sqrt` of such a counter in a sum; a sum with `log2` in a test.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6035,7 +6042,8 @@ Pushed to the public repository up to `f39c112` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 102 (a counter a function gives back, used as a counter inside an operation: the construct table 3898 of 4038, 68 by design, 71 gaps), the gate; §12.A: three follow-ups |
+| (this commit) | §12.V: step 103's design -- a sum around a counter a function gives back, with an operation the check knows nothing of |
+| `26ddcd3` | §12.V: step 102 (a counter a function gives back, used as a counter inside an operation: the construct table 3898 of 4038, 68 by design, 71 gaps), the gate; §12.A: three follow-ups |
 | `f39c112` | `proved/KQRReify.v` + `KQRWf.v` + matrix step 102: a counter a function gives back, used as a counter inside an operation: its bound kept with its constant apart, a written number one constant and a leaf of the walks, a shift left by a written number, an operation inside a sum given its bound, a library definition written out |
 | `f64aac0` | §12.V: step 102's design -- a counter a function gives back, used as a counter inside an operation; F83, F84 |
 | `c9b37d3` | §12.V: step 101 (a function giving back a counter built by a bit operation: the construct table 3847 of 3984, 66 by design, 70 gaps), the gate |
