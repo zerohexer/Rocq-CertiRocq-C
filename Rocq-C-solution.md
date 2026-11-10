@@ -5744,6 +5744,12 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   theorems each within the list; `check_trust.py`: `trust unchanged`.  Next: a counter chosen by a match on a counter (step 99),
   built and its cells read locally.
 
+**Step 99, a counter chosen by a match on a counter (§3.5, §12.A; the gap `A_c2_match_cnt`) — the design (2026-11-10).**  `ff (match n with O => 1 | S m => m end) a`: a counter's value chosen by a match on another, natural, was not read in a counter's place.  A match on a counter is read where it gives a number (F19); where it gives a counter it has no node, and it binds a counter.
+- *The reader* (`KQRReify.v`): in `y_all`, a match on a counter that gives a counter, in a counter's place (an argument, a `let` of a counter, a branch of such a match), is written `if Nat.eqb c 0 then x else y`, the predecessor `Nat.pred c` for the second branch's variable (`y_natm`, `y_natm_c`); decided by a scan (`y_natm_has`, F81).  Not where a branch applies a variable: a recursion's own call stays on the variable it is structural on.
+- *What is proved*: each such program's equation, by `kitc.py`, the dead branch closed by step 98's tactic step; nothing new in `KQR.v`.
+- *The C*: a program read before, byte-identical.
+- *Cells*: `A_zn_*`: such a match as a number, in a test, a let, a branch's counter used twice, nested, on an expression, on a counter of a machine number, with a call and a helper in a branch, given to a callee, in a recursion's accumulator and in its counter's argument.  `A_c2_match_cnt` read.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5930,7 +5936,8 @@ Pushed to the public repository up to `a4ac67c` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 98 (a match on a comparison in any place, `log2_up`, `sqrt_up`: the construct table 3813 of 3953, 66 by design, 73 gaps), the C and its assembly, the gate; F81, F82 |
+| (this commit) | §12.V: step 99's design -- a counter chosen by a match on a counter |
+| `8ef1e56` | §12.V: step 98 (a match on a comparison in any place, `log2_up`, `sqrt_up`: the construct table 3813 of 3953, 66 by design, 73 gaps), the C and its assembly, the gate; F81, F82 |
 | `a4ac67c` | `proved/KQRReify.v` + `KQRWf.v` + matrix step 98: a match on a comparison in any place: a library definition calling `Nat.compare` written out first, a match on a choice of constructors floated anywhere, a dead branch closed in the equations |
 | `a100b49` | §12.V: step 98's design -- a match on a comparison in any place: log2_up, sqrt_up, Nat.compare in a counter |
 | `d6b44c0` | §12.V: step 97 (the bounds of a min and of a subtraction of counters exact: the construct table 3790 of 3932, 66 by design, 75 gaps), the gate |
