@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3827 of 3966, 72 gaps, 66 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3838 of 3975, 70 gaps, 66 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -5769,6 +5769,18 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: a program read before, byte-identical.
 - *Cells*: `A_zo_*`: such a counter as a budget, a number, a test, a let, a callee's; three steps down; with an accumulator; with a memory; two of them.  `A_z_s_match_counter`, `A_zb_s_deep` read.
 
+**Step 100, a function giving back a counter whose recursion goes more than one step down — the result (2026-11-10).**  Built as designed:
+- *The reader* (`KQRReify.v`): `strip_pre`, `pf_info_r`; *`kitc.py`* asks for `pf_info_r q r0` where it asked for `pf_info q`.  Measured on the two gaps: the reader's record named `tw` with the stem of `tw`'s copies, `KQG'_.._tw__w`, never made; of `y_all`'s environment it names the row, `kqcopy.KQG'_.._tw__k0__rp__wy`, whose copies were, and the row's name in the reader's file is its short name.
+- *The C*: the 99 programs byte-identical.
+- *Cells*: 9 more, all proved: such a counter as a budget, a number, a test, a let, a callee's; three steps down; with an accumulator; with a memory; two of them.  Two gaps read: `A_z_s_match_counter`, `A_zb_s_deep`.
+- The C: the 99 programs byte-identical.  The construct table (on `1de1259`): **3838 of 3975 through the verified compiler**, 66
+  by design, 70 gaps, 1 not Rocq (was 3827 of 3966: the 9 new cells read; 2 gaps read; no cell lost).  The gate on `1de1259`, the
+  walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding; the same C: undefined behaviour trapped 63 / 63,
+  `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels and `grow` (22 / 22 / 25 / 19 / 19 / 9
+  s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems each within the list; `check_trust.py`:
+  `trust unchanged`.  Next: the other places of a counter in a value (a local fix giving back one, a closed term computed), from
+  the notes of step 100.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5951,11 +5963,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `5bf8172` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `1de1259` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 100's design -- a function giving back a counter whose recursion goes more than one step down |
+| (this commit) | §12.V: step 100 (a function giving back a counter whose recursion goes more than one step down: the construct table 3838 of 3975, 66 by design, 70 gaps), the gate |
+| `1de1259` | `proved/KQRReify.v` + `kitc.py` + matrix step 100: a function giving back a counter whose recursion goes more than one step down: the record of such recursions of the environment the reading used |
+| `c6d3894` | §12.V: step 100's design -- a function giving back a counter whose recursion goes more than one step down |
 | `4a07678` | §12.V: step 99 (a counter chosen by a match on a counter: the construct table 3827 of 3966, 66 by design, 72 gaps), the gate |
 | `5bf8172` | `proved/KQRReify.v` + matrix step 99: a counter chosen by a match on a counter, in a counter's place, the test with 0 and the predecessor |
 | `a954405` | §12.V: step 99's design -- a counter chosen by a match on a counter |
