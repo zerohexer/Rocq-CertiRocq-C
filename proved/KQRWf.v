@@ -557,8 +557,16 @@ Ltac nc_shl :=
   repeat match goal with |- context [Nat.shiftl ?a ?k] =>
     rewrite (Nat.shiftl_mul_pow2 a k); let v := eval vm_compute in (Nat.pow 2 k) in change (Nat.pow 2 k) with v end.
 Ltac nc_side := kq_bd; nc_shl; lia.
+(** (step 104) [Nat.ldiff] as the reader writes it, the 63 ones a literal *)
+Lemma nr_ldiff_l : forall a b, Uint63.of_Z (Z.of_nat (Nat.ldiff a b)) =
+  PrimInt63.land (Uint63.of_Z (Z.of_nat a)) (PrimInt63.lxor (Uint63.of_Z (Z.of_nat b)) 9223372036854775807%uint63).
+Proof. intros a b. rewrite nr_ldiff. reflexivity. Qed.
 Ltac nc_fold :=
   match goal with
+  | |- context [PrimInt63.land (Uint63.of_Z (Z.of_nat ?a)) (PrimInt63.lxor (Uint63.of_Z (Z.of_nat ?b)) 9223372036854775807%uint63)] => rewrite <- (nr_ldiff_l a b)
+  | |- context [PrimInt63.land (Uint63.of_Z (Z.of_nat ?a)) (Uint63.of_Z (Z.of_nat ?b))] => rewrite <- (nr_land a b)
+  | |- context [PrimInt63.lor (Uint63.of_Z (Z.of_nat ?a)) (Uint63.of_Z (Z.of_nat ?b))] => rewrite <- (nr_lor a b)
+  | |- context [PrimInt63.lxor (Uint63.of_Z (Z.of_nat ?a)) (Uint63.of_Z (Z.of_nat ?b))] => rewrite <- (nr_lxor a b)
   | |- context [PrimInt63.add (Uint63.of_Z (Z.of_nat ?a)) 1%uint63] => rewrite <- (nr_S a)
   | |- context [PrimInt63.add (Uint63.of_Z (Z.of_nat ?a)) (Uint63.of_Z (Z.of_nat ?b))] => rewrite <- (nr_add a b)
   | |- context [PrimInt63.mul (Uint63.of_Z (Z.of_nat ?a)) (Uint63.of_Z (Z.of_nat ?b))] => rewrite <- (nr_mul a b)
@@ -653,6 +661,52 @@ Ltac nc_opf :=
   | |- context [Nat.double ?a] => lazymatch goal with _ : Nat.double a = _ |- _ => fail | _ => pose proof (Nat.double_twice a) end
   end.
 Ltac nc_side ::= kq_bd; nc_shl; nb_bitf; nc_opf; lia.
+(** (step 104) where only the value modulo a word of a counter is used ([land] with a number below a word, [testbit] below 63, [even], [odd],
+    [mod] by a divisor of [2^63]): the same at the row's number, whatever the counter is, so no bound of it is asked *)
+Lemma nc_low_of : forall x, Uint63.of_Z (Z.of_nat (Z.to_nat (Uint63.to_Z (Uint63.of_Z (Z.of_nat x))))) = Uint63.of_Z (Z.of_nat x).
+Proof.
+  intros x. rewrite Z2Nat.id by (pose proof (Uint63.to_Z_bounded (Uint63.of_Z (Z.of_nat x))); lia). apply Uint63.of_to_Z.
+Qed.
+Lemma nc_zlow : forall x, Z.of_nat (Z.to_nat (Uint63.to_Z (Uint63.of_Z (Z.of_nat x)))) = (Z.of_nat x mod 9223372036854775808)%Z.
+Proof.
+  intros x. rewrite Z2Nat.id by (pose proof (Uint63.to_Z_bounded (Uint63.of_Z (Z.of_nat x))); lia). rewrite Uint63.of_Z_spec. reflexivity.
+Qed.
+Lemma nc_land_low : forall x y, (Z.of_nat y < 9223372036854775808)%Z ->
+  Nat.land x y = Nat.land (Z.to_nat (Uint63.to_Z (Uint63.of_Z (Z.of_nat x)))) y.
+Proof.
+  intros x y H. set (x' := Z.to_nat (Uint63.to_Z (Uint63.of_Z (Z.of_nat x)))).
+  rewrite <- (nc_E (Nat.land x y)) by (pose proof (nb_land_r x y); lia).
+  rewrite <- (nc_E (Nat.land x' y)) by (pose proof (nb_land_r x' y); lia).
+  rewrite !nr_land. unfold x'. rewrite nc_low_of. reflexivity.
+Qed.
+Lemma nc_land_low_l : forall x y, (Z.of_nat y < 9223372036854775808)%Z ->
+  Nat.land y x = Nat.land y (Z.to_nat (Uint63.to_Z (Uint63.of_Z (Z.of_nat x)))).
+Proof. intros x y H. rewrite !(Nat.land_comm y). apply nc_land_low. exact H. Qed.
+Lemma nc_testbit_low : forall x i, (Z.of_nat i < 63)%Z ->
+  Nat.testbit x i = Nat.testbit (Z.to_nat (Uint63.to_Z (Uint63.of_Z (Z.of_nat x)))) i.
+Proof.
+  intros x i H. rewrite !nr_nbit, nc_zlow. change 9223372036854775808%Z with (2 ^ 63)%Z.
+  rewrite Z.mod_pow2_bits_low by lia. reflexivity.
+Qed.
+Lemma nc_odd_low : forall x, Nat.odd x = Nat.odd (Z.to_nat (Uint63.to_Z (Uint63.of_Z (Z.of_nat x)))).
+Proof. intros x. rewrite <- !Nat.bit0_odd. apply nc_testbit_low. lia. Qed.
+Lemma nc_even_low : forall x, Nat.even x = Nat.even (Z.to_nat (Uint63.to_Z (Uint63.of_Z (Z.of_nat x)))).
+Proof. intros x. rewrite <- !Nat.negb_odd, nc_odd_low. reflexivity. Qed.
+Lemma nc_mod_low : forall x m, (0 < Z.of_nat m)%Z -> (9223372036854775808 mod Z.of_nat m = 0)%Z ->
+  Nat.modulo x m = Nat.modulo (Z.to_nat (Uint63.to_Z (Uint63.of_Z (Z.of_nat x)))) m.
+Proof.
+  intros x m H0 H1. apply Nat2Z.inj. rewrite !Nat2Z.inj_mod, nc_zlow.
+  symmetry. apply Z.mod_mod_divide. apply Z.mod_divide; [lia | exact H1].
+Qed.
+Ltac nc_low_rw n :=
+  first [ rewrite <- (nc_land_low n) by nc_side | rewrite <- (nc_land_low_l n) by nc_side
+        | rewrite <- (nc_testbit_low n) by lia | rewrite <- (nc_even_low n) | rewrite <- (nc_odd_low n)
+        | rewrite <- (nc_mod_low n) by first [lia | vm_compute; reflexivity] ].
+Ltac nc_step rw ::=
+  match goal with |- context [Z.to_nat (Uint63.to_Z _)] =>
+    rw; repeat nc_fold;
+    match goal with |- context [Z.to_nat (Uint63.to_Z (Uint63.of_Z (Z.of_nat ?n)))] => first [rewrite (nc_E n) by nc_side | nc_low_rw n] end
+  end.
 Ltac nb_step tac :=
   repeat (cbn beta iota zeta;
           first [ solve [tac; nb_bitf; lia]

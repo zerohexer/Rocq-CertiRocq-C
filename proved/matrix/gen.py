@@ -3577,6 +3577,53 @@ addA('zo_let', "", 'let c := tw n in ff c a + ff c b',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
 addA('zo_callee', "", 'g2 n a',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (k : nat) (x : int) : int := ff (tw k) x.\n')
+# a counter a function gives back, used where its value modulo a word is enough (step 104)
+addA('zu_land', "", 'ff (Nat.land (tw n) 255) b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
+addA('zu_land_left', "", 'ff (Nat.land 255 (tw n)) b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
+addA('zu_land_param', "", 'ff (Nat.land (tw n) n) b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
+addA('zu_land_two', "", 'ff (Nat.land (tw n) (tw n)) b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
+addA('zu_testbit', "", 'if Nat.testbit (tw n) 3 then a else b',
+     'Fixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
+addA('zu_testbit_63', "", 'if Nat.testbit (tw n) 63 then a else b',
+     'Fixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
+addA('zu_even', "", 'if Nat.even (tw n) then a else b',
+     'Fixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
+addA('zu_odd', "", 'if Nat.odd (tw n) then a else b',
+     'Fixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
+addA('zu_mod_pow2', "", 'ff (Nat.modulo (tw n) 64) b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
+addA('zu_mod_ten', "", 'ff (Nat.modulo (tw n) 10) b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
+addA('zu_add_inside', "", 'ff (Nat.land (tw n + 3) 255) b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
+addA('zu_mul_inside', "", 'ff (Nat.land (tw n * 3) 1023) b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
+addA('zu_lxor_inside', "", 'ff (Nat.land (Nat.lxor (tw n) 5) 255) b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
+addA('zu_shiftl_inside', "", 'ff (Nat.land (Nat.shiftl (tw n) 2) 255) b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
+addA('zu_mixed_rows', "", 'ff (Nat.land (tw n + cnt n a s) 255) b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\nFixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('zu_quadratic', "", 'ff (Nat.land (th n n) 255) b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint th (k c : nat) : nat := match k with O => c | S m => th m c + c end.\n')
+addA('zu_big_const', "", 'ff (Nat.land (cbm n n) 255) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint cbm (k m : nat) : nat := match k with O => m | S j => Nat.mul (Nat.land (S (cbm j m)) 4095) 300 end.\n')
+addA('zu_big_direct', "", 'ff (cbm n n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint cbm (k m : nat) : nat := match k with O => m | S j => Nat.mul (Nat.land (S (cbm j m)) 4095) 300 end.\n')
+addA('zu_in_test', "", 'if Nat.leb (Nat.land (tw n) 7) 3 then a else b',
+     'Fixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
+addA('zu_let_once', "", 'let c := tw n in ff (Nat.land c 255) b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
+addA('zu_let_twice', "", 'let c := tw n in ff (Nat.land c 255) (if Nat.odd c then a else b)',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\n')
+addA('zu_in_rec', "", 'lp n a',
+     'Fixpoint tw (k : nat) : nat := match k with O => 1 | S m => tw m + tw m end.\nFixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (if Nat.even (tw k) then x + 1 else x) end.\n')
+addA('zu_mid_direct', "", 'ff (cbm n n) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint cbm (k m : nat) : nat := match k with O => m | S j => Nat.mul (Nat.land (S (cbm j m)) 255) 300 end.\n')
 # a sum around a counter a function gives back, with an operation of the library or of the program (step 103)
 addA('zt_sum_log2', "", 'ff (cnt n a s + Nat.log2 n) b',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')

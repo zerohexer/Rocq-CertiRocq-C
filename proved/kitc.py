@@ -1002,7 +1002,8 @@ def reflect(name, entry, prog, no_proof):
         t += "Ltac KQRWf.kq_rw ::= progress (" + "; ".join(rrw) + ").\n"
     # (step 83) a counter a function gives back, used as a counter: the bound of each such function, by induction, each after what it calls; the equations of what uses them hold where the counters are below the bound
     bqs = [m for m, _ in mts if m.endswith("__bq__wy")]
-    ncp = bool(bqs)
+    # (step 104) or a use of such a counter where its value modulo a word is enough, which needs no bound
+    ncp = bool(bqs) or any(m.endswith("__nc__wy") for m, _ in mts)
     if ncp:
         rrk0 = [f"{name}_rr{j}" for j, (m, h) in enumerate(rrs) if re.search(r"__k\d+__rq__wy$", m)]
         nch = [kqfn(m[:-len("__nch__wy")]) for m, _ in mts if m.endswith("__nch__wy")]
