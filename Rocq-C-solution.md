@@ -5897,6 +5897,14 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   (22 / 22 / 25 / 19 / 20 / 9 s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems each within
   the list; `check_trust.py`: `trust unchanged`.  Next: step 105, step 102's follow-up of a bound's constant from 5000 on.
 
+**Step 105, a bound's constant from 5000 on, and a written number from 5000 on, where a counter given back is used (§3.5, §12.A, step 102's follow-up) — the design (2026-11-10).**  `cbm k m <= k + m + 1228500`: step 102 kept a bound only below 5000, its statement carrying the constant as a chain of successors, and step 83's count of a site took its multiples only, the constants below 5000 fitting in the room the counters' bounds leave.  A larger constant, or a number written from 5000 on in a site (`cnt n a s + 100000`), wants the constant counted.
+- *The bound's constant in `Z`* (`nbf`, `nb_*`): in the reader, a number of `Z`; in the statement, below 5000 the chain Rocq writes, from 5000 on `Z.to_nat` of the number (`nb_cst`, `z_tm`), which `lia` reads; a written number from 5000 on read by step 94's `nu_z` (`nb_valz`), in a row's text too (`nr_tr`: the machine's literal).
+- *The count of a site* (`nc_cd`): its multiples and its constant, `nc_c` its first part, so a decision made before is the same; a let's variable carries both.  *The fit* (`nc_fits`): the constant below `2^63`, `2^62`, `2^61` with the own bound, `2^59` with the own bound, at none, one, two, three to seven multiples, the counters being below `2^62` and below the next function's by `2^20`; two multiples with a constant above `2^20` ask for the own bound (`nc_needo`), as three to seven do.
+- *What is proved* (`KQRWf.v`): step 94's `nu_z` and its proof again, since `KQRWf.v` comes before `KQR.v` (`nr_du_z`, `nr_hu_z`, `nr_nu_z`, `nr_nu_z_ok`); `nr_numf` gives `lia` a written number's value in `Z`, in `nb_step` and `nc_side`; `kq_nr` computes it in a row's equation (`nr_ofnum`); `setbit`'s bound in `Z` (`nc_setbit_lez`), where it was a unary `2^k`.
+- *Left, with a cell*: such a counter plus a number past a word less one (`cnt n a s + 9223372036854775807`): past a word, by design, with `cnt n a s + 100000` as control.
+- *The C*: a program read before, byte-identical.
+- *Cells*: `A_zv_*`, 8: a written number from 5000 on in a site and in a row's text, alone and in a sum; two counters with a constant of 2000000; three; a `let`; a test; one past a word.  Step 104's `A_zu_big_direct`, `A_zu_mid_direct` and step 103's `A_zt_sum_setbit_big`, gaps of this follow-up, are read.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6083,7 +6091,8 @@ Pushed to the public repository up to `ba331f2` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 104 (a counter a function gives back, used where its value modulo a word is enough: the construct table 3929 of 4077, 75 by design, 72 gaps), the gate |
+| (this commit) | §12.V: step 105's design -- a bound's constant and a written number from 5000 on, where a counter given back is used |
+| `72b3ee8` | §12.V: step 104 (a counter a function gives back, used where its value modulo a word is enough: the construct table 3929 of 4077, 75 by design, 72 gaps), the gate |
 | `ba331f2` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + matrix step 104: a counter a function gives back, used where its value modulo a word is enough: the operand the row's number, no bound asked; land with a number below a word, testbit, even, odd, mod by a power of two, a let of one |
 | `244a100` | §12.V: step 104's design -- a counter a function gives back, used where its value modulo a word is enough |
 | `cc5e636` | §12.V: step 103 (a sum around a counter a function gives back, with an operation the check knows nothing of: the construct table 3909 of 4054, 72 by design, 72 gaps), the gate |
