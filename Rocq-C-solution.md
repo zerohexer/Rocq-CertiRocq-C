@@ -5872,6 +5872,16 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   `check_trust.py`: `trust unchanged`.  Next: step 104, step 102's follow-up of a counter given back used where its value modulo a
   word is enough, then step 105, a bound's constant from 5000 on.
 
+**Step 104, a counter a function gives back, used where its value modulo a word is enough (§3.5, §12.A, found at step 102) — the design (2026-11-10).**  `ff (Nat.land (tw n) 255) b`, `tw` a doubling: `tw n` is `2^n`, past a word, and has no bound, so step 83's reading does not take it.  But `Nat.land x 255` is the same at `x` and at `x` modulo a word, and a function giving back a counter is read as a row giving exactly that (steps 82, 101).  No bound is needed: where only the value modulo a word of an operand is used, the operand is the row's number.
+- *Where* (`nc_lowp`): `land` with an operand below a word (a written number, or what step 83's count keeps below seven times its counters); `testbit` below 63; `even`, `odd`; `mod` by a written power of two.
+- *The operand* (`nc_wx`, `nc_trw`): made of `+`, `*`, `S`, a shift left by a written number, `land`, `lor`, `lxor`, `ldiff`, written numbers, variables and functions read as rows, each the same modulo a word (steps 82, 101, 102); read this way where a row in it has no bound, so a program read before keeps its C.  The machine's operations there, folded back by `nc_fold`'s rules for the bit operations (built at step 102 and not kept then: here they are needed).
+- *What is proved* (`KQRWf.v`): `nc_land_low` (`Nat.land x y` the same at the row's number where `y` is below a word: both are below `y`, and the same modulo a word by `nr_land`), `nc_land_low_l`, `nc_testbit_low`, `nc_even_low`, `nc_odd_low`, `nc_mod_low` (a divisor of `2^63`), from Rocq's axioms of its machine numbers; `nc_step` takes them where `nc_E`, which needs a bound, does not hold.
+- *A `let` of such a counter* (`let c := tw n in .. Nat.land c 255 .. Nat.odd c ..`): held as the row's number where every use of it is such a use, as step 83 holds a let of a bounded one; `nc_ulow` checks each use: inside such an operand, at its operations, not inside a row's arguments.
+- *The walks* (`y_all`) run where the program has a function read as a row, with a bound or not; *`kitc.py`* sets up step 83's check where there is such a use and no bound.
+- *Left, with cells*: such a counter's whole value (a `land` of two of them, `mod 10`, bit 63): a number past a word, by design, with `land`, `mod 64`, `testbit 3` as controls; a bound's constant from 5000 on used as itself (`ff (cbm n n) a`): step 102's follow-up.  Step 102's `A_zs_const_mid` and `A_zs_big_const`, used inside `land`, need no bound now.
+- *The C*: a program read before, byte-identical.
+- *Cells*: `A_zu_*`, 23: a doubling inside `land` with a written number on either side and with a parameter, of two such, `testbit` 3 and 63, `even`, `odd`, `mod 64`, `mod 10`; with `+`, `*`, `lxor`, `shiftl` inside; with a bounded row beside; a quadratic; a bound's constant of 1228500 inside `land` and as itself, of 76500 as itself; in a test, a `let` named once and twice, a recursion.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6058,7 +6068,8 @@ Pushed to the public repository up to `841465a` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 103 (a sum around a counter a function gives back, with an operation the check knows nothing of: the construct table 3909 of 4054, 72 by design, 72 gaps), the gate |
+| (this commit) | §12.V: step 104's design -- a counter a function gives back, used where its value modulo a word is enough |
+| `cc5e636` | §12.V: step 103 (a sum around a counter a function gives back, with an operation the check knows nothing of: the construct table 3909 of 4054, 72 by design, 72 gaps), the gate |
 | `841465a` | `proved/KQRReify.v` + `KQRWf.v` + matrix step 103: a sum around a counter a function gives back is one site only where the check has a bound of each part: the count of a call by its bound, the bounds of log2, sqrt, gcd, b2n, a helper by its body |
 | `521f96a` | §12.V: step 103's design -- a sum around a counter a function gives back, with an operation the check knows nothing of |
 | `26ddcd3` | §12.V: step 102 (a counter a function gives back, used as a counter inside an operation: the construct table 3898 of 4038, 68 by design, 71 gaps), the gate; §12.A: three follow-ups |
