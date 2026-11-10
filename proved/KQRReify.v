@@ -6131,6 +6131,73 @@ Fixpoint y_tail (fuel self : nat) (T t : term) {struct fuel} : term :=
       end
   end.
 Definition y_case_nat := <% fun n : nat => match n with O => O | S m => O end %>.
+(** (step 98) a match on a choice of constructors in any place of a body (a counter given to a call, not only at its end): the choice
+    outside, each of its ends the match on its constructor, taken; the new match's type the outer one's, where that does not depend on
+    the value matched.  Not a conversion: [y_all]'s equation, which [kitc.py] proves, covers it *)
+(* a choice whose ends are constructors without arguments ([Lt], [Eq], [Gt]): what a pair, a record, a [sumbool] carries is read as it was
+   (steps 68, 84, the monads), and so is a choice of booleans *)
+Fixpoint y_conk (fuel : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      match t with
+      | tConstruct i _ _ => negb (Kername.eqb (inductive_mind i) (inductive_mind ind_bool))
+      | tCase _ _ _ brs => forallb (fun br => y_conk fuel (bbody br)) brs
+      | tLetIn _ _ _ b => y_conk fuel b
+      | _ => false
+      end
+  end.
+Fixpoint y_inner (fuel : nat) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := y_inner fuel in
+      match t with
+      | tCase ci p (tCase ci1 p1 c1 brs1) brs =>
+          let k := length (pcontext p) in
+          if y_conk 100 (tCase ci1 p1 c1 brs1) && forallb (fun i => negb (tm_has_rel 1000 i (preturn p))) (seq 0 k) then
+            let T := subst (repeat (tRel 0) k) 0 (preturn p) in
+            go (tCase ci1 (y_ret p1 T) c1
+                 (map (fun br' =>
+                    let k' := length (bcontext br') in
+                    {| bcontext := bcontext br';
+                       bbody := match lift0 k' t with
+                                | tCase ci2 p2 _ brs2 =>
+                                    match bbody br' with
+                                    | tConstruct _ n _ => match nth_error brs2 n with
+                                                          | Some b2 => if Nat.eqb (length (bcontext b2)) 0 then bbody b2 else tCase ci2 p2 (bbody br') brs2
+                                                          | None => tCase ci2 p2 (bbody br') brs2 end
+                                    | _ => tCase ci2 p2 (bbody br') brs2
+                                    end
+                                | u => u
+                                end |}) brs1))
+          else tCase ci p (go (tCase ci1 p1 c1 brs1)) (map (fun br => {| bcontext := bcontext br; bbody := go (bbody br) |}) brs)
+      | tCase ci p c brs => tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := go (bbody br) |}) brs)
+      | tApp f args => tApp (go f) (map go args)
+      | tLambda na a b => tLambda na a (go b)
+      | tLetIn na v a b => tLetIn na (go v) a (go b)
+      | tFix mfix k => tFix (map (fun d => {| dname := dname d; dtype := dtype d; rarg := rarg d; dbody := go (dbody d) |}) mfix) k
+      | _ => t
+      end
+  end.
+(* whether [y_inner] floats something: its condition, by a scan (a comparison of the two terms runs out of fuel on a long body) *)
+Fixpoint y_inner_has (fuel : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      let go := y_inner_has fuel in
+      match t with
+      | tCase ci p (tCase ci1 p1 c1 brs1) brs =>
+          if y_conk 100 (tCase ci1 p1 c1 brs1) && forallb (fun i => negb (tm_has_rel 1000 i (preturn p))) (seq 0 (length (pcontext p))) then true
+          else if go (tCase ci1 p1 c1 brs1) then true else existsb (fun br => go (bbody br)) brs
+      | tCase _ _ c brs => if go c then true else existsb (fun br => go (bbody br)) brs
+      | tApp f args => if go f then true else existsb go args
+      | tLambda _ _ b => go b
+      | tLetIn _ v _ b => if go v then true else go b
+      | tFix mfix _ => existsb (fun d => go (dbody d)) mfix
+      | _ => false
+      end
+  end.
 (** a match on a counter whose constructor is written: its branch, Rocq's own iota: the guard of a fixpoint does not see through it *)
 Fixpoint y_rep (fuel c d : nat) (v t : term) {struct fuel} : term :=
   match fuel with
@@ -6760,6 +6827,42 @@ Fixpoint pm_sub (fuel : nat) (e : list (option term)) (g : list (term * term)) (
   end.
 Definition pm_has (t : term) : bool :=
   existsb (fun k => if Kername.eqb k kn_d21 || Kername.eqb k kn_divs then true else match pm_of k with Some _ => true | None => match dec_of k with Some _ => true | None => false end end) (consts 10000 t []).
+(** (step 98) a definition of Rocq's libraries, not a fixpoint and not one [lib_open] opens later, whose body calls what [pm_sub] writes
+    as its definition ([Nat.log2_up], [Nat.sqrt_up] match on [Nat.compare]): written out where the program calls it, before [pm_sub], so
+    that the rewriting reaches that call.
+    The same up to delta and beta, and the equation [kitc.py] proves of [pm_sub]'s form covers it *)
+Definition rocq_lib (kn : kername) : bool :=
+  match rev (mp_file (fst kn)) with r :: _ => if String.eqb r "Corelib" then true else String.eqb r "Stdlib" | [] => false end.
+Definition pm_named (kn : kername) : bool :=
+  if Kername.eqb kn kn_d21 || Kername.eqb kn kn_divs then true
+  else match pm_of kn with Some _ => true | None => match dec_of kn with Some _ => true | None => false end end.
+Definition pm_lib (Σ : global_env) (kn : kername) : option term :=
+  (* what lib_open already opens, and what the rewriting knows by name (pm_of, dec_of, step 68), are read as they were: only the
+     definitions nothing opened before, whose body calls a primitive the rewriting writes as its definition *)
+  if rocq_lib kn && negb (lib_open kn) && negb (pm_named kn) then
+    match body_of Σ kn with
+    | Some b => if has_fix 1000 b then None else if existsb (fun k => match pm_of k with Some _ => true | None => false end) (consts 1000 b []) then Some b else None
+    | None => None end
+  else None.
+Fixpoint pm_open (fuel : nat) (Σ : global_env) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := pm_open fuel Σ in
+      match t with
+      | tApp (tConst kn u) args => match pm_lib Σ kn with Some b => go (pf_beta b args) | None => tApp (tConst kn u) (map go args) end
+      | tConst kn _ => match pm_lib Σ kn with Some b => go b | None => t end
+      | tApp f args => tApp (go f) (map go args)
+      | tLambda na a b => tLambda na a (go b)
+      | tLetIn na v a b => tLetIn na (go v) a (go b)
+      | tCase ci p c brs => tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := go (bbody br) |}) brs)
+      | tFix mfix k => tFix (map (fun d => {| dname := dname d; dtype := dtype d; rarg := rarg d; dbody := go (dbody d) |}) mfix) k
+      | _ => t
+      end
+  end.
+(* asked of every function: the library's constants first, by their file's name; the lookups only for those *)
+Definition pm_lib_any (Σ : global_env) (t : term) : bool :=
+  existsb (fun k => if rocq_lib k then match pm_lib Σ k with Some _ => true | None => false end else false) (consts 1000 t []).
 (** a body's choices over known constructors floated out: for a function with no fixpoint *)
 Definition y_nf (T b : term) : term :=
   let '(tys, body) := lams b in lams_of tys (y_tail 1000 9999 T body).
@@ -10656,9 +10759,14 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
               (* (step 63) a binder's type a redex, from a motive, a cast: the same up to beta *)
               let c0 := if c1 then true else ty_has 1000 b0 in
               let b1 := if ty_has 1000 b0 then ty_beta 1000 b0 else b0 in
+              (* (step 98) a definition of Rocq's libraries that calls what pm_sub rewrites, written out first *)
+              let b1 := if pm_lib_any Σ b1 then pm_open 1000 Σ b1 else b1 in
               let p00 := pm_has b1 in
               let b := if p00 then pm_sub 100000 [] [] b1 else b1 in
-              let p0 := if p00 then true else r0 in
+              (* (step 98) a match on a choice of constructors in any place, floated *)
+              let yi := y_inner_has 1000 b in
+              let b := if yi then y_inner 1000 b else b in
+              let p0 := if p00 then true else if yi then true else r0 in
               (* (step 68) a function chosen by a match, applied *)
               let f0 := if p0 then false else fc_has 100000 b in
               let S1 := if p00 then pm_add S1 else S1 in

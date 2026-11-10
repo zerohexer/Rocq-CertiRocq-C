@@ -558,6 +558,8 @@ Ltac fr_step IH :=
                 | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
                 | match goal with |- context [match ?c with pair _ _ => _ end] => destruct c end
                 | reflexivity
+                (* (step 99) a dead branch: a test's answer that its case contradicts, `(S m =? 0) = true` *)
+                | match goal with e : _ = _ |- _ => solve [cbn in e; discriminate e] end
                 | match goal with |- context [match ?c with _ => _ end] => is_var c; destruct c end ]).
 (** (step 61) a fixpoint with its own call under a choice in an operand, and the same with the choice floated out: equal at each counter, test by test *)
 Ltac own_step IH :=
@@ -578,6 +580,8 @@ Ltac own_step IH :=
                 | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
                 | match goal with |- context [match ?c with pair _ _ => _ end] => destruct c end
                 | reflexivity
+                (* (step 99) a dead branch: a test's answer that its case contradicts, `(S m =? 0) = true` *)
+                | match goal with e : _ = _ |- _ => solve [cbn in e; discriminate e] end
                 | match goal with |- context [match ?c with _ => _ end] => is_var c; destruct c end ]).
 
 (** (step 82) a function giving back a counter, and the number in its place: its own call made a number on the right *)
@@ -593,6 +597,8 @@ Ltac nr_step IH :=
                 | match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
                 | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
                 | reflexivity
+                (* (step 99) a dead branch: a test's answer that its case contradicts, `(S m =? 0) = true` *)
+                | match goal with e : _ = _ |- _ => solve [cbn in e; discriminate e] end
                 | match goal with |- context [match ?c with _ => _ end] => is_var c; destruct c end ]).
 (** (step 61) a fixpoint with its own call on a counter deeper than the predecessor, and a budget function above it: equal at every budget above the counter *)
 Ltac deep_step IH pr :=
@@ -624,6 +630,8 @@ Ltac own_step0 :=
                 | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
                 | match goal with |- context [match ?c with pair _ _ => _ end] => destruct c end
                 | reflexivity
+                (* (step 99) a dead branch: a test's answer that its case contradicts, `(S m =? 0) = true` *)
+                | match goal with e : _ = _ |- _ => solve [cbn in e; discriminate e] end
                 | match goal with |- context [match ?c with _ => _ end] => is_var c; destruct c end ]).
 (** (step 77) the same, a call's pair taken apart as its two parts, so that the same call on both sides is the same two parts whatever is taken apart first *)
 Ltac pr_call :=
@@ -643,4 +651,6 @@ Ltac own_step0p :=
                 | match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
                 | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
                 | reflexivity
+                (* (step 99) a dead branch: a test's answer that its case contradicts, `(S m =? 0) = true` *)
+                | match goal with e : _ = _ |- _ => solve [cbn in e; discriminate e] end
                 | match goal with |- context [match ?c with _ => _ end] => is_var c; destruct c end ]).

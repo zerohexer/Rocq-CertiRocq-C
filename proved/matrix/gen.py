@@ -3488,6 +3488,49 @@ addA('zl_sub_past', "", 'ff (Nat.sub 5 (Nat.mul (Uint63.to_nat a) 4)) b',
      'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
 addA('zl_sub_past_ctl', "", 'ff (Nat.sub 5 (Nat.mul (Nat.land (Uint63.to_nat a) 255) 4)) b',
      'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+# a match on a choice of constructors in any place: log2_up, sqrt_up, Nat.compare in a counter (step 98)
+addA('zm_log2_up_num', "", 'a + Uint63.of_nat (Nat.log2_up n)',
+     'From Stdlib Require Import ZArith.\n')
+addA('zm_log2_up_cmp', "", 'if Nat.leb (Nat.log2_up n) 3 then a else b',
+     '')
+addA('zm_log2_up_let', "", 'let c := Nat.log2_up n in ff c a + ff c b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zm_log2_up_ar', "", 'ff (Nat.log2_up n) a',
+     'From Stdlib Require Import Arith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zm_log2_up_rec', "", 'lp n a',
+     'Fixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (x + Uint63.of_nat (Nat.log2_up j)) end.\n')
+addA('zm_log2_up_zero', "", 'ff (Nat.log2_up 0) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zm_log2_up_lit', "", 'ff (Nat.log2_up 1000) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zm_sqrt_up_num', "", 'a + Uint63.of_nat (Nat.sqrt_up n)',
+     'From Stdlib Require Import ZArith.\n')
+addA('zm_sqrt_up_cmp', "", 'if Nat.leb (Nat.sqrt_up n) 3 then a else b',
+     '')
+addA('zm_sqrt_up_let', "", 'let c := Nat.sqrt_up n in ff c a + ff c b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zm_sqrt_up_ar', "", 'ff (Nat.sqrt_up n) a',
+     'From Stdlib Require Import Arith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zm_sqrt_up_rec', "", 'lp n a',
+     'Fixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j (x + Uint63.of_nat (Nat.sqrt_up j)) end.\n')
+addA('zm_sqrt_up_zero', "", 'ff (Nat.sqrt_up 0) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zm_sqrt_up_lit', "", 'ff (Nat.sqrt_up 1000) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zm_compare_cnt', "", 'ff (match Nat.compare n 3 with Lt => 1 | Eq => 2 | Gt => 3 end) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zm_compare_cnt_var', "", 'ff (match Nat.compare n (Uint63.to_nat b) with Lt => n | Eq => 0 | Gt => 5 end) a',
+     'From Stdlib Require Import ZArith.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zm_compare_bool', "", 'if match Nat.compare n 3 with Lt => true | _ => false end then a else b',
+     '')
+addA('zm_compare_nested', "", 'ff (match Nat.compare n 3 with Lt => match Nat.compare n 1 with Lt => 0 | _ => 1 end | _ => 2 end) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zm_choice_cnt', "", 'ff (match (if Nat.ltb n 3 then Lt else Gt) with Lt => 1 | _ => 2 end) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zm_prim_compare_cnt', "", 'ff (match PrimInt63.compare a b with Lt => 1 | Eq => 2 | Gt => 3 end) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zm_log2_up_sqrt_up', "", 'ff (Nat.log2_up (Nat.sqrt_up n)) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
 # a memory in a value of any data type; a sixth probe (step 87)
 addA('zf_h_user', "", 'match st1 a s with Ok v t => v + rd 0 a t | Err e => e end',
      'Inductive res := Ok (v : int) (t : mem) | Err (e : int).\nDefinition st1 (i : int) (t : mem) : res := if i =? 0 then Err 1 else Ok i (upd 0 i i t).\n')

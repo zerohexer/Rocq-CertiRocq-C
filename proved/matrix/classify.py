@@ -185,8 +185,6 @@ BY_NAME = {
   "A_zh_row_land": "a function giving back a counter built by a bit operation of the library",
   "A_zh_row_shiftr": "a function giving back a counter built by a bit operation of the library",
   "A_zh_row_testbit_own": "a function giving back a counter built by a bit operation of the library",
-  "A_zi_log2_up": "a definition of the library that matches on a comparison of counters: log2_up, sqrt_up",
-  "A_zi_sqrt_up": "a definition of the library that matches on a comparison of counters: log2_up, sqrt_up",
   "A_zf_r_three": "three constructors or more holding a memory, through a recursion: a sum in a sum",
   "A_l_ack": "a fixpoint inside a fixpoint that gives back a function",
   "A_l_dec_proof_used": "a proof a test gives, named by what follows",
