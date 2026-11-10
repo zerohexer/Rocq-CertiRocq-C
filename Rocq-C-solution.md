@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3847 of 3984, 70 gaps, 66 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3898 of 4038, 71 gaps, 68 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1708,9 +1708,23 @@ comparisons on counters (4); records of three numbers by recursion (3, with the 
 constructs of `S`.  Then the pins of §0.5's boundaries, each with its control (§3.5): cells added to `gen.py` and to
 `DESIGN_CELLS` together.  Accepted when: the category's cells are `ok`, the full table is re-run and `MATRIX.md` updated, and
 the gate (examples, corpus, kernels if the walk changed) passes.
-- *A counter a function gives back, used as a counter inside a bit operation* (found at step 101): step 83's reading of such a counter
-  (`nc_c`, `nc_tr`, the rewriting `nc_sub`) takes `S`, `+` and `*`; `land`, `lor`, `lxor`, `ldiff` are the machine's there too (step
-  101's lemmas), with their bounds.  Accepted when `A_zr_land_budget` is proved.
+- ~~*A counter a function gives back, used as a counter inside a bit operation*~~ (found at step 101) — **done, step 102**: the cause was
+  the function's bound not kept (its constant counted with its multiples), not step 83's reading (F83); `A_zr_land_budget` proved.
+- *A bound's constant from 5000 on* (found at step 102): `nb_all` keeps a function's bound only where its constant is below 5000, since
+  the bound's statement carries it as a chain of successors (76500: 18 s and 2.4 GB to check); the constant in `Z`, in the statement
+  and in the reader, and counted with the multiples against the counters' bounds where the counter is used (step 83's `nc_c` counts
+  multiples only).  Accepted when such a bound is proved and used where the counter is used as itself, which needs it (`ff (cbm n n) a`
+  with `cbm k m <= k + m + 76500`, and with `+ 1228500`), each pinned by a cell.
+- *A counter a function gives back, used where its value modulo a word is enough* (found at step 102): `Nat.land x 255` is the same at
+  `x` and at `x` modulo a word, and a row gives that (steps 82, 101), so no bound is needed; today such a use is read only where the
+  function has a bound (`A_zs_const_mid`, `A_zs_big_const`, whose bounds' constants are 76500 and 1228500).  Inside `land` with a
+  number below a word, `testbit` below 63, `mod` by a power of two, `even`, `odd`: accepted when these are proved for functions with no
+  bound (a doubling, a quadratic, those two).
+- *A sum around such a counter with an operation the check knows nothing of* (found at step 102, there since step 83): in
+  `cnt n a s + Nat.log2 n` step 83's reading takes the whole sum as one site, counting `log2 n` as one counter (`nc_c`'s 1 for any call),
+  and the check, given no bound of `log2`, falls to a path that unfolds it: no answer in 120 s, the same with `sqrt` and `gcd`.  A sum is
+  one site only where the check has a bound of each part; `log2`, `sqrt`, `gcd` given theirs.  Accepted when those three are proved and
+  an operation with no bound is refused at once.
 
 **B. Compiling from an ordinary `.v` file, as simply as `lean --c`.**
 - ~~A command in an ordinary Rocq file~~ — **done at step 89**, without a command: `python3 proved/kitc.py prog.v [--main=NAME]`: the entry's arguments are read from its signature (numbers and counters from the
@@ -5819,6 +5833,22 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: a program read before, byte-identical.
 - *Cells*: `A_zs_*`, 52: such a counter in `land` with a written number, a parameter, another such counter; `lor`, `lxor`, `ldiff`; nested; with a `+` inside and outside; in a test, an equality, a match, a let, a callee's argument, a recursion; `shiftr`, `shiftl` by 1, 2, 3 and by a counter, `setbit`, `clearbit`, `/`, `mod`, `min`, `max`, `-`, `pred`, `div2`, `double`, `testbit`; 15 of them inside a sum, `land` inside a product; a counter built by a bit operation used directly, at one counter, by `lor`; a bound whose constant is above `2^20`.
 
+**Step 102, a counter a function gives back, used as a counter inside an operation — the result (2026-11-10).**  Built as designed, but the cap of a bound's constant:
+- *The bound's constant*: designed at most `2^20`, the room its use has; measured, the bound's statement carries it as a chain of successors (`nb_nat`), and a constant of 76500 took 18 s and 2.4 GB to check where 1023 takes 5 s, so it would not fit in memory near `2^20`.  Kept below 5000, as Rocq writes a numeral of `nat` (4095: 7 s, 0.9 GB); from 5000 on a §12.A follow-up, the constant in `Z` (`A_zs_const_mid`, `A_zs_big_const`).
+- *The reader* (`KQRReify.v`): `nb_all`'s bound kept with its multiples at most 1000 and its constant below 5000, apart; a written number one constant in `nr_tr`, `nb_go`, `nc_c`, a leaf in `nc_has`, `nc_any`, `nc_sub`; `Nat.shiftl` by a written number in `nc_has`, `nc_c`, `nc_tr` (`nr_lsl_i`).
+- *What is proved* (`KQRWf.v`): `nr_shiftl`, from `lsl_spec`; `nc_fold`'s rule for `lsl`, `nc_shl` in `nc_side`; `kq_nr` computes a written number at once (`nr_numeral`).
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62, in clean copies of both trees; step 101's files / these): `HWP_kernel` 2.91 / 2.90 s, `HWP_own` 1.95 / 1.96, `HWP_irqnow` 1.63 / 1.62 — the same.
+- *The C*: the 99 programs byte-identical.
+- *Cells*: 54 more: 50 proved; by design, each with controls: `A_zs_shiftl_three`, `A_zs_shiftl_var` (the shifts by 1 and 2); gaps `A_zs_const_mid`, `A_zs_big_const` (a bound's constant from 5000 on, §12.A).  One gap read: `A_zr_land_budget`.
+- The C: the 99 programs byte-identical.  The construct table (on `f39c112`): **3898 of 4038 through the verified compiler**, 68
+  by design, 71 gaps, 1 not Rocq (was 3847 of 3984: 50 of the 54 new cells read, 2 by design, 2 gaps; 1 gap read; no cell lost).
+  The gate on `f39c112`, the walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding; the same C: undefined
+  behaviour trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels and `grow`
+  (22 / 21 / 25 / 20 / 19 / 9 s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems each within
+  the list; `check_trust.py`: `trust unchanged`.  Next: step 103, step 102's follow-up of a sum around such a counter with an
+  operation the check knows nothing of (a hang, there since step 83), then step 104, a use where its value modulo a word is
+  enough.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6001,11 +6031,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `2667bb1` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `f39c112` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 102's design -- a counter a function gives back, used as a counter inside an operation; F83, F84 |
+| (this commit) | §12.V: step 102 (a counter a function gives back, used as a counter inside an operation: the construct table 3898 of 4038, 68 by design, 71 gaps), the gate; §12.A: three follow-ups |
+| `f39c112` | `proved/KQRReify.v` + `KQRWf.v` + matrix step 102: a counter a function gives back, used as a counter inside an operation: its bound kept with its constant apart, a written number one constant and a leaf of the walks, a shift left by a written number, an operation inside a sum given its bound, a library definition written out |
+| `f64aac0` | §12.V: step 102's design -- a counter a function gives back, used as a counter inside an operation; F83, F84 |
 | `c9b37d3` | §12.V: step 101 (a function giving back a counter built by a bit operation: the construct table 3847 of 3984, 66 by design, 70 gaps), the gate |
 | `2667bb1` | `proved/KQRReify.v` + `KQRWf.v` + matrix step 101: a function giving back a counter built by a bit operation: land, lor, lxor, ldiff the machine's in a row, each proved the same modulo a word, and their bounds |
 | `aa48ac4` | §12.V: step 101's design -- a function giving back a counter built by a bit operation |
