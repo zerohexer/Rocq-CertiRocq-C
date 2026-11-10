@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3838 of 3975, 70 gaps, 66 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3847 of 3984, 70 gaps, 66 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1706,6 +1706,9 @@ comparisons on counters (4); records of three numbers by recursion (3, with the 
 constructs of `S`.  Then the pins of §0.5's boundaries, each with its control (§3.5): cells added to `gen.py` and to
 `DESIGN_CELLS` together.  Accepted when: the category's cells are `ok`, the full table is re-run and `MATRIX.md` updated, and
 the gate (examples, corpus, kernels if the walk changed) passes.
+- *A counter a function gives back, used as a counter inside a bit operation* (found at step 101): step 83's reading of such a counter
+  (`nc_c`, `nc_tr`, the rewriting `nc_sub`) takes `S`, `+` and `*`; `land`, `lor`, `lxor`, `ldiff` are the machine's there too (step
+  101's lemmas), with their bounds.  Accepted when `A_zr_land_budget` is proved.
 
 **B. Compiling from an ordinary `.v` file, as simply as `lean --c`.**
 - ~~A command in an ordinary Rocq file~~ — **done at step 89**, without a command: `python3 proved/kitc.py prog.v [--main=NAME]`: the entry's arguments are read from its signature (numbers and counters from the
@@ -5789,6 +5792,20 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: a program read before, byte-identical.
 - *Cells*: `A_zr_*`: a row's `lor`, `lxor`, `ldiff`, a `land` with a parameter, of two own results, two steps down, mixed, its result in a test and as a budget.
 
+**Step 101, a function giving back a counter built by a bit operation — the result (2026-11-10).**  Built as designed:
+- *The row* (`KQRReify.v`): `nr_land_i`, `nr_lor_i`, `nr_lxor_i`; `nr_tr` reads `land`, `lor`, `lxor`, `ldiff` by step 92's `nbop_of`, `shiftr` and `clearbit` not.  *The bound*: `nb_go`'s four rules.
+- *What is proved* (`KQRWf.v`): `nr_nbit`, `nr_nbits`, `nr_zland` .. `nr_zldiff`, `nr_mod63`, `nr_land` .. `nr_ldiff`, `nr_zland_ldiff`, `nr_zlxor_add`, `nb_land_l`, `nb_land_r`, `nb_ldiff`, `nb_lor`, `nb_lxor`, from Rocq's axioms of its machine numbers alone; `kq_nr`'s four rules, `nb_bitf` in `nb_step`.  Step 92 proved the same facts of `Z` in `KQR.v`, which `KQRWf.v` comes before: they are proved again here under other names rather than `KQR.v` importing `KQRWf.v`'s whole name space.
+- *Found by the cells*: a row's result used in a test (`A_zr_lxor_test`) wanted the row's bound, so the bound took its rules in the same step; a row's result used inside a bit operation in another function (`A_zr_land_budget`) goes through step 83's reading of such a counter, which takes `S`, `+`, `*`: a §12.A follow-up.
+- *The C*: the 99 programs byte-identical.
+- *Cells*: 9 more: 8 proved, a row's `lor`, `lxor`, `ldiff`, a `land` with a parameter, of two own results, two steps down, mixed, its result in a test; gap `A_zr_land_budget` (the follow-up).  One gap read: `A_zh_row_land`; `A_zh_row_shiftr` and `A_zh_row_testbit_own` named by what they want.
+- The C: the 99 programs byte-identical.  The construct table (on `2667bb1`): **3847 of 3984 through the verified compiler**, 66
+  by design, 70 gaps, 1 not Rocq (was 3838 of 3975: 8 of the 9 new cells read; 1 gap read; no cell lost).  The gate on `2667bb1`,
+  the walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding; the same C: undefined behaviour trapped 63 /
+  63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels and `grow` (22 / 22 / 24 / 19 / 19
+  / 9 s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems each within the list;
+  `check_trust.py`: `trust unchanged`.  Next: step 102, the follow-up: a counter a function gives back, used as a counter inside a
+  bit operation (`A_zr_land_budget`).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -5971,11 +5988,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `1de1259` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `2667bb1` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 101's design -- a function giving back a counter built by a bit operation |
+| (this commit) | §12.V: step 101 (a function giving back a counter built by a bit operation: the construct table 3847 of 3984, 66 by design, 70 gaps), the gate |
+| `2667bb1` | `proved/KQRReify.v` + `KQRWf.v` + matrix step 101: a function giving back a counter built by a bit operation: land, lor, lxor, ldiff the machine's in a row, each proved the same modulo a word, and their bounds |
+| `aa48ac4` | §12.V: step 101's design -- a function giving back a counter built by a bit operation |
 | `2c48ca3` | §12.V: step 100 (a function giving back a counter whose recursion goes more than one step down: the construct table 3838 of 3975, 66 by design, 70 gaps), the gate |
 | `1de1259` | `proved/KQRReify.v` + `kitc.py` + matrix step 100: a function giving back a counter whose recursion goes more than one step down: the record of such recursions of the environment the reading used |
 | `c6d3894` | §12.V: step 100's design -- a function giving back a counter whose recursion goes more than one step down |
