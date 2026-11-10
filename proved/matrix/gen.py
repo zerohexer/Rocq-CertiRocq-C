@@ -3577,6 +3577,27 @@ addA('zo_let', "", 'let c := tw n in ff c a + ff c b',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
 addA('zo_callee', "", 'g2 n a',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (k : nat) (x : int) : int := ff (tw k) x.\n')
+# a value of a type holding a counter, built and taken apart in the text (step 106)
+addA('zw_pair_match', "", 'match (n, a) with (c, x) => Uint63.of_nat c + x end',
+     '')
+addA('zw_pair_fst', "", 'Uint63.of_nat (fst (n, a)) + snd (n, a)',
+     '')
+addA('zw_opt_match', "", 'match Some n with Some c => ff c a | None => b end',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
+addA('zw_rec_match', "", 'match ct (bump (mkcn n a)) with O => a | S m => ff m b end',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nRecord cn := mkcn { ct : nat; vl : int }.\nDefinition bump (c : cn) : cn := mkcn (S (ct c)) (vl c).\n')
+addA('zw_rec_budget', "", 'ff (ct (mkcn (n + 1) a)) b',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nRecord cn := mkcn { ct : nat; vl : int }.\nDefinition bump (c : cn) : cn := mkcn (S (ct c)) (vl c).\n')
+addA('zw_data', "", 'match K1 n with K1 c => ff c a | K2 x => x end',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nInductive dk := K1 (c : nat) | K2 (x : int).\n')
+addA('zw_data_helper', "", 'match mk n with K1 c => ff c a | K2 x => x end',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nInductive dk := K1 (c : nat) | K2 (x : int).\nDefinition mk (k : nat) : dk := K1 (S k).\n')
+addA('zw_nested', "", 'Uint63.of_nat (ct (inn (mko (mkcn n a) b)))',
+     'Record cn := mkcn { ct : nat; vl : int }.\nDefinition bump (c : cn) : cn := mkcn (S (ct c)) (vl c).\nRecord outer := mko { inn : cn; ow : int }.\n')
+addA('zw_let_rec', "", 'let r := mkcn n a in Uint63.of_nat (ct r) + vl r',
+     'Record cn := mkcn { ct : nat; vl : int }.\nDefinition bump (c : cn) : cn := mkcn (S (ct c)) (vl c).\n')
+addA('zw_choice', "", 'match (if a <? b then K1 n else K2 a) with K1 c => ff c a | K2 x => x end',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nInductive dk := K1 (c : nat) | K2 (x : int).\n')
 # a bound's constant and a written number from 5000 on, where a counter given back is used (step 105)
 addA('zv_add_big', "", 'ff (cnt n a s + 100000) b',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')

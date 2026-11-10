@@ -10970,6 +10970,71 @@ Definition cl_all (Σ : global_env) (mp : modpath) (kns : list kername) : list (
   flat_map (fun k => match cl_proj Σ mp k with Some e => [(k, e)] | None => [] end) kns.
 Definition cl_s (Σ : global_env) (mp : modpath) (cls : list (kername * (nat * nat * nat))) (t : term) : term :=
   match cls with [] => t | _ => cl_red 100000 Σ mp cls t end.
+(** (step 106) a value of a type holding a counter (a constructor with a counter field, or a pair or an option at [nat]), built and taken
+    apart in the text: the match, a projection of the program's, [fst], [snd], taken where the value is built, once the program's helpers
+    on the way are written out ([um_red]); a type with no counter, as before *)
+Definition nf_ind (Σ : global_env) (i : inductive) : bool :=
+  if Kername.eqb (inductive_mind i) (inductive_mind ind_nat) then false else
+  match lookup_env Σ (inductive_mind i) with
+  | Some (InductiveDecl mib) =>
+      match nth_error (ind_bodies mib) (inductive_ind i) with
+      | Some oib => existsb (fun cb => existsb (fun d => is_nat (decl_type d)) (cstr_args cb)) (ind_ctors oib)
+      | None => false
+      end
+  | _ => false
+  end.
+Definition kn_snd6 := kn_of <% @snd %>.
+Fixpoint nf_red (fuel : nat) (Σ : global_env) (mp : modpath) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := nf_red fuel Σ mp in
+      let brs' := fun brs : list (branch term) => map (fun br => {| bcontext := bcontext br; bbody := go (bbody br) |}) brs in
+      match t with
+      | tCase ci p c brs =>
+          if nf_ind Σ (ci_ind ci) || existsb is_nat (pparams p) then
+            match um_red 1000 Σ mp t with
+            | tCase _ _ _ _ => tCase ci p (go c) (brs' brs)
+            | u => go u
+            end
+          else tCase ci p (go c) (brs' brs)
+      | tApp (tConst k u) args =>
+          let keep := tApp (tConst k u) (map go args) in
+          if Kername.eqb k kn_fst || Kername.eqb k kn_snd6 then
+            match args with
+            | [A; B; x] =>
+                if is_nat A || is_nat B then
+                  match um_red 1000 Σ mp x with
+                  | tApp (tConstruct i 0 _) [_; _; x1; x2] =>
+                      if Kername.eqb (inductive_mind i) (inductive_mind ind_prod) then go (if Kername.eqb k kn_fst then x1 else x2) else keep
+                  | _ => keep
+                  end
+                else keep
+            | _ => keep
+            end
+          else if in_prog mp (fst k) then
+            match body_of Σ k with
+            | Some b =>
+                match lams b with
+                | (tys, tCase ci _ _ _) =>
+                    if Nat.eqb (length tys) (length args) && nf_ind Σ (ci_ind ci) then
+                      match um_red 1000 Σ mp t with
+                      | tCase _ _ _ _ => keep
+                      | v => go v
+                      end
+                    else keep
+                | _ => keep
+                end
+            | None => keep
+            end
+          else keep
+      | tApp f args => tApp (go f) (map go args)
+      | tLambda na ty b => tLambda na ty (go b)
+      | tLetIn na v ty b => tLetIn na (go v) ty (go b)
+      | tFix mfix k => tFix (map (fun d => {| dname := dname d; dtype := dtype d; rarg := rarg d; dbody := go (dbody d) |}) mfix) k
+      | _ => t
+      end
+  end.
 Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env * bool :=
   let kns0 := snd (reach_go 1000 Σ mp root root ([], [])) in
   let cls := cl_all (conv_all Σ mp) mp kns0 in
@@ -11106,9 +11171,11 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
           | Some b00 =>
               (* (step 68) a program's name for a type, read as its definition, the same up to delta *)
               let ty0 := al_t 1000 Σ mp (cst_type cb) in
+              (* (step 106) a value holding a counter, built and taken apart in the text: taken apart where it is built *)
+              let b0a := nf_red 100000 (conv_all Σ mp) mp (al_t 100000 Σ mp b00) in
               let b0n := match cls with
-                         | [] => nr_sub 100000 (conv_all Σ mp) mp rows (al_t 100000 Σ mp b00)
-                         | _ => rp_sub 100000 rows (cl_s (conv_all Σ mp) mp cls (nr_sub 100000 (conv_all Σ mp) mp rows (al_t 100000 Σ mp b00)))
+                         | [] => nr_sub 100000 (conv_all Σ mp) mp rows b0a
+                         | _ => rp_sub 100000 rows (cl_s (conv_all Σ mp) mp cls (nr_sub 100000 (conv_all Σ mp) mp rows b0a))
                          end in
               let b0c := if nc_rows rows then nc_sub 100000 (conv_all Σ mp) mp rows nbt [] b0n else b0n in
               let b0x := mo_t 100000 Σ mp (lu_t 100000 Σ b0c) in
