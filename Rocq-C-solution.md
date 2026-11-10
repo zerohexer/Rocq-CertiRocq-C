@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3898 of 4038, 71 gaps, 68 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3909 of 4054, 72 gaps, 72 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1714,13 +1714,15 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   the bound's statement carries it as a chain of successors (76500: 18 s and 2.4 GB to check); the constant in `Z`, in the statement
   and in the reader, and counted with the multiples against the counters' bounds where the counter is used (step 83's `nc_c` counts
   multiples only).  Accepted when such a bound is proved and used where the counter is used as itself, which needs it (`ff (cbm n n) a`
-  with `cbm k m <= k + m + 76500`, and with `+ 1228500`), each pinned by a cell.
+  with `cbm k m <= k + m + 76500`, and with `+ 1228500`), each pinned by a cell, and `A_zt_sum_setbit_big` (`setbit` by 20 in such a sum,
+  a constant `2^20`) is proved.
 - *A counter a function gives back, used where its value modulo a word is enough* (found at step 102): `Nat.land x 255` is the same at
   `x` and at `x` modulo a word, and a row gives that (steps 82, 101), so no bound is needed; today such a use is read only where the
   function has a bound (`A_zs_const_mid`, `A_zs_big_const`, whose bounds' constants are 76500 and 1228500).  Inside `land` with a
   number below a word, `testbit` below 63, `mod` by a power of two, `even`, `odd`: accepted when these are proved for functions with no
   bound (a doubling, a quadratic, those two).
-- *A sum around such a counter with an operation the check knows nothing of* (found at step 102, there since step 83): in
+- ~~*A sum around such a counter with an operation the check knows nothing of*~~ (found at step 102, there since step 83) — **done, step
+  103**: a call counted by the bound the check is given of it, another of Rocq's libraries past the limit.  In
   `cnt n a s + Nat.log2 n` step 83's reading takes the whole sum as one site, counting `log2 n` as one counter (`nc_c`'s 1 for any call),
   and the check, given no bound of `log2`, falls to a path that unfolds it: no answer in 120 s, the same with `sqrt` and `gcd`.  A sum is
   one site only where the check has a bound of each part; `log2`, `sqrt`, `gcd` given theirs.  Accepted when those three are proved and
@@ -5856,6 +5858,20 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: a program read before, byte-identical.
 - *Cells*: `A_zt_*`, 16: such a counter in a sum with `log2`, `sqrt`, `gcd`, `b2n`, an `if`, a product, a power, `lcm`, `setbit` by 20, helpers of the program adding one, two and seven times, a doubling; `log2` and `sqrt` of such a counter in a sum; a sum with `log2` in a test.
 
+**Step 103, a sum around a counter a function gives back, with an operation the check knows nothing of — the result (2026-11-10).**  Built as designed:
+- *The reader* (`KQRReify.v`): `nc_opc`, the count of a call in a site; `kn_c_setbit`, `kn_c_double`, `kn_c_b2n`; `nc_c` and `nc_ok` take the environment and the rows.  *What is proved* (`KQRWf.v`): `nc_log2_le`, `nc_sqrt_le`, `nc_gcd_le`, `nc_b2n_le`, in `nc_opf`.
+- *Measured*: `cnt n a s + Nat.log2 n` proved in 3.8 s where there was no answer in 120 s; the power, the `lcm`, the `setbit` by 20, the helper seven times and the doubling refused in about 2 s.  No cell of step 102's or of steps 82, 83, 100, 101's families changed.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62, in clean copies of both trees; step 102's files / these): `HWP_kernel` 2.93 / 2.94 s, `HWP_own` 1.99 / 1.99, `HWP_irqnow` 1.66 / 1.66 — the same.
+- *The C*: the 99 programs byte-identical.
+- *Cells*: 16 more: 11 proved; by design, each with controls: `A_zt_sum_pow`, `A_zt_sum_lcm` (`A_zt_sum_log2`, `A_zt_sum_gcd`), `A_zt_sum_helper_seven`, `A_zt_sum_doubling` (`A_zt_sum_helper_two`); gap `A_zt_sum_setbit_big` (a constant `2^20`, step 102's follow-up of a constant from 5000 on).
+- The C: the 99 programs byte-identical.  The construct table (on `841465a`): **3909 of 4054 through the verified compiler**, 72
+  by design, 72 gaps, 1 not Rocq (was 3898 of 4038: 11 of the 16 new cells read, 4 by design, 1 gap; no cell lost).  The gate on
+  `841465a`, the walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding; the same C: undefined behaviour
+  trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels and `grow` (22 / 22 /
+  26 / 20 / 19 / 9 s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems each within the list;
+  `check_trust.py`: `trust unchanged`.  Next: step 104, step 102's follow-up of a counter given back used where its value modulo a
+  word is enough, then step 105, a bound's constant from 5000 on.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6038,11 +6054,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `f39c112` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `841465a` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 103's design -- a sum around a counter a function gives back, with an operation the check knows nothing of |
+| (this commit) | §12.V: step 103 (a sum around a counter a function gives back, with an operation the check knows nothing of: the construct table 3909 of 4054, 72 by design, 72 gaps), the gate |
+| `841465a` | `proved/KQRReify.v` + `KQRWf.v` + matrix step 103: a sum around a counter a function gives back is one site only where the check has a bound of each part: the count of a call by its bound, the bounds of log2, sqrt, gcd, b2n, a helper by its body |
+| `521f96a` | §12.V: step 103's design -- a sum around a counter a function gives back, with an operation the check knows nothing of |
 | `26ddcd3` | §12.V: step 102 (a counter a function gives back, used as a counter inside an operation: the construct table 3898 of 4038, 68 by design, 71 gaps), the gate; §12.A: three follow-ups |
 | `f39c112` | `proved/KQRReify.v` + `KQRWf.v` + matrix step 102: a counter a function gives back, used as a counter inside an operation: its bound kept with its constant apart, a written number one constant and a leaf of the walks, a shift left by a written number, an operation inside a sum given its bound, a library definition written out |
 | `f64aac0` | §12.V: step 102's design -- a counter a function gives back, used as a counter inside an operation; F83, F84 |
