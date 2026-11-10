@@ -12976,6 +12976,9 @@ Ltac kq_rbt_own :=
          | H : True |- _ => clear H
          end.
 Ltac kq_rbt_arm :=
+  (* (step 107) the tag's machine number computed once: the loop below leaves it a written counter [S (.. (S O))], which each of the
+     representation's comparisons converted again, so arm k cost k levels of the constructors' match (88 s on [byte]'s 256) *)
+  try (match goal with |- context [ofn ?k] => let v := eval vm_compute in (ofn k) in change (ofn k) with v end);
   match goal with Hl : (length (_ :: ?rest) + _)%nat = _, Hz : zeros_from _ ?rest = true, Ho : rs_own _ _ |- _ =>
     cbn in Hl; rewrite Nat.add_comm in Hl; cbn in Hl; repeat (destruct rest as [|? rest]; try discriminate Hl);
     cbn in Hz; kq_zeros; cbn in Ho; kq_rbt_own;
