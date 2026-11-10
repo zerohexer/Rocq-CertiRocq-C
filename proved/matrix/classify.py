@@ -13,6 +13,9 @@ import re, sys, collections
 # differs only in the cause.  The cells once listed here (option, sum, a list cell, a function in a pair, a function returned,
 # a dead memory let) build and take apart their value in place, so they are gaps.
 DESIGN_CELLS = {
+  # a counter a function gives back shifted left by 3 or by a counter: up to 8 times a counter of up to 2^60, or 2^n, a number past a
+  # word (Rocq-C-solution.md §0.5, second reason); controls: A_zs_shiftl, A_zs_shiftl_two, the shifts by 1 and 2 (step 102)
+  "A_zs_shiftl_three", "A_zs_shiftl_var",
   # two records holding a memory, read from one and written in the other, given the same one by the call: two versions (Rocq-C-solution.md §0.5, third reason); control: A_x_p_other_param
   "A_x_p_two_states",
   # read from a memory and written in another, given the same one: two versions differing in cells whose number comes from the data (Rocq-C-solution.md §0.5, third reason); controls: A_w_s_three_value, A_w_l_cap_lit
@@ -179,7 +182,8 @@ BY_NAME = {
   "A_zc_r_nested": "a record of functions inside a record, given to a recursion",
   "A_zd_r_default": "the memory before a call that gave nothing, used after it",
   "A_ze_own_call_12": "tests that cannot be moves in one expression, an own call in each: what follows written in each arm",
-  "A_zr_land_budget": "a counter a function gives back, used as a counter inside a bit operation: step 83's reading of such a counter takes S, + and * (12.A)",
+  "A_zs_const_mid": "a counter a function gives back whose bound's constant is 5000 or more: the bound is not kept, its statement would carry the constant as a chain of successors (12.A)",
+  "A_zs_big_const": "a counter a function gives back whose bound's constant is 5000 or more: the bound is not kept, its statement would carry the constant as a chain of successors (12.A)",
   "A_zh_row_shiftr": "a function giving back a counter built by shiftr: not the same modulo a word, it wants the row's bound (step 83)",
   "A_zh_row_testbit_own": "a test on what a function giving back a counter gives back, in its own recursion: it wants the row's bound or the test on the machine's number",
   "A_zf_r_three": "three constructors or more holding a memory, through a recursion: a sum in a sum",

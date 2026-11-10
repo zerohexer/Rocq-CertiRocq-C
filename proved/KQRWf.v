@@ -523,8 +523,11 @@ Proof.
   destruct (Z.ltb_spec i 63); [rewrite !Z.ones_spec_low by lia | rewrite !Z.ones_spec_high by lia]; btauto.
 Qed.
 (** only as written: a function of the shape of [Nat.add] is [Nat.add] up to conversion *)
+Ltac nr_numeral a := lazymatch a with O => idtac | S ?b => nr_numeral b end.
 Ltac kq_nr :=
   match goal with
+  | |- context [Uint63.of_Z (Z.of_nat (S ?a))] =>
+      nr_numeral a; let v := eval vm_compute in (Uint63.of_Z (Z.of_nat (S a))) in change (Uint63.of_Z (Z.of_nat (S a))) with v
   | |- context [Uint63.of_Z (Z.of_nat (S ?a))] => rewrite (nr_S a)
   | |- context [Uint63.of_Z (Z.of_nat (Nat.add ?a ?b))] => rewrite (nr_add a b)
   | |- context [Uint63.of_Z (Z.of_nat (Nat.mul ?a ?b))] => rewrite (nr_mul a b)
@@ -541,12 +544,25 @@ Proof.
 Qed.
 (** what is known of the calls in the goal: [kitc.py] sets it *)
 Ltac kq_bd := idtac.
-Ltac nc_side := kq_bd; lia.
+(** (step 102) a shift left by a number below [wB]: the machine's, the same modulo a word; for a bound, the product it is *)
+Lemma nr_shiftl : forall a k, (Z.of_nat k < 9223372036854775808)%Z ->
+  Uint63.of_Z (Z.of_nat (Nat.shiftl a k)) = PrimInt63.lsl (Uint63.of_Z (Z.of_nat a)) (Uint63.of_Z (Z.of_nat k)).
+Proof.
+  intros a k H. apply Uint63.to_Z_inj. rewrite Uint63.lsl_spec, !Uint63.of_Z_spec.
+  rewrite (Z.mod_small (Z.of_nat k)) by (change Uint63.wB with 9223372036854775808%Z; lia).
+  rewrite Nat.shiftl_mul_pow2, Nat2Z.inj_mul, Nat2Z.inj_pow. change (Z.of_nat 2) with 2%Z.
+  rewrite Z.mul_mod_idemp_l by (compute; discriminate). reflexivity.
+Qed.
+Ltac nc_shl :=
+  repeat match goal with |- context [Nat.shiftl ?a ?k] =>
+    rewrite (Nat.shiftl_mul_pow2 a k); let v := eval vm_compute in (Nat.pow 2 k) in change (Nat.pow 2 k) with v end.
+Ltac nc_side := kq_bd; nc_shl; lia.
 Ltac nc_fold :=
   match goal with
   | |- context [PrimInt63.add (Uint63.of_Z (Z.of_nat ?a)) 1%uint63] => rewrite <- (nr_S a)
   | |- context [PrimInt63.add (Uint63.of_Z (Z.of_nat ?a)) (Uint63.of_Z (Z.of_nat ?b))] => rewrite <- (nr_add a b)
   | |- context [PrimInt63.mul (Uint63.of_Z (Z.of_nat ?a)) (Uint63.of_Z (Z.of_nat ?b))] => rewrite <- (nr_mul a b)
+  | |- context [PrimInt63.lsl (Uint63.of_Z (Z.of_nat ?a)) (Uint63.of_Z (Z.of_nat ?b))] => rewrite <- (nr_shiftl a b) by lia
   end.
 (** what stands in a function's place back to the counter, around it the same counter, in one step: what is left of them is folded again after *)
 Ltac nc_step rw :=
@@ -596,6 +612,32 @@ Ltac nb_bitf :=
   | |- context [Nat.lxor ?a ?b] => lazymatch goal with _ : (Nat.lxor a b <= a + b)%nat |- _ => fail | _ => pose proof (nb_lxor a b) end
   | |- context [Nat.ldiff ?a ?b] => lazymatch goal with _ : (Nat.ldiff a b <= a)%nat |- _ => fail | _ => pose proof (nb_ldiff a b) end
   end.
+(** (step 102) a counter a function gives back inside an operation, inside a sum or a product: the operation at most what it is of *)
+Lemma nc_shiftr_le : forall a k, (Nat.shiftr a k <= a)%nat.
+Proof. intros a k. rewrite Nat.shiftr_div_pow2. apply Nat.Div0.div_le_upper_bound. pose proof (Nat.pow_nonzero 2 k ltac:(lia)). nia. Qed.
+Lemma nc_div_le : forall a b, (Nat.div a b <= a)%nat.
+Proof. intros a [|b]; [cbn; lia | apply Nat.Div0.div_le_upper_bound; nia]. Qed.
+Lemma nc_mod_le : forall a b, (Nat.modulo a b <= a)%nat.
+Proof. intros a b. apply Nat.Div0.mod_le. Qed.
+Lemma nc_div2_le : forall a, (Nat.div2 a <= a)%nat.
+Proof. intros a. rewrite Nat.div2_div. apply nc_div_le. Qed.
+Lemma nc_clearbit_le : forall a k, (Nat.clearbit a k <= a)%nat.
+Proof. intros a k. rewrite Nat.clearbit_spec'. apply nb_ldiff. Qed.
+Lemma nc_setbit_le : forall a k, (Nat.setbit a k <= a + Nat.pow 2 k)%nat.
+Proof. intros a k. unfold Nat.setbit. rewrite Nat.shiftl_1_l. apply nb_lor. Qed.
+Ltac nc_opf :=
+  repeat match goal with
+  | |- context [Nat.shiftr ?a ?k] => lazymatch goal with _ : (Nat.shiftr a k <= a)%nat |- _ => fail | _ => pose proof (nc_shiftr_le a k) end
+  | |- context [Nat.div ?a ?b] => lazymatch goal with _ : (Nat.div a b <= a)%nat |- _ => fail | _ => pose proof (nc_div_le a b) end
+  | |- context [Nat.modulo ?a ?b] => lazymatch goal with _ : (Nat.modulo a b <= a)%nat |- _ => fail | _ => pose proof (nc_mod_le a b) end
+  | |- context [Nat.div2 ?a] => lazymatch goal with _ : (Nat.div2 a <= a)%nat |- _ => fail | _ => pose proof (nc_div2_le a) end
+  | |- context [Nat.clearbit ?a ?k] => lazymatch goal with _ : (Nat.clearbit a k <= a)%nat |- _ => fail | _ => pose proof (nc_clearbit_le a k) end
+  | |- context [Nat.setbit ?a ?k] =>
+      lazymatch goal with _ : (Nat.setbit a k <= _)%nat |- _ => fail
+      | _ => let v := eval vm_compute in (Nat.pow 2 k) in pose proof (nc_setbit_le a k : (Nat.setbit a k <= a + v)%nat) end
+  | |- context [Nat.double ?a] => lazymatch goal with _ : Nat.double a = _ |- _ => fail | _ => pose proof (Nat.double_twice a) end
+  end.
+Ltac nc_side ::= kq_bd; nc_shl; nb_bitf; nc_opf; lia.
 Ltac nb_step tac :=
   repeat (cbn beta iota zeta;
           first [ solve [tac; nb_bitf; lia]
