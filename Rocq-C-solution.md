@@ -5946,6 +5946,12 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems each within the list; `check_trust.py`:
   `trust unchanged`.  Next: step 107, the laws of a data type with many constructors in time (§12.F).
 
+**Step 107, the laws of a data type with many constructors, in time (§7, §12.F, found at step 106) — the design (2026-11-11).**  `match x with x41 => 1 | _ => 0 end` on a `byte`: Rocq writes the `_` as the other 255 constructors, and the program took about 100 s to compile, 88 of them in one law of the type's representation (`rb_tag`, proved per program by `KQR.kq_rbt_case`).  Measured: each of its 256 arms takes 1 ms at its own tag; the loop that reaches arm k (`destruct c as [|c]`) leaves the tag as `S (.. (S O))`, and the representation's comparison of the tag word `ofn c` with each constructor's converted that unary number again, so arm k cost k levels of the 256-branch match: cubic in the constructors.  Simplifying the whole goal at each step instead unfolds the representation and runs out of memory.
+- *The arm* (`KQR.kq_rbt_arm`): the tag's machine number computed once (`vm_compute` of `ofn k`, put in by `change`), so its comparisons are of literals.  A tactic: no statement, no theorem and nothing assumed changes.
+- *Measured*: `A_q_byte_lit` 8.7 s for the whole program (about 100 s before); a type of few constructors, as before.
+- *The C*: the same, since only a proof changes.
+- *Cells*: none new; `A_q_byte_lit` is the measurement, the table and the gate the check that every law of every program still proves.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6132,7 +6138,8 @@ Pushed to the public repository up to `6f6855a` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 106 (a value of a type holding a counter, built and taken apart in the text: the construct table 3951 of 4095, 76 by design, 67 gaps), the gate; §12.F: the laws of a data type with many constructors |
+| (this commit) | §12.V: step 107's design -- the laws of a data type with many constructors, in time |
+| `577992b` | §12.V: step 106 (a value of a type holding a counter, built and taken apart in the text: the construct table 3951 of 4095, 76 by design, 67 gaps), the gate; §12.F: the laws of a data type with many constructors |
 | `6f6855a` | `proved/KQRReify.v` + matrix step 106: a value of a type holding a counter, built and taken apart in the text: taken apart where it is built |
 | `382b2b1` | §12.V: step 106's design -- a value of a type holding a counter, built and taken apart in the text |
 | `28a1143` | §12.V: step 105 (a bound's constant and a written number from 5000 on: the construct table 3939 of 4085, 76 by design, 69 gaps), the gate |
