@@ -3577,6 +3577,35 @@ addA('zo_let', "", 'let c := tw n in ff c a + ff c b',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
 addA('zo_callee', "", 'g2 n a',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (k : nat) (x : int) : int := ff (tw k) x.\n')
+# a local mutual fixpoint naming variables of the function (step 110)
+addA('zz_two_caps', "", '(fix f (m : nat) (x : int) : int := match m with O => x | S q => g q (x + a) end with g (m : nat) (x : int) : int := match m with O => x | S q => f q (x * b) end for f) n 1',
+     '')
+addA('zz_mem', "", '(fix f (m : nat) (i : int) : int := match m with O => rd 0 i s | S q => g q (i + 1) end with g (m : nat) (i : int) : int := match m with O => 0 | S q => f q (i + 2) end for f) n a',
+     '')
+addA('zz_counter', "", '(fix f (m : nat) (x : int) : int := match m with O => x | S q => g q (x + Uint63.of_nat n) end with g (m : nat) (x : int) : int := match m with O => x | S q => f q (x * 2) end for f) n a',
+     '')
+addA('zz_in_rec', "", 'lp n a',
+     'Fixpoint lp (k : nat) (y : int) : int := match k with O => y | S j => lp j ((fix f (m : nat) (x : int) : int := match m with O => x | S q => g q (x + y) end with g (m : nat) (x : int) : int := match m with O => x | S q => f q (x * 2) end for f) 3%nat y) end.\n')
+addA('zz_match_bound', "", 'match n with O => a | S p => (fix f (m : nat) (x : int) : int := match m with O => x | S q => g q (x + 1) end with g (m : nat) (x : int) : int := match m with O => x | S q => f q (x * 2) end for f) p (a + Uint63.of_nat p) end',
+     '')
+addA('zz_match_bound_use', "", 'match n with O => a | S p => (fix f (m : nat) (x : int) : int := match m with O => x + Uint63.of_nat p | S q => g q (x + 1) end with g (m : nat) (x : int) : int := match m with O => x | S q => f q (x * 2) end for f) n a end',
+     '')
+addA('zz_bool_cap', "", 'let c := a <? b in (fix f (m : nat) (x : int) : int := match m with O => x | S q => g q (if c then x + 1 else x) end with g (m : nat) (x : int) : int := match m with O => x | S q => f q (x * 2) end for f) n a',
+     '')
+addA('zz_rec_cap', "", 'let r := hr a b in (fix f (m : nat) (x : int) : int := match m with O => x + f3 r | S q => g q (x + f1 r) end with g (m : nat) (x : int) : int := match m with O => x | S q => f q (x * f2 r) end for f) n a',
+     '')
+addA('zz_section_mut', "", 'ev2 a n b',
+     'Section Sm.\nVariable k : int.\nFixpoint ev2 (m : nat) (x : int) : int := match m with O => x + k | S q => od2 q (x + k) end\nwith od2 (m : nat) (x : int) : int := match m with O => x | S q => ev2 q (x * 2) end.\nEnd Sm.\n')
+addA('zz_section_mut_let', "", 'ev3 a n b',
+     'Section Sl.\nVariable k : int.\nLet k2 : int := k + 1.\nFixpoint ev3 (m : nat) (x : int) : int := match m with O => x + k2 | S q => od3 q (x + k) end\nwith od3 (m : nat) (x : int) : int := match m with O => x | S q => ev3 q (x * k2) end.\nEnd Sl.\n')
+addA('zz_in_fix_call', "", 'lq n a',
+     'Fixpoint lq (k : nat) (y : int) : int := match k with O => y | S j => (fix f (m : nat) (x : int) : int := match m with O => lq j x | S q => g q (x + 1) end with g (m : nat) (x : int) : int := match m with O => x | S q => f q (x * 2) end for f) 2%nat y end.\n')
+addA('zz_with_lfix', "", '(fix h (m : nat) (y : int) : int := match m with O => y | S q => h q (y + 1) end) n ((fix f (m : nat) (x : int) : int := match m with O => x | S q => g q (x + a) end with g (m : nat) (x : int) : int := match m with O => x | S q => f q (x * 2) end for f) n b)',
+     '')
+addA('zz_in_helper', "", 'hh n a + hh n b',
+     'Definition hh (n : nat) (a : int) : int := (fix f (m : nat) (x : int) : int := match m with O => x | S q => g q (x + a) end with g (m : nat) (x : int) : int := match m with O => x | S q => f q (x * 2) end for f) n a.\n')
+addA('zz_fn_arg', "", 'twice ((fix f (m : nat) (x : int) : int := match m with O => x | S q => g q (x + b) end with g (m : nat) (x : int) : int := match m with O => x | S q => f q (x * 2) end for f) n) a',
+     '')
 # a local mutual fixpoint (step 108)
 addA('zy_three', "", '(fix f (m : nat) (x : int) : int := match m with O => x | S q => g q (x + 1) end with g (m : nat) (x : int) : int := match m with O => x | S q => h3 q (x * 2) end with h3 (m : nat) (x : int) : int := match m with O => x | S q => f q (x - 3) end for f) n a',
      '')
