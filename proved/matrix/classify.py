@@ -193,7 +193,6 @@ BY_NAME = {
   "A_zc_r_nested": "a record of functions inside a record, given to a recursion",
   "A_zd_r_default": "the memory before a call that gave nothing, used after it",
   "A_ze_own_call_12": "tests that cannot be moves in one expression, an own call in each: what follows written in each arm",
-  "A_zy_counter": "a local mutual block giving back a counter: the rows are made before the reading lifts a local block (12.A)",
   "A_zz_in_fix_call": "a local mutual fixpoint calling the function it stands in: its members would take that function as a parameter (12.A)",
   "A_zx_as_counter": "a mutual block's counter used as a counter: step 83's bound is of single functions (12.A)",
   "A_zx_mixed": "a block of different types (step 62's) one of whose members gives back a counter: step 111's rows are of blocks whose members all give back counters (12.A)",

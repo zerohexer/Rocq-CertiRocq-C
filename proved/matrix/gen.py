@@ -3577,6 +3577,17 @@ addA('zo_let', "", 'let c := tw n in ff c a + ff c b',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
 addA('zo_callee', "", 'g2 n a',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (k : nat) (x : int) : int := ff (tw k) x.\n')
+# a local mutual block giving back counters (step 112)
+addA('zx_loc_cap', "", 'Uint63.of_nat ((fix ev (m : nat) : nat := match m with O => n | S q => S (od q) end with od (m : nat) : nat := match m with O => O | S q => ev q end for ev) n)',
+     '')
+addA('zx_loc_three', "", 'Uint63.of_nat ((fix ta (m : nat) : nat := match m with O => O | S q => S (tb q) end with tb (m : nat) : nat := match m with O => 1%nat | S q => tc q end with tc (m : nat) : nat := match m with O => 2%nat | S q => S (ta q) end for ta) n)',
+     '')
+addA('zx_loc_helper', "", 'Uint63.of_nat (hc n) + a',
+     'Definition hc (n : nat) : nat := (fix ev (m : nat) : nat := match m with O => O | S q => S (od q) end with od (m : nat) : nat := match m with O => 1%nat | S q => ev q end for ev) n.\n')
+addA('zx_loc_both', "", 'Uint63.of_nat ((fix ev (m : nat) : nat := match m with O => O | S q => S (od q) end with od (m : nat) : nat := match m with O => 1%nat | S q => ev q end for ev) n) + Uint63.of_nat ((fix ev (m : nat) : nat := match m with O => O | S q => S (od q) end with od (m : nat) : nat := match m with O => 1%nat | S q => ev q end for od) n)',
+     '')
+addA('zx_loc_num', "", 'Uint63.of_nat ((fix en (m : nat) (x : int) : nat := match m with O => O | S q => if x <? 0 then S (on q x) else on q x end with on (m : nat) (x : int) : nat := match m with O => 1%nat | S q => S (en q (x - 1)) end for en) n a)',
+     '')
 # a mutual block giving back counters (step 111)
 addA('zx_three', "", 'Uint63.of_nat (ta n)',
      'Fixpoint ta (m : nat) : nat := match m with O => O | S q => S (tb q) end with tb (m : nat) : nat := match m with O => 1%nat | S q => tc q end with tc (m : nat) : nat := match m with O => 2%nat | S q => S (S (ta q)) end.\n')
