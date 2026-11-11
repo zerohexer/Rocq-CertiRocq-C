@@ -6078,6 +6078,12 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups: a local mutual block giving back a counter, a block's counter
   used as a counter, a block of different types with a counter, a local mutual block calling the fixpoint it stands in.
 
+**Step 112, a local mutual block giving back counters (§3.5, §12.A; found at step 111, `A_zy_counter`) — the design (2026-11-12).**  `Uint63.of_nat ((fix ev (m : nat) : nat := .. S (od q) .. with od .. for ev) n)`: the reading lifts a local block (steps 108, 110), and a block giving back counters is read through its rows (step 111), which are made before the reading, on the program as written (`y_all`), where the block has no members yet.
+- *The lifting first* (`y_all`): the local blocks lifted as the reading lifts them, before the rows are made, the members named for the rows' table (`__wy`, `lift_all_s`); the rows made over the lifted members as over the program's (`nr_rows`).  A lifted member giving back a counter is read through its row only: made, its rows' statements naming it, not read itself.
+- *The statements*: a lifted member's names its body at the arguments, the block as the user's text has it, so that the text's equation with what is read rewrites (the member's constant would need a beta step under the rewrite); a member of the program's own names its constant, as the text does.
+- *The C*: a program read before, byte-identical.
+- *Cells*: `A_zx_loc_*`, 5: naming a variable of the function, three members, in a helper, both members used, a number parameter.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6264,7 +6270,8 @@ Pushed to the public repository up to `912136f` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 111 (a mutual block giving back counters: the construct table 3982 of 4129, 76 by design, 70 gaps), the gate; §12.A: three follow-ups |
+| (this commit) | §12.V: step 112's design -- a local mutual block giving back counters: y_all lifts it first |
+| `6a182a5` | §12.V: step 111 (a mutual block giving back counters: the construct table 3982 of 4129, 76 by design, 70 gaps), the gate; §12.A: three follow-ups |
 | `912136f` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + matrix step 111: a mutual block giving back counters: its rows made together, one block of rows, their statements proved by one mutual fixpoint; 10 cells |
 | `ca7c79f` | §12.V: step 111's design -- a mutual block giving back counters, at the top level and under parameters: one block of rows |
 | `509ad57` | §12.V: step 110 (a local mutual fixpoint naming variables of the function, a Section's mutual Fixpoint: the construct table 3973 of 4119, 76 by design, 69 gaps), the gate; §12.A: one follow-up |
