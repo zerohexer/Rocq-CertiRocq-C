@@ -6046,6 +6046,13 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups, a mutual block giving back a counter (step 108's) and a local
   mutual block calling the fixpoint it stands in.
 
+**Step 111, a mutual block giving back counters (§3.5, §12.A; found at step 108, `A_zy_top_counter`) — the design (2026-11-12).**  `Fixpoint ev (m : nat) : nat := .. S (od q) .. with od (m : nat) : nat := .. ev q ..`, made a number where it is used, `Uint63.of_nat (ev n)`: step 82 reads a function giving back a counter as a row, a number-valued function of its own proved equal at every argument, and its rows are of single fixpoints.
+- *The rows* (`nr_rows`): a block whose members all give back a counter, at the top level or under parameters (`blk_view`), gets its rows together, one block of rows: each member's body translated as step 82's (`nr_trm`: its calls of any member of the block are the row block's), each member's row the row block's fixpoint for it, read as step 45 reads a block (`lmy`: such rows are read with their block, not as copies).  A row's number of parameters is its member's (`rp_ar`).
+- *The statements*: each member's, the counter first, `F_j kqn xs = of_Z (Z.of_nat (f_j kqn xs))`, and at a counter (`__ra__wy`); proved by one mutual fixpoint over the members' statements at a counter, every hypothesis over every counter as a single row's (`kitc.py`; `KQRWf.nr_stepT`, `nr_step` with the hypotheses' rewriting given).  A member the program never names is no declaration of Rocq's quote, a constant of Rocq's environment all the same, so its statement names it.
+- *The C*: a program read before, byte-identical.
+- *Left, with cells*: a local block giving back a counter (`A_zy_counter`): the rows are made before the reading lifts a local block, so it has none; a block's counter used as a counter (`A_zx_as_counter`): step 83's bound, of single functions; §12.A follow-ups.
+- *Cells*: `A_zx_*`, 10: three members, both members used, the other member, a number parameter, a sum, under a Section's variable, an accumulator, used as a counter, a block of different types (step 62's), inside a recursion.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6232,7 +6239,8 @@ Pushed to the public repository up to `9280902` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 110 (a local mutual fixpoint naming variables of the function, a Section's mutual Fixpoint: the construct table 3973 of 4119, 76 by design, 69 gaps), the gate; §12.A: one follow-up |
+| (this commit) | §12.V: step 111's design -- a mutual block giving back counters, at the top level and under parameters: one block of rows |
+| `509ad57` | §12.V: step 110 (a local mutual fixpoint naming variables of the function, a Section's mutual Fixpoint: the construct table 3973 of 4119, 76 by design, 69 gaps), the gate; §12.A: one follow-up |
 | `9280902` | `proved/KQRReify.v` + matrix step 110: a local mutual fixpoint naming variables of the function, lifted under those it names; a mutual block under parameters (a Section's mutual Fixpoint) read with its block; 14 cells |
 | `25df01b` | §12.V: step 110's design -- a local mutual fixpoint naming variables of the function, lifted under those it names; a mutual block under parameters (a Section's mutual Fixpoint) |
 | `ce73e7f` | §12.V: step 109 (the look for a local mutual block once per program: the construct table the same), the gate; §12.F |
