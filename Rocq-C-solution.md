@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3951 of 4095, 67 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3958 of 4105, 70 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1708,6 +1708,13 @@ comparisons on counters (4); records of three numbers by recursion (3, with the 
 constructs of `S`.  Then the pins of §0.5's boundaries, each with its control (§3.5): cells added to `gen.py` and to
 `DESIGN_CELLS` together.  Accepted when: the category's cells are `ok`, the full table is re-run and `MATRIX.md` updated, and
 the gate (examples, corpus, kernels if the walk changed) passes.
+- *A local mutual fixpoint naming a variable of the function* (found at step 108): step 108 lifts a closed one; a member naming a
+  parameter or a let of the function wants it as a parameter of its own, given in each call of the block (lambda lifting), and a
+  variable bound by a match has no type in the term to give that parameter.  Accepted when `A_zy_capture` and `A_zy_capture_let` are
+  proved.
+- *A mutual block giving back a counter* (found at step 108, there before it): step 82 reads a function giving back a counter as a row
+  of one function; a block's members as one row with a selector, as step 45 makes them one function.  Accepted when `A_zy_counter`
+  and `A_zy_top_counter` are proved.
 - ~~*A counter a function gives back, used as a counter inside a bit operation*~~ (found at step 101) — **done, step 102**: the cause was
   the function's bound not kept (its constant counted with its multiples), not step 83's reading (F83); `A_zr_land_budget` proved.
 - ~~*A bound's constant from 5000 on*~~ (found at step 102) — **done, step 105**: the constant in `Z`, counted with the multiples where
@@ -1755,6 +1762,10 @@ proved once, measured against C written the same way.
   out in `Z` by squaring; past a word, a pin with its control.
 
 **F. Proof speed, only if it becomes the bottleneck (§7.5):** segmenting long straight-line functions; reflection.
+- *The look for a local mutual block, once per program* (found at step 108): step 108 walks every function's body for one in each of
+  the reading's tries (`lift_all` runs in each `reify_prog2c`), and `HWP_irqnow`'s reifier step measured about 0.1 s slower (1.69 to
+  1.76 s on a quiet machine), the other kernels within 1%.  The lifting done once, before the tries.  Accepted when the kernels'
+  reifier step measures as step 107's.
 - ~~*The laws of a data type with many constructors*~~ (found at step 106) — **done, step 107**: each arm's tag computed once;
   `A_q_byte_lit` 8.7 s.  `A_q_byte_lit` (`match x with x41 => 1 | _ => 0 end` on a
   `byte`, 256 constructors) takes about 100 s, there before these steps.  Its proof file spends 88 s in one law, `KQR.kq_rbt_case`:
@@ -5972,6 +5983,20 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: a program read before, byte-identical.
 - *Cells*: `A_zy_*`, 10: three members, two blocks in one function, the block's other member, inside a recursion, with a memory, giving back booleans in a test, giving back a counter locally and at the top level, naming a parameter and a let.
 
+**Step 108, a local mutual fixpoint — the result (2026-11-11).**  Built as designed:
+- *The reader* (`KQRReify.v`): `lm_lift`, in `lift_all`; `set_decl`; `lm_ent`, and `reify_prog2c`'s table of copies without the lifted members, which it makes at the end.
+- *Found while building* (each by probing the reader's steps on the cell): the program's own top-level block was lifted at first (a pinned reading of `KQRReify.v`, `qmut`, caught it); the members were not found until their binders were named as the functions made; the table of copies took a call of a member as a call of a template's copy; the shadowed declaration was first kept out of step 31's look by reading each name's visible one, which costs a look-up per declaration, quadratic in them, and the kernels' reifier step measured slower (`HWP_irqnow` 1.69 to 1.76 s): the declaration is replaced in place instead.
+- *The reifier's step on the kernels' programs* (one machine, one core, interleaved, three rounds, the fastest, F62, in clean copies of both trees; step 106's files / these; the quiet run): `HWP_kernel` 2.95 / 2.97 s, `HWP_own` 2.02 / 2.03, `HWP_irqnow` 1.69 / 1.76 — the walk for a local mutual block in each of the reading's tries, a §12.F item; runs under a desktop's load since gave the same difference.
+- *The C*: the 99 programs byte-identical.
+- *Cells*: 10 more: 6 proved; gaps `A_zy_capture`, `A_zy_capture_let` (a block naming a variable of the function), `A_zy_counter`, `A_zy_top_counter` (a mutual block giving back a counter, there before), two §12.A follow-ups.  One gap read: `A_l_fix_mut`.
+- The C: the 99 programs byte-identical.  The construct table (on `e2d5b56`): **3958 of 4105 through the verified compiler**, 76
+  by design, 70 gaps, 1 not Rocq (was 3951 of 4095: 6 of the 10 new cells read, 4 gaps; 1 gap read; no cell lost).  The gate on
+  `e2d5b56`, the walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding; the same C: undefined behaviour
+  trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels and `grow` (23 / 23 /
+  25 / 21 / 20 / 10 s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems each within the list;
+  `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups of step 108 (a local mutual block naming a variable; a mutual
+  block giving back a counter), and §12.F's look once per program.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6154,11 +6179,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `603c071` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `e2d5b56` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 108's design -- a local mutual fixpoint |
+| (this commit) | §12.V: step 108 (a local mutual fixpoint: the construct table 3958 of 4105, 76 by design, 70 gaps), the gate; §12.A, §12.F: three follow-ups |
+| `e2d5b56` | `proved/KQRReify.v` + matrix step 108: a local mutual fixpoint: lifted, each member a function of the reader's own, the block read as at the top level |
+| `3921801` | §12.V: step 108's design -- a local mutual fixpoint |
 | `56c507c` | §12.V: step 107 (the laws of a data type with many constructors, in time: the construct table 3951 of 4095, the same), the gate |
 | `603c071` | `proved/KQR.v` step 107: the laws of a data type with many constructors in time: each arm's tag computed once |
 | `54cf7ae` | §12.V: step 107's design -- the laws of a data type with many constructors, in time |
