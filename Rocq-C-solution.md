@@ -1755,7 +1755,8 @@ proved once, measured against C written the same way.
   out in `Z` by squaring; past a word, a pin with its control.
 
 **F. Proof speed, only if it becomes the bottleneck (§7.5):** segmenting long straight-line functions; reflection.
-- *The laws of a data type with many constructors* (found at step 106): `A_q_byte_lit` (`match x with x41 => 1 | _ => 0 end` on a
+- ~~*The laws of a data type with many constructors*~~ (found at step 106) — **done, step 107**: each arm's tag computed once;
+  `A_q_byte_lit` 8.7 s.  `A_q_byte_lit` (`match x with x41 => 1 | _ => 0 end` on a
   `byte`, 256 constructors) takes about 100 s, there before these steps.  Its proof file spends 88 s in one law, `KQR.kq_rbt_case`:
   each arm takes 1 ms at its tag, but the loop `destruct c as [|c]` leaves the goal's tag as `S (.. (S c))`, so arm k reduces k
   levels of a 256-branch match, cubic in the constructors; simplifying the whole goal at each step unfolds the representation and
@@ -5952,6 +5953,18 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: the same, since only a proof changes.
 - *Cells*: none new; `A_q_byte_lit` is the measurement, the table and the gate the check that every law of every program still proves.
 
+**Step 107, the laws of a data type with many constructors, in time — the result (2026-11-11).**  Built as designed:
+- *`KQR.v`*: `kq_rbt_arm` computes the tag's machine number first.
+- *Measured* (on one machine, the program alone): `A_q_byte_lit` 8.7 s for the whole program, about 100 s before (over 120 s on step 101's files); its law `rb_tag` 1.8 s, 87.8 s before.  The data-type families run alone (288 cells), as before, the slowest cell now `A_q_byte_lit`.
+- *The C*: the 99 programs byte-identical.
+- *Cells*: none new; the table the same as step 106's, cell for cell.  Its first run, 12 cells at a time, stopped when the laptop's container machine ran out of memory; run again at 6, as before (the run's record, not the work's).
+- The C: the 99 programs byte-identical.  The construct table (on `603c071`): **3951 of 4095 through the verified compiler**, 76
+  by design, 67 gaps, 1 not Rocq (was 3951 of 4095: the same, cell for cell).  The gate on `603c071`, the walk switched off:
+  `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding; the same C: undefined behaviour trapped 63 / 63, `-O0` 63 / 63,
+  `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels and `grow` (22 / 22 / 25 / 19 / 19 / 9 s); **109
+  programs through the verified compiler, 0 refused**, their 109 end theorems each within the list; `check_trust.py`: `trust
+  unchanged`.  Next: step 108, a local mutual fixpoint.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6134,11 +6147,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `6f6855a` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `603c071` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 107's design -- the laws of a data type with many constructors, in time |
+| (this commit) | §12.V: step 107 (the laws of a data type with many constructors, in time: the construct table 3951 of 4095, the same), the gate |
+| `603c071` | `proved/KQR.v` step 107: the laws of a data type with many constructors in time: each arm's tag computed once |
+| `54cf7ae` | §12.V: step 107's design -- the laws of a data type with many constructors, in time |
 | `577992b` | §12.V: step 106 (a value of a type holding a counter, built and taken apart in the text: the construct table 3951 of 4095, 76 by design, 67 gaps), the gate; §12.F: the laws of a data type with many constructors |
 | `6f6855a` | `proved/KQRReify.v` + matrix step 106: a value of a type holding a counter, built and taken apart in the text: taken apart where it is built |
 | `382b2b1` | §12.V: step 106's design -- a value of a type holding a counter, built and taken apart in the text |
