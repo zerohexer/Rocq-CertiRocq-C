@@ -4878,7 +4878,7 @@ Definition set_decl (Σ : global_env) (kn : kername) (ty b : term) : global_env 
      retroknowledge := retroknowledge Σ |}.
 Definition lm_ent (e : kername * (list term * list cent) * kername * term) : bool :=
   match snd e with tFix mfix _ => Nat.leb 2 (length mfix) | _ => false end.
-Definition lift_all (Σ : global_env) (mp : modpath) (kns : list kername) : global_env * list kername * copytab :=
+Definition lift_all (lm : bool) (Σ : global_env) (mp : modpath) (kns : list kername) : global_env * list kername * copytab :=
   fold_left (fun st kn =>
     let '(S1, ks, tb) := st in
     match lookup_env S1 kn with
@@ -4892,7 +4892,8 @@ Definition lift_all (Σ : global_env) (mp : modpath) (kns : list kername) : glob
                tb ++ map (fun l => ((copy_mp, fst (fst l)), ([], []), (copy_mp, fst (fst l)), snd l)) ls)
             else
               (* (step 108) a local mutual fixpoint *)
-              (* not the constant's own block, a Fixpoint's: its bodies only *)
+              (* not the constant's own block, a Fixpoint's: its bodies only; (step 109) only where the program has a local fixpoint *)
+              if negb lm then (S1, ks ++ [kn], tb) else
               if negb (match b with tFix mfix _ => existsb (fun d => lm_has 100000 (dbody d)) mfix | _ => lm_has 100000 b end) then (S1, ks ++ [kn], tb) else
               match (match b with
                      | tFix mfix k =>
@@ -11332,7 +11333,15 @@ Definition reify_prog2c (lo : bool) (bt0 : kername -> option Z) (chk : bool) (p 
       let ltp := y_rows Σ000 ++ ltp0 in
       let '(Σ0, lt0) := if lo then lift_ops Σ00 mp root else (Σ00, []) in
       let kns0 := reach 1000 Σ0 mp root root [] in
-      let '(Σ, kns1, lts1) := lift_all (float_all Σ0 kns0) mp kns0 in
+      (* (step 109) step 31's look for a local fixpoint, made before the lifting: where it finds none, nothing is lifted, nor looked
+         for again after *)
+      let Σ0f := float_all Σ0 kns0 in
+      let lfl := fun S : global_env => existsb (fun e => if (if in_prog mp (fst (fst e)) then true else lib_open (fst e)) then
+                                    match snd e with
+                                    | ConstantDecl cb => match cst_body cb with Some b => lfix_body b | None => false end
+                                    | _ => false end else false) (declarations S) in
+      let lf0 := lfl Σ0f in
+      let '(Σ, kns1, lts1) := lift_all lf0 Σ0f mp kns0 in
       (* (step 93) the kit's functions first: the program's functions call them *)
       let kns := map kit_kn lko ++ filter (fun k => match kit_of_kn k with Some _ => false | None => true end) kns1 in
       let lms := filter lm_ent lts1 in
@@ -11340,10 +11349,7 @@ Definition reify_prog2c (lo : bool) (bt0 : kername -> option Z) (chk : bool) (p 
       let hb := helper_of Σ mp kns in
       let rt := rtab_of Σ hb (kns ++ vm_phantoms Σ) in
       (* a local fixpoint in a definition of the program's file: its copies are looked for as a template's are (step 31) *)
-      let lf := existsb (fun e => if (if in_prog mp (fst (fst e)) then true else lib_open (fst e)) then
-                                    match snd e with
-                                    | ConstantDecl cb => match cst_body cb with Some b => lfix_body b | None => false end
-                                    | _ => false end else false) (declarations Σ) in
+      let lf := if lf0 then lfl Σ else false in
       let tms := (if lf then [kn_lfix] else []) ++ filter (is_tmpl Σ mp) kns in
       let th := tmpl_helpers Σ hb tms kns in
       let st := fold_left (fun st kn =>
@@ -11534,7 +11540,10 @@ Definition rec_info2 (p0 : program) (r : option (list (kername * sig * fbody) * 
         let Σ00 := fst (pf_all (if lo then (if existsb (fun q => has_kqj (fst q)) (match r with Some (_, mts) => mts | None => [] end) then jn_add Σ000 else Σ000) else Σ000) mp root) in
         let Σ0 := if lo then fst (lift_ops Σ00 mp root) else Σ00 in
         let kns0 := reach 1000 Σ0 mp root root [] in
-        let '(Σ, kns, _) := lift_all (float_all Σ0 kns0) mp kns0 in
+        (* (step 109) a local mutual block lifted where the reading made its members *)
+        let lm := existsb (fun mt : string * term => match snd mt with tFix mfix _ => Nat.leb 2 (length mfix) | _ => false end)
+                          (match r with Some (_, mts) => mts | None => [] end) in
+        let '(Σ, kns, _) := lift_all lm (float_all Σ0 kns0) mp kns0 in
         let rt := rtab_of Σ (helper_of Σ mp kns) (kns ++ vm_phantoms Σ0) in map (rec_text Σ rt) rt
     | _ => []
     end
