@@ -1762,7 +1762,8 @@ proved once, measured against C written the same way.
   out in `Z` by squaring; past a word, a pin with its control.
 
 **F. Proof speed, only if it becomes the bottleneck (§7.5):** segmenting long straight-line functions; reflection.
-- *The look for a local mutual block, once per program* (found at step 108): step 108 walks every function's body for one in each of
+- ~~*The look for a local mutual block, once per program*~~ (found at step 108) — **done, step 109**: step 31's look made before the
+  lifting, nothing lifted where it finds none.  Step 108 walks every function's body for one in each of
   the reading's tries (`lift_all` runs in each `reify_prog2c`), and `HWP_irqnow`'s reifier step measured about 0.1 s slower (1.69 to
   1.76 s on a quiet machine), the other kernels within 1%.  The lifting done once, before the tries.  Accepted when the kernels'
   reifier step measures as step 107's.
@@ -6003,6 +6004,20 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: the same, cell for cell.
 - *Cells*: none new; the kernels' reifier step is the measurement.
 
+**Step 109, the look for a local mutual block once per program — the result (2026-11-11).**  Built as designed:
+- *The reader* (`KQRReify.v`): `lift_all` takes whether to look; `reify_prog2c`'s `lf0` and `lfl`; `rec_info2` looks only where the reading made a lifted block's member.
+- *Checked on the work laptop* (the repository at step 108 with this reader, the cells of step 108 and of the local fixpoints, the mutual blocks, the Sections, the records of functions: 485): every verdict step 108's.
+- *The reifier's step on the kernels' programs* (on the work laptop, one core, interleaved, three rounds, the fastest, F62, in clean copies of two trees, the repository with step 107's reader / with this one): `HWP_kernel` 3.39 / 3.37 s, `HWP_own` 2.46 / 2.40, `HWP_irqnow` 2.04 / 2.05 — the same: step 108's follow-up accepted.  The laptop's core is not this record's earlier machine, so these numbers are not compared with theirs.
+- *The C*: the 99 programs byte-identical.
+- *Cells*: none new; the table the same as step 108's, cell for cell, run 3 cells at a time beside the laptop's other work.
+- The C: the 99 programs byte-identical.  The construct table (on `3f1bef1`): **3958 of 4105 through the verified compiler**, 76
+  by design, 70 gaps, 1 not Rocq (was 3958 of 4105: the same, cell for cell).  The gate on `3f1bef1`, the walk switched off:
+  `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding; the same C: undefined behaviour trapped 63 / 63, `-O0` 63 / 63,
+  `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels and `grow` (23 / 22 / 25 / 20 / 20 / 9 s); **109
+  programs through the verified compiler, 0 refused**, their 109 end theorems each within the list; `check_trust.py`: `trust
+  unchanged`.  Next: step 108's §12.A follow-ups, a local mutual block naming a variable of the function and a mutual block giving
+  back a counter.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6185,11 +6200,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `e2d5b56` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `3f1bef1` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 109's design -- the look for a local mutual block once per program |
+| (this commit) | §12.V: step 109 (the look for a local mutual block once per program: the construct table the same), the gate; §12.F |
+| `3f1bef1` | `proved/KQRReify.v` step 109: the look for a local mutual block once per program: step 31's look made before the lifting, nothing lifted where it finds no local fixpoint |
+| `ba5d1cd` | §12.V: step 109's design -- the look for a local mutual block once per program |
 | `ae78f0d` | §12.V: step 108 (a local mutual fixpoint: the construct table 3958 of 4105, 76 by design, 70 gaps), the gate; §12.A, §12.F: three follow-ups |
 | `e2d5b56` | `proved/KQRReify.v` + matrix step 108: a local mutual fixpoint: lifted, each member a function of the reader's own, the block read as at the top level |
 | `3921801` | §12.V: step 108's design -- a local mutual fixpoint |
