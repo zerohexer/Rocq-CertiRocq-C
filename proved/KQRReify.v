@@ -7376,6 +7376,15 @@ Definition rp_is_sp (slots : list nat) : bool := existsb (Nat.eqb rp_sp) slots.
 (** (step 82) a row whose function gives back a counter: what is in its place the number it is, modulo the machine's *)
 Definition rp_nr : nat := 990.
 Definition rp_is_nr (slots : list nat) : bool := existsb (Nat.eqb rp_nr) slots.
+(** (step 111) a member's row of a block of rows: its def's body the row block's fixpoint for that member (outside [rp_real]'s and
+    [rp_gds]'s ranges) *)
+Definition rp_nrb : nat := 1988.
+Definition rp_is_nrb (slots : list nat) : bool := existsb (Nat.eqb rp_nrb) slots.
+Definition rp_ar (d0 : def term) : nat :=
+  match dbody d0 with
+  | tFix rds j => if Nat.leb 2 (length rds) then length (fst (lams (dbody (nth j rds dflt_def)))) else O
+  | b => length (fst (lams b))
+  end.
 (** (step 72) a row whose function gives back a boolean and a memory, what is in its place a number and a memory *)
 Definition rp_bm : nat := 997.
 Definition rp_is_bm (slots : list nat) : bool := existsb (Nat.eqb rp_bm) slots.
@@ -7418,6 +7427,7 @@ Definition um_tt := <% tt %>.
 Definition rp_def (r : rprow) : def term :=
   let '(_, inst, slots0, _, d) := r in
   let slots := rp_real slots0 in
+  if rp_is_nrb slots0 then d else
   match inst with
   | [] =>
       let '(tys, body) := lams (dbody d) in
@@ -7474,9 +7484,9 @@ Definition rp_match (rows : list rprow) (h : term) (args : list term) : option t
       if rp_is_sp slots0 then None else
       if rp_is_nr slots0 then None else
       if rp_is_um slots0 then
-        if Nat.eqb (length args) (length (fst (lams (dbody d0)))) then Some (pf_beta um_pair [tApp (tConst (rp_name r) []) args]) else None else
+        if Nat.eqb (length args) (rp_ar d0) then Some (pf_beta um_pair [tApp (tConst (rp_name r) []) args]) else None else
       if rp_is_bm slots0 then
-        if Nat.eqb (length args) (length (fst (lams (dbody d0)))) then Some (pf_beta bm_wrap [tApp (tConst (rp_name r) []) args]) else None else
+        if Nat.eqb (length args) (rp_ar d0) then Some (pf_beta bm_wrap [tApp (tConst (rp_name r) []) args]) else None else
       Some (tApp (tConst (rp_name r) []) (match inst with [] => drop_at slots args | _ => skipn (length inst) args end))
   | None => None
   end.
@@ -7485,7 +7495,7 @@ Definition bm_part (rows : list rprow) (h : term) (args : list term) (pj : term)
           let '(h0, _, sl, _, d0) := r in
           if rp_is_bm sl then
             match h0, h with
-            | tConst k0 _, tConst k _ => Kername.eqb k0 k && Nat.eqb (length args) (length (fst (lams (dbody d0))))
+            | tConst k0 _, tConst k _ => Kername.eqb k0 k && Nat.eqb (length args) (rp_ar d0)
             | _, _ => false
             end
           else false) rows with
@@ -7527,7 +7537,7 @@ Definition er_row (rows : list rprow) (h : term) (args : list term) : option ter
           let '(h0, _, sl, _, d0) := r in
           if rp_is_er sl then
             match h0, h with
-            | tConst k0 _, tConst k _ => Kername.eqb k0 k && Nat.eqb (length args) (length (fst (lams (dbody d0))))
+            | tConst k0 _, tConst k _ => Kername.eqb k0 k && Nat.eqb (length args) (rp_ar d0)
             | _, _ => false
             end
           else false) rows with
@@ -9732,7 +9742,7 @@ Fixpoint vm_sub (fuel : nat) (Σ : global_env) (rows : list rprow) (gd : bool) (
           if rp_is_vm sl then
             match h0, h with
             | tConst k0 _, tConst k _ =>
-                Kername.eqb k0 k && Nat.eqb (length args) (length (fst (lams (dbody d0))))
+                Kername.eqb k0 k && Nat.eqb (length args) (rp_ar d0)
                 && forallb (fun p => match vm_blk Σ (if gd then 100000 else 0) 0 (nth_error args p) with Some _ => true | None => false end) (rp_gds sl)
             | _, _ => false
             end
@@ -9748,7 +9758,7 @@ Fixpoint vm_sub (fuel : nat) (Σ : global_env) (rows : list rprow) (gd : bool) (
                  let '(h0, _, sl, _, d0) := r in
                  if rp_is_vm sl then
                    match lams h0 with
-                   | (_, tFix _ _ as f0) => teq 100000 f0 key && Nat.eqb (length args2) (length (fst (lams (dbody d0))))
+                   | (_, tFix _ _ as f0) => teq 100000 f0 key && Nat.eqb (length args2) (rp_ar d0)
                    | _ => false
                    end
                  else false) rows)
@@ -10104,11 +10114,11 @@ Fixpoint nr_tail_ok (fuel : nat) (Σ : global_env) (mp : modpath) (self v d : na
       end
   end.
 (** what a function giving back a counter is as a number; a counter among the variables a number, [accs] the rels of those that are numbers already *)
-Fixpoint nr_tr (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (self d : nat) (accs : list nat) (nv : list nat) (t : term) {struct fuel} : option term :=
+Fixpoint nr_trm (m : nat) (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (self d : nat) (accs : list nat) (nv : list nat) (t : term) {struct fuel} : option term :=
   match fuel with
   | O => None
   | S fuel =>
-      let go := nr_tr fuel Σ mp rows self d accs nv in
+      let go := nr_trm m fuel Σ mp rows self d accs nv in
       if cnt_lit t then Some (vm_lit (cnt_val t)) else
       match num_lit t with Some u => Some (tInt (Uint63.of_Z (nu_z u))) | None =>
       match um_red 1000 Σ mp t with
@@ -10118,7 +10128,7 @@ Fixpoint nr_tr (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow)
           then option_map (fun e2 => tApp (tConst nr_add []) [e2; vm_lit 1]) (go e) else None
       | tRel r as c => if existsb (Nat.eqb r) nv then Some c else Some (nr_ofn c)
       | tApp (tRel i) args as c =>
-          if Nat.eqb i (self + d) then
+          if (if Nat.leb (self + d) i then Nat.ltb i (self + d + m) else false) then
             match opt_all (map (fun ja : nat * term =>
                      if existsb (Nat.eqb (fst ja)) accs then go (snd ja) else Some (snd ja)) (combine (seq 0 (length args)) args)) with
             | Some a2 => Some (tApp (tRel i) a2)
@@ -10166,7 +10176,7 @@ Fixpoint nr_tr (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow)
             (* another function giving back a counter *)
             match List.find (fun r : rprow => let '(h0, _, _, _, d0) := r in
                                match h0 with
-                               | tConst k0 _ => Kername.eqb k0 k && Nat.eqb (length args) (length (fst (lams (dbody d0))))
+                               | tConst k0 _ => Kername.eqb k0 k && Nat.eqb (length args) (rp_ar d0)
                                | _ => false
                                end) rows with
             | Some r =>
@@ -10181,20 +10191,23 @@ Fixpoint nr_tr (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow)
       | tCase ci p c brs =>
           match opt_all (map (fun br => let k := length (bcontext br) in
                                  option_map (fun b2 => {| bcontext := bcontext br; bbody := b2 |})
-                                 (nr_tr fuel Σ mp rows self (d + k) accs (map (Nat.add k) nv) (bbody br))) brs) with
+                                 (nr_trm m fuel Σ mp rows self (d + k) accs (map (Nat.add k) nv) (bbody br))) brs) with
           | Some b2s => Some (tCase ci (y_ret p (tConst kn_int [])) c b2s)
           | None => None
           end
       | tLetIn na v ty b =>
           if is_nat ty then
-            match go v, nr_tr fuel Σ mp rows self (S d) accs (0 :: map S nv) b with
+            match go v, nr_trm m fuel Σ mp rows self (S d) accs (0 :: map S nv) b with
             | Some v2, Some b2 => Some (tLetIn na v2 (tConst kn_int []) b2)
             | _, _ => None
             end
-          else option_map (tLetIn na v ty) (nr_tr fuel Σ mp rows self (S d) accs (map S nv) b)
+          else option_map (tLetIn na v ty) (nr_trm m fuel Σ mp rows self (S d) accs (map S nv) b)
       | _ => None
       end end
   end.
+(** (step 111) a function's own call; [nr_trm m]: any member's of a block of [m] *)
+Definition nr_tr (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (self d : nat) (accs : list nat) (nv : list nat) (t : term) : option term :=
+  nr_trm 1 fuel Σ mp rows self d accs nv t.
 Definition nr_rows (Σ : global_env) (mp : modpath) (root : kername) (kns : list kername) : list rprow :=
   fold_left (fun rs kn =>
     if if in_prog mp (fst kn) then negb (Kername.eqb kn root) else false then
@@ -10219,7 +10232,32 @@ Definition nr_rows (Σ : global_env) (mp : modpath) (root : kername) (kns : list
                       | None => rs
                       end
                     else rs
-                | None => rs
+                | None =>
+                    (* (step 111) a member of a mutual block whose members all give back a counter: the block's rows made together, one
+                       block of rows (step 45 reads it), each member's row that block's fixpoint for the member; no accumulator *)
+                    match blk_view b with
+                    | Some (mfix, _) =>
+                        let mb := length mfix in
+                        (* each row named by its member, its counter's place, its index, the block's size and its first member (for kitc's grouping) *)
+                        let st := fun j : nat => (mangle (mem_kn (fst kn) mfix j) ^ "__kb" ^ string_of_nat (rarg (nth j mfix dflt_def)) ^ "_" ^ string_of_nat j
+                                                  ^ "_" ^ string_of_nat mb ^ "_" ^ mangle (mem_kn (fst kn) mfix 0))%bs in
+                        if (if Nat.leb 2 mb then forallb (fun dj => is_nat (ret_ty (al_t 1000 Σ mp (dtype dj)))) mfix else false) then
+                          if existsb (fun r : rprow => let '(_, _, _, s0, _) := r in String.eqb s0 (st 0)) rs then rs else
+                          match opt_all (map (fun dj => let '(tys, body) := lams (dbody dj) in
+                                                option_map (fun b2 => (tys, b2)) (nr_trm mb 1000 Σ mp rs (length tys) 0 [] [] body)) mfix) with
+                          | Some tbs =>
+                              let rdefs := map (fun jt : nat * (list term * term) =>
+                                             {| dname := {| binder_name := nNamed (st (fst jt) ^ "__rp__wy")%bs; binder_relevance := Relevant |};
+                                                dtype := pis_of (fst (snd jt)) (tConst kn_int []); rarg := rarg (nth (fst jt) mfix dflt_def);
+                                                dbody := lams_of (fst (snd jt)) (snd (snd jt)) |}) (combine (seq 0 mb) tbs) in
+                              rs ++ map (fun j => (tConst (mem_kn (fst kn) mfix j) [], [], [rp_nr; rp_nrb], st j,
+                                                   {| dname := dname (nth j rdefs dflt_def); dtype := dtype (nth j rdefs dflt_def); rarg := rp_nofix;
+                                                      dbody := tFix rdefs j |})) (seq 0 mb)
+                          | None => rs
+                          end
+                        else rs
+                    | None => rs
+                    end
                 end
             | None => rs
             end
@@ -10229,7 +10267,8 @@ Definition nr_rows (Σ : global_env) (mp : modpath) (root : kername) (kns : list
     else rs) kns [].
 Definition nr_stmt (Σ : global_env) (mp : modpath) (r : rprow) : term :=
   let '(h, _, sl, _, d0) := r in
-  let tys0 := match h with
+  let tys0 := if rp_is_nrb sl then match dbody d0 with tFix rds j => removelast (prod_tys (dtype (nth j rds dflt_def))) | _ => [] end else
+              match h with
               | tConst k _ => match lookup_env Σ k with
                               | Some (ConstantDecl cb) => removelast (prod_tys (al_t 1000 Σ mp (cst_type cb)))
                               | _ => []
@@ -10241,6 +10280,24 @@ Definition nr_stmt (Σ : global_env) (mp : modpath) (r : rprow) : term :=
   let accs := rp_gds sl in
   let a2 := map (fun ja : nat * term => if existsb (Nat.eqb (fst ja)) accs then nr_ofn (snd ja) else snd ja) (combine (seq 0 m) rels) in
   pis_of tys0 (tApp y_eq [tConst kn_int []; tApp (tConst (rp_name r) []) a2; nr_ofn (mkApps h rels)]).
+(** (step 111) a block's row: its statement at a counter, the counter first, for the proof of the block's statements together *)
+Definition ra_name (r : rprow) : kername := let '(_, _, _, st, _) := r in (copy_mp, st ^ "__ra__wy"%bs).
+Definition nr_at (r : rprow) : term :=
+  let '(h, _, sl, _, d0) := r in
+  match dbody d0 with
+  | tFix rds j =>
+      let dj := nth j rds dflt_def in
+      let tys0 := removelast (prod_tys (dtype dj)) in
+      let n := length tys0 in
+      let rv := rarg dj in
+      let others := filter (fun q => negb (Nat.eqb q rv)) (seq 0 n) in
+      let k := length others in
+      let rels := map (fun q => if Nat.eqb q rv then tRel k else tRel (k - 1 - match idx_of q others 0 with Some p => p | None => 0 end)) (seq 0 n) in
+      tLambda anon_b (tInd ind_nat [])
+        (pis_of (map (fun q => nth q tys0 (tRel 0)) others)
+           (tApp y_eq [tConst kn_int []; tApp (tConst (rp_name r) []) rels; nr_ofn (mkApps h rels)]))
+  | _ => tVar "unread"%bs
+  end.
 (** a counter a function gives back, made a number at once *)
 Fixpoint nr_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (t : term) {struct fuel} : term :=
   match fuel with
@@ -10251,7 +10308,7 @@ Fixpoint nr_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
         List.find (fun r : rprow => let '(h0, _, sl, _, d0) := r in
                      if rp_is_nr sl then
                        match h0 with
-                       | tConst k0 _ => Kername.eqb k0 k && Nat.eqb n (length (fst (lams (dbody d0))))
+                       | tConst k0 _ => Kername.eqb k0 k && Nat.eqb n (rp_ar d0)
                        | _ => false
                        end
                      else false) rows in
@@ -10698,7 +10755,7 @@ Definition nc_rowa (rows : list rprow) (k : kername) (n : nat) : option rprow :=
   List.find (fun r : rprow => let '(h0, _, sl, _, d0) := r in
                if rp_is_nr sl then
                  match h0 with
-                 | tConst k0 _ => Kername.eqb k0 k && Nat.eqb n (length (fst (lams (dbody d0))))
+                 | tConst k0 _ => Kername.eqb k0 k && Nat.eqb n (rp_ar d0)
                  | _ => false
                  end
                else false) rows.
@@ -10707,7 +10764,7 @@ Definition nc_row (rows : list rprow) (tab : list (kername * nbf)) (k : kername)
     List.find (fun r : rprow => let '(h0, _, sl, _, d0) := r in
                  if rp_is_nr sl then
                    match h0 with
-                   | tConst k0 _ => Kername.eqb k0 k && Nat.eqb n (length (fst (lams (dbody d0))))
+                   | tConst k0 _ => Kername.eqb k0 k && Nat.eqb n (rp_ar d0)
                    | _ => false
                    end
                  else false) rows
@@ -11294,7 +11351,9 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
               add_decl (add_decl S2 (rp_name r) (dtype d')
                          (if plain then tFix [d'] 0 else if Nat.eqb (rarg d') rp_nofix then y_red 100000 (vm_sub 100000 (conv_all Σ mp) rows true (rp_sub 100000 rows (er_sub 100000 rows [] (sp_sub 100000 (conv_all Σ mp) mp rows (nr_sub 100000 (conv_all Σ mp) mp rows (dbody d'))))))
                           else tFix [{| dname := dname d'; dtype := dtype d'; rarg := rarg d'; dbody := (if existsb (fun q : rprow => let '(_, _, sl, _, _) := q in rp_is_vm sl) rows then vm_yr gts else cf_red gts) (vm_sub 100000 (conv_all Σ mp) rows true (rp_sub 100000 rows (er_sub 100000 rows [] (sp_sub 100000 (conv_all Σ mp) mp rows (nr_sub 100000 (conv_all Σ mp) mp rows (dbody d')))))) |}] 0))
-                       (rq_name r) (tSort sProp) (match r with (_, _, sl, _, _) => if rp_is_om sl then om_stmt (conv_all Σ mp) mp r else if rp_is_er sl then er_stmt Σ mp r else if rp_is_vm sl then vm_stmt Σq mp r else if rp_is_qm sl then vm_qstmt Σq mp r else if rp_is_sp sl then sp_stmt (conv_all Σ mp) mp r else if rp_is_nr sl then nr_stmt (conv_all Σ mp) mp r else rp_stmt r end)) rows Σ in
+                       (rq_name r) (tSort sProp) (match r with (_, _, sl, _, _) => if rp_is_om sl then om_stmt (conv_all Σ mp) mp r else if rp_is_er sl then er_stmt Σ mp r else if rp_is_vm sl then vm_stmt Σq mp r else if rp_is_qm sl then vm_qstmt Σq mp r else if rp_is_sp sl then sp_stmt (conv_all Σ mp) mp r else if rp_is_nrb sl then (match nr_at r with tLambda na ty bd => tProd na ty bd | x => x end) else if rp_is_nr sl then nr_stmt (conv_all Σ mp) mp r else rp_stmt r end)) rows Σ in
+  (* (step 111) a block's rows: each one's statement at a counter too; its statement that at every counter, the counter first *)
+  let S0 := fold_left (fun S2 r => match r with (_, _, sl, _, _) => if rp_is_nrb sl then add_decl S2 (ra_name r) (tProd anon_b (tInd ind_nat []) (tSort sProp)) (nr_at r) else S2 end) rows S0 in
   (* (step 85) what the proof of a class's program unfolds: the methods, the instances, the helpers over them *)
   let S0 := match cls with
             | [] => S0
@@ -11478,9 +11537,10 @@ Definition reify_prog2c (lo : bool) (bt0 : kername -> option Z) (chk : bool) (p 
       let Σ0f := float_all Σ0 kns0 in
       let '(Σ, kns1, lts1) := lift_all lf0 Σ0f mp kns0 in
       (* (step 93) the kit's functions first: the program's functions call them *)
-      let kns := map kit_kn lko ++ filter (fun k => match kit_of_kn k with Some _ => false | None => true end) kns1 in
-      let lms := filter lm_ent lts1 in
-      let lts := ltp ++ lt0 ++ filter (fun e => negb (lm_ent e)) lts1 in
+      let lmy := filter lm_ent ltp in
+      let kns := map kit_kn lko ++ map (fun e => fst (fst (fst e))) lmy ++ filter (fun k => match kit_of_kn k with Some _ => false | None => true end) kns1 in
+      let lms := lmy ++ filter lm_ent lts1 in
+      let lts := filter (fun e => negb (lm_ent e)) ltp ++ lt0 ++ filter (fun e => negb (lm_ent e)) lts1 in
       let hb := helper_of Σ mp kns in
       let rt := rtab_of Σ hb (kns ++ vm_phantoms Σ) in
       (* a local fixpoint in a definition of the program's file: its copies are looked for as a template's are (step 31) *)

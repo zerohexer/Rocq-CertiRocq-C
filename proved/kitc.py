@@ -949,12 +949,12 @@ def reflect(name, entry, prog, no_proof):
     kqfn = lambda x: "" if re.search(r"__l\d+(__v\d+)?$", x) else kqunm(x).split("kqcopy.")[-1]
     fqf = [(m, kqfn(re.match(r"(.*)__f\d+__fq__wy$", m).group(1)), int(re.search(r"__f(\d+)__fq__wy$", m).group(1))) for m in fqs]
     vmr = any(re.search(r"__v\d+__rq__wy$", m) for m, _ in rrs)
-    qmr = any(re.search(r"__[qkm]\d+__rq__wy$", m) for m, _ in rrs)
+    qmr = any(re.search(r"__[qkm]\d+__rq__wy$|__kb\d+_\d+_\d+_.*__rq__wy$", m) for m, _ in rrs)
     rrw2 = []
     roomw = max([int(r[2]) for r in recs] + [1])
     roomR = f"({roomw} <= Sint63.to_Z (KQ.KQBound.kq_len 63) + 1)%Z" if roomw > 1 else "True"
     hrb = f"(Hr : {roomR}) " if vmr else ""
-    keepf = " ".join(sorted({"KQ.KQRun.kq_nat"} | ({"Uint63.of_Z", "Z.of_nat", "Nat.add", "Nat.mul"} if any(re.search(r"__k\d+__rq__wy$", m) for m, _ in rrs) else set()) | {x for m, h in rrs for x in (h, m[:-len("__rq__wy")] + "__rp__wy") if x} | {f[1] for f in fqf if f[1]} | {x for x in (kqfn(re.match(r"(.*)__[vqk]\d+__rq__wy$", m).group(1)) for m, _ in rrs if re.search(r"__[vqk]\d+__rq__wy$", m)) if x}
+    keepf = " ".join(sorted({"KQ.KQRun.kq_nat"} | ({"Uint63.of_Z", "Z.of_nat", "Nat.add", "Nat.mul"} if any(re.search(r"__k\d+__rq__wy$|__kb\d+_\d+_\d+_.*__rq__wy$", m) for m, _ in rrs) else set()) | {x for m, h in rrs for x in (h, m[:-len("__rq__wy")] + "__rp__wy") if x} | {f[1] for f in fqf if f[1]} | {x for x in (kqfn(re.match(r"(.*)__[vqk]\d+__rq__wy$", m).group(1)) for m, _ in rrs if re.search(r"__[vqk]\d+__rq__wy$", m)) if x}
                             | {f[0] for f in fs if f[0] in fix1} | {f[0].rsplit(".", 1)[-1] + "__wy" for f in fs if f[0].rsplit(".", 1)[-1] + "__wy" in made}))
     if vmr:
         if roomw > 1:
@@ -969,7 +969,35 @@ def reflect(name, entry, prog, no_proof):
         cb0 = f"cbn [{fn}]" if fn else "cbn beta iota"
         t += (f"Lemma {name}_fq{j} : {m}.\nProof. unfold {m}. fix IH {r + 1}. {d0}intros kqn; destruct kqn as [|kqn]; intros; {cb0}; first [solve [KQRWf.fr_step IH] | solve [cbn; KQRWf.fr_step IH] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.fr_step IH]]. Qed.\n")
         t += "Ltac KQRWf.kq_fr ::= progress (rewrite " + ", ".join(f"?{name}_fq{i}" for i in range(j + 1)) + " by KQRWf.vm_side).\n"
+    # (step 111) a block's rows (__kb<rarg>_<index>_<size>_<first member>): each member's statement, the counter first, proved by one
+    # mutual fixpoint over the members' statements at a counter (__ra__wy), every hypothesis over every counter as a single row's
+    kbre = re.compile(r"(.*)__kb(\d+)_(\d+)_(\d+)_(.*)__rq__wy$")
+    kbg = {}
+    for m0, _ in rrs:
+        mk0 = kbre.match(m0)
+        if mk0:
+            kbg.setdefault(mk0.group(5), {})[int(mk0.group(3))] = (m0, mk0.group(1))
     for j, (m, h) in enumerate(rrs):
+        mkb = kbre.match(m)
+        if mkb:
+            ktag, kib, kmb = mkb.group(5), int(mkb.group(3)), int(mkb.group(4))
+            kgrp = kbg[ktag]
+            if sorted(kgrp) != list(range(kmb)):
+                sys.exit(f"{name}: a block's rows not all made ({ktag})")
+            kats = [kgrp[i][0][:-len("__rq__wy")] + "__ra__wy" for i in range(kmb)]
+            kfs = [kgrp[i][0][:-len("__rq__wy")] + "__rp__wy" for i in range(kmb)]
+            khs = [kqfn(kgrp[i][1]) for i in range(kmb)]
+            kunf = " ".join(x for x in khs + kfs if x)
+            katl = ", ".join(kats)
+            kwiths = " ".join("(IH%d (kqn : nat) {struct kqn} : %s kqn)" % (i, kats[i]) for i in range(kmb) if i != kib)
+            krwt = "ltac:(rewrite " + ", ".join("<- ?IH%d" % i for i in range(kmb)) + ")"
+            t += (f"Lemma {name}_rr{j} {hrb}: {m}.\n"
+                  f"Proof. unfold {m}. fix IH{kib} 1 with {kwiths}. all: intros kqn; destruct kqn as [|kqn]; try unfold {katl} in *; intros; cbn [{kunf}]; "
+                  f"first [solve [KQRWf.nr_stepT {krwt}] | solve [cbn; KQRWf.nr_stepT {krwt}] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.nr_stepT {krwt}]]. Qed.\n")
+            rrn.append(f"{name}_rr{j}")
+            rrw.append(f"match goal with Hr : {roomR} |- _ => rewrite <- ?({name}_rr{j} Hr) end" if vmr else f"rewrite <- ?{name}_rr{j}")
+            t += "Ltac KQRWf.kq_rw ::= progress (" + "; ".join(rrw) + ").\n"
+            continue
         F = m[:-len("__rq__wy")] + "__rp__wy"
         # (step 78) what is read through the slot block: its statement names the function by what follows the row
         h = kqfn(re.match(r"(.*)__[vqkm]\d+__rq__wy$", m).group(1)) if re.search(r"__[vqkm]\d+__rq__wy$", m) else h

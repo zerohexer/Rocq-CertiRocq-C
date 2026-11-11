@@ -3577,6 +3577,27 @@ addA('zo_let', "", 'let c := tw n in ff c a + ff c b',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
 addA('zo_callee', "", 'g2 n a',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (k : nat) (x : int) : int := ff (tw k) x.\n')
+# a mutual block giving back counters (step 111)
+addA('zx_three', "", 'Uint63.of_nat (ta n)',
+     'Fixpoint ta (m : nat) : nat := match m with O => O | S q => S (tb q) end with tb (m : nat) : nat := match m with O => 1%nat | S q => tc q end with tc (m : nat) : nat := match m with O => 2%nat | S q => S (S (ta q)) end.\n')
+addA('zx_both', "", 'Uint63.of_nat (ev n) + Uint63.of_nat (od n)',
+     'Fixpoint ev (m : nat) : nat := match m with O => O | S q => S (od q) end with od (m : nat) : nat := match m with O => 1%nat | S q => ev q end.\n')
+addA('zx_other_member', "", 'Uint63.of_nat (od n)',
+     'Fixpoint ev (m : nat) : nat := match m with O => O | S q => S (od q) end with od (m : nat) : nat := match m with O => 1%nat | S q => ev q end.\n')
+addA('zx_num_param', "", 'Uint63.of_nat (en n a)',
+     'Fixpoint en (m : nat) (x : int) : nat := match m with O => O | S q => if x <? 0 then S (on q x) else on q x end with on (m : nat) (x : int) : nat := match m with O => 1%nat | S q => S (en q (x - 1)) end.\n')
+addA('zx_add', "", 'Uint63.of_nat (ea n)',
+     'Fixpoint ea (m : nat) : nat := match m with O => 1%nat | S q => Nat.add (oa q) 2 end with oa (m : nat) : nat := match m with O => O | S q => Nat.add (ea q) (ea q) end.\n')
+addA('zx_section', "", 'Uint63.of_nat (es n n)',
+     'Section Sk.\nVariable k : nat.\nFixpoint es (m : nat) : nat := match m with O => k | S q => S (os q) end with os (m : nat) : nat := match m with O => O | S q => es q end.\nEnd Sk.\n')
+addA('zx_acc', "", 'Uint63.of_nat (eac n O)',
+     'Fixpoint eac (m acc : nat) : nat := match m with O => acc | S q => oac q (S acc) end with oac (m acc : nat) : nat := match m with O => acc | S q => eac q acc end.\n')
+addA('zx_as_counter', "", 'if Nat.leb (ev n) 3 then a else b',
+     'Fixpoint ev (m : nat) : nat := match m with O => O | S q => S (od q) end with od (m : nat) : nat := match m with O => 1%nat | S q => ev q end.\n')
+addA('zx_mixed', "", 'Uint63.of_nat (em n) + om n a',
+     'Fixpoint em (m : nat) : nat := match m with O => O | S q => if om q 1 <? 0 then O else 1%nat end with om (m : nat) (x : int) : int := match m with O => x | S q => Uint63.of_nat (em q) + x end.\n')
+addA('zx_in_rec', "", 'lr n a',
+     'Fixpoint ev (m : nat) : nat := match m with O => O | S q => S (od q) end with od (m : nat) : nat := match m with O => 1%nat | S q => ev q end.\nFixpoint lr (k : nat) (y : int) : int := match k with O => y | S j => lr j (y + Uint63.of_nat (ev j)) end.\n')
 # a local mutual fixpoint naming variables of the function (step 110)
 addA('zz_two_caps', "", '(fix f (m : nat) (x : int) : int := match m with O => x | S q => g q (x + a) end with g (m : nat) (x : int) : int := match m with O => x | S q => f q (x * b) end for f) n 1',
      '')

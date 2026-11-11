@@ -827,6 +827,22 @@ Ltac nr_step IH :=
                 (* (step 99) a dead branch: a test's answer that its case contradicts, `(S m =? 0) = true` *)
                 | match goal with e : _ = _ |- _ => solve [cbn in e; discriminate e] end
                 | match goal with |- context [match ?c with _ => _ end] => is_var c; destruct c end ]).
+(** (step 111) the same, the induction hypotheses' rewriting given: a block's rows proved together, one hypothesis per member *)
+Ltac nr_stepT rw :=
+  repeat (cbn beta iota zeta delta [fst snd proj1_sig]; kq_unf;
+          first [ prim_rw
+                | kq_rw
+                | progress rw
+                | kq_vm
+                | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
+                | kq_convoy
+                | match goal with |- context [if ?c then _ else _] => lazymatch c with context [match _ with _ => _ end] => fail | _ => let e := fresh "kqe" in destruct c eqn:e end end
+                | match goal with |- context [if ?c then _ else _] => let e := fresh "kqe" in destruct c eqn:e end
+                | match goal with |- context [match ?c with O => _ | S _ => _ end] => destruct c end
+                | reflexivity
+                (* (step 99) a dead branch: a test's answer that its case contradicts, `(S m =? 0) = true` *)
+                | match goal with e : _ = _ |- _ => solve [cbn in e; discriminate e] end
+                | match goal with |- context [match ?c with _ => _ end] => is_var c; destruct c end ]).
 (** (step 61) a fixpoint with its own call on a counter deeper than the predecessor, and a budget function above it: equal at every budget above the counter *)
 Ltac deep_step IH pr :=
   repeat (cbn beta iota zeta; pr;
