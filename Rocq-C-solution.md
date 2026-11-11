@@ -5965,6 +5965,13 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   programs through the verified compiler, 0 refused**, their 109 end theorems each within the list; `check_trust.py`: `trust
   unchanged`.  Next: step 108, a local mutual fixpoint.
 
+**Step 108, a local mutual fixpoint (§3.5, §12.A; the gap `A_l_fix_mut`) — the design (2026-11-11).**  `(fix f (m : nat) (x : int) : int := .. g .. with g (m : nat) (x : int) : int := .. f .. for f) n a`: a local fixpoint is read where it is one (steps 31, 79), a mutual block where it is a program's (step 45), a local mutual block nowhere.
+- *The lifting* (`lm_lift`, in `lift_all`, as step 54 lifts a pattern's let): a local mutual block with no variable of the function in it becomes one function of the reader's own per member, each `fix .. for` that member, the block's binders named as those functions, which is how step 45 finds a block's members (`mem_kn`); the place where the block stood, the chosen member's function.  The same term up to delta.  A Fixpoint's own block is not lifted, its bodies are walked.
+- *The reading*: the members are made for the proof as the lifted functions are, from `lift_all`'s table, but are no copies of a template: `reify_prog2c` sets them apart from the table it looks a call up in (`lm_ent`) and adds them to what it makes at the end.  The function's declaration is replaced where it stands (`set_decl`), not shadowed, so step 31's look for local fixpoints, which reads every declaration, sees the lifted body.
+- *Left, with cells*: a block naming a variable of the function (`A_zy_capture`, a parameter; `A_zy_capture_let`, a let): its members want that variable as a parameter, given in each call (lambda lifting), and a variable bound by a match has no type in the term to give it, a §12.A follow-up; a mutual block giving back a counter (`A_zy_counter`, and at the top level `A_zy_top_counter`, there before this step): step 82's rows are of single functions, a §12.A follow-up.
+- *The C*: a program read before, byte-identical.
+- *Cells*: `A_zy_*`, 10: three members, two blocks in one function, the block's other member, inside a recursion, with a memory, giving back booleans in a test, giving back a counter locally and at the top level, naming a parameter and a let.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6151,7 +6158,8 @@ Pushed to the public repository up to `603c071` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 107 (the laws of a data type with many constructors, in time: the construct table 3951 of 4095, the same), the gate |
+| (this commit) | §12.V: step 108's design -- a local mutual fixpoint |
+| `56c507c` | §12.V: step 107 (the laws of a data type with many constructors, in time: the construct table 3951 of 4095, the same), the gate |
 | `603c071` | `proved/KQR.v` step 107: the laws of a data type with many constructors in time: each arm's tag computed once |
 | `54cf7ae` | §12.V: step 107's design -- the laws of a data type with many constructors, in time |
 | `577992b` | §12.V: step 106 (a value of a type holding a counter, built and taken apart in the text: the construct table 3951 of 4095, 76 by design, 67 gaps), the gate; §12.F: the laws of a data type with many constructors |
