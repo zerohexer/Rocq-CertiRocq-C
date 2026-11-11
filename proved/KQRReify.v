@@ -4821,6 +4821,63 @@ Definition float_all (Σ : global_env) (kns : list kername) : global_env :=
     end) kns Σ.
 Definition add_decl_cb (Σ : global_env) (kn : kername) (cb : constant_body) : global_env :=
   {| universes := universes Σ; declarations := (kn, ConstantDecl cb) :: declarations Σ; retroknowledge := retroknowledge Σ |}.
+(** (step 108) a local mutual fixpoint with no variable of the function in it: each member a function of the reader's own, [fix .. for]
+    that member, and the block read as at the top level; the same term up to delta *)
+(** whether a body has such a block: a walk that only reads, so a body with none is not built again *)
+Fixpoint lm_has (fuel : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      match t with
+      | tFix mfix _ => if (if Nat.leb 2 (length mfix) then closedn 0 t else false) then true else existsb (fun d => lm_has fuel (dbody d)) mfix
+      | tApp f args => lm_has fuel f || existsb (lm_has fuel) args
+      | tLambda _ _ b => lm_has fuel b
+      | tLetIn _ v _ b => lm_has fuel v || lm_has fuel b
+      | tCase _ _ c brs => lm_has fuel c || existsb (fun br => lm_has fuel (bbody br)) brs
+      | _ => false
+      end
+  end.
+Fixpoint lm_lift (fuel : nat) (base : string) (acc : list (string * term * term)) (t : term) {struct fuel} : term * list (string * term * term) :=
+  match fuel with
+  | O => (t, acc)
+  | S fuel =>
+      let go := lm_lift fuel base in
+      let gol := fix gol (ts : list term) (a0 : list (string * term * term)) {struct ts} : list term * list (string * term * term) :=
+        match ts with
+        | [] => ([], a0)
+        | x :: r => let '(x', a1) := go a0 x in let '(r', a2) := gol r a1 in (x' :: r', a2)
+        end in
+      match t with
+      | tFix mfix k =>
+          if (if Nat.leb 2 (length mfix) then closedn 0 t else false) then
+            let i := length acc in
+            let nm := fun j : nat => (base ^ "__lm" ^ string_of_nat i ^ "_" ^ string_of_nat j)%bs in
+            (* the members named as the functions made, which is how a block's members are found (step 45's [mem_kn]) *)
+            let mfix' := map (fun jd : nat * def term =>
+                           {| dname := {| binder_name := nNamed (nm (fst jd)); binder_relevance := binder_relevance (dname (snd jd)) |};
+                              dtype := dtype (snd jd); rarg := rarg (snd jd); dbody := dbody (snd jd) |}) (combine (seq 0 (length mfix)) mfix) in
+            (tConst (copy_mp, nm k) [], acc ++ map (fun jd : nat * def term => (nm (fst jd), dtype (snd jd), tFix mfix' (fst jd))) (combine (seq 0 (length mfix)) mfix))
+          else
+            let '(bs', a1) := gol (map dbody mfix) acc in
+            (tFix (map (fun db : def term * term => {| dname := dname (fst db); dtype := dtype (fst db); rarg := rarg (fst db); dbody := snd db |}) (combine mfix bs')) k, a1)
+      | tApp f args => let '(f', a1) := go acc f in let '(args', a2) := gol args a1 in (tApp f' args', a2)
+      | tLambda na ty b => let '(b', a1) := go acc b in (tLambda na ty b', a1)
+      | tLetIn na v ty b => let '(v', a1) := go acc v in let '(b', a2) := go a1 b in (tLetIn na v' ty b', a2)
+      | tCase ci pr c brs =>
+          let '(c', a1) := go acc c in
+          let '(bs', a2) := gol (map bbody brs) a1 in
+          (tCase ci pr c' (map (fun bb : branch term * term => {| bcontext := bcontext (fst bb); bbody := snd bb |}) (combine brs bs')), a2)
+      | _ => (t, acc)
+      end
+  end.
+Definition set_decl (Σ : global_env) (kn : kername) (ty b : term) : global_env :=
+  {| universes := universes Σ;
+     declarations := map (fun e => if Kername.eqb (fst e) kn
+                                   then (kn, ConstantDecl {| cst_type := ty; cst_body := Some b; cst_universes := Monomorphic_ctx; cst_relevance := Relevant |})
+                                   else e) (declarations Σ);
+     retroknowledge := retroknowledge Σ |}.
+Definition lm_ent (e : kername * (list term * list cent) * kername * term) : bool :=
+  match snd e with tFix mfix _ => Nat.leb 2 (length mfix) | _ => false end.
 Definition lift_all (Σ : global_env) (mp : modpath) (kns : list kername) : global_env * list kername * copytab :=
   fold_left (fun st kn =>
     let '(S1, ks, tb) := st in
@@ -4833,7 +4890,24 @@ Definition lift_all (Σ : global_env) (mp : modpath) (kns : list kername) : glob
               let S2 := fold_left (fun s l => add_decl s (copy_mp, fst (fst l)) (snd (fst l)) (snd l)) ls S1 in
               (add_decl S2 kn (cst_type cb) b', ks ++ map (fun l => (copy_mp, fst (fst l))) ls ++ [kn],
                tb ++ map (fun l => ((copy_mp, fst (fst l)), ([], []), (copy_mp, fst (fst l)), snd l)) ls)
-            else (S1, ks ++ [kn], tb)
+            else
+              (* (step 108) a local mutual fixpoint *)
+              (* not the constant's own block, a Fixpoint's: its bodies only *)
+              if negb (match b with tFix mfix _ => existsb (fun d => lm_has 100000 (dbody d)) mfix | _ => lm_has 100000 b end) then (S1, ks ++ [kn], tb) else
+              match (match b with
+                     | tFix mfix k =>
+                         let '(bs', a1) := fold_left (fun st d => let '(l, a) := st in let '(d', a') := lm_lift 100000 (mangle kn) a (dbody d) in (l ++ [d'], a')) mfix ([], []) in
+                         (tFix (map (fun db : def term * term => {| dname := dname (fst db); dtype := dtype (fst db); rarg := rarg (fst db); dbody := snd db |}) (combine mfix bs')) k, a1)
+                     | _ => lm_lift 100000 (mangle kn) [] b
+                     end) with
+              | (_, []) => (S1, ks ++ [kn], tb)
+              | (b', ls) =>
+                  let S2 := fold_left (fun s l => add_decl s (copy_mp, fst (fst l)) (snd (fst l)) (snd l)) ls S1 in
+                  (* the function's declaration replaced, not shadowed: what looks at every declaration (step 31's look for a local
+                     fixpoint) sees the lifted body only *)
+                  (set_decl S2 kn (cst_type cb) b', ks ++ map (fun l => (copy_mp, fst (fst l))) ls ++ [kn],
+                   tb ++ map (fun l => ((copy_mp, fst (fst l)), ([], []), (copy_mp, fst (fst l)), snd l)) ls)
+              end
         | None => (S1, ks ++ [kn], tb)
         end
     | _ => (S1, ks ++ [kn], tb)
@@ -11261,7 +11335,8 @@ Definition reify_prog2c (lo : bool) (bt0 : kername -> option Z) (chk : bool) (p 
       let '(Σ, kns1, lts1) := lift_all (float_all Σ0 kns0) mp kns0 in
       (* (step 93) the kit's functions first: the program's functions call them *)
       let kns := map kit_kn lko ++ filter (fun k => match kit_of_kn k with Some _ => false | None => true end) kns1 in
-      let lts := ltp ++ lt0 ++ lts1 in
+      let lms := filter lm_ent lts1 in
+      let lts := ltp ++ lt0 ++ filter (fun e => negb (lm_ent e)) lts1 in
       let hb := helper_of Σ mp kns in
       let rt := rtab_of Σ hb (kns ++ vm_phantoms Σ) in
       (* a local fixpoint in a definition of the program's file: its copies are looked for as a template's are (step 31) *)
@@ -11294,7 +11369,7 @@ Definition reify_prog2c (lo : bool) (bt0 : kername -> option Z) (chk : bool) (p 
                       | None => None
                       end
                   end) kns (Some ([], lts)) in
-      option_map (fun et => (fst et, map (fun e => (snd (snd (fst e)), real_copies 1000 (MPfile (mp_file mp)) (snd e))) (snd et))) st
+      option_map (fun et => (fst et, map (fun e => (snd (snd (fst e)), real_copies 1000 (MPfile (mp_file mp)) (snd e))) (snd et ++ lms))) st
   | _ => None
   end.
 (** counter bounds worked out from the call graph (step 34): from the entry down -- the functions come callees first -- each

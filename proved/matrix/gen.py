@@ -3577,6 +3577,27 @@ addA('zo_let', "", 'let c := tw n in ff c a + ff c b',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
 addA('zo_callee', "", 'g2 n a',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (k : nat) (x : int) : int := ff (tw k) x.\n')
+# a local mutual fixpoint (step 108)
+addA('zy_three', "", '(fix f (m : nat) (x : int) : int := match m with O => x | S q => g q (x + 1) end with g (m : nat) (x : int) : int := match m with O => x | S q => h3 q (x * 2) end with h3 (m : nat) (x : int) : int := match m with O => x | S q => f q (x - 3) end for f) n a',
+     '')
+addA('zy_twice', "", '(fix f (m : nat) (x : int) : int := match m with O => x | S q => g q (x + 1) end with g (m : nat) (x : int) : int := match m with O => x | S q => f q (x * 2) end for f) n a + (fix p (m : nat) (x : int) : int := match m with O => x | S q => r q (x + 2) end with r (m : nat) (x : int) : int := match m with O => x | S q => p q (x * 3) end for r) n b',
+     '')
+addA('zy_other_member', "", '(fix f (m : nat) (x : int) : int := match m with O => x | S q => g q (x + 1) end with g (m : nat) (x : int) : int := match m with O => x | S q => f q (x * 2) end for g) n a',
+     '')
+addA('zy_in_rec', "", 'lp n a',
+     'Fixpoint lp (k : nat) (x : int) : int := match k with O => x | S j => lp j ((fix f (m : nat) (x : int) : int := match m with O => x | S q => g q (x + 1) end with g (m : nat) (x : int) : int := match m with O => x | S q => f q (x * 2) end for f) 3%nat x) end.\n')
+addA('zy_counter', "", 'Uint63.of_nat ((fix ev (m : nat) : nat := match m with O => O | S q => S (od q) end with od (m : nat) : nat := match m with O => 1%nat | S q => ev q end for ev) n)',
+     '')
+addA('zy_mem', "", '(fix f (m : nat) (i : int) (t : mem) : int := match m with O => rd 0 i t | S q => g q (i + 1) t end with g (m : nat) (i : int) (t : mem) : int := match m with O => 0 | S q => f q (i + 2) t end for f) n a s',
+     '')
+addA('zy_bool', "", 'if (fix ev (m : nat) : bool := match m with O => true | S q => od q end with od (m : nat) : bool := match m with O => false | S q => ev q end for ev) n then a else b',
+     '')
+addA('zy_capture', "", '(fix f (m : nat) (x : int) : int := match m with O => x | S q => g q (x + a) end with g (m : nat) (x : int) : int := match m with O => x | S q => f q (x * 2) end for f) n b',
+     '')
+addA('zy_capture_let', "", 'let k := a + 1 in (fix f (m : nat) (x : int) : int := match m with O => x | S q => g q (x + k) end with g (m : nat) (x : int) : int := match m with O => x | S q => f q (x * 2) end for f) n b',
+     '')
+addA('zy_top_counter', "", 'Uint63.of_nat (ev n)',
+     'Fixpoint ev (m : nat) : nat := match m with O => O | S q => S (od q) end with od (m : nat) : nat := match m with O => 1%nat | S q => ev q end.\n')
 # a value of a type holding a counter, built and taken apart in the text (step 106)
 addA('zw_pair_match', "", 'match (n, a) with (c, x) => Uint63.of_nat c + x end',
      '')
