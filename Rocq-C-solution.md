@@ -5997,6 +5997,12 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups of step 108 (a local mutual block naming a variable; a mutual
   block giving back a counter), and §12.F's look once per program.
 
+**Step 109, the look for a local mutual block once per program (§7, §12.F, found at step 108) — the design (2026-11-11).**  Step 108 walks every function's body for a local mutual block in each of the reading's tries, and `HWP_irqnow`'s reifier step measured about 0.1 s slower.  The reading already makes one walk of every declaration: step 31's look for a local fixpoint (`lf`).
+- *The order* (`reify_prog2c`): that look made before the lifting (`lf0`); where it finds no local fixpoint, nothing is lifted and it is not made again after; where it finds one, both as at step 108.  So every decision is step 108's, and a program with no local fixpoint makes one walk fewer than at step 107.
+- *`rec_info2`*: it lifts only where the reading made a member of a lifted block, which it sees in what the reading made, with no walk.
+- *The C*: the same, cell for cell.
+- *Cells*: none new; the kernels' reifier step is the measurement.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6183,7 +6189,8 @@ Pushed to the public repository up to `e2d5b56` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 108 (a local mutual fixpoint: the construct table 3958 of 4105, 76 by design, 70 gaps), the gate; §12.A, §12.F: three follow-ups |
+| (this commit) | §12.V: step 109's design -- the look for a local mutual block once per program |
+| `ae78f0d` | §12.V: step 108 (a local mutual fixpoint: the construct table 3958 of 4105, 76 by design, 70 gaps), the gate; §12.A, §12.F: three follow-ups |
 | `e2d5b56` | `proved/KQRReify.v` + matrix step 108: a local mutual fixpoint: lifted, each member a function of the reader's own, the block read as at the top level |
 | `3921801` | §12.V: step 108's design -- a local mutual fixpoint |
 | `56c507c` | §12.V: step 107 (the laws of a data type with many constructors, in time: the construct table 3951 of 4095, the same), the gate |
