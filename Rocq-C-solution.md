@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3958 of 4105, 70 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3973 of 4119, 69 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1708,10 +1708,15 @@ comparisons on counters (4); records of three numbers by recursion (3, with the 
 constructs of `S`.  Then the pins of §0.5's boundaries, each with its control (§3.5): cells added to `gen.py` and to
 `DESIGN_CELLS` together.  Accepted when: the category's cells are `ok`, the full table is re-run and `MATRIX.md` updated, and
 the gate (examples, corpus, kernels if the walk changed) passes.
-- *A local mutual fixpoint naming a variable of the function* (found at step 108): step 108 lifts a closed one; a member naming a
+- ~~*A local mutual fixpoint naming a variable of the function*~~ (found at step 108) — **done, step 110**: the block lifted under
+  the variables it names alone, a match's with its constructor's argument types, each member the user's block under them; a Section's
+  mutual `Fixpoint`, the same shape at the top level, read with it.  Step 108 lifts a closed one; a member naming a
   parameter or a let of the function wants it as a parameter of its own, given in each call of the block (lambda lifting), and a
   variable bound by a match has no type in the term to give that parameter.  Accepted when `A_zy_capture` and `A_zy_capture_let` are
   proved.
+- *A local mutual fixpoint calling the fixpoint it stands in* (found at step 110): `match k with S j => (fix f .. lq j x .. with g ..
+  for f) .. end` inside `Fixpoint lq`: the block names `lq`, a function, so its members would take a function as a parameter, a
+  function given (step 10's copies) inside the very function given.  Accepted when `A_zz_in_fix_call` is proved.
 - *A mutual block giving back a counter* (found at step 108, there before it): step 82 reads a function giving back a counter as a row
   of one function; a block's members as one row with a selector, as step 45 makes them one function.  Accepted when `A_zy_counter`
   and `A_zy_top_counter` are proved.
@@ -6026,6 +6031,21 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Left, with cells*: a block calling the fixpoint it stands in (`A_zz_in_fix_call`): its members would take that function as a parameter, a §12.A follow-up.
 - *Cells*: `A_zz_*`, 14: two variables, the memory, a counter, a boolean, a record, inside a recursion, a match's variable named and not, beside a local fixpoint, in a helper, given to a function unapplied, a Section's mutual `Fixpoint` with a `Variable` and with a `Let`, a block calling the fixpoint around it.
 
+**Step 110, a local mutual fixpoint naming variables of the function, and a mutual block under parameters — the result (2026-11-12).**  Built as designed:
+- *The reader* (`KQRReify.v`): `lm_lift` with the variables' types (`ctx`, `br_ctx`), `lm_need`, the place eta-expanded (`lm_pis`) and beta-reduced where applied (`lm_beta`); `blk_view`, `is_blk`, `own_blk`, `relams`, `vm_normm`; `is_fn` takes a block under parameters and a definition with a local mutual block (`lm_has`, moved before it); `lift_all` floats a lifted body's lets; `reify_prog2c`'s reading of a block member through `blk_view`; `read_part`'s views from one member's body; the lifted members made first.
+- *Found while building* (each by probing the reader's steps on the work laptop): the first form, members taking the variables first, was read and refused by the kernel at the function's check (two fixpoints of different arities do not convert); the members' step-41 wrappers were made before the members; a Section's mutual `Fixpoint` was written out where it is called, as a helper, until `is_fn` took it; then its block function's equation was refused, the view of `od` (which no constant names, so Rocq's quote leaves it out) being the reader's block and that of `ev` the user's, until every view came from one member's body; a Section's `Let` before the block needed the place eta-expanded and floated after the lifting, `float_all` having run before it.  A second laptop run of the first form had not started (the laptop short of memory) and its results were read from the run before: the runner now leaves no results behind a run that does not start.
+- *Checked on the work laptop* (the repository at step 109 with this reader, the cells of steps 108 and 110, the Sections, the mutual blocks, the local fixpoints, the records of functions: 570): every verdict step 109's but the cells read.
+- *The reifier's step on the kernels' programs* (on the work laptop, one core, interleaved, three rounds, the fastest, F62, in clean copies of two trees, the repository with step 109's reader / with this one): `HWP_kernel` 3.34 / 3.34 s, `HWP_own` 2.37 / 2.38, `HWP_irqnow` 2.04 / 2.02 — the same.  With the look for a local mutual block in a helper made for every helper, 2.03 / 2.11: made only where the program has a local fixpoint.
+- *The C*: the 99 programs byte-identical.
+- *Cells*: 14 more: 13 proved; gap `A_zz_in_fix_call` (a block calling the fixpoint it stands in), a §12.A follow-up.  Two gaps read: `A_zy_capture`, `A_zy_capture_let`.  The table run 8 cells at a time, the laptop's other work stopped.
+- The C: the 99 programs byte-identical.  The construct table (on `9280902`): **3973 of 4119 through the verified compiler**, 76
+  by design, 69 gaps, 1 not Rocq (was 3958 of 4105: 13 of the 14 new cells read, 1 gap; 2 gaps read; no cell lost).  The gate on
+  `9280902`, the walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding; the same C: undefined behaviour
+  trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels and `grow` (23 / 23 /
+  26 / 20 / 19 / 9 s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems each within the list;
+  `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups, a mutual block giving back a counter (step 108's) and a local
+  mutual block calling the fixpoint it stands in.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6208,11 +6228,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `3f1bef1` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `9280902` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 110's design -- a local mutual fixpoint naming variables of the function, lifted under those it names; a mutual block under parameters (a Section's mutual Fixpoint) |
+| (this commit) | §12.V: step 110 (a local mutual fixpoint naming variables of the function, a Section's mutual Fixpoint: the construct table 3973 of 4119, 76 by design, 69 gaps), the gate; §12.A: one follow-up |
+| `9280902` | `proved/KQRReify.v` + matrix step 110: a local mutual fixpoint naming variables of the function, lifted under those it names; a mutual block under parameters (a Section's mutual Fixpoint) read with its block; 14 cells |
+| `25df01b` | §12.V: step 110's design -- a local mutual fixpoint naming variables of the function, lifted under those it names; a mutual block under parameters (a Section's mutual Fixpoint) |
 | `ce73e7f` | §12.V: step 109 (the look for a local mutual block once per program: the construct table the same), the gate; §12.F |
 | `3f1bef1` | `proved/KQRReify.v` step 109: the look for a local mutual block once per program: step 31's look made before the lifting, nothing lifted where it finds no local fixpoint |
 | `ba5d1cd` | §12.V: step 109's design -- the look for a local mutual block once per program |
