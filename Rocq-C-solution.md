@@ -6160,6 +6160,17 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups (a counter in a value left at step 114, the block follow-ups),
   then the other categories of §3.5.
 
+**Step 115, a counter in a value in a value (§3.5, §12.A; the gap `A_zx_cv_nested`, found at step 114) — the design (2026-11-12).**  `Fixpoint pn (k : nat) (i : int) : option (nat * int) := .. Some (k, i) ..`, used as `match pn n a with Some (c, j) => Uint63.of_nat c + j | None => b end`: step 114's value rows are of a type whose parameters are counters, and here the parameter is itself a value holding one.
+- *The types* (`vt_has`, `vt_ty`): a type holding a counter is `nat`, or an inductive's application one of whose parameters holds one, at any depth; the type at numbers has each `nat` in it made `int` (`option (nat * int)` at numbers `option (int * int)`).  A constructor's fields at the type's parameters (`vt_flds`): a counter, a value holding counters with its type, or a field holding none; a type one of whose fields names `nat` by its own declaration is not of this kind (its counters are not its parameters: step 114's record, left).
+- *The rows* (`nr_trv`): a field holding counters is given back at numbers in turn; a match on the function's own call or on a value at numbers binds that value's counters as numbers and its values holding counters as values at numbers; a `let` of a counter, of such a value (the own call among them) the same; a projection of a value at numbers (`fst r`, or any constant that is a match giving one field, `proj_info`) is a match on it with that field named (`pj_sub`); another function of the program giving back such a value is its row; a counter or a value at numbers used anywhere else leaves the function without a row, as a gap.
+- *The statements*: `vt_cv` rebuilds each constructor with its counters made numbers, its fields holding counters in turn.
+- *A function's copy* (`rp_match`): a value row is put in only where `nr_sub` reads a use of the value; the rows' general substitution put it in place of any call in the copies of the program's functions, of another type where the call is not such a use.
+- *The uses* (`nr_sub`): `of_nat` of a chain of projections around a call ending in a counter is the chain around the row's call (`pj_path`, `pj_ty`, `pj_mk`); a chain ending in a field holding no counter, the same; a match on such a call or on a chain around it is the row's, its counters numbers and its values holding counters values at numbers where the text uses them only through matches, `of_nat` of chains and fields holding none (`vstrip`).
+- *The gate*: the examples and the corpus run side by side again, `corpus.sh` told that `make.sh` has run (`KQ_MADE=1`), so it does not rewrite the `.vo` files the examples read (§12.F's item from step 114's first try).
+- *The C*: a program read before, byte-identical.
+- *Left, with cells*: a value holding counters given to a recursion as a parameter (`A_zx_cv_acc`): its row would take it at numbers, a statement of another form; §12.A.
+- *Cells*: `A_zx_cv_*`, 8: a pair in a pair, a let of the own call with projections, an `option` of a pair matched on the own call, an `option` of an `option`, a let of a counter, a function giving back such a value calling another, a sum of a pair, an accumulator.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6346,7 +6357,8 @@ Pushed to the public repository up to `6dfed58` (2026-11-12); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 114 (a counter in a value: the construct table 4003 of 4147, 76 by design, 67 gaps), the gate; §12.A, §12.F |
+| (this commit) | §12.V: step 115's design -- a counter in a value in a value: value rows of types holding counters at any depth |
+| `f2d2ea6` | §12.V: step 114 (a counter in a value: the construct table 4003 of 4147, 76 by design, 67 gaps), the gate; §12.A, §12.F |
 | `6dfed58` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + matrix step 114: a counter in a value: a row giving back the value at numbers, its statement by induction with the values destructed; 7 cells |
 | `8326720` | §12.V: step 114's design -- a counter in a value: a row giving back the value at numbers |
 | `75a2029` | §12.V: step 113 (a local fixpoint giving back a counter: the construct table 3996 of 4140, 76 by design, 67 gaps), the gate; §12.A |
