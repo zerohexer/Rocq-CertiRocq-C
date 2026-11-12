@@ -6190,6 +6190,16 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   each within the list; `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups (a record of the program's with a counter
   field, a value's counter used as a counter, an accumulator), then the other categories of §3.5.
 
+**Step 116, a counter in a value of the program's own type (§3.5, §12.A; the gap `A_zx_cv_record`, found at step 114) — the design (2026-11-12).**  `Record rn := mkrn { rcn : nat; rcv : int }`, `Fixpoint pr (k : nat) (i : int) : rn := .. mkrn (S (rcn r)) (rcv r) ..`, used as `Uint63.of_nat (rcn (pr n a)) + rcv (pr n a)`: steps 114 and 115 read a value whose counters are its type's parameters, and here a field is a counter by the type's own declaration, so the type at numbers is not the same type at other parameters but a type of its own.
+- *The type at numbers, made* (`vt_dirf`, `vt_mk`, `vt_mib`): a type one of whose fields holds a counter by its own declaration, one inductive, not indexed, not recursive, of monomorphic universes (a record, a type of several constructors, under parameters or not) gets a type at numbers made: the same inductive under the name `<type>__kn`, each field's type at numbers (a field of another such type, that type's made one, made first, `vt_need`), its constructors renamed, a plain inductive.  It is made in the file that reads the program, beside what the reader makes there (`vt_mades`, `vt_add`), and handed to `kitc.py` first in the list of what the reader made (`vt_enc`, `vt_mts`), which makes it with MetaRocq's `tmMkInductive` before the definitions naming it (`KQRReify.mk_made`, `vt_entry`, as MetaRocq's `mind_body_to_entry` makes an entry of a body).  A type made by the reader is a definition of Rocq's, checked by its kernel; nothing is assumed.
+- *The rows*: the types at numbers, the constructors and the matches of such a type at numbers the made type's (`vt_ty`, `vt_ind`, `vt_ci`); a constructor with no field the same.
+- *The statements*: `vt_cv` rebuilds each constructor as the made type's; a record of primitive projections, on which no match is a term, by its projections.
+- *The uses*: a projection of such a type at numbers is a match on the made type (`pj_mk`, `vt_fty`); primitive projections read in chains as projection constants are (`pj_path`, `pj_occ`, `pj_sub`).
+- *The proofs* (`KQRWf.nv_step`, `kq_vm0`): a projection of a constructor (`roc (mkro c v)`) is reduced before the match to take apart is chosen, so that the source's match on a projection and the row's on the field take the same thing apart; a primitive projection of a constructor anywhere (`is_proj`).
+- *The C*: a program read before, byte-identical.
+- *Left, with cells*: a record in a record given back by a recursion (`A_zx_cv_rec_rec`; of numbers too, `A_zx_rr_let`, `A_zx_rr_match`, found while building): not read, while a record in a record given as a parameter is; §12.A.
+- *Cells*: 9: `A_zx_cv_*`, a record matched, a type of three constructors, a record holding an `option`, an `option` of a record, a record in a record, a type under a parameter, a record of primitive projections; `A_zx_rr_*`, a record in a record of numbers given back, through a let and a match.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6376,7 +6386,8 @@ Pushed to the public repository up to `2ab828a` (2026-11-12); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 115 (a counter in a value in a value: the construct table 4011 of 4155, 76 by design, 67 gaps), the gate; §12.A, §12.F |
+| (this commit) | §12.V: step 116's design -- a counter in a value of the program's own type: its type at numbers made, a type of its own |
+| `7d119d0` | §12.V: step 115 (a counter in a value in a value: the construct table 4011 of 4155, 76 by design, 67 gaps), the gate; §12.A, §12.F |
 | `2ab828a` | `proved/KQRReify.v` + `corpus.sh` + matrix step 115: a counter in a value in a value: value rows of types holding counters at any depth; the gate side by side, `make.sh` once; 8 cells |
 | `e1f962e` | §12.V: step 115's design -- a counter in a value in a value: value rows of types holding counters at any depth |
 | `f2d2ea6` | §12.V: step 114 (a counter in a value: the construct table 4003 of 4147, 76 by design, 67 gaps), the gate; §12.A, §12.F |
