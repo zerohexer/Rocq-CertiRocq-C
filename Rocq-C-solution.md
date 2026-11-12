@@ -6127,6 +6127,14 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   `trust unchanged`.  Next: §12.A's counter in a value (a pair, an option, with a memory, divmod, nat_of_ascii), then the block
   follow-ups and the other categories of §3.5.
 
+**Step 114, a counter in a value (§3.5, §12.A; the gaps `A_z_o_pair_counter`, `A_z_o_opt_counter`, `A_z_o_mem_counter`) — the design (2026-11-12).**  `Fixpoint tw (k : nat) (i : int) : nat * int`, `option nat`, `nat * mem`, used as `Uint63.of_nat (fst (tw n a))`, `match tw n a with Some c => Uint63.of_nat c ..`: a row gives back a number (step 82), and these give back a value holding one.
+- *The rows* (in `nr_rows`' walk): a function giving back a value whose type's parameters include counters (`vt_of`) gets a row giving back the value at numbers (`prod int int`, `option int`): its constructors' counter fields translated as step 82's (`nr_trv`), the others kept; a match on its own call binds that call's counter fields as numbers.
+- *The statements* (`nv_stmt`): `F xs = cv (f xs)`, `cv` the match rebuilding each constructor, its counter fields made numbers (`vt_cv`); proved by induction, the hypothesis rewritten forward and each value matched on destructed (`KQRWf.nv_step`).
+- *The uses* (`nr_sub`): `of_nat (fst x)` of such a call the row's field; a field that is no counter the row's; a match on such a call the row's call, each counter field it binds a number where the text uses it only as one (`ofn_strip`), the text as it is otherwise.
+- *The C*: a program read before, byte-identical.
+- *Left, with cells*: a counter of a value used as a counter (`A_zx_cv_as_counter`), a record of the program's with a counter field (`A_zx_cv_record`, its counters no parameters of its type), a value in a value (`A_zx_cv_nested`); `Nat.divmod`'s pair and `nat_of_ascii` (`A_q_divmod`, `A_q_ascii_code`), a library's; §12.A follow-ups.
+- *Cells*: `A_zx_cv_*`, 7: both fields counters, a match on the call, an `option`'s `None`, a `sum`, a record, a value in a value, used as a counter.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6313,7 +6321,8 @@ Pushed to the public repository up to `add41dd` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 113 (a local fixpoint giving back a counter: the construct table 3996 of 4140, 76 by design, 67 gaps), the gate; §12.A |
+| (this commit) | §12.V: step 114's design -- a counter in a value: a row giving back the value at numbers |
+| `75a2029` | §12.V: step 113 (a local fixpoint giving back a counter: the construct table 3996 of 4140, 76 by design, 67 gaps), the gate; §12.A |
 | `add41dd` | `proved/KQRReify.v` + matrix step 113: a local fixpoint giving back a counter: lifted by `y_all`, its row step 82's; 6 cells |
 | `15227cb` | §12.V: step 113's design -- a local fixpoint giving back a counter: lifted by y_all, its row step 82's |
 | `d790c20` | §12.V: step 112 (a local mutual block giving back counters: the construct table 3988 of 4134, 76 by design, 69 gaps), the gate; §12.A |
