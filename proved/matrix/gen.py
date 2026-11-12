@@ -3577,6 +3577,21 @@ addA('zo_let', "", 'let c := tw n in ff c a + ff c b',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
 addA('zo_callee', "", 'g2 n a',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (k : nat) (x : int) : int := ff (tw k) x.\n')
+# a counter in a value (step 114)
+addA('zx_cv_pair_both', "", 'Uint63.of_nat (fst (pc n a)) + Uint63.of_nat (snd (pc n a))',
+     'Fixpoint pc (k : nat) (i : int) : nat * nat := match k with O => (O, 1%nat) | S m => let (x, y) := pc m (i + 1) in (S x, S (S y)) end.\n')
+addA('zx_cv_pair_match', "", 'match pd n a with (c, j) => Uint63.of_nat c + j end',
+     'Fixpoint pd (k : nat) (i : int) : nat * int := match k with O => (O, i) | S m => match pd m (i + 1) with (c, j) => (S c, j) end end.\n')
+addA('zx_cv_opt_none', "", 'match po n a with Some c => Uint63.of_nat c | None => b end',
+     'Fixpoint po (k : nat) (i : int) : option nat := match k with O => None | S m => if i <? 0 then Some (S m) else po m (i + 1) end.\n')
+addA('zx_cv_sum', "", 'match ps n a with inl c => Uint63.of_nat c | inr j => j end',
+     'Fixpoint ps (k : nat) (i : int) : nat + int := match k with O => inr i | S m => if i <? 0 then inl k else ps m (i + 1) end.\n')
+addA('zx_cv_record', "", 'Uint63.of_nat (rcn (pr n a)) + rcv (pr n a)',
+     'Record rn := mkrn { rcn : nat; rcv : int }.\nFixpoint pr (k : nat) (i : int) : rn := match k with O => mkrn O i | S m => let r := pr m (i + 1) in mkrn (S (rcn r)) (rcv r) end.\n')
+addA('zx_cv_nested', "", 'match pn n a with Some (c, j) => Uint63.of_nat c + j | None => b end',
+     'Fixpoint pn (k : nat) (i : int) : option (nat * int) := match k with O => None | S m => if i <? 0 then Some (k, i) else pn m (i + 1) end.\n')
+addA('zx_cv_as_counter', "", 'if Nat.leb (fst (pa n a)) 3 then a else b',
+     'Fixpoint pa (k : nat) (i : int) : nat * int := match k with O => (O, i) | S m => let (x, y) := pa m (i + 1) in (S x, y) end.\n')
 # a local fixpoint giving back a counter (step 113)
 addA('zx_lfc_direct', "", 'Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => O | S q => S (S (cn q)) end) n)',
      '')

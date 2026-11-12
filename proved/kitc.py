@@ -949,7 +949,7 @@ def reflect(name, entry, prog, no_proof):
     kqfn = lambda x: "" if re.search(r"__l\d+(__v\d+)?$", x) else kqunm(x).split("kqcopy.")[-1]
     fqf = [(m, kqfn(re.match(r"(.*)__f\d+__fq__wy$", m).group(1)), int(re.search(r"__f(\d+)__fq__wy$", m).group(1))) for m in fqs]
     vmr = any(re.search(r"__v\d+__rq__wy$", m) for m, _ in rrs)
-    qmr = any(re.search(r"__[qkm]\d+__rq__wy$|__kb\d+_\d+_\d+_.*__rq__wy$", m) for m, _ in rrs)
+    qmr = any(re.search(r"__[qkm]\d+__rq__wy$|__kb\d+_\d+_\d+_.*__rq__wy$|__kv\d+__rq__wy$", m) for m, _ in rrs)
     rrw2 = []
     roomw = max([int(r[2]) for r in recs] + [1])
     roomR = f"({roomw} <= Sint63.to_Z (KQ.KQBound.kq_len 63) + 1)%Z" if roomw > 1 else "True"
@@ -1000,7 +1000,7 @@ def reflect(name, entry, prog, no_proof):
             continue
         F = m[:-len("__rq__wy")] + "__rp__wy"
         # (step 78) what is read through the slot block: its statement names the function by what follows the row
-        h = kqfn(re.match(r"(.*)__[vqkm]\d+__rq__wy$", m).group(1)) if re.search(r"__[vqkm]\d+__rq__wy$", m) else h
+        h = kqfn(re.match(r"(.*)__(?:[vqkm]|kv)\d+__rq__wy$", m).group(1)) if re.search(r"__(?:[vqkm]|kv)\d+__rq__wy$", m) else h
         unf = " ".join(x for x in [h, F] if x)
         unfc = ", ".join(x for x in [h, F] if x)
         if m.endswith("__n__rq__wy"):
@@ -1010,10 +1010,10 @@ def reflect(name, entry, prog, no_proof):
             t += (f"Lemma {name}_rr{j} {hrb}: {m}.\nProof. unfold {m}. intros; unfold {unfc}; first [solve [KQRWf.own_step0] | solve [cbn; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0]]. Qed.\n")
         else:
             # (step 78) the counter of a function read through the slot block may stand anywhere
-            mv = re.search(r"__[vqgkm](\d+)__rq__wy$", m)
+            mv = re.search(r"__(?:[vqgkm]|kv)(\d+)__rq__wy$", m)
             rv = int(mv.group(1)) if mv else 0
             d0 = f"do {rv} intro; " if rv else ""
-            ost = "KQRWf.nr_step" if re.search(r"__k\d+__rq__wy$", m) else "KQRWf.own_step"
+            ost = "KQRWf.nr_step" if re.search(r"__k\d+__rq__wy$", m) else "KQRWf.nv_step" if re.search(r"__kv\d+__rq__wy$", m) else "KQRWf.own_step"
             t += (f"Lemma {name}_rr{j} {hrb}: {m}.\nProof. unfold {m}. fix IH {rv + 1}. {d0}intros kqn; destruct kqn as [|kqn]; intros; cbn [{unf}]; first [solve [{ost} IH] | solve [cbn; {ost} IH] | solve [cbv beta iota zeta delta -[{keepf}]; {ost} IH]]. Qed.\n")
         rrn.append(f"{name}_rr{j}")
         # (step 76) rewriting compares up to unfolding: such a lemma only where its function is in the goal, or it would turn the operation back

@@ -827,6 +827,19 @@ Ltac nr_step IH :=
                 (* (step 99) a dead branch: a test's answer that its case contradicts, `(S m =? 0) = true` *)
                 | match goal with e : _ = _ |- _ => solve [cbn in e; discriminate e] end
                 | match goal with |- context [match ?c with _ => _ end] => is_var c; destruct c end ]).
+(** (step 114) a row giving back a value with counter fields: its statement [F xs = cv (f xs)] at the successor, the hypothesis
+    rewritten forward (the row's call becomes the function's value made numbers), each value matched on destructed, the counters'
+    numbers by [kq_nr] *)
+Ltac nv_step IH :=
+  repeat (cbn beta iota zeta delta [fst snd proj1_sig]; kq_unf;
+          first [ prim_rw
+                | kq_rw
+                | progress (rewrite ?IH)
+                | kq_nr
+                | reflexivity
+                | match goal with |- context [match ?c with _ => _ end] =>
+                    lazymatch c with context [match _ with _ => _ end] => fail | _ => let e := fresh "kqe" in destruct c eqn:e end end
+                | match goal with e : _ = _ |- _ => solve [cbn in e; discriminate e] end ]).
 (** (step 111) the same, the induction hypotheses' rewriting given: a block's rows proved together, one hypothesis per member *)
 Ltac nr_stepT rw :=
   repeat (cbn beta iota zeta delta [fst snd proj1_sig]; kq_unf;
