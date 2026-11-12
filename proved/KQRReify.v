@@ -7492,7 +7492,9 @@ Definition rp_stmt (r : rprow) : term :=
 (** a text with each such call written as a call of what is in its place *)
 Definition rp_match (rows : list rprow) (h : term) (args : list term) : option term :=
   match List.find (fun r : rprow =>
-          let '(h0, inst, _, _, _) := r in
+          let '(h0, inst, sl0, _, _) := r in
+          (* (step 115) a value row is put in only where the text uses the value so (nr_sub), never as the function's copy *)
+          if rp_is_nrv sl0 then false else
           match h0, h with
           | tConst k0 _, tConst k _ => if Kername.eqb k0 k then teqs (firstn (length inst) args) inst else false
           | tFix _ _, tFix _ _ => teq 100000 h0 h
@@ -10228,12 +10230,24 @@ Fixpoint nr_trm (m : nat) (fuel : nat) (Σ : global_env) (mp : modpath) (rows : 
       | _ => None
       end end
   end.
-(** (step 114) a value whose type's parameters include counters ([prod nat int], [option nat], [prod nat mem]): its inductive, its
-    parameters; the type at numbers; which fields of a constructor are counters (a field whose type is a parameter that is one) *)
+(** (step 114, step 115) a value holding counters: a type holding one is [nat], or an inductive's application one of whose parameters
+    holds one ([prod nat int], [option nat], [option (prod nat int)]); the type at numbers, each [nat] in it [int] *)
+Fixpoint vt_has (fuel : nat) (T : term) {struct fuel} : bool :=
+  match fuel with
+  | O => false
+  | S fuel => if is_nat T then true else match T with tApp (tInd _ _) ps => existsb (vt_has fuel) ps | _ => false end
+  end.
+Fixpoint vt_ty (fuel : nat) (T : term) {struct fuel} : term :=
+  match fuel with
+  | O => T
+  | S fuel => if is_nat T then tConst kn_int [] else match T with tApp (tInd i u) ps => tApp (tInd i u) (map (vt_ty fuel) ps) | _ => T end
+  end.
 Definition vt_of (T : term) : option (inductive * Instance.t * list term) :=
-  match T with tApp (tInd i u) ps => if existsb is_nat ps then Some (i, u, ps) else None | _ => None end.
-Definition vt_int (ps : list term) : list term := map (fun q => if is_nat q then tConst kn_int [] else q) ps.
-Definition vt_cnt (Σ : global_env) (i : inductive) (ps : list term) (c : nat) : option (list bool) :=
+  match T with tApp (tInd i u) ps => if existsb (vt_has 50) ps then Some (i, u, ps) else None | _ => None end.
+Definition vt_int (ps : list term) : list term := map (vt_ty 50) ps.
+(** (step 115) the fields of a constructor at the parameters [ps]: [None] a field holding no counter, [Some T] one of type [T] holding
+    one ([T] is [nat]: a counter); none at all where a field's own type names [nat] (its counters not the type's parameters) *)
+Definition vt_flds (Σ : global_env) (i : inductive) (ps : list term) (c : nat) : option (list (option term)) :=
   match lookup_env Σ (inductive_mind i) with
   | Some (InductiveDecl mib) =>
       match nth_error (ind_bodies mib) (inductive_ind i) with
@@ -10241,71 +10255,349 @@ Definition vt_cnt (Σ : global_env) (i : inductive) (ps : list term) (c : nat) :
           match nth_error (ind_ctors oib) c with
           | Some cb =>
               let args := rev (cstr_args cb) in
-              let np := length ps in
-              Some (map (fun jd => match decl_type (snd jd) with
-                                   | tRel k => if (if Nat.leb (fst jd) k then Nat.ltb k (fst jd + np) else false)
-                                               then is_nat (nth (np - 1 - (k - fst jd)) ps (tRel 0)) else false
-                                   | _ => false
-                                   end) (combine (seq 0 (length args)) args))
+              opt_all (map (fun jd : nat * context_decl =>
+                         let D := decl_type (snd jd) in
+                         if vt_has 50 D then None else
+                         let T := subst (rev ps) (fst jd) D in
+                         if vt_has 50 T then (if closedn 0 T then Some (Some T) else None) else Some None)
+                       (combine (seq 0 (length args)) args))
           | None => None
           end
       | None => None
       end
   | _ => None
   end.
+Definition vt_cnt (Σ : global_env) (i : inductive) (ps : list term) (c : nat) : option (list bool) :=
+  option_map (map (fun o => match o with Some T => is_nat T | None => false end)) (vt_flds Σ i ps c).
 Definition vt_same (i j : inductive) : bool := Kername.eqb (inductive_mind i) (inductive_mind j) && Nat.eqb (inductive_ind i) (inductive_ind j).
-(** (step 114) [t] of such a type [T] given back at numbers: its constructors' counter fields translated (step 82's), the others kept;
-    a match on its own call binds that call's counter fields as numbers; any other match gives the value in each branch *)
-Fixpoint nr_trv (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (self d : nat) (nv : list nat) (T t : term) {struct fuel} : option term :=
+(** (step 115) a projection: a constant [fun params x => match x with C a1 .. an => aj end]: its inductive, parameters, field *)
+Definition proj_info (Σ : global_env) (k : kername) : option (inductive * nat * nat) :=
+  match lookup_env Σ k with
+  | Some (ConstantDecl cb) =>
+      match cst_body cb with
+      | Some b =>
+          let '(tys, bd) := lams b in
+          match bd with
+          | tCase ci _ (tRel 0) [br] =>
+              match bbody br with
+              | tRel r =>
+                  let n := length (bcontext br) in
+                  if Nat.ltb r n then (if Nat.eqb (S (ci_npar ci)) (length tys) then Some (ci_ind ci, ci_npar ci, n - 1 - r) else None) else None
+              | _ => None
+              end
+          | _ => None
+          end
+      | None => None
+      end
+  | _ => None
+  end.
+(** (step 115) whether a projection of the variable [w] is in [t] *)
+Fixpoint pj_occ (fuel : nat) (Σ : global_env) (w : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      let go := pj_occ fuel Σ w in
+      match t with
+      | tApp (tConst k _) args =>
+          if (match List.last args (tVar "none"%bs) with
+              | tRel r => if Nat.eqb r w then match proj_info Σ k with Some (_, np, _) => Nat.eqb (length args) (S np) | None => false end else false
+              | _ => false
+              end) then true else existsb go args
+      | tApp f args => if go f then true else existsb go args
+      | tLambda _ a b | tProd _ a b => if go a then true else pj_occ fuel Σ (S w) b
+      | tLetIn _ v a b => if go v then true else if go a then true else pj_occ fuel Σ (S w) b
+      | tCase _ p c brs => if go c then true else if existsb go (pparams p) then true
+                           else existsb (fun br => pj_occ fuel Σ (w + length (bcontext br)) (bbody br)) brs
+      | tFix mfix _ => existsb (fun df => pj_occ fuel Σ (w + length mfix) (dbody df)) mfix
+      | _ => false
+      end
+  end.
+(** (step 115) in [t] lifted by the [n] fields of a match on [w] (of the inductive [i]), each projection of [w] that field *)
+Fixpoint pj_sub (fuel : nat) (Σ : global_env) (i : inductive) (n w dd : nat) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := pj_sub fuel Σ i n w dd in
+      let under := fun k => pj_sub fuel Σ i n w (dd + k) in
+      match t with
+      | tApp (tConst k u) args =>
+          let dflt := tApp (tConst k u) (map go args) in
+          match List.last args (tVar "none"%bs) with
+          | tRel r =>
+              if Nat.eqb r (w + n + dd) then
+                match proj_info Σ k with
+                | Some (j, np, f) => if (if vt_same i j then Nat.eqb (length args) (S np) else false) then tRel (n - 1 - f + dd) else dflt
+                | None => dflt
+                end
+              else dflt
+          | _ => dflt
+          end
+      | tApp f args => tApp (go f) (map go args)
+      | tLambda na a b => tLambda na (go a) (under 1 b)
+      | tProd na a b => tProd na (go a) (under 1 b)
+      | tLetIn na v a b => tLetIn na (go v) (go a) (under 1 b)
+      | tCase ci p c brs =>
+          tCase ci {| pparams := map go (pparams p); puinst := puinst p; pcontext := pcontext p; preturn := under (length (pcontext p)) (preturn p) |} (go c)
+                (map (fun br => {| bcontext := bcontext br; bbody := under (length (bcontext br)) (bbody br) |}) brs)
+      | tFix mfix k => tFix (map (fun df => {| dname := dname df; dtype := go (dtype df); rarg := rarg df; dbody := under (length mfix) (dbody df) |}) mfix) k
+      | _ => t
+      end
+  end.
+(** (step 115) a chain of projections around [x], the outermost first, each with its constant, instance, parameters, inductive, field *)
+Fixpoint pj_path (fuel : nat) (Σ : global_env) (t : term) {struct fuel} : list (kername * Instance.t * list term * (inductive * nat)) * term :=
+  match fuel with
+  | O => ([], t)
+  | S fuel =>
+      match t with
+      | tApp (tConst k u) args =>
+          match proj_info Σ k with
+          | Some (i, np, f) =>
+              if Nat.eqb (length args) (S np) then
+                let '(l, c) := pj_path fuel Σ (List.last args (tVar "none"%bs)) in ((k, u, firstn np args, (i, f)) :: l, c)
+              else ([], t)
+          | None => ([], t)
+          end
+      | _ => ([], t)
+      end
+  end.
+(** the type at the end of such a chain from [T], the innermost projection first: [Some (Some T')] one holding counters, [Some None]
+    one holding none *)
+Fixpoint pj_ty (Σ : global_env) (T : term) (l : list (kername * Instance.t * list term * (inductive * nat))) : option (option term) :=
+  match l with
+  | [] => Some (Some T)
+  | (_, _, _, (j, f)) :: r =>
+      match T with
+      | tApp (tInd i _) ps =>
+          if vt_same i j then
+            match vt_flds Σ i ps 0 with
+            | Some fs =>
+                match nth_error fs f with
+                | Some (Some Tf) => pj_ty Σ Tf r
+                | Some None => Some None
+                | None => None
+                end
+            | None => None
+            end
+          else None
+      | _ => None
+      end
+  end.
+Definition pj_mk (l : list (kername * Instance.t * list term * (inductive * nat))) (c : term) : term :=
+  fold_right (fun p x => let '(k, u, ps, _) := p in tApp (tConst k u) (vt_int ps ++ [x])) c l.
+(** (step 114) [of_nat (tRel v)] made [tRel v], no other use of [v] (under binders, [v] moved): the variable a number *)
+Fixpoint ofn_strip (fuel v : nat) (t : term) {struct fuel} : option term :=
+  match fuel with
+  | O => None
+  | S fuel =>
+      let go := ofn_strip fuel v in
+      match t with
+      | tApp (tConst oz _) [tApp (tConst u _) [tRel r]] =>
+          if (if Kername.eqb u kn_zofn then (match nr_of_z with tConst z0 _ => Kername.eqb oz z0 | _ => false end) else false)
+          then (if Nat.eqb r v then Some (tRel r) else Some t) else Some t
+      | tRel r => if Nat.eqb r v then None else Some t
+      | tApp f args => match go f, opt_all (map go args) with Some f2, Some a2 => Some (tApp f2 a2) | _, _ => None end
+      | tLambda na a b => match go a, ofn_strip fuel (S v) b with Some a2, Some b2 => Some (tLambda na a2 b2) | _, _ => None end
+      | tProd na a b => match go a, ofn_strip fuel (S v) b with Some a2, Some b2 => Some (tProd na a2 b2) | _, _ => None end
+      | tLetIn na x a b => match go x, go a, ofn_strip fuel (S v) b with Some x2, Some a2, Some b2 => Some (tLetIn na x2 a2 b2) | _, _, _ => None end
+      | tCase ci p c brs =>
+          match go c, opt_all (map go (pparams p)),
+                opt_all (map (fun br => option_map (fun b2 => {| bcontext := bcontext br; bbody := b2 |})
+                                         (ofn_strip fuel (v + length (bcontext br)) (bbody br))) brs) with
+          | Some c2, Some ps2, Some b2s => Some (tCase ci {| pparams := ps2; puinst := puinst p; pcontext := pcontext p; preturn := preturn p |} c2 b2s)
+          | _, _, _ => None
+          end
+      | tFix mfix k =>
+          match opt_all (map (fun df => option_map (fun b2 => {| dname := dname df; dtype := dtype df; rarg := rarg df; dbody := b2 |})
+                                         (ofn_strip fuel (v + length mfix) (dbody df))) mfix) with
+          | Some m2 => Some (tFix m2 k)
+          | None => None
+          end
+      | _ => Some t
+      end
+  end.
+(** (step 115) [v], a value holding counters of type [T] made a value at numbers, in [t]: a match on it or on a chain of projections
+    around it binds its counters as numbers and its values holding counters as values at numbers, in turn; [of_nat] of a chain ending
+    in a counter is the chain at numbers; a chain ending in a field holding none, the same; no other use *)
+Fixpoint vstrip (fuel : nat) (Σ : global_env) (v : nat) (T : term) (t : term) {struct fuel} : option term :=
+  match fuel with
+  | O => None
+  | S fuel =>
+      let go := vstrip fuel Σ v T in
+      let isv := fun c => match c with tRel r => Nat.eqb r v | _ => false end in
+      let isofn := fun (oz u : kername) => if Kername.eqb u kn_zofn then (match nr_of_z with tConst z0 _ => Kername.eqb oz z0 | _ => false end) else false in
+      let chain := fun (x : term) =>
+        let '(l, c) := pj_path 50 Σ x in
+        match l with
+        | [] => None
+        | _ => if isv c then (match pj_ty Σ T (rev l) with Some None => Some (Some (pj_mk l c)) | _ => Some None end) else None
+        end in
+      match (match t with
+             | tApp (tConst oz _) [tApp (tConst u _) [x]] =>
+                 if isofn oz u then
+                   let '(l, c) := pj_path 50 Σ x in
+                   match l with
+                   | [] => None
+                   | _ => if isv c then (match pj_ty Σ T (rev l) with Some (Some T') => if is_nat T' then Some (Some (pj_mk l c)) else Some None | _ => Some None end) else None
+                   end
+                 else chain t
+             | tApp (tConst _ _) _ => chain t
+             | tCase ci p x brs =>
+                 let '(l, c) := pj_path 50 Σ x in
+                 if isv c then
+                   match pj_ty Σ T (rev l) with
+                   | Some (Some (tApp (tInd i _) ps)) =>
+                       if vt_same i (ci_ind ci) then
+                         Some (option_map (fun b2s => tCase ci {| pparams := vt_int (pparams p); puinst := puinst p; pcontext := pcontext p; preturn := preturn p |} (pj_mk l c) b2s)
+                           (opt_all (map (fun kb : nat * branch term =>
+                              let k := length (bcontext (snd kb)) in
+                              match vt_flds Σ i ps (fst kb) with
+                              | Some fs =>
+                                  option_map (fun b2 => {| bcontext := bcontext (snd kb); bbody := b2 |})
+                                    (fold_left (fun ob jf => match ob with
+                                                             | Some b => match snd jf with
+                                                                         | Some Tf => if is_nat Tf then ofn_strip 100000 (k - 1 - fst jf) b else vstrip fuel Σ (k - 1 - fst jf) Tf b
+                                                                         | None => Some b
+                                                                         end
+                                                             | None => None
+                                                             end) (combine (seq 0 k) fs) (vstrip fuel Σ (v + k) T (bbody (snd kb))))
+                              | None => None
+                              end) (combine (seq 0 (length brs)) brs))))
+                       else Some None
+                   | _ => Some None
+                   end
+                 else None
+             | _ => None
+             end) with
+      | Some r => r
+      | None =>
+          match t with
+          | tRel r => if Nat.eqb r v then None else Some t
+          | tApp f args => match go f, opt_all (map go args) with Some f2, Some a2 => Some (tApp f2 a2) | _, _ => None end
+          | tLambda na a b => match go a, vstrip fuel Σ (S v) T b with Some a2, Some b2 => Some (tLambda na a2 b2) | _, _ => None end
+          | tProd na a b => match go a, vstrip fuel Σ (S v) T b with Some a2, Some b2 => Some (tProd na a2 b2) | _, _ => None end
+          | tLetIn na x a b => match go x, go a, vstrip fuel Σ (S v) T b with Some x2, Some a2, Some b2 => Some (tLetIn na x2 a2 b2) | _, _, _ => None end
+          | tCase ci p c brs =>
+              match go c, opt_all (map go (pparams p)),
+                    opt_all (map (fun br => option_map (fun b2 => {| bcontext := bcontext br; bbody := b2 |})
+                                             (vstrip fuel Σ (v + length (bcontext br)) T (bbody br))) brs) with
+              | Some c2, Some ps2, Some b2s => Some (tCase ci {| pparams := ps2; puinst := puinst p; pcontext := pcontext p; preturn := preturn p |} c2 b2s)
+              | _, _, _ => None
+              end
+          | tFix mfix k =>
+              match opt_all (map (fun df => option_map (fun b2 => {| dname := dname df; dtype := dtype df; rarg := rarg df; dbody := b2 |})
+                                             (vstrip fuel Σ (v + length mfix) T (dbody df))) mfix) with
+              | Some m2 => Some (tFix m2 k)
+              | None => None
+              end
+          | _ => Some t
+          end
+      end
+  end.
+(** (step 115) the counters [nv] made numbers in a term holding no counter: [of_nat c] becomes [c], no other use; no value of [vv] *)
+Definition vv_free (vv : list (nat * term)) (t : term) : bool := forallb (fun wt : nat * term => noccur_between (fst wt) 1 t) vv.
+Definition nv_strip (nv : list nat) (vv : list (nat * term)) (t : term) : option term :=
+  if vv_free vv t then fold_left (fun ot v => match ot with Some x => ofn_strip 100000 v x | None => None end) nv (Some t) else None.
+(** (step 114, step 115) [t] of such a type [T] given back at numbers: its constructors' counter fields translated (step 82's), its fields
+    holding counters given back at numbers in turn, the others kept, the counters met there numbers; a match on its own call or on a
+    value at numbers ([vv]) binds its fields' counters as numbers ([nv]) and its values holding counters as values at numbers; a let of
+    a counter or of such a value the same; a projection of a value at numbers a match on it; another function giving back such a value
+    its row *)
+Fixpoint nr_trv (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (self d : nat) (nv : list nat) (vv : list (nat * term)) (T t : term) {struct fuel} : option term :=
   match fuel with
   | O => None
   | S fuel =>
       match vt_of T with
       | None => None
       | Some (i, u, ps) =>
-          let np := length ps in
           let Ti := tApp (tInd i u) (vt_int ps) in
+          let shv := fun k => map (fun wt : nat * term => (fst wt + k, snd wt)) vv in
+          match List.find (fun wt : nat * term => pj_occ 100000 Σ (fst wt) t) vv with
+          | Some (w, Tw) =>
+              match Tw with
+              | tApp (tInd iw uw) pw =>
+                  match vt_flds Σ iw pw 0 with
+                  | Some fs =>
+                      let n := length fs in
+                      nr_trv fuel Σ mp rows self d nv vv T
+                        (tCase {| ci_ind := iw; ci_npar := length pw; ci_relevance := Relevant |}
+                               {| puinst := uw; pparams := pw; pcontext := [anon_b]; preturn := lift0 1 T |}
+                               (tRel w) [{| bcontext := repeat anon_b n; bbody := pj_sub 100000 Σ iw n w 0 (lift0 n t) |}])
+                  | None => None
+                  end
+              | _ => None
+              end
+          | None =>
           match t with
+          | tRel w => if existsb (fun wt : nat * term => Nat.eqb (fst wt) w) vv then Some t else None
           | tApp (tConstruct j c u') args =>
               if vt_same i j then
-                match vt_cnt Σ i ps c with
-                | Some cs =>
-                    match opt_all (map (fun cf : bool * term => if fst cf then nr_trm 1 fuel Σ mp rows self d [] nv (snd cf) else Some (snd cf))
-                                       (combine cs (skipn np args))) with
-                    | Some fs2 => Some (tApp (tConstruct j c u') (vt_int (firstn np args) ++ fs2))
+                match vt_flds Σ i ps c with
+                | Some fs =>
+                    match opt_all (map (fun fa : option term * term =>
+                             match fst fa with
+                             | Some Tf => if is_nat Tf then (if vv_free vv (snd fa) then nr_trm 1 fuel Σ mp rows self d [] nv (snd fa) else None)
+                                          else nr_trv fuel Σ mp rows self d nv vv Tf (snd fa)
+                             | None => nv_strip nv vv (snd fa)
+                             end) (combine fs (skipn (length ps) args))) with
+                    | Some fs2 => Some (tApp (tConstruct j c u') (vt_int (firstn (length ps) args) ++ fs2))
                     | None => None
                     end
                 | None => None
                 end
               else None
-          | tApp (tRel r) _ => if Nat.eqb r (self + d) then Some t else None
+          | tApp (tRel r) args => if Nat.eqb r (self + d) then option_map (tApp (tRel r)) (opt_all (map (nv_strip nv vv) args)) else None
+          | tApp (tConst k _) args =>
+              match List.find (fun r : rprow => let '(h0, _, sl, _, d0) := r in
+                                 if rp_is_nrv sl then match h0 with tConst k0 _ => Kername.eqb k0 k && Nat.eqb (length args) (rp_ar d0) | _ => false end else false) rows with
+              | Some r => option_map (tApp (tConst (rp_name r) [])) (opt_all (map (nv_strip nv vv) args))
+              | None => None
+              end
           | tCase ci p c brs =>
-              let own := match c with tApp (tRel r) _ => Nat.eqb r (self + d) | _ => false end in
-              if (if own then vt_same (ci_ind ci) i else false) then
-                (* a match on its own call: that call's counter fields numbers in each branch *)
-                match opt_all (map (fun kb : nat * branch term =>
+              let own := match c with tApp (tRel r) _ => Nat.eqb r (self + d) | tRel r => existsb (fun wt : nat * term => Nat.eqb (fst wt) r) vv | _ => false end in
+              if own then
+                match (match c with tApp (tRel r) args => option_map (tApp (tRel r)) (opt_all (map (nv_strip nv vv) args)) | _ => Some c end),
+                      opt_all (map (fun kb : nat * branch term =>
                          let k := length (bcontext (snd kb)) in
-                         match vt_cnt Σ i ps (fst kb) with
-                         | Some cs =>
-                             let nv2 := map (Nat.add k) nv ++ map (fun j => k - 1 - j) (filter (fun j => nth j cs false) (seq 0 k)) in
+                         match vt_flds Σ (ci_ind ci) (pparams p) (fst kb) with
+                         | Some fs =>
+                             let js := seq 0 k in
+                             let nv2 := map (Nat.add k) nv ++ map (fun j => k - 1 - j) (filter (fun j => match nth j fs None with Some Tf => is_nat Tf | None => false end) js) in
+                             let vv2 := shv k ++ flat_map (fun j => match nth j fs None with Some Tf => if is_nat Tf then [] else [(k - 1 - j, Tf)] | None => [] end) js in
                              option_map (fun b2 => {| bcontext := bcontext (snd kb); bbody := b2 |})
-                                        (nr_trv fuel Σ mp rows self (d + k) nv2 T (bbody (snd kb)))
+                                        (nr_trv fuel Σ mp rows self (d + k) nv2 vv2 T (bbody (snd kb)))
                          | None => None
                          end) (combine (seq 0 (length brs)) brs)) with
-                | Some b2s => Some (tCase ci {| pparams := vt_int (pparams p); puinst := puinst p; pcontext := pcontext p;
-                                                preturn := lift0 (length (pcontext p)) Ti |} c b2s)
+                | Some c2, Some b2s => Some (tCase ci {| pparams := vt_int (pparams p); puinst := puinst p; pcontext := pcontext p;
+                                                         preturn := lift0 (length (pcontext p)) Ti |} c2 b2s)
+                | _, _ => None
+                end
+              else
+                match nv_strip nv vv c,
+                      opt_all (map (fun br => let k := length (bcontext br) in
+                                       option_map (fun b2 => {| bcontext := bcontext br; bbody := b2 |})
+                                       (nr_trv fuel Σ mp rows self (d + k) (map (Nat.add k) nv) (shv k) T (bbody br))) brs) with
+                | Some c2, Some b2s => Some (tCase ci (y_ret p Ti) c2 b2s)
+                | _, _ => None
+                end
+          | tLetIn na v ty b =>
+              let nv1 := map S nv in
+              if is_nat ty then
+                match (if vv_free vv v then nr_trm 1 fuel Σ mp rows self d [] nv v else None) with
+                | Some v2 => option_map (tLetIn na v2 (tConst kn_int [])) (nr_trv fuel Σ mp rows self (S d) (0 :: nv1) (shv 1) T b)
+                | None => None
+                end
+              else if vt_has 50 ty then
+                match nr_trv fuel Σ mp rows self d nv vv ty v with
+                | Some v2 => option_map (tLetIn na v2 (vt_ty 50 ty)) (nr_trv fuel Σ mp rows self (S d) nv1 ((0, ty) :: shv 1) T b)
                 | None => None
                 end
               else
-                match opt_all (map (fun br => let k := length (bcontext br) in
-                                       option_map (fun b2 => {| bcontext := bcontext br; bbody := b2 |})
-                                       (nr_trv fuel Σ mp rows self (d + k) (map (Nat.add k) nv) T (bbody br))) brs) with
-                | Some b2s => Some (tCase ci (y_ret p Ti) c b2s)
+                match nv_strip nv vv v with
+                | Some v2 => option_map (tLetIn na v2 ty) (nr_trv fuel Σ mp rows self (S d) nv1 (shv 1) T b)
                 | None => None
                 end
-          | tLetIn na v ty b => option_map (tLetIn na v ty) (nr_trv fuel Σ mp rows self (S d) (map S nv) T b)
           | _ => None
-          end
+          end end
       end
   end.
 (** (step 111) a function's own call; [nr_trm m]: any member's of a block of [m] *)
@@ -10373,7 +10665,7 @@ Definition nr_rows (Σ : global_env) (mp : modpath) (root : kername) (kns : list
                     let '(tys, body) := lams (dbody d) in
                     let n := length tys in
                     if Nat.eqb n (length (removelast (prod_tys ty))) then
-                      match nr_trv 1000 Σ mp rs n 0 [] (ret_ty ty) body with
+                      match nr_trv 1000 Σ mp rs n 0 [] [] (ret_ty ty) body with
                       | Some b2 =>
                           rs ++ [(tConst kn [], [], [rp_nrv], mangle kn ^ "__kv" ^ string_of_nat (rarg d),
                                   {| dname := dname d; dtype := pis_of tys (tApp (tInd i u) (vt_int ps)); rarg := rarg d; dbody := lams_of tys b2 |})]
@@ -10405,32 +10697,46 @@ Definition nr_src1 (Σ : global_env) (h : term) (rels : list term) : term :=
       else mkApps h rels
   | _ => mkApps h rels
   end.
-(** (step 114) a value of such a type, its counter fields made numbers: a match rebuilding each constructor *)
-Definition vt_cv (Σ : global_env) (i : inductive) (u : Instance.t) (ps : list term) (x : term) : option term :=
-  match lookup_env Σ (inductive_mind i) with
-  | Some (InductiveDecl mib) =>
-      match nth_error (ind_bodies mib) (inductive_ind i) with
-      | Some oib =>
-          let Ti := tApp (tInd i u) (vt_int ps) in
-          match opt_all (map (fun ck : nat * constructor_body =>
-                   let n := length (cstr_args (snd ck)) in
-                   match vt_cnt Σ i ps (fst ck) with
-                   | Some cs =>
-                       Some {| bcontext := repeat anon_b n;
-                               bbody := tApp (tConstruct i (fst ck) u)
-                                             (map (lift0 n) (vt_int ps)
-                                              ++ map (fun jb : nat * bool => if snd jb then nr_ofn (tRel (n - 1 - fst jb)) else tRel (n - 1 - fst jb))
-                                                     (combine (seq 0 n) cs)) |}
-                   | None => None
-                   end) (combine (seq 0 (length (ind_ctors oib))) (ind_ctors oib))) with
-          | Some brs => Some (tCase {| ci_ind := i; ci_npar := length ps; ci_relevance := Relevant |}
-                                    {| puinst := u; pparams := ps; pcontext := [anon_b]; preturn := lift0 1 Ti |} x brs)
-          | None => None
+(** (step 114, step 115) a value of such a type, its counters made numbers: a match rebuilding each constructor, its fields holding
+    counters made numbers in turn *)
+Fixpoint vt_cvf (fuel : nat) (Σ : global_env) (T x : term) {struct fuel} : option term :=
+  match fuel with
+  | O => None
+  | S fuel =>
+      if is_nat T then Some (nr_ofn x) else
+      match T with
+      | tApp (tInd i u) ps =>
+          match lookup_env Σ (inductive_mind i) with
+          | Some (InductiveDecl mib) =>
+              match nth_error (ind_bodies mib) (inductive_ind i) with
+              | Some oib =>
+                  let Ti := tApp (tInd i u) (vt_int ps) in
+                  match opt_all (map (fun ck : nat * constructor_body =>
+                           let n := length (cstr_args (snd ck)) in
+                           match vt_flds Σ i ps (fst ck) with
+                           | Some fs =>
+                               option_map (fun a2 => {| bcontext := repeat anon_b n;
+                                                        bbody := tApp (tConstruct i (fst ck) u) (map (lift0 n) (vt_int ps) ++ a2) |})
+                                 (opt_all (map (fun jf : nat * option term =>
+                                    match snd jf with
+                                    | Some Tf => vt_cvf fuel Σ Tf (tRel (n - 1 - fst jf))
+                                    | None => Some (tRel (n - 1 - fst jf))
+                                    end) (combine (seq 0 n) fs)))
+                           | None => None
+                           end) (combine (seq 0 (length (ind_ctors oib))) (ind_ctors oib))) with
+                  | Some brs => Some (tCase {| ci_ind := i; ci_npar := length ps; ci_relevance := Relevant |}
+                                            {| puinst := u; pparams := ps; pcontext := [anon_b]; preturn := lift0 1 Ti |} x brs)
+                  | None => None
+                  end
+              | None => None
+              end
+          | _ => None
           end
-      | None => None
+      | _ => None
       end
-  | _ => None
   end.
+Definition vt_cv (Σ : global_env) (i : inductive) (u : Instance.t) (ps : list term) (x : term) : option term :=
+  vt_cvf 20 Σ (tApp (tInd i u) ps) x.
 Definition nr_stmt (Σ : global_env) (mp : modpath) (r : rprow) : term :=
   let '(h, _, sl, _, d0) := r in
   let tys0 := if rp_is_nrb sl then match dbody d0 with tFix rds j => removelast (prod_tys (dtype (nth j rds dflt_def))) | _ => [] end else
@@ -10489,37 +10795,6 @@ Definition nr_at (Σ : global_env) (r : rprow) : term :=
            (tApp y_eq [tConst kn_int []; tApp (tConst (rp_name r) []) rels; nr_ofn (nr_src Σ h rels)]))
   | _ => tVar "unread"%bs
   end.
-(** (step 114) [of_nat (tRel v)] made [tRel v], no other use of [v] (under binders, [v] moved): the variable a number *)
-Fixpoint ofn_strip (fuel v : nat) (t : term) {struct fuel} : option term :=
-  match fuel with
-  | O => None
-  | S fuel =>
-      let go := ofn_strip fuel v in
-      match t with
-      | tApp (tConst oz _) [tApp (tConst u _) [tRel r]] =>
-          if (if Kername.eqb u kn_zofn then (match nr_of_z with tConst z0 _ => Kername.eqb oz z0 | _ => false end) else false)
-          then (if Nat.eqb r v then Some (tRel r) else Some t) else Some t
-      | tRel r => if Nat.eqb r v then None else Some t
-      | tApp f args => match go f, opt_all (map go args) with Some f2, Some a2 => Some (tApp f2 a2) | _, _ => None end
-      | tLambda na a b => match go a, ofn_strip fuel (S v) b with Some a2, Some b2 => Some (tLambda na a2 b2) | _, _ => None end
-      | tProd na a b => match go a, ofn_strip fuel (S v) b with Some a2, Some b2 => Some (tProd na a2 b2) | _, _ => None end
-      | tLetIn na x a b => match go x, go a, ofn_strip fuel (S v) b with Some x2, Some a2, Some b2 => Some (tLetIn na x2 a2 b2) | _, _, _ => None end
-      | tCase ci p c brs =>
-          match go c, opt_all (map go (pparams p)),
-                opt_all (map (fun br => option_map (fun b2 => {| bcontext := bcontext br; bbody := b2 |})
-                                         (ofn_strip fuel (v + length (bcontext br)) (bbody br))) brs) with
-          | Some c2, Some ps2, Some b2s => Some (tCase ci {| pparams := ps2; puinst := puinst p; pcontext := pcontext p; preturn := preturn p |} c2 b2s)
-          | _, _, _ => None
-          end
-      | tFix mfix k =>
-          match opt_all (map (fun df => option_map (fun b2 => {| dname := dname df; dtype := dtype df; rarg := rarg df; dbody := b2 |})
-                                         (ofn_strip fuel (v + length mfix) (dbody df))) mfix) with
-          | Some m2 => Some (tFix m2 k)
-          | None => None
-          end
-      | _ => Some t
-      end
-  end.
 (** a counter a function gives back, made a number at once *)
 Fixpoint nr_subv (hv : bool) (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (t : term) {struct fuel} : term :=
   match fuel with
@@ -10544,29 +10819,63 @@ Fixpoint nr_subv (hv : bool) (fuel : nat) (Σ : global_env) (mp : modpath) (rows
                                      | _ => None
                                      end in
       let isofn := fun (oz u : kername) => if Kername.eqb u kn_zofn then (match nr_of_z with tConst z0 _ => Kername.eqb oz z0 | _ => false end) else false in
+      (* (step 115) the function's own type, its value's parameters *)
+      let vsrc := fun (r : rprow) => let '(h0, _, _, _, _) := r in
+                    match h0 with
+                    | tConst k0 _ => match lookup_env Σ k0 with Some (ConstantDecl cb) => ret_ty (al_t 1000 Σ mp (cst_type cb)) | _ => tVar "none"%bs end
+                    | _ => tVar "none"%bs
+                    end in
+      let chain := fun (x : term) =>
+        let '(l, c) := pj_path 50 Σ x in
+        match l with
+        | [] => None
+        | _ => match vcall c with
+               | Some (r, cr) => match pj_ty Σ (vsrc r) (rev l) with Some None => Some (pj_mk l cr) | _ => None end
+               | None => None
+               end
+        end in
       match (if negb hv then None else match t with
-             (* [of_nat (fst x)], [of_nat (snd x)] of such a call: the row's field *)
-             | tApp (tConst oz _) [tApp (tConst u _) [tApp (tConst pj _) [A; B; x]]] =>
-                 if (if isofn oz u then (if Kername.eqb pj kn_fst then true else Kername.eqb pj kn_snd) else false)
-                 then option_map (fun rx => tApp (tConst pj []) (vt_int [A; B] ++ [snd rx])) (vcall x) else None
-             (* a field that is no counter: the row's, the same *)
-             | tApp (tConst pj _) [A; B; x] =>
-                 if (if Kername.eqb pj kn_fst then negb (is_nat A) else if Kername.eqb pj kn_snd then negb (is_nat B) else false)
-                 then option_map (fun rx => tApp (tConst pj []) (vt_int [A; B] ++ [snd rx])) (vcall x) else None
-             (* a match on such a call: the row's call, the counter fields numbers where the text uses them as numbers only *)
-             | tCase ci p c brs =>
-                 match vcall c with
-                 | Some (_, cr) =>
-                     option_map (fun b2s => tCase ci {| pparams := vt_int (pparams p); puinst := puinst p; pcontext := pcontext p; preturn := preturn p |} cr b2s)
-                       (opt_all (map (fun kb : nat * branch term =>
-                          let k := length (bcontext (snd kb)) in
-                          match vt_cnt Σ (ci_ind ci) (pparams p) (fst kb) with
-                          | Some cs =>
-                              option_map (fun b2 => {| bcontext := bcontext (snd kb); bbody := b2 |})
-                                (fold_left (fun ob j => match ob with Some b => if nth j cs false then ofn_strip 100000 (k - 1 - j) b else Some b | None => None end)
-                                           (seq 0 k) (Some (go (bbody (snd kb)))))
+             (* [of_nat] of a chain of projections around such a call, a counter at its end: the chain of the row's call *)
+             | tApp (tConst oz _) [tApp (tConst u _) [x]] =>
+                 if isofn oz u then
+                   let '(l, c) := pj_path 50 Σ x in
+                   match l with
+                   | [] => None
+                   | _ => match vcall c with
+                          | Some (r, cr) => match pj_ty Σ (vsrc r) (rev l) with Some (Some T') => if is_nat T' then Some (pj_mk l cr) else None | _ => None end
                           | None => None
-                          end) (combine (seq 0 (length brs)) brs)))
+                          end
+                   end
+                 else chain t
+             (* a chain ending in a field holding no counter: the row's, the same *)
+             | tApp (tConst _ _) _ => chain t
+             (* a match on such a call or on a chain around it: on the row's, its counters numbers and its values holding counters values at
+                numbers where the text uses them so only *)
+             | tCase ci p x brs =>
+                 let '(l, c) := pj_path 50 Σ x in
+                 match vcall c with
+                 | Some (r, cr) =>
+                     match pj_ty Σ (vsrc r) (rev l) with
+                     | Some (Some (tApp (tInd i _) ps)) =>
+                         if vt_same i (ci_ind ci) then
+                           option_map (fun b2s => tCase ci {| pparams := vt_int (pparams p); puinst := puinst p; pcontext := pcontext p; preturn := preturn p |} (pj_mk l cr) b2s)
+                             (opt_all (map (fun kb : nat * branch term =>
+                                let k := length (bcontext (snd kb)) in
+                                match vt_flds Σ i ps (fst kb) with
+                                | Some fs =>
+                                    option_map (fun b2 => {| bcontext := bcontext (snd kb); bbody := b2 |})
+                                      (fold_left (fun ob jf => match ob with
+                                                               | Some b => match snd jf with
+                                                                           | Some Tf => if is_nat Tf then ofn_strip 100000 (k - 1 - fst jf) b else vstrip 100000 Σ (k - 1 - fst jf) Tf b
+                                                                           | None => Some b
+                                                                           end
+                                                               | None => None
+                                                               end) (combine (seq 0 k) fs) (Some (go (bbody (snd kb)))))
+                                | None => None
+                                end) (combine (seq 0 (length brs)) brs)))
+                         else None
+                     | _ => None
+                     end
                  | None => None
                  end
              | _ => None

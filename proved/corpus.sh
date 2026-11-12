@@ -3,14 +3,15 @@
 #   the proofs checked (proved/make.sh), each program translated and proved (kitc.py), built, and its answer
 #   compared with the C++ run's (bench.sh); with "times", also timed next to the kit's own build of the same program
 #   (bin/fin_H_C_NAME_gc, from all.sh or regen.sh).
-#   SKIP="NAME .."  programs left out;  ONLY="NAME .."  only these.
+#   SKIP="NAME .."  programs left out;  ONLY="NAME .."  only these.  KQ_MADE=1: proved/make.sh has just run, not again (a gate
+#   running the examples beside it: make.sh writes the .vo files they read).
 #   A function whose lemma the kernel does not finish in KQ_TIMEOUT (300 s) is left unproved: the program is still built
 #   and its answer checked against the C++ run, and the last line counts it apart.
 # The last line says how many agree.
 cd /w && ulimit -s unlimited; eval $(opam env)
 export KQ_ENDAX=1   # each program's end theorem: what it rests on, one line (step 96)
 mkdir -p dbg
-bash proved/make.sh | tail -1
+[ -n "$KQ_MADE" ] || bash proved/make.sh | tail -1
 SKIP=${SKIP-}
 names=$(grep -v '^#' hand.tsv | awk 'NF { print $1 }' | grep -vxF -f <(printf '%s\n' $SKIP x))
 [ -z "$ONLY" ] || names=$(printf '%s\n' $names | grep -xF -f <(printf '%s\n' $ONLY))

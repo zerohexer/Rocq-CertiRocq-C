@@ -199,6 +199,7 @@ BY_NAME = {
   "A_zx_cv_as_counter": "a counter of a value given back, used as a counter: a value row's field has no bound (12.A)",
   "A_zx_cv_record": "a record of the program's with a counter field: a value row's counters are its type's parameters (12.A)",
   "A_zx_cv_nested": "a counter in a value in a value (option (nat * int)): a value row's counters are its type's own parameters (12.A)",
+  "A_zx_cv_acc": "a value holding counters given to a recursion as a parameter: its row would take it at numbers (12.A)",
   "A_zh_row_shiftr": "a function giving back a counter built by shiftr: not the same modulo a word, it wants the row's bound (step 83)",
   "A_zh_row_testbit_own": "a test on what a function giving back a counter gives back, in its own recursion: it wants the row's bound or the test on the machine's number",
   "A_zf_r_three": "three constructors or more holding a memory, through a recursion: a sum in a sum",
