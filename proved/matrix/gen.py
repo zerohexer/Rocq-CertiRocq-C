@@ -3577,6 +3577,19 @@ addA('zo_let', "", 'let c := tw n in ff c a + ff c b',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\n')
 addA('zo_callee', "", 'g2 n a',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S O => 5 | S (S m) => S (tw m) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition g2 (k : nat) (x : int) : int := ff (tw k) x.\n')
+# a local fixpoint giving back a counter (step 113)
+addA('zx_lfc_direct', "", 'Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => O | S q => S (S (cn q)) end) n)',
+     '')
+addA('zx_lfc_let', "", 'let fix cn (m : nat) : nat := match m with O => 1%nat | S q => S (cn q) end in Uint63.of_nat (cn n) + a',
+     '')
+addA('zx_lfc_cap', "", 'Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => n | S q => S (cn q) end) n)',
+     '')
+addA('zx_lfc_num', "", 'Uint63.of_nat ((fix cn (m : nat) (x : int) : nat := match m with O => O | S q => if x <? 0 then S (cn q x) else cn q (x + 1) end) n a)',
+     '')
+addA('zx_lfc_two', "", 'Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => O | S q => S (cn q) end) n) + Uint63.of_nat ((fix cm (m : nat) : nat := match m with O => 2%nat | S q => S (S (cm q)) end) n)',
+     '')
+addA('zx_lfc_in_rec', "", 'lr n a',
+     'Fixpoint lr (k : nat) (y : int) : int := match k with O => y | S j => lr j (y + Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => O | S q => S (cn q) end) j)) end.\n')
 # a local mutual block giving back counters (step 112)
 addA('zx_loc_cap', "", 'Uint63.of_nat ((fix ev (m : nat) : nat := match m with O => n | S q => S (od q) end with od (m : nat) : nat := match m with O => O | S q => ev q end for ev) n)',
      '')

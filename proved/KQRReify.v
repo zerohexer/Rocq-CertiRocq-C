@@ -3673,6 +3673,22 @@ Fixpoint lm_has (fuel : nat) (t : term) {struct fuel} : bool :=
       | _ => false
       end
   end.
+(** (step 113) a single fixpoint giving back a counter *)
+Definition lm_nat1 (mfix : mfixpoint term) : bool := match mfix with [d] => is_nat (ret_ty (dtype d)) | _ => false end.
+(** (step 113) [lm_has], a single local fixpoint giving back a counter counted too ([y_all]'s lifting) *)
+Fixpoint lm_has1 (fuel : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => false
+  | S fuel =>
+      match t with
+      | tFix mfix _ => if (if Nat.leb 2 (length mfix) then true else lm_nat1 mfix) then true else existsb (fun d => lm_has1 fuel (dbody d)) mfix
+      | tApp f args => lm_has1 fuel f || existsb (lm_has1 fuel) args
+      | tLambda _ _ b => lm_has1 fuel b
+      | tLetIn _ v _ b => lm_has1 fuel v || lm_has1 fuel b
+      | tCase _ _ c brs => lm_has1 fuel c || existsb (fun br => lm_has1 fuel (bbody br)) brs
+      | _ => false
+      end
+  end.
 (** (step 110) a body that is a mutual block, under the constant's parameters or not *)
 Definition is_blk (b : term) : bool := match snd (lams b) with tFix mfix _ => Nat.leb 2 (length mfix) | _ => false end.
 Definition is_fn (lm : bool) (Σ : global_env) (mp : modpath) (root kn : kername) : bool :=
@@ -4928,11 +4944,11 @@ Definition br_ctx (Σ : global_env) (ci : case_info) (pr : predicate term) (i n 
     types are in the term), or by a [match] (their constructor's arguments: [br_ctx]) -- [ctx], innermost first --, each member is the
     block under those variables alone, renumbered, and the block's place that member applied to them: the same term up to delta and
     beta.  A block naming a fixpoint around it is left: that variable is a function *)
-Fixpoint lm_lift (Σ : global_env) (fuel : nat) (base sfx : string) (ctx : list (option term)) (acc : list (string * term * term)) (t : term) {struct fuel} : term * list (string * term * term) :=
+Fixpoint lm_lift (Σ : global_env) (fuel : nat) (base sfx : string) (one : bool) (ctx : list (option term)) (acc : list (string * term * term)) (t : term) {struct fuel} : term * list (string * term * term) :=
   match fuel with
   | O => (t, acc)
   | S fuel =>
-      let go := lm_lift Σ fuel base sfx ctx in
+      let go := lm_lift Σ fuel base sfx one ctx in
       let gol := fix gol (ts : list term) (a0 : list (string * term * term)) {struct ts} : list term * list (string * term * term) :=
         match ts with
         | [] => ([], a0)
@@ -4942,14 +4958,14 @@ Fixpoint lm_lift (Σ : global_env) (fuel : nat) (base sfx : string) (ctx : list 
         match t with
         | tFix mfix k =>
             let ctxf := repeat None (length mfix) ++ ctx in
-            let '(bs', a1) := fold_left (fun st d => let '(l, a) := st in let '(d', a') := lm_lift Σ fuel base sfx ctxf a (dbody d) in (l ++ [d'], a')) mfix ([], acc) in
+            let '(bs', a1) := fold_left (fun st d => let '(l, a) := st in let '(d', a') := lm_lift Σ fuel base sfx one ctxf a (dbody d) in (l ++ [d'], a')) mfix ([], acc) in
             (tFix (map (fun db : def term * term => {| dname := dname (fst db); dtype := dtype (fst db); rarg := rarg (fst db); dbody := snd db |}) (combine mfix bs')) k, a1)
         | _ => (t, acc)
         end in
       match t with
       | tFix mfix k =>
           let L := length ctx in
-          if (if Nat.leb 2 (length mfix) then closedn L t else false) then
+          if (if (if Nat.leb 2 (length mfix) then true else (if one then lm_nat1 mfix else false)) then closedn L t else false) then
             match lm_need 100000 ctx (fvs 100000 0 t []) [] with
             | None => walk tt
             | Some seen =>
@@ -4992,12 +5008,12 @@ Fixpoint lm_lift (Σ : global_env) (fuel : nat) (base sfx : string) (ctx : list 
       (* the block's place an application itself, given the variables: one application, as the reader reads them *)
       | tApp f args => let '(f', a1) := go acc f in let '(args', a2) := gol args a1 in
                        (match f with tFix _ _ => lm_beta f' args' | _ => mkApps f' args' end, a2)
-      | tLambda na ty b => let '(b', a1) := lm_lift Σ fuel base sfx (Some ty :: ctx) acc b in (tLambda na ty b', a1)
-      | tLetIn na v ty b => let '(v', a1) := go acc v in let '(b', a2) := lm_lift Σ fuel base sfx (Some ty :: ctx) a1 b in (tLetIn na v' ty b', a2)
+      | tLambda na ty b => let '(b', a1) := lm_lift Σ fuel base sfx one (Some ty :: ctx) acc b in (tLambda na ty b', a1)
+      | tLetIn na v ty b => let '(v', a1) := go acc v in let '(b', a2) := lm_lift Σ fuel base sfx one (Some ty :: ctx) a1 b in (tLetIn na v' ty b', a2)
       | tCase ci pr c brs =>
           let '(c', a1) := go acc c in
           let '(bs', a2) := fold_left (fun st ib => let '(l, a) := st in let br := snd ib in
-                                       let '(b', a') := lm_lift Σ fuel base sfx (br_ctx Σ ci pr (fst ib) (length (bcontext br)) ++ ctx) a (bbody br) in (l ++ [b'], a'))
+                                       let '(b', a') := lm_lift Σ fuel base sfx one (br_ctx Σ ci pr (fst ib) (length (bcontext br)) ++ ctx) a (bbody br) in (l ++ [b'], a'))
                                       (combine (seq 0 (length brs)) brs) ([], a1) in
           (tCase ci pr c' (map (fun bb : branch term * term => {| bcontext := bcontext (fst bb); bbody := snd bb |}) (combine brs bs')), a2)
       | _ => (t, acc)
@@ -5011,6 +5027,7 @@ Definition set_decl (Σ : global_env) (kn : kername) (ty b : term) : global_env 
      retroknowledge := retroknowledge Σ |}.
 Definition lm_ent (e : kername * (list term * list cent) * kername * term) : bool := is_blk (snd e).
 Definition lift_all_s (sfx : string) (lm : bool) (Σ : global_env) (mp : modpath) (kns : list kername) : global_env * list kername * copytab :=
+  let one := negb (String.eqb sfx ""%bs) in
   fold_left (fun st kn =>
     let '(S1, ks, tb) := st in
     match lookup_env S1 kn with
@@ -5026,13 +5043,13 @@ Definition lift_all_s (sfx : string) (lm : bool) (Σ : global_env) (mp : modpath
               (* (step 108) a local mutual fixpoint *)
               (* not the constant's own block, a Fixpoint's: its bodies only; (step 109) only where the program has a local fixpoint *)
               if negb lm then (S1, ks ++ [kn], tb) else
-              if negb (match own_blk b with Some (_, mfix, _) => existsb (fun d => lm_has 100000 (dbody d)) mfix | None => lm_has 100000 b end) then (S1, ks ++ [kn], tb) else
+              if negb (match own_blk b with Some (_, mfix, _) => existsb (fun d => (if one then lm_has1 else lm_has) 100000 (dbody d)) mfix | None => (if one then lm_has1 else lm_has) 100000 b end) then (S1, ks ++ [kn], tb) else
               match (match own_blk b with
                      | Some (pre, mfix, k) =>
                          let ctxf := repeat None (length mfix) ++ rev (map Some pre) in
-                         let '(bs', a1) := fold_left (fun st d => let '(l, a) := st in let '(d', a') := lm_lift S1 100000 (mangle kn) sfx ctxf a (dbody d) in (l ++ [d'], a')) mfix ([], []) in
+                         let '(bs', a1) := fold_left (fun st d => let '(l, a) := st in let '(d', a') := lm_lift S1 100000 (mangle kn) sfx one ctxf a (dbody d) in (l ++ [d'], a')) mfix ([], []) in
                          (relams b (tFix (map (fun db : def term * term => {| dname := dname (fst db); dtype := dtype (fst db); rarg := rarg (fst db); dbody := snd db |}) (combine mfix bs')) k), a1)
-                     | None => lm_lift S1 100000 (mangle kn) sfx [] [] b
+                     | None => lm_lift S1 100000 (mangle kn) sfx one [] [] b
                      end) with
               | (_, []) => (S1, ks ++ [kn], tb)
               | (b', ls) =>
@@ -10268,6 +10285,24 @@ Definition nr_rows (Σ : global_env) (mp : modpath) (root : kername) (kns : list
       | _ => rs
       end
     else rs) kns [].
+(** (step 112) what a row's statement names: a member of the program by its constant, as the user's text does; a lifted member by its
+    body at the arguments, the block where the user's text has it *)
+Definition nr_src (Σ : global_env) (h : term) (rels : list term) : term :=
+  match h with
+  | tConst k _ =>
+      if eq_mp (fst k) copy_mp then
+        match lookup_env Σ k with Some (ConstantDecl cb) => match cst_body cb with Some b => lm_beta b rels | None => mkApps h rels end | _ => mkApps h rels end
+      else mkApps h rels
+  | _ => mkApps h rels
+  end.
+Definition nr_src1 (Σ : global_env) (h : term) (rels : list term) : term :=
+  match h with
+  | tConst k _ =>
+      if eq_mp (fst k) copy_mp then
+        match lookup_env Σ k with Some (ConstantDecl cb) => match cst_body cb with Some (tLambda _ _ _ as b) => lm_beta b rels | _ => mkApps h rels end | _ => mkApps h rels end
+      else mkApps h rels
+  | _ => mkApps h rels
+  end.
 Definition nr_stmt (Σ : global_env) (mp : modpath) (r : rprow) : term :=
   let '(h, _, sl, _, d0) := r in
   let tys0 := if rp_is_nrb sl then match dbody d0 with tFix rds j => removelast (prod_tys (dtype (nth j rds dflt_def))) | _ => [] end else
@@ -10282,19 +10317,9 @@ Definition nr_stmt (Σ : global_env) (mp : modpath) (r : rprow) : term :=
   let rels := map (fun j => tRel (m - 1 - j)) (seq 0 m) in
   let accs := rp_gds sl in
   let a2 := map (fun ja : nat * term => if existsb (Nat.eqb (fst ja)) accs then nr_ofn (snd ja) else snd ja) (combine (seq 0 m) rels) in
-  pis_of tys0 (tApp y_eq [tConst kn_int []; tApp (tConst (rp_name r) []) a2; nr_ofn (mkApps h rels)]).
+  pis_of tys0 (tApp y_eq [tConst kn_int []; tApp (tConst (rp_name r) []) a2; nr_ofn (nr_src1 Σ h rels)]).
 (** (step 111) a block's row: its statement at a counter, the counter first, for the proof of the block's statements together *)
 Definition ra_name (r : rprow) : kername := let '(_, _, _, st, _) := r in (copy_mp, st ^ "__ra__wy"%bs).
-(** (step 112) what a row's statement names: a member of the program by its constant, as the user's text does; a lifted member by its
-    body at the arguments, the block where the user's text has it *)
-Definition nr_src (Σ : global_env) (h : term) (rels : list term) : term :=
-  match h with
-  | tConst k _ =>
-      if eq_mp (fst k) copy_mp then
-        match lookup_env Σ k with Some (ConstantDecl cb) => match cst_body cb with Some b => lm_beta b rels | None => mkApps h rels end | _ => mkApps h rels end
-      else mkApps h rels
-  | _ => mkApps h rels
-  end.
 Definition nr_at (Σ : global_env) (r : rprow) : term :=
   let '(h, _, sl, _, d0) := r in
   match dbody d0 with
