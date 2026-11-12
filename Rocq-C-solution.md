@@ -6218,6 +6218,11 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   each within the list; `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups (a record in a record given back, a value's
   counter used as a counter, an accumulator), then the other categories of §3.5.
 
+**Step 117, a record of one field inside a record (§3.5, §12.A; the gaps `A_zx_rr_let`, `A_zx_rr_match`, `A_zx_cv_rec_rec`, found at step 116) — the design (2026-11-13).**  `Record ri := mkri { ric : int }`, `Record rj := mkrj { rji : ri; rjv : int }`, given back by a recursion or given as a parameter: measured before deciding, on the work laptop, a record holding a record of two fields is read wherever step 32 reads one, a record of one field is read alone (as a parameter, as a result, given back by a recursion, in a tail recursion, under a `let`), and a record of one field inside a record or a pair is read nowhere.  Step 32's reading tells a record field from a number by its width (`fents`, `fpend`, `rbr`, `held`, the constructor's flat fields, the record table, the text `kitc.py` builds the instance from): a record of one number has width 1, as a number has, so it was taken for one.
+- *The reading* (`rfr`, `rholds`): a field is a record by its type, wherever step 32 asked its width; the widths stay the flat record's sizes.
+- *The C*: a program read before, byte-identical.
+- *Cells*: `A_zr1_*`, 10: a record of one field as a parameter, a result, given back by a recursion, in a tail recursion, under a `let`, in a pair, and inside a record as its last field, in a tail recursion, two levels down, through projections; none had a cell.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6404,7 +6409,8 @@ Pushed to the public repository up to `b7a05d4` (2026-11-13); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 116 (a counter in a value of the program's own type: the construct table 4018 of 4164, 76 by design, 69 gaps), the gate; §12.A |
+| (this commit) | §12.V: step 117's design -- a record of one field inside a record: a record's record fields told by their types |
+| `0dfc683` | §12.V: step 116 (a counter in a value of the program's own type: the construct table 4018 of 4164, 76 by design, 69 gaps), the gate; §12.A |
 | `b7a05d4` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + matrix step 116: a counter in a value of the program's own type: its type at numbers made, a type of its own; 9 cells |
 | `40575f0` | §12.V: step 116's design -- a counter in a value of the program's own type: its type at numbers made, a type of its own |
 | `7d119d0` | §12.V: step 115 (a counter in a value in a value: the construct table 4011 of 4155, 76 by design, 67 gaps), the gate; §12.A, §12.F |
