@@ -3609,6 +3609,25 @@ addA('zx_cv_sum_pair', "", 'match sp n a with inl (c, j) => Uint63.of_nat c + j 
      'Fixpoint sp (k : nat) (i : int) : (nat * int) + int := match k with O => inr i | S m => if i <? 0 then inl (k, i) else sp m (i + 1) end.\n')
 addA('zx_cv_acc', "", 'Uint63.of_nat (fst (pk n (O, a)))',
      'Fixpoint pk (k : nat) (st : nat * int) : nat * int := match k with O => st | S m => pk m (S (fst st), snd st + 1) end.\n')
+# a counter in a value of the program's own type; a record in a record given back (step 116)
+addA('zx_cv_rec_match', "", 'match pm n a with mkrm c v => Uint63.of_nat c + v end',
+     'Record rm := mkrm { rmc : nat; rmv : int }.\nFixpoint pm (k : nat) (i : int) : rm := match k with O => mkrm O i | S m => match pm m (i + 1) with mkrm c v => mkrm (S c) (v + 1) end end.\n')
+addA('zx_cv_enum', "", 'match ph n a with Hit c x => Uint63.of_nat c + x | Miss y => y | Nil => b end',
+     'Inductive rs := Hit (c : nat) (x : int) | Miss (y : int) | Nil.\nFixpoint ph (k : nat) (i : int) : rs := match k with O => Nil | S m => if i <? 0 then Hit k i else match ph m (i + 1) with Hit c x => Hit (S c) x | Miss y => Miss (y + 1) | Nil => Miss i end end.\n')
+addA('zx_cv_rec_opt', "", 'match roc (po3 n a) with Some c => Uint63.of_nat c + rov (po3 n a) | None => b end',
+     'Record ro := mkro { roc : option nat; rov : int }.\nFixpoint po3 (k : nat) (i : int) : ro := match k with O => mkro None i | S m => if i <? 0 then mkro (Some k) i else po3 m (i + 1) end.\n')
+addA('zx_cv_opt_rec', "", 'match pq2 n a with Some r => Uint63.of_nat (rpc r) + rpv r | None => b end',
+     'Record rp := mkrp { rpc : nat; rpv : int }.\nFixpoint pq2 (k : nat) (i : int) : option rp := match k with O => None | S m => if i <? 0 then Some (mkrp k i) else pq2 m (i + 1) end.\n')
+addA('zx_cv_rec_rec', "", 'Uint63.of_nat (ric (rji (pj n a))) + rjv (pj n a)',
+     'Record ri := mkri { ric : nat }.\nRecord rj := mkrj { rji : ri; rjv : int }.\nFixpoint pj (k : nat) (i : int) : rj := match k with O => mkrj (mkri O) i | S m => let r := pj m (i + 1) in mkrj (mkri (S (ric (rji r)))) (rjv r) end.\n')
+addA('zx_cv_rec_param', "", 'match pw n a with WQ c x => Uint63.of_nat c + x end',
+     'Inductive wq (A : Type) : Type := WQ : nat -> A -> wq A.\nArguments WQ {A}.\nFixpoint pw (k : nat) (i : int) : wq int := match k with O => WQ O i | S m => match pw m (i + 1) with WQ c x => WQ (S c) x end end.\n')
+addA('zx_cv_rec_prim', "", 'Uint63.of_nat (rqc (pk2 n a)) + rqv (pk2 n a)',
+     'Set Primitive Projections.\nRecord rq := mkrq { rqc : nat; rqv : int }.\nUnset Primitive Projections.\nFixpoint pk2 (k : nat) (i : int) : rq := match k with O => mkrq O i | S m => let r := pk2 m (i + 1) in mkrq (S (rqc r)) (rqv r + 1) end.\n')
+addA('zx_rr_let', "", 'ric2 (rji2 (pj2 n a)) + rjv2 (pj2 n a)',
+     'Record ri2 := mkri2 { ric2 : int }.\nRecord rj2 := mkrj2 { rji2 : ri2; rjv2 : int }.\nFixpoint pj2 (k : nat) (i : int) : rj2 := match k with O => mkrj2 (mkri2 0) i | S m => let r := pj2 m (i + 1) in mkrj2 (mkri2 (ric2 (rji2 r) + 1)) (rjv2 r) end.\n')
+addA('zx_rr_match', "", 'match pj3 n a with mkrj3 (mkri3 c) v => c + v end',
+     'Record ri3 := mkri3 { ric3 : int }.\nRecord rj3 := mkrj3 { rji3 : ri3; rjv3 : int }.\nFixpoint pj3 (k : nat) (i : int) : rj3 := match k with O => mkrj3 (mkri3 0) i | S m => match pj3 m (i + 1) with mkrj3 (mkri3 c) v => mkrj3 (mkri3 (c + 1)) v end end.\n')
 # a local fixpoint giving back a counter (step 113)
 addA('zx_lfc_direct', "", 'Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => O | S q => S (S (cn q)) end) n)',
      '')

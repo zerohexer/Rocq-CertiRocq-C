@@ -763,6 +763,10 @@ Ltac kq_vm0 :=
         | kq_rw2
         | vm_case
         | match goal with |- context [match ?c with _ => _ end] => is_var c; destruct c end
+        (* (step 116) a projection of a constructor reduced first *)
+        | match goal with |- context [match ?c with _ => _ end] =>
+            lazymatch c with ?f ?x => let h := vm_head x in is_constructor h; let c2 := eval cbn in c in progress (change c with c2) end end
+        | match goal with |- context [?f ?x] => is_proj (f x); let h := vm_head x in is_constructor h; let c2 := eval cbn in (f x) in progress (change (f x) with c2) end
         | match goal with |- context [match ?c with _ => _ end] =>
             lazymatch c with context [match _ with _ => _ end] => fail | _ => idtac end;
             lazymatch type of c with bool => fail | nat => fail | _ => destruct c end end ].
@@ -837,6 +841,10 @@ Ltac nv_step IH :=
                 | progress (rewrite ?IH)
                 | kq_nr
                 | reflexivity
+                | (* (step 116) a projection of a constructor, [rcn (mkrn c v)]: reduced, so that what is taken apart is [c]'s; a primitive one anywhere *)
+                  match goal with |- context [match ?c with _ => _ end] =>
+                    lazymatch c with ?f ?x => let h := vm_head x in is_constructor h; let c2 := eval cbn in c in progress (change c with c2) end end
+                | match goal with |- context [?f ?x] => is_proj (f x); let h := vm_head x in is_constructor h; let c2 := eval cbn in (f x) in progress (change (f x) with c2) end
                 | match goal with |- context [match ?c with _ => _ end] =>
                     lazymatch c with context [match _ with _ => _ end] => fail | _ => let e := fresh "kqe" in destruct c eqn:e end end
                 | match goal with e : _ = _ |- _ => solve [cbn in e; discriminate e] end ]).

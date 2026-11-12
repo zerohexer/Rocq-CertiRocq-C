@@ -498,7 +498,7 @@ def reflect(name, entry, prog, no_proof):
         + f"Definition {name}_src := ltac:(let r := eval vm_compute in (option_map fst (fst (fst (fst (fst (fst {name}_res)))))) in exact r).\n"
         + f"Definition {name}_mts := match fst (fst (fst (fst (fst {name}_res)))) with Some x => snd x | None => [] end.\n"
         # a copy of a recursive function for the functions it is given: its meaning, the function applied to them (step 10)
-        + f"MetaRocq Run (monad_iter (fun p => tmMkDefinition (fst p) (snd p)) (KQRReify.plain_mts {name}_mts)).\n")
+        + f"MetaRocq Run (monad_iter KQRReify.mk_made (KQRReify.plain_mts {name}_mts)).\n")
     # (step 77) what the reader found, as Rocq prints it, read below: a notation of the program's or a scope it opens would print it otherwise; then in a file of its own
     q = f"KQG.{name}_r." if re.search(r"\b(Notation|Infix|Open Scope|Bind Scope|Declare Scope)\b", prog) else ""
     prt = (f'Redirect "{name}_rinfo" Eval vm_compute in (option_map KQRReify.info_of {q}{name}_src).\n'
