@@ -6101,6 +6101,12 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   §12.A's follow-ups: a block's counter used as a counter, a block of different types with a counter, a local mutual block calling
   the fixpoint it stands in; then the other categories of §3.5.
 
+**Step 113, a local fixpoint giving back a counter (§3.5, §12.A; the gaps `A_z_o_local`, `A_zb_o_local`) — the design (2026-11-12).**  `let fix go (k : nat) (i : int) : nat := .. S (go m (i + 1)) .. in Uint63.of_nat (go k0 i0)`: a function giving back a counter is read through its row (step 82), made on the program as written, and a local fixpoint is read where it stands (steps 31, 79), so it has no row.
+- *The lifting* (`y_all`, step 112's): a local single fixpoint giving back a counter lifted too, as a block is (`lm_nat1`, `lm_has1`), its row then step 82's; the reading's own lifting leaves single fixpoints to step 31's copies, as before.
+- *The statements*: a lifted fixpoint under the variables it names by its body at the arguments (step 112's), a closed one by its constant, which the rewrite unfolds: a fixpoint in a single row's statement made the rewrite unify it with every number of the goal (measured: the cells did not end).
+- *The C*: a program read before, byte-identical.
+- *Cells*: `A_zx_lfc_*`, 6: applied where it stands, a `let fix`, naming a variable of the function, a number parameter, two of them, inside a recursion.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6287,7 +6293,8 @@ Pushed to the public repository up to `1041d8d` (2026-11-03); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 112 (a local mutual block giving back counters: the construct table 3988 of 4134, 76 by design, 69 gaps), the gate; §12.A |
+| (this commit) | §12.V: step 113's design -- a local fixpoint giving back a counter: lifted by y_all, its row step 82's |
+| `d790c20` | §12.V: step 112 (a local mutual block giving back counters: the construct table 3988 of 4134, 76 by design, 69 gaps), the gate; §12.A |
 | `1041d8d` | `proved/KQRReify.v` + matrix step 112: a local mutual block giving back counters: `y_all` lifts it first, the rows made over its members; 5 cells |
 | `3e2db13` | §12.V: step 112's design -- a local mutual block giving back counters: y_all lifts it first |
 | `6a182a5` | §12.V: step 111 (a mutual block giving back counters: the construct table 3982 of 4129, 76 by design, 70 gaps), the gate; §12.A: three follow-ups |
