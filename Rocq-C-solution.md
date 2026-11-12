@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **3988 of 4134, 69 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **3996 of 4140, 67 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1726,6 +1726,11 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   lifted members.  The reading lifts a local block (steps 108, 110), and the rows are
   made before it, on the program as written (`y_all`), so the block's members have none.  Lifting first, the members made, their rows
   over them.  Accepted when `A_zy_counter` is proved.
+- ~~*A local fixpoint giving back a counter*~~ (§3.5, left at step 82) — **done, step 113**: lifted by `y_all` as a local block is
+  (step 112), its row step 82's; `A_z_o_local`, `A_zb_o_local` proved.
+- *A counter in a value* (§3.5, left at step 82): a pair of a counter and a number (`A_z_o_pair_counter`), an `option` of a counter
+  (`A_z_o_opt_counter`), a counter with a memory (`A_z_o_mem_counter`), `Nat.divmod`'s pair (`A_q_divmod`), and `nat_of_ascii`
+  (`A_q_ascii_code`): a row gives back a number, and these give back a value holding one.  Accepted when those are proved.
 - *A mutual block's counter used as a counter* (found at step 111): `Nat.leb (ev n) 3`: step 83's bound is read and proved of single
   functions.  Accepted when `A_zx_as_counter` is proved.
 - *A block of different types one of whose members gives back a counter* (found at step 111): step 62 reads such a block by writing
@@ -6107,6 +6112,21 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: a program read before, byte-identical.
 - *Cells*: `A_zx_lfc_*`, 6: applied where it stands, a `let fix`, naming a variable of the function, a number parameter, two of them, inside a recursion.
 
+**Step 113, a local fixpoint giving back a counter — the result (2026-11-12).**  Built as designed:
+- *The reader* (`KQRReify.v`): `lm_nat1`, `lm_has1`, `lm_lift`'s flag for a single fixpoint giving back a counter, set by `y_all`'s lifting only; `nr_src1`, a single row's statement's source.
+- *Found while building* (on the work laptop): a single row's statement naming a closed member's body, a fixpoint, made the rewrite with it run without end; its constant, unfolded by the rewrite, as before.  A check run beside a chain slowed both and disturbed the chain's gate (step 112's record says so): checks run between chains.
+- *Checked on the work laptop* (the repository at step 112 with this reader, step 112's families and the new cells: 726): every verdict step 112's but the cells read.
+- *The reifier's step on the kernels' programs* (on the work laptop, one core, interleaved, three rounds, the fastest, F62, in clean copies of two trees, the repository with step 112's reader / with this one): `HWP_kernel` 3.28 / 3.31 s, `HWP_own` 2.36 / 2.36, `HWP_irqnow` 2.01 / 2.01 — the same.
+- *The C*: the 99 programs byte-identical.
+- *Cells*: 6 more, all proved.  Two gaps read: `A_z_o_local`, `A_zb_o_local` (the second its counter used as a counter, step 83's bound).
+- The C: the 99 programs byte-identical.  The construct table (on `add41dd`): **3996 of 4140 through the verified compiler**, 76
+  by design, 67 gaps, 1 not Rocq (was 3988 of 4134: the 6 new cells read; 2 gaps read; no cell lost).  The gate on `add41dd`, the
+  walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding; the same C: undefined behaviour trapped 63 / 63,
+  `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels and `grow` (23 / 24 / 26 / 20 / 20 / 9
+  s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems each within the list; `check_trust.py`:
+  `trust unchanged`.  Next: §12.A's counter in a value (a pair, an option, with a memory, divmod, nat_of_ascii), then the block
+  follow-ups and the other categories of §3.5.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6289,11 +6309,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `1041d8d` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `add41dd` (2026-11-03); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 113's design -- a local fixpoint giving back a counter: lifted by y_all, its row step 82's |
+| (this commit) | §12.V: step 113 (a local fixpoint giving back a counter: the construct table 3996 of 4140, 76 by design, 67 gaps), the gate; §12.A |
+| `add41dd` | `proved/KQRReify.v` + matrix step 113: a local fixpoint giving back a counter: lifted by `y_all`, its row step 82's; 6 cells |
+| `15227cb` | §12.V: step 113's design -- a local fixpoint giving back a counter: lifted by y_all, its row step 82's |
 | `d790c20` | §12.V: step 112 (a local mutual block giving back counters: the construct table 3988 of 4134, 76 by design, 69 gaps), the gate; §12.A |
 | `1041d8d` | `proved/KQRReify.v` + matrix step 112: a local mutual block giving back counters: `y_all` lifts it first, the rows made over its members; 5 cells |
 | `3e2db13` | §12.V: step 112's design -- a local mutual block giving back counters: y_all lifts it first |
