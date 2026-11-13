@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **4018 of 4164, 69 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **4031 of 4174, 66 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1738,7 +1738,8 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   counter used as a counter (`A_zx_cv_as_counter`, `A_fx_nat_pair`: no bound), a library's (`A_q_divmod`, `A_q_ascii_code`: rows are of
   the program's functions), a value holding counters given to a recursion as a parameter (`A_zx_cv_acc`, found at step 115: its row
   would take it at numbers, a statement of another form).  Accepted when those are proved.
-- *A record in a record given back by a recursion* (found at step 116): `Fixpoint pj (k : nat) (i : int) : rj := .. mkrj (mkri ..) ..`
+- ~~*A record in a record given back by a recursion*~~ (found at step 116) — **done, step 117**: the cause a record of one field, taken for
+  a number by its width wherever step 32 reads a record holding records; a record field is told by its type now. `Fixpoint pj (k : nat) (i : int) : rj := .. mkrj (mkri ..) ..`
   with `Record rj := { rji : ri; .. }`, of numbers as of counters (`A_zx_rr_let`, `A_zx_rr_match`, `A_zx_cv_rec_rec`): not read, while a
   record in a record given as a parameter is (`A_q_rec_nested_rec`).  Accepted when those are proved.
 - *A mutual block's counter used as a counter* (found at step 111): `Nat.leb (ev n) 3`: step 83's bound is read and proved of single
@@ -6223,6 +6224,19 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: a program read before, byte-identical.
 - *Cells*: `A_zr1_*`, 10: a record of one field as a parameter, a result, given back by a recursion, in a tail recursion, under a `let`, in a pair, and inside a record as its last field, in a tail recursion, two levels down, through projections; none had a cell.
 
+**Step 117, a record of one field inside a record — the result (2026-11-13).**  Built as designed:
+- *The reader* (`KQRReify.v`): `rfr`, `rholds`, `rftys` moved beside `rfw`; `fents`, `fpend`, `rbr`, `rbr_go`, `held`, the constructor's `flat`, `rtab_of`, `rec_text` by them.
+- *Checked on the work laptop* (the repository at step 116 with this reader, the families of records, pairs, values, values and memories, classes and parameters, and the new cells: 948): every verdict step 116's but the cells read.
+- *The reifier's step on the kernels' programs* (on the work laptop, one core, interleaved, three rounds, the fastest, F62, in clean copies of two trees, the repository with step 116's reader / with this one): `HWP_kernel` 3.19 / 3.19 s, `HWP_own` 2.24 / 2.25, `HWP_irqnow` 1.96 / 1.95, the same.  The gate's kernels took 2 to 4 s more than step 116's (26 / 24 / 29 / 22 / 20 s against 22 / 22 / 25 / 19 / 19), the work laptop running other programs then; built again apart, the two readers interleaved, two rounds, the fastest (one machine, not pinned): `irqnow` 19.95 / 19.80 s, `fault` 19.87 / 19.92, `smp` 22.13 / 23.39, `own` 18.44 / 18.40, `kernel` 18.51 / 19.76, `grow` 7.78 / 8.13, each kernel's generated files the same in the two trees: within the spread of such runs.
+- *Cells*: 10 more (`A_zr1_*`), all proved.  Three gaps read: `A_zx_rr_let`, `A_zx_rr_match`, `A_zx_cv_rec_rec`.
+- The C: the 99 programs byte-identical.  The construct table (on `404fa25`): **4031 of 4174 through the verified compiler**, 76
+  by design, 66 gaps, 1 not Rocq (was 4018 of 4164: the 10 new cells read; 3 gaps read; no cell lost).  The gate on `404fa25`, the
+  walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding, beside the corpus; the same C: undefined
+  behaviour trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels and `grow`
+  (26 / 24 / 29 / 22 / 20 / 9 s, the machine busy: above); **109 programs through the verified compiler, 0 refused**, their 109
+  end theorems each within the list; `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups (a value's counter used as a
+  counter, an accumulator, the block follow-ups), then the other categories of §3.5.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6405,11 +6419,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `b7a05d4` (2026-11-13); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `404fa25` (2026-11-13); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 117's design -- a record of one field inside a record: a record's record fields told by their types |
+| (this commit) | §12.V: step 117 (a record of one field inside a record: the construct table 4031 of 4174, 76 by design, 66 gaps), the gate; §12.A |
+| `404fa25` | `proved/KQRReify.v` + matrix step 117: a record of one field inside a record: a record's record fields told by their types, not their widths; 10 cells |
+| `0ccfd61` | §12.V: step 117's design -- a record of one field inside a record: a record's record fields told by their types |
 | `0dfc683` | §12.V: step 116 (a counter in a value of the program's own type: the construct table 4018 of 4164, 76 by design, 69 gaps), the gate; §12.A |
 | `b7a05d4` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + matrix step 116: a counter in a value of the program's own type: its type at numbers made, a type of its own; 9 cells |
 | `40575f0` | §12.V: step 116's design -- a counter in a value of the program's own type: its type at numbers made, a type of its own |
