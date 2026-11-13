@@ -6307,6 +6307,16 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   each within the list; `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups (an accumulator holding counters, a counter
   in a value in a value used as a counter, a block of members of other parameters), then the other categories of §3.5.
 
+**Step 121, a value holding counters given to a recursion as a parameter (§3.5, §12.A; the gap `A_zx_cv_acc`, found at step 115) — the design (2026-11-14).**  `Fixpoint pk (k : nat) (st : nat * int) : nat * int := match k with O => st | S m => pk m (S (fst st), snd st + 1) end`, used as `Uint63.of_nat (fst (pk n (O, a)))`: step 114's row gives back the value at numbers and takes the parameters as they are, so the accumulator `st` would hold its counter as a counter in the row, while what the row gives back of it is a number.
+- *The row* (`nr_rows`, `nr_trv`): a value row's parameters holding counters, its counter and the counters themselves apart, taken at numbers (its accumulators), the row named `<f>__kva<rarg>_<arity>`; in its own calls the arguments there at numbers (`nr_trv` at the parameter's type), a call in a last position or matched on.  Where the body is not read so, step 114's row, as before.  A projection of such a value is taken apart where it is, not above a match that does not take it apart, so the counter's match stays first.
+- *A body that does not begin with its counter's match* (`y_fix68`): step 68's form, the whole body in each branch of a match on the counter, as the program's own functions are read; for a value row, and for a row giving back a counter whose body begins with a match on another value (`y_fix`'s first case takes any match of two branches for the counter's, so step 68's case is its own function).
+- *The statement* (`nv_stmt`): `F k (cv st) = cv (f k st)`, the accumulators made numbers on the left.
+- *The calls of such a row* (`nv_cargs`, in `nr_subv`, `nc_sub`, `nc_tr`; a value row's body calling one, `nr_trv`): the arguments at its accumulators at numbers, read as a row's body reads them, made numbers by `vt_cvf` where they are not.  *The made types* (`vt_mades`): of the accumulators' types too.
+- *The proofs* (`KQRWf.nv_acceq`, `nv_stepb`; `kitc.py`): a call of the row, `F m a'`, is paired with a call of the function, `f m a`, whose arguments made numbers are `a'` (`nv_acceq`: each value taken apart, a primitive projection of a constructor reduced, the counters' numbers by `kq_nr`, the rows' calls by `kq_rw`), and the statement at `a` put in; then as step 114's, a variable's match taken apart first.  The calls are paired, not rewritten backwards, so that a call matched on (`match pk m st with (c, j) => (S c, j) end`) is read as one in a last position is.  The uses rewrite with the same pairing, the row's lemma in place of the hypothesis.
+- *The C*: a program read before, byte-identical.
+- *Left, with a cell*: a counter given back by a function taking an accumulator, used as a counter (`A_zx_ca_as_counter`): step 118's bound is over the counter parameters, and here the accumulator's counter is in it; §12.A.
+- *Cells*: 21 (`A_zx_ca_*`): a call matched on, the accumulator matched on, an `option`, a record of the program's, a record of primitive projections, the counter not first, two accumulators, another type given back, a helper with an accumulator, a `let` as the argument, used in a recursion, used as a counter, a `nat` accumulator beside it, the accumulator handed on unchanged, a pair in a pair; a parameter taken apart before the counter's match, of numbers, of a pair given back, with a counter, of a function giving back a counter (before it and inside it), an `option` accumulator taken apart first.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6493,7 +6503,8 @@ Pushed to the public repository up to `73b4041` (2026-11-14); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 120 (a mutual block's counter used as a counter: the construct table 4054 of 4196, 76 by design, 65 gaps), the gate; §12.A |
+| (this commit) | §12.V: step 121's design -- a value holding counters given to a recursion as a parameter: value rows taking accumulators at numbers |
+| `b21d29b` | §12.V: step 120 (a mutual block's counter used as a counter: the construct table 4054 of 4196, 76 by design, 65 gaps), the gate; §12.A |
 | `73b4041` | `proved/KQRReify.v` + `kitc.py` + matrix step 120: a mutual block's counter used as a counter: one bound for the block's members, proved by one mutual fixpoint; 8 cells |
 | `2553413` | §12.V: step 120's design -- a mutual block's counter used as a counter: one bound for the block's members |
 | `8de6996` | §12.V: step 119 (the reflect route's files under a time limit: the construct table 4046 of 4188, 76 by design, 65 gaps), the gate; §12.F |
