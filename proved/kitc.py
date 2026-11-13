@@ -1029,30 +1029,42 @@ def reflect(name, entry, prog, no_proof):
         rrw.append(f"try (match goal with |- context [{F}] => {rrj} end)" if m.endswith("__e__rq__wy") or m.endswith("__e__n__rq__wy") else rrj)
         t += "Ltac KQRWf.kq_rw ::= progress (" + "; ".join(rrw) + ").\n"
     # (step 83) a counter a function gives back, used as a counter: the bound of each such function, by induction, each after what it calls; the equations of what uses them hold where the counters are below the bound
-    bqs = [m for m, _ in mts if m.endswith("__bq__wy")]
+    bqs = [m for m, _ in mts if m.endswith("__bq__wy") or m.endswith("__bv__wy")]
     # (step 104) or a use of such a counter where its value modulo a word is enough, which needs no bound
     ncp = bool(bqs) or any(m.endswith("__nc__wy") for m, _ in mts)
     if ncp:
         rrk0 = [f"{name}_rr{j}" for j, (m, h) in enumerate(rrs) if re.search(r"__k\d+__rq__wy$", m)]
         nch = [kqfn(m[:-len("__nch__wy")]) for m, _ in mts if m.endswith("__nch__wy")]
-        rrk = ("try unfold " + ", ".join(nch) + "; " if nch else "") + "; ".join(f"match goal with Hr : {roomR} |- _ => rewrite ?({x} Hr) end" if vmr else f"rewrite ?{x}" for x in rrk0) or "idtac"
+        rrk = ("try unfold " + ", ".join(nch) + "; " if nch else "") + ("; ".join(f"match goal with Hr : {roomR} |- _ => rewrite ?({x} Hr) end" if vmr else f"rewrite ?{x}" for x in rrk0) or "idtac")
         bprev = "fail"
+        vds = []
         for j, m in enumerate(bqs):
-            mb = re.match(r"(.*)__b(\d+)_(\d+)__bq__wy$", m)
+            mb = re.match(r"(.*)__b(\d+)_(\d+)__b[qv]__wy$", m)
             fn, ar, r = kqfn(mb.group(1)), int(mb.group(2)), int(mb.group(3))
+            isv = m.endswith("__bv__wy")
             xs = " ".join(f"?kx{i}" for i in range(ar))
             ys = " ".join(f"kx{i}" for i in range(ar))
-            ptn = lambda pr: f"match goal with |- context [{fn} {xs}] => lazymatch goal with _ : ({fn} {ys} <= _)%nat |- _ => fail | _ => pose proof ({pr} {ys}) end end"
+            # (step 118) a value's bound is posed where no hypothesis but an equation names the call yet
+            vno = f"assert_fails (idtac; match goal with H : ?P |- _ => match P with context [{fn} {ys}] => lazymatch P with _ = _ => fail | _ => idtac end end end)"
+            ptn = (lambda pr: f"match goal with |- context [{fn} {xs}] => {vno}; pose proof ({pr} {ys}) end") if isv else \
+                  (lambda pr: f"match goal with |- context [{fn} {xs}] => lazymatch goal with _ : ({fn} {ys} <= _)%nat |- _ => fail | _ => pose proof ({pr} {ys}) end end")
+            nbs = "KQRWf.nb_stepv" if isv else "KQRWf.nb_step"
+            pth = (lambda pr: f"match goal with _ : context [{fn} {xs}] |- _ => {vno}; pose proof ({pr} {ys}) end") if isv else \
+                  (lambda pr: f"match goal with _ : context [{fn} {xs}] |- _ => lazymatch goal with _ : ({fn} {ys} <= _)%nat |- _ => fail | _ => pose proof ({pr} {ys}) end end")
             if r >= ar:
-                t += (f"Lemma {name}_bd{j} : {m}.\nProof. unfold {m}. intros; unfold {fn}. KQRWf.nb_step ltac:(repeat first [{bprev}]). Qed.\n")
+                t += (f"Lemma {name}_bd{j} : {m}.\nProof. unfold {m}. intros; unfold {fn}. {nbs} ltac:(repeat first [{bprev}]). Qed.\n")
             else:
                 d0 = f"do {r} intro; " if r else ""
-                t += (f"Lemma {name}_bd{j} : {m}.\nProof. unfold {m}. fix IH {r + 1}. {d0}intros kqn; destruct kqn as [|kqn]; intros; cbn [{fn}]; KQRWf.nb_step ltac:(repeat first [{ptn('IH')} | {bprev}]). Qed.\n")
+                t += (f"Lemma {name}_bd{j} : {m}.\nProof. unfold {m}. fix IH {r + 1}. {d0}intros kqn; destruct kqn as [|kqn]; intros; cbn [{fn}]; {nbs} ltac:(repeat first [{ptn('IH')} | " + (f"{pth('IH')} | " if isv else "") + f"{bprev}]). Qed.\n")
             # what the tests kept too
-            pth = lambda pr: f"match goal with _ : context [{fn} {xs}] |- _ => lazymatch goal with _ : ({fn} {ys} <= _)%nat |- _ => fail | _ => pose proof ({pr} {ys}) end end"
             t += f"Ltac {name}_bt{j} := first [{ptn(f'{name}_bd{j}')} | {pth(f'{name}_bd{j}')} | {bprev}].\n"
             bprev = f"{name}_bt{j}"
+            if isv:
+                # (step 118) the call taken apart where the text uses its counters, its bound posed first
+                vds.append(f"match goal with |- context [{fn} {xs}] => (try {name}_bt{j}); let e := fresh \"kqe\" in destruct ({fn} {ys}) eqn:e; KQRWf.nb_vh0 end")
         t += f"Ltac KQRWf.kq_bd ::= repeat {bprev}.\nLtac KQRWf.kq_nc ::= first [KQRWf.nc_step ltac:({rrk}) | KQRWf.nc_match].\nLtac KQRWf.kq_nc_side ::= KQRWf.nc_lia.\n"
+        if vds:
+            t += "Ltac KQRWf.kq_vh ::= KQRWf.nb_vh.\nLtac KQRWf.kq_vd ::= first [" + " | ".join(vds) + "].\n"
         keepf = keepf + " Z.to_nat Uint63.to_Z"
     yf = {f[0]: f[0].rsplit(".", 1)[-1] + "__wy" for f in fs if f[0].rsplit(".", 1)[-1] + "__wy" in made}
     # (step 83) the bound as a number
@@ -1100,7 +1112,9 @@ def reflect(name, entry, prog, no_proof):
                           f"Proof. cbn [KQR.eqC KQR.eqN]; intros; unfold {W}, {f[0]}; apply {reqs[pfc[f[0]]]}. Qed.\n")
                 t += f"Lemma {name}_rok{j} : @KQR.callee_ok {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {sig(f)} {f[0]}.\n"
                 if ncf(f):
-                    rr0 = f"{name}_room {rq0}" if vmr else f"(fun _ => Logic.I) (fun _ => {rq0})"
+                    # (step 118) the slot block's room, where the program gives back a record through it and has no __v row
+                    rr0 = (f"{name}_room {rq0}" if vmr else f"(fun _ => Logic.I) (fun _ => {rq0})" if roomw <= 1 else
+                           f"(fun Hs => Hs {[int(r[2]) for r in recs].index(roomw)}%nat (proj1 (PeanoNat.Nat.ltb_lt 1%nat {roomw}%nat) eq_refl)) (fun _ => {rq0})")
                     t += (f"Proof. exact_no_check (@KQR.callee_ok_eqb {inst} {name}_prog (KQR.gid1 {j}) {bnz(f, j)}%Z {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)} ({roomR}) {W} {f[0]} {rr0}"
                           f" (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j}) eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl)). Qed.\n")
                     continue

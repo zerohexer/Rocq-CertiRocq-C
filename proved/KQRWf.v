@@ -579,6 +579,22 @@ Proof.
 Qed.
 (** what is known of the calls in the goal: [kitc.py] sets it *)
 Ltac kq_bd := idtac.
+(** (step 118) a value's bound posed: rewritten by what a match took apart, reduced, split; and, where a program has one, its call taken
+    apart with its bound: [kitc.py] sets them *)
+Ltac nb_vh0 :=
+  repeat first [
+    match goal with e : ?x = ?v, H : context [?x] |- _ =>
+      lazymatch type of H with _ = _ => fail | _ => rewrite e in H end end
+  | progress (cbn beta iota in *)
+  | match goal with H : context [match ?p with _ => _ end] |- _ =>
+      lazymatch type of H with _ = _ => fail | _ =>
+        tryif is_var p then destruct p
+        else lazymatch p with context [match _ with _ => _ end] => fail | _ => let e := fresh "kqe" in destruct p eqn:e end end end
+  | match goal with H : _ /\ _ |- _ => destruct H end ].
+(** where [lia] comes next: a projection of a constructor reduced too, on the goal *)
+Ltac nb_vh := nb_vh0; try simpl.
+Ltac kq_vh := idtac.
+Ltac kq_vd := fail.
 (** (step 102) a shift left by a number below [wB]: the machine's, the same modulo a word; for a bound, the product it is *)
 Lemma nr_shiftl : forall a k, (Z.of_nat k < 9223372036854775808)%Z ->
   Uint63.of_Z (Z.of_nat (Nat.shiftl a k)) = PrimInt63.lsl (Uint63.of_Z (Z.of_nat a)) (Uint63.of_Z (Z.of_nat k)).
@@ -591,7 +607,7 @@ Qed.
 Ltac nc_shl :=
   repeat match goal with |- context [Nat.shiftl ?a ?k] =>
     rewrite (Nat.shiftl_mul_pow2 a k); let v := eval vm_compute in (Nat.pow 2 k) in change (Nat.pow 2 k) with v end.
-Ltac nc_side := kq_bd; nc_shl; lia.
+Ltac nc_side := kq_bd; kq_vh; nc_shl; lia.
 (** (step 104) [Nat.ldiff] as the reader writes it, the 63 ones a literal *)
 Lemma nr_ldiff_l : forall a b, Uint63.of_Z (Z.of_nat (Nat.ldiff a b)) =
   PrimInt63.land (Uint63.of_Z (Z.of_nat a)) (PrimInt63.lxor (Uint63.of_Z (Z.of_nat b)) 9223372036854775807%uint63).
@@ -698,7 +714,7 @@ Ltac nc_opf :=
       | _ => let v := eval vm_compute in (2 ^ Z.of_nat k)%Z in pose proof (nc_setbit_lez a k : (Z.of_nat (Nat.setbit a k) <= Z.of_nat a + v)%Z) end
   | |- context [Nat.double ?a] => lazymatch goal with _ : Nat.double a = _ |- _ => fail | _ => pose proof (Nat.double_twice a) end
   end.
-Ltac nc_side ::= kq_bd; nc_shl; nb_bitf; nc_opf; nr_numf; lia.
+Ltac nc_side ::= kq_bd; kq_vh; nc_shl; nb_bitf; nc_opf; nr_numf; lia.
 (** (step 104) where only the value modulo a word of a counter is used ([land] with a number below a word, [testbit] below 63, [even], [odd],
     [mod] by a divisor of [2^63]): the same at the row's number, whatever the counter is, so no bound of it is asked *)
 Lemma nc_low_of : forall x, Uint63.of_Z (Z.of_nat (Z.to_nat (Uint63.to_Z (Uint63.of_Z (Z.of_nat x))))) = Uint63.of_Z (Z.of_nat x).
@@ -750,6 +766,15 @@ Ltac nb_step tac :=
           first [ solve [tac; nb_bitf; nr_numf; lia]
                 | match goal with |- context [match ?c with _ => _ end] =>
                     lazymatch c with context [match _ with _ => _ end] => fail | _ => destruct c end end ]).
+(** (step 118) a value's bound, each of its counters: what its matches take apart, with their equations, so that the bounds posed of
+    the calls taken apart are of their parts *)
+Ltac nb_stepv tac :=
+  repeat (cbn beta iota zeta;
+          first [ exact I
+                | match goal with |- _ /\ _ => split end
+                | solve [tac; nb_vh; nb_bitf; nr_numf; lia]
+                | match goal with |- context [match ?c with _ => _ end] =>
+                    lazymatch c with context [match _ with _ => _ end] => fail | _ => let e := fresh "kqe" in destruct c eqn:e end end ]).
 (** a program's lemmas of a function read as a pair, for when what is known of the pair has been used: [kitc.py] sets it *)
 Ltac kq_rw2 := fail.
 Ltac kq_vm0 :=
@@ -765,7 +790,7 @@ Ltac kq_vm0 :=
         | match goal with |- context [match ?c with _ => _ end] => is_var c; destruct c end
         (* (step 116) a projection of a constructor reduced first *)
         | match goal with |- context [match ?c with _ => _ end] =>
-            lazymatch c with ?f ?x => let h := vm_head x in is_constructor h; let c2 := eval cbn in c in progress (change c with c2) end end
+            lazymatch c with ?f ?x => let h := vm_head x in is_constructor h; let c2 := eval cbn in c in lazymatch x with context [c2] => progress (change c with c2) end end end
         | match goal with |- context [?f ?x] => is_proj (f x); let h := vm_head x in is_constructor h; let c2 := eval cbn in (f x) in progress (change (f x) with c2) end
         | match goal with |- context [match ?c with _ => _ end] =>
             lazymatch c with context [match _ with _ => _ end] => fail | _ => idtac end;
@@ -800,6 +825,7 @@ Ltac own_step IH :=
                 | kq_nc
                 | kq_rw
                 | progress (rewrite ?IH by vm_side)
+                | kq_vd
                 | kq_vm
                 | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
                 | match goal with |- context [match ?c with pair _ _ => _ end] => lazymatch c with context [match _ with _ => _ end] => fail | PrimInt63.diveucl_21 _ _ _ => fail | _ => destruct c end end
@@ -843,7 +869,7 @@ Ltac nv_step IH :=
                 | reflexivity
                 | (* (step 116) a projection of a constructor, [rcn (mkrn c v)]: reduced, so that what is taken apart is [c]'s; a primitive one anywhere *)
                   match goal with |- context [match ?c with _ => _ end] =>
-                    lazymatch c with ?f ?x => let h := vm_head x in is_constructor h; let c2 := eval cbn in c in progress (change c with c2) end end
+                    lazymatch c with ?f ?x => let h := vm_head x in is_constructor h; let c2 := eval cbn in c in lazymatch x with context [c2] => progress (change c with c2) end end end
                 | match goal with |- context [?f ?x] => is_proj (f x); let h := vm_head x in is_constructor h; let c2 := eval cbn in (f x) in progress (change (f x) with c2) end
                 | match goal with |- context [match ?c with _ => _ end] =>
                     lazymatch c with context [match _ with _ => _ end] => fail | _ => let e := fresh "kqe" in destruct c eqn:e end end
@@ -883,6 +909,7 @@ Ltac own_step0 :=
                 | kq_guard
                 | kq_nc
                 | kq_rw
+                | kq_vd
                 | kq_vm
                 | match goal with e : ?c = ?v |- context [?c] => lazymatch c with ?f _ => rewrite e | ?f _ _ => rewrite e end end
                 | match goal with |- context [match ?c with pair _ _ => _ end] => lazymatch c with context [match _ with _ => _ end] => fail | PrimInt63.diveucl_21 _ _ _ => fail | _ => destruct c end end

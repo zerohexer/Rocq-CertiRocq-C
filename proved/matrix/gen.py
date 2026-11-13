@@ -3649,6 +3649,35 @@ addA('zr1_in_rec_deep', "", 'match pd1 n a with mkrd (mkrc (mkrb c)) v => c + v 
      'Record rb1 := mkrb { fb : int }.\nRecord rc1 := mkrc { fc : rb1 }.\nRecord rd1 := mkrd { fd : rc1; fv : int }.\nFixpoint pd1 (k : nat) (i : int) : rd1 := match k with O => mkrd (mkrc (mkrb 0)) i | S m => match pd1 m (i + 1) with mkrd (mkrc (mkrb c)) v => mkrd (mkrc (mkrb (c + 1))) v end end.\n')
 addA('zr1_in_rec_proj', "", 'fc2 (fd2 (pe1 n a)) + fv2 (pe1 n a)',
      'Record rc2 := mkrc2 { fc2 : int }.\nRecord rd2 := mkrd2 { fd2 : rc2; fv2 : int }.\nFixpoint pe1 (k : nat) (i : int) : rd2 := match k with O => mkrd2 (mkrc2 0) i | S m => let r := pe1 m (i + 1) in mkrd2 (mkrc2 (fc2 (fd2 r) + 1)) (fv2 r) end.\n')
+# a counter given back in a value, used as a counter (step 118)
+addA('zx_cvc_nested', "", 'if Nat.leb (fst (fst (pp n a))) 3 then a else b',
+     'Fixpoint pp (k : nat) (i : int) : (nat * int) * int := match k with O => ((O, i), 0) | S m => match pp m (i + 1) with ((c, j), t) => ((S c, j), t + 1) end end.\n')
+addA('zx_cvc_record', "", 'if Nat.leb (rcn (pr n a)) 3 then a else b',
+     'Record rn := mkrn { rcn : nat; rcv : int }.\nFixpoint pr (k : nat) (i : int) : rn := match k with O => mkrn O i | S m => let r := pr m (i + 1) in mkrn (S (rcn r)) (rcv r) end.\n')
+addA('zx_cvc_prim', "", 'if Nat.leb (rqc (pk2 n a)) 3 then a else b',
+     'Set Primitive Projections.\nRecord rq := mkrq { rqc : nat; rqv : int }.\nUnset Primitive Projections.\nFixpoint pk2 (k : nat) (i : int) : rq := match k with O => mkrq O i | S m => let r := pk2 m (i + 1) in mkrq (S (rqc r)) (rqv r + 1) end.\n')
+addA('zx_cvc_opt', "", 'match po n a with Some c => if Nat.leb c 3 then a else b | None => b end',
+     'Fixpoint po (k : nat) (i : int) : option nat := match k with O => None | S m => if i <? 0 then Some (S m) else po m (i + 1) end.\n')
+addA('zx_cvc_sum', "", 'match ps n a with inl c => if Nat.leb c 3 then a else b | inr j => j end',
+     'Fixpoint ps (k : nat) (i : int) : nat + int := match k with O => inr i | S m => if i <? 0 then inl k else ps m (i + 1) end.\n')
+addA('zx_cvc_rec_match', "", 'match pm n a with mkrm c v => if Nat.leb c 3 then v else b end',
+     'Record rm := mkrm { rmc : nat; rmv : int }.\nFixpoint pm (k : nat) (i : int) : rm := match k with O => mkrm O i | S m => match pm m (i + 1) with mkrm c v => mkrm (S c) (v + 1) end end.\n')
+addA('zx_cvc_budget', "", 'ff (fst (pa n a)) b',
+     'Fixpoint pa (k : nat) (i : int) : nat * int := match k with O => (O, i) | S m => let (x, y) := pa m (i + 1) in (S x, y) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zx_cvc_succ', "", 'if Nat.leb (S (fst (pa n a))) 3 then a else b',
+     'Fixpoint pa (k : nat) (i : int) : nat * int := match k with O => (O, i) | S m => let (x, y) := pa m (i + 1) in (S x, y) end.\n')
+addA('zx_cvc_let', "", 'let c := fst (pa n a) in if Nat.leb c 3 then a else b',
+     'Fixpoint pa (k : nat) (i : int) : nat * int := match k with O => (O, i) | S m => let (x, y) := pa m (i + 1) in (S x, y) end.\n')
+addA('zx_cvc_in_rec', "", 'gg n a',
+     'Fixpoint pa (k : nat) (i : int) : nat * int := match k with O => (O, i) | S m => let (x, y) := pa m (i + 1) in (S x, y) end.\nFixpoint gg (k : nat) (x : int) : int := match k with O => x | S m => if Nat.leb (fst (pa m x)) 3 then gg m (x + 1) else x end.\n')
+addA('zx_cvc_both', "", 'if Nat.leb (fst (pa n a)) 3 then Uint63.of_nat (fst (pa n a)) else b',
+     'Fixpoint pa (k : nat) (i : int) : nat * int := match k with O => (O, i) | S m => let (x, y) := pa m (i + 1) in (S x, y) end.\n')
+addA('zx_cvc_eqb', "", 'if Nat.eqb (fst (pa n a)) 2 then a else b',
+     'Fixpoint pa (k : nat) (i : int) : nat * int := match k with O => (O, i) | S m => let (x, y) := pa m (i + 1) in (S x, y) end.\n')
+addA('zx_cvc_two_rows', "", 'if Nat.leb (fst (pa n a)) (fst (pc n a)) then a else b',
+     'Fixpoint pa (k : nat) (i : int) : nat * int := match k with O => (O, i) | S m => let (x, y) := pa m (i + 1) in (S x, y) end.\nFixpoint pc (k : nat) (i : int) : nat * nat := match k with O => (O, 1%nat) | S m => let (x, y) := pc m (i + 1) in (S x, S (S y)) end.\n')
+addA('zx_cvc_opt_pair', "", 'match pq n a with Some (c, j) => if Nat.leb c 3 then j else b | None => b end',
+     'Fixpoint pq (k : nat) (i : int) : option (nat * int) := match k with O => if i <? 0 then None else Some (O, i) | S m => match pq m (i + 1) with Some (c, j) => Some (S c, j) | None => None end end.\n')
 # a local fixpoint giving back a counter (step 113)
 addA('zx_lfc_direct', "", 'Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => O | S q => S (S (cn q)) end) n)',
      '')
