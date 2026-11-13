@@ -487,7 +487,9 @@ def reflect(name, entry, prog, no_proof):
     # kernel beside each function's theorem
     shared = shared_term(prog)
     f0 = os.path.join(GEN, f"{name}_r.v")
-    open(f0, "w").write(HDR + "From KQC Require KQR KQRReify.\n" + prog
+    # (step 119) the time limit the walk's files have: a reading or a proof that does not end stops there, not the run
+    tlim = f"Set Default Timeout {os.environ.get('KQ_TIMEOUT', '300')}.\n"
+    open(f0, "w").write(HDR + "From KQC Require KQR KQRReify.\n" + tlim + prog
         + f"\nDefinition {name}_res := ltac:(let k q := (let r := eval vm_compute in (let r0 := KQRReify.reify_prog2 q in (r0, KQRReify.reify_why q, KQRReify.rec_info2 q r0, KQRReify.entry_perm q, KQRReify.fix1_info q, KQRReify.pf_info_r q r0)) in exact r) in\n"
         + f"  run_template_program (tmQuoteRecTransp {entry} false)\n"
         + "  (fun q0 => let b := eval vm_compute in (KQRReify.has_function q0) in\n"
@@ -579,7 +581,7 @@ def reflect(name, entry, prog, no_proof):
     # (step 60) a fixpoint whose match on its counter gives a function: not a measure's, its theorem a copy's
     cv = {k for k, m in pfs.items() if m[5] == "c"}
     pfs = {k: m for k, m in pfs.items() if m[5] != "c"}
-    t = HDR + "From KQC Require KQR KQRReify KQREnd" + (" KQRWf" if pfs or (os.path.exists(os.path.join(GEN, f"{name}_rmts.out")) and "__wy" in open(os.path.join(GEN, f"{name}_rmts.out")).read()) else "") + ".\nImport ListNotations.\n" + ("From Stdlib Require Import FunInd.\n" if any(m[5] == "f" for m in pfs.values()) else "") + f"From KQG Require Import {name}_r.\n"
+    t = HDR + f"Set Default Timeout {os.environ.get('KQ_TIMEOUT', '300')}.\n" + "From KQC Require KQR KQRReify KQREnd" + (" KQRWf" if pfs or (os.path.exists(os.path.join(GEN, f"{name}_rmts.out")) and "__wy" in open(os.path.join(GEN, f"{name}_rmts.out")).read()) else "") + ".\nImport ListNotations.\n" + ("From Stdlib Require Import FunInd.\n" if any(m[5] == "f" for m in pfs.values()) else "") + f"From KQG Require Import {name}_r.\n"
     # the program's record types (step 12): each its type, its constructor and match, a value of it; the laws by a fixed script
     rp = os.path.join(GEN, f"{name}_rrec.out")
     # each entry: its type, its constructor (a data type's: its constructors), its number of fields, a data type's widths
@@ -1182,7 +1184,8 @@ def reflect(name, entry, prog, no_proof):
     open(f1, "w").write(t)
     rc, out = coqc(f1)
     if rc != 0:
-        print(name, "REFLECT CHECK FAILED" + FOLLOW + ":", out[-400:].replace("\n", " "), flush=True)
+        # (step 119) a check the time limit stopped, said first: the table keeps a line's start
+        print(name, "REFLECT CHECK FAILED" + (" (the time limit, KQ_TIMEOUT)" if "Timeout!" in out else "") + FOLLOW + ":", out[-400:].replace("\n", " "), flush=True)
         return None
     if not no_proof and os.environ.get("KQ_ENDAX"):
         # (step 96) what the end theorem rests on, printed from a file that imports nothing: each name the one constant it names (F76)

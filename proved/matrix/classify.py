@@ -274,6 +274,7 @@ INVALID = re.compile(r"Cannot guess decreasing|Unable to unify|not found in the 
 
 # (regex on the refusal, category), tried in order
 GAP = [
+  (r"REFLECT CHECK FAILED \(the time limit", "a proof or a reading the time limit stops (KQ_TIMEOUT): it does not end, or not in time"),
   (r"PROOF FAILED", "a proof the tactics do not find (the translation was accepted)"),
   (r"must name no variable of the caller", "a function given that names a variable of the caller (a closure)"),
   (r"a let of a type this translator does not read", "a local function, a polymorphic or class-based helper, a memory inside a record"),
