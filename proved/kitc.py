@@ -1031,15 +1031,45 @@ def reflect(name, entry, prog, no_proof):
         rrw.append(f"try (match goal with |- context [{F}] => {rrj} end)" if m.endswith("__e__rq__wy") or m.endswith("__e__n__rq__wy") else rrj)
         t += "Ltac KQRWf.kq_rw ::= progress (" + "; ".join(rrw) + ").\n"
     # (step 83) a counter a function gives back, used as a counter: the bound of each such function, by induction, each after what it calls; the equations of what uses them hold where the counters are below the bound
-    bqs = [m for m, _ in mts if m.endswith("__bq__wy") or m.endswith("__bv__wy")]
+    bqs = [m for m, _ in mts if (m.endswith("__bq__wy") or m.endswith("__bv__wy")) and not re.search(r"__bnd\d+__bq__wy$", m)]
+    bbre = re.compile(r"(.*)__kb(\d+)_(\d+)_(\d+)_(.*)__bnd(\d+)__bq__wy$")
+    bbs = [m for m, _ in mts if bbre.match(m)]
     # (step 104) or a use of such a counter where its value modulo a word is enough, which needs no bound
-    ncp = bool(bqs) or any(m.endswith("__nc__wy") for m, _ in mts)
+    ncp = bool(bqs) or bool(bbs) or any(m.endswith("__nc__wy") for m, _ in mts)
     if ncp:
-        rrk0 = [f"{name}_rr{j}" for j, (m, h) in enumerate(rrs) if re.search(r"__k\d+__rq__wy$", m)]
+        rrk0 = [f"{name}_rr{j}" for j, (m, h) in enumerate(rrs) if re.search(r"__k\d+__rq__wy$|__kb\d+_\d+_\d+_.*__rq__wy$", m)]
         nch = [kqfn(m[:-len("__nch__wy")]) for m, _ in mts if m.endswith("__nch__wy")]
         rrk = ("try unfold " + ", ".join(nch) + "; " if nch else "") + ("; ".join(f"match goal with Hr : {roomR} |- _ => rewrite ?({x} Hr) end" if vmr else f"rewrite ?{x}" for x in rrk0) or "idtac")
         bprev = "fail"
         vds = []
+        # (step 120) a block's bounds, the counter first: one mutual fixpoint over them at a counter, each member's call posed by its own
+        bbg = {}
+        for m0 in bbs:
+            mm0 = bbre.match(m0)
+            bbg.setdefault(mm0.group(5), {})[int(mm0.group(3))] = (m0, kqfn(mm0.group(1)), int(mm0.group(2)), int(mm0.group(6)), int(mm0.group(4)))
+        for g, (btag, grp) in enumerate(sorted(bbg.items())):
+            bmb = list(grp.values())[0][4]
+            if sorted(grp) != list(range(bmb)):
+                sys.exit(f"{name}: a block's bounds not all made ({btag})")
+            bst = [grp[i][0] for i in range(bmb)]
+            bat = [x[:-len("__bq__wy")] + "__bba__wy" for x in bst]
+            bfn = [grp[i][1] for i in range(bmb)]
+            def bpose(i, pr):
+                fn, r, ar = grp[i][1], grp[i][2], grp[i][3]
+                xs = " ".join(f"?kx{q}" for q in range(ar))
+                yin = " ".join(f"kx{q}" for q in range(ar))
+                yrd = " ".join(f"kx{q}" for q in [r] + [q for q in range(ar) if q != r])
+                return (f"match goal with |- context [{fn} {xs}] => lazymatch goal with _ : ({fn} {yin} <= _)%nat |- _ => fail | _ => pose proof ({pr} {yrd}) end end",
+                        f"match goal with _ : context [{fn} {xs}] |- _ => lazymatch goal with _ : ({fn} {yin} <= _)%nat |- _ => fail | _ => pose proof ({pr} {yrd}) end end")
+            for i in range(bmb):
+                bwith = " ".join(f"(IH{k} (kqn : nat) {{struct kqn}} : {bat[k]} kqn)" for k in range(bmb) if k != i)
+                bposes = " | ".join(bpose(k, f"IH{k}")[0] for k in range(bmb))
+                t += (f"Lemma {name}_bdb{g}_{i} : {bst[i]}.\nProof. unfold {bst[i]}. fix IH{i} 1 with {bwith}. all: intros kqn; destruct kqn as [|kqn]; "
+                      f"try unfold {', '.join(bat)} in *; intros; cbn [{' '.join(bfn)}]; KQRWf.nb_step ltac:(repeat first [{bposes} | {bprev}]). Qed.\n")
+            for i in range(bmb):
+                pa, pb = bpose(i, f"{name}_bdb{g}_{i}")
+                t += f"Ltac {name}_btb{g}_{i} := first [{pa} | {pb} | {bprev}].\n"
+                bprev = f"{name}_btb{g}_{i}"
         for j, m in enumerate(bqs):
             mb = re.match(r"(.*)__b(\d+)_(\d+)__b[qv]__wy$", m)
             fn, ar, r = kqfn(mb.group(1)), int(mb.group(2)), int(mb.group(3))

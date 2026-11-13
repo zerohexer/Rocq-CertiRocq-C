@@ -3678,6 +3678,23 @@ addA('zx_cvc_two_rows', "", 'if Nat.leb (fst (pa n a)) (fst (pc n a)) then a els
      'Fixpoint pa (k : nat) (i : int) : nat * int := match k with O => (O, i) | S m => let (x, y) := pa m (i + 1) in (S x, y) end.\nFixpoint pc (k : nat) (i : int) : nat * nat := match k with O => (O, 1%nat) | S m => let (x, y) := pc m (i + 1) in (S x, S (S y)) end.\n')
 addA('zx_cvc_opt_pair', "", 'match pq n a with Some (c, j) => if Nat.leb c 3 then j else b | None => b end',
      'Fixpoint pq (k : nat) (i : int) : option (nat * int) := match k with O => if i <? 0 then None else Some (O, i) | S m => match pq m (i + 1) with Some (c, j) => Some (S c, j) | None => None end end.\n')
+# a mutual block's counter used as a counter (step 120)
+addA('zx_bc_budget', "", 'ff (ev n) b',
+     'Fixpoint ev (m : nat) : nat := match m with O => O | S q => S (od q) end with od (m : nat) : nat := match m with O => 1%nat | S q => ev q end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zx_bc_other', "", 'if Nat.eqb (od n) 2 then a else b',
+     'Fixpoint ev (m : nat) : nat := match m with O => O | S q => S (od q) end with od (m : nat) : nat := match m with O => 1%nat | S q => ev q end.\n')
+addA('zx_bc_match', "", 'match ev n with O => a | S _ => b end',
+     'Fixpoint ev (m : nat) : nat := match m with O => O | S q => S (od q) end with od (m : nat) : nat := match m with O => 1%nat | S q => ev q end.\n')
+addA('zx_bc_succ', "", 'if Nat.leb (S (ev n)) 3 then a else b',
+     'Fixpoint ev (m : nat) : nat := match m with O => O | S q => S (od q) end with od (m : nat) : nat := match m with O => 1%nat | S q => ev q end.\n')
+addA('zx_bc_three', "", 'if Nat.leb (eb7 n) 3 then a else b',
+     'Fixpoint eb7 (m : nat) : nat := match m with O => O | S q => S (fb7 q) end with fb7 (m : nat) : nat := match m with O => 1%nat | S q => gb7 q end with gb7 (m : nat) : nat := match m with O => 2%nat | S q => S (eb7 q) end.\n')
+addA('zx_bc_param', "", 'if Nat.leb (ex n a) 3 then a else b',
+     'Fixpoint ex (m : nat) (x : int) : nat := match m with O => O | S q => S (ox q (x + 1)) end with ox (m : nat) (x : int) : nat := match m with O => 1%nat | S q => ex q x end.\n')
+addA('zx_bc_in_rec', "", 'gb n a',
+     'Fixpoint ev (m : nat) : nat := match m with O => O | S q => S (od q) end with od (m : nat) : nat := match m with O => 1%nat | S q => ev q end.\nFixpoint gb (k : nat) (x : int) : int := match k with O => x | S m => if Nat.leb (ev m) 3 then gb m (x + 1) else x end.\n')
+addA('zx_bc_arities', "", 'if Nat.leb (ea n) 3 then a else b',
+     'Fixpoint ea (m : nat) : nat := match m with O => O | S q => S (oa q 1) end with oa (m : nat) (x : int) : nat := match m with O => 1%nat | S q => ea q end.\n')
 # a local fixpoint giving back a counter (step 113)
 addA('zx_lfc_direct', "", 'Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => O | S q => S (S (cn q)) end) n)',
      '')
