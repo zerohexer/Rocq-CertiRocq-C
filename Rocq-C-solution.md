@@ -6282,6 +6282,14 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   unchanged`.  Next: §12.A's follow-ups (an accumulator holding counters, a counter in a value in a value used as a counter, the
   block follow-ups), then the other categories of §3.5.
 
+**Step 120, a mutual block's counter used as a counter (§3.5, §12.A; the gap `A_zx_as_counter`, found at step 111) — the design (2026-11-14).**  `Fixpoint ev (m : nat) : nat := .. S (od q) .. with od (m : nat) : nat := .. ev q ..`, used as `if Nat.leb (ev n) 3 then .. else ..`: step 111 reads a block's counters as numbers, and a counter used as a counter needs step 83's bound, read off one function's text with its own call its only recursion.
+- *One bound for the block* (`nb_go`'s `blk`, `nb_all`): each member's bound read with every call of the block a recursive call, the callee's counter in its own place; the block's bound the most of its members' weights and constants, so that each member's induction meets the others' bound (`ev`'s own reading gives `n`, but `ev (S 0)` is `S (od 0)` = 2: the block's is `n + 1`).  A block whose members' parameters are alike in number and in the counter's place; one where they are not, a gap with its cell.
+- *The statements* (`nb_blk`): each member's bound with the counter first, named by its row and its number of parameters (`__kb..__bnd<n>__bq__wy`), and at a counter (`__bba__wy`), its parameters from its row, as step 111's rows have them; a member the program never names is a constant of Rocq's all the same.
+- *The proofs* (`kitc.py`): each member's by one mutual fixpoint over the members' bounds at a counter, as step 111 proves the rows, a call of any member posed by its own hypothesis; where the text uses such a counter, posed as step 83's, the block's rows rewritten as the single rows are.
+- *The C*: a program read before, byte-identical.
+- *Left, with cells*: a block whose members' parameters are not alike (`A_zx_bc_arities`); §12.A.
+- *Cells*: `A_zx_bc_*`, 8: the other member, a budget, a match, under a successor, three members, a number parameter, inside a recursion, members of other parameters.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6468,7 +6476,8 @@ Pushed to the public repository up to `9aa3f4d` (2026-11-14); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 119 (the reflect route's files under a time limit: the construct table 4046 of 4188, 76 by design, 65 gaps), the gate; §12.F |
+| (this commit) | §12.V: step 120's design -- a mutual block's counter used as a counter: one bound for the block's members |
+| `8de6996` | §12.V: step 119 (the reflect route's files under a time limit: the construct table 4046 of 4188, 76 by design, 65 gaps), the gate; §12.F |
 | `9aa3f4d` | `proved/kitc.py` + matrix step 119: the reflect route's files under the time limit the walk's have, a stop a gap of its own reason |
 | `56f2dab` | §12.V: step 119's design -- the reflect route's files under a time limit |
 | `221e425` | §12.V: step 118 (a counter given back in a value, used as a counter: the construct table 4046 of 4188, 76 by design, 65 gaps), the gate; §12.A, §12.F |
