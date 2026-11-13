@@ -1795,7 +1795,8 @@ proved once, measured against C written the same way.
   out in `Z` by squaring; past a word, a pin with its control.
 
 **F. Proof speed, only if it becomes the bottleneck (§7.5):** segmenting long straight-line functions; reflection.
-- *A proof that does not end stops a table* (found at step 118): the reflect route's proof files are checked with no time limit (the walk's
+- ~~*A proof that does not end stops a table*~~ (found at step 118) — **done, step 119**: the reflect route's files under `KQ_TIMEOUT`, the
+  stop a gap of its own reason. the reflect route's proof files are checked with no time limit (the walk's
   have `KQ_TIMEOUT`), so a tactic that loops holds a cell, and with it the table, without end.  Accepted when `kitc.py` gives those files the
   time limit, and a cell whose proof does not end is a gap with that reason.
 - *`HWP_irqnow`'s reifier step after step 114* (found at step 114): about 0.09 s slower (1.90 to 1.99 s, in four timings), the other
@@ -6270,6 +6271,17 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: every program byte-identical.
 - *The acceptance*: the gate, and the table with no cell lost; a cell's proofs checked with no cache under a limit of 1 s (`A_q_byte_lit`): refused with that reason, its category in the table's classification.
 
+**Step 119, the reflect route's files under a time limit — the result (2026-11-13).**  Built as designed:
+- *`kitc.py`*: `Set Default Timeout` at the head of `<name>_r.v` and `<name>_rp.v`; the time limit named first in the failure's line.  *`classify.py`*: its category.
+- *Checked on the work laptop*: `A_q_byte_lit` (its laws about 9 s), its proofs checked again with no cache (`KQ_MONO=1`) under `KQ_TIMEOUT=1`: `REFLECT CHECK FAILED (the time limit, KQ_TIMEOUT)`, classified "a proof or a reading the time limit stops"; under the table's limit, proved.  Step 118's cells and the families of one-field records: every verdict step 118's.
+- The C: the 99 programs byte-identical.  The construct table (on `9aa3f4d`): **4046 of 4188 through the verified compiler**, 76
+  by design, 65 gaps, 1 not Rocq (was 4046 of 4188: no cell changed).  The gate on `9aa3f4d`, the walk switched off: `make.sh`
+  `core-ok`; examples 64 / 64, 63 / 63 freestanding, beside the corpus; the same C: undefined behaviour trapped 63 / 63, `-O0` 63
+  / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels and `grow` (24 / 23 / 26 / 19 / 20 / 9 s); **109
+  programs through the verified compiler, 0 refused**, their 109 end theorems each within the list; `check_trust.py`: `trust
+  unchanged`.  Next: §12.A's follow-ups (an accumulator holding counters, a counter in a value in a value used as a counter, the
+  block follow-ups), then the other categories of §3.5.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6452,11 +6464,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `8d96856` (2026-11-13); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `9aa3f4d` (2026-11-14); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 119's design -- the reflect route's files under a time limit |
+| (this commit) | §12.V: step 119 (the reflect route's files under a time limit: the construct table 4046 of 4188, 76 by design, 65 gaps), the gate; §12.F |
+| `9aa3f4d` | `proved/kitc.py` + matrix step 119: the reflect route's files under the time limit the walk's have, a stop a gap of its own reason |
+| `56f2dab` | §12.V: step 119's design -- the reflect route's files under a time limit |
 | `221e425` | §12.V: step 118 (a counter given back in a value, used as a counter: the construct table 4046 of 4188, 76 by design, 65 gaps), the gate; §12.A, §12.F |
 | `8d96856` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + matrix step 118: a counter given back in a value, used as a counter: step 83's bound of every counter of a value, its uses; 14 cells |
 | `3ef0963` | §12.V: step 118's design -- a counter given back in a value, used as a counter: step 83's bound of every counter of a value |
