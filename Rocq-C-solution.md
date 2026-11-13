@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **4046 of 4188, 65 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **4054 of 4196, 65 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1743,8 +1743,11 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   a number by its width wherever step 32 reads a record holding records; a record field is told by its type now. `Fixpoint pj (k : nat) (i : int) : rj := .. mkrj (mkri ..) ..`
   with `Record rj := { rji : ri; .. }`, of numbers as of counters (`A_zx_rr_let`, `A_zx_rr_match`, `A_zx_cv_rec_rec`): not read, while a
   record in a record given as a parameter is (`A_q_rec_nested_rec`).  Accepted when those are proved.
-- *A mutual block's counter used as a counter* (found at step 111): `Nat.leb (ev n) 3`: step 83's bound is read and proved of single
+- ~~*A mutual block's counter used as a counter*~~ (found at step 111) — **done, step 120**: one bound for the block's members, read with
+  every call of the block a recursive call, proved by one mutual fixpoint.  `Nat.leb (ev n) 3`: step 83's bound is read and proved of single
   functions.  Accepted when `A_zx_as_counter` is proved.
+- *A mutual block's counter used as a counter, its members' parameters not alike* (found at step 120): `Fixpoint ea (m : nat) : nat .. with
+  oa (m : nat) (x : int) : nat ..` (`A_zx_bc_arities`): the block's one bound is over the same parameters.  Accepted when it is proved.
 - *A block of different types one of whose members gives back a counter* (found at step 111): step 62 reads such a block by writing
   the others into the one they call, and step 111's rows are of blocks whose members all give back counters.  Accepted when
   `A_zx_mixed` is proved.
@@ -6290,6 +6293,20 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Left, with cells*: a block whose members' parameters are not alike (`A_zx_bc_arities`); §12.A.
 - *Cells*: `A_zx_bc_*`, 8: the other member, a budget, a match, under a successor, three members, a number parameter, inside a recursion, members of other parameters.
 
+**Step 120, a mutual block's counter used as a counter — the result (2026-11-14).**  Built as designed:
+- *The reader* (`KQRReify.v`): `nb_go` and `nb_of` with the block's counters' places (`blk`), `nb_all`'s bound of a block, `nb_blk` and its statements in `y_all`.  *`kitc.py`*: the block's bounds' mutual proofs, their posing, the block's rows in the counters' rewriting.
+- *Checked on the work laptop* (the repository at step 119 with this step's files, the families of values, of values and memories, of records, of counters, of blocks and of the program's parameters, and the new cells: 1682): every verdict step 119's but the cell read.
+- *The reifier's step on the kernels' programs* (on the work laptop, one core, interleaved, three rounds, the fastest, F62, in clean copies of two trees, the repository with step 119's reader / with this one): `HWP_kernel` 3.26 / 3.30 s, `HWP_own` 2.32 / 2.35, `HWP_irqnow` 2.04 / 2.03, the same.
+- *Cells*: 8 more (`A_zx_bc_*`): a block's counter as a recursion's budget, the other member's, matched on, under a successor, a block of three, a block over a parameter, used in a recursion's test; 7 proved, `A_zx_bc_arities` (members of other parameters) a gap, §12.A.  One gap read: `A_zx_as_counter`.
+- *The run*: the machine that drives the chain restarted while the table ran; the table's run on the work laptop ended by itself (`Exited (0)`), and the chain's last steps (fetching the results, comparing them with step 119's) were run by hand.
+- The C: the 99 programs byte-identical.  The construct table (on `73b4041`): **4054 of 4196 through the verified compiler**, 76
+  by design, 65 gaps, 1 not Rocq (was 4046 of 4188: 7 of the 8 new cells read, 1 gap; 1 gap read; no cell lost).  The gate on
+  `73b4041`, the walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding, beside the corpus; the same C:
+  undefined behaviour trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels
+  and `grow` (23 / 23 / 25 / 19 / 19 / 9 s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems
+  each within the list; `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups (an accumulator holding counters, a counter
+  in a value in a value used as a counter, a block of members of other parameters), then the other categories of §3.5.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6472,11 +6489,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `9aa3f4d` (2026-11-14); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `73b4041` (2026-11-14); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 120's design -- a mutual block's counter used as a counter: one bound for the block's members |
+| (this commit) | §12.V: step 120 (a mutual block's counter used as a counter: the construct table 4054 of 4196, 76 by design, 65 gaps), the gate; §12.A |
+| `73b4041` | `proved/KQRReify.v` + `kitc.py` + matrix step 120: a mutual block's counter used as a counter: one bound for the block's members, proved by one mutual fixpoint; 8 cells |
+| `2553413` | §12.V: step 120's design -- a mutual block's counter used as a counter: one bound for the block's members |
 | `8de6996` | §12.V: step 119 (the reflect route's files under a time limit: the construct table 4046 of 4188, 76 by design, 65 gaps), the gate; §12.F |
 | `9aa3f4d` | `proved/kitc.py` + matrix step 119: the reflect route's files under the time limit the walk's have, a stop a gap of its own reason |
 | `56f2dab` | §12.V: step 119's design -- the reflect route's files under a time limit |
