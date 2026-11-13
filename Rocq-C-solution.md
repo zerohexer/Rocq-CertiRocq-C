@@ -6237,6 +6237,14 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   end theorems each within the list; `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups (a value's counter used as a
   counter, an accumulator, the block follow-ups), then the other categories of §3.5.
 
+**Step 118, a counter given back in a value, used as a counter (§3.5, §12.A; the gaps `A_zx_cv_as_counter`, `A_fx_nat_pair`) — the design (2026-11-13).**  `Fixpoint pa (k : nat) (i : int) : nat * int := .. (S x, y) ..`, used as `if Nat.leb (fst (pa n a)) 3 then .. else ..`, or `let (k, v) := fp n a in match k with O => .. | S _ => .. end`: steps 114 to 117 read a value's counters where the text uses them as numbers, and a counter used as a counter is the same counter only below `wB`, so it needs step 83's bound, of single counters until now.
+- *The bound* (`nb_go`, `nb_all`, `nb_stmt`, `vt_lef`, `nb_namev`): one linear bound of every counter a value gives back, read off the function's text as step 83 reads a counter's: a constructor of such a value the most of its fields holding counters, a match on such a value its fields holding counters at most what its counters are, a projection of it the same, a let of it; stated as a match on the value, each counter at most the bound (`__b<n>_<r>__bv__wy`), a record of primitive projections by them.
+- *The uses* (`nc_vcall`, `nc_vch`): a chain of projections around a call of such a function ending in a counter is a counter of step 83's, its number the chain around the row's call (`nc_has`, `nc_cd`, `nc_tr`, which take the environment now; `nc_ul` writes no such chain out); a match on such a call is the row's, its counters held as such numbers in its branches (`nc_sub`, `nc_any`), as a let of such a counter is.
+- *The proofs*: the bound by induction, its posed bounds rewritten by what the matches take apart (`KQRWf.nb_stepv`, `nb_vh`); where the text uses such a counter, the call taken apart with its bound posed (`kq_vd`, set by `kitc.py`, tried in `own_step0` and `own_step`), the side conditions with the bound (`kq_vh` in `nc_side`).  `kitc.py`: the bound's lemma, the slot block's room for `callee_ok_eqb` where a record is given back through it.
+- *The C*: a program read before, byte-identical.
+- *Left, with cells*: a counter in a value in a value used as a counter (`A_zx_cvc_opt_pair`): the match takes the counters one level deep; §12.A.
+- *Cells*: `A_zx_cvc_*`, 14: a pair in a pair, a record, primitive projections, an `option`, a `sum`, a record matched, a budget, under a successor, a let, inside a recursion, used as a number and as a counter, `Nat.eqb`, two such functions, an `option` of a pair.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6423,7 +6431,8 @@ Pushed to the public repository up to `404fa25` (2026-11-13); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 117 (a record of one field inside a record: the construct table 4031 of 4174, 76 by design, 66 gaps), the gate; §12.A |
+| (this commit) | §12.V: step 118's design -- a counter given back in a value, used as a counter: step 83's bound of every counter of a value |
+| `5815a0c` | §12.V: step 117 (a record of one field inside a record: the construct table 4031 of 4174, 76 by design, 66 gaps), the gate; §12.A |
 | `404fa25` | `proved/KQRReify.v` + matrix step 117: a record of one field inside a record: a record's record fields told by their types, not their widths; 10 cells |
 | `0ccfd61` | §12.V: step 117's design -- a record of one field inside a record: a record's record fields told by their types |
 | `0dfc683` | §12.V: step 116 (a counter in a value of the program's own type: the construct table 4018 of 4164, 76 by design, 69 gaps), the gate; §12.A |
