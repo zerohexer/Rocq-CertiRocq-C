@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **4031 of 4174, 66 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **4046 of 4188, 65 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1734,8 +1734,9 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   pair (`A_q_divmod`), and `nat_of_ascii` (`A_q_ascii_code`): a row gives back a number, and these give back a value holding one.
 - *A counter in a value, left at step 114*: ~~a value in a value (`A_zx_cv_nested`)~~ — **done, step 115**: the value rows' types
   holding counters at any depth, projections and lets of such values read.  ~~A record of the program's with a counter field
-  (`A_zx_cv_record`)~~ — **done, step 116**: its type at numbers made, a type of its own.  Left: a value's
-  counter used as a counter (`A_zx_cv_as_counter`, `A_fx_nat_pair`: no bound), a library's (`A_q_divmod`, `A_q_ascii_code`: rows are of
+  (`A_zx_cv_record`)~~ — **done, step 116**: its type at numbers made, a type of its own.  ~~A value's counter used as a counter
+  (`A_zx_cv_as_counter`, `A_fx_nat_pair`)~~ — **done, step 118**: step 83's bound of every counter a value gives back.  Left: a counter
+  in a value in a value used as a counter (`A_zx_cvc_opt_pair`, found at step 118: a match takes the counters one level deep), a library's (`A_q_divmod`, `A_q_ascii_code`: rows are of
   the program's functions), a value holding counters given to a recursion as a parameter (`A_zx_cv_acc`, found at step 115: its row
   would take it at numbers, a statement of another form).  Accepted when those are proved.
 - ~~*A record in a record given back by a recursion*~~ (found at step 116) — **done, step 117**: the cause a record of one field, taken for
@@ -1794,9 +1795,13 @@ proved once, measured against C written the same way.
   out in `Z` by squaring; past a word, a pin with its control.
 
 **F. Proof speed, only if it becomes the bottleneck (§7.5):** segmenting long straight-line functions; reflection.
+- *A proof that does not end stops a table* (found at step 118): the reflect route's proof files are checked with no time limit (the walk's
+  have `KQ_TIMEOUT`), so a tactic that loops holds a cell, and with it the table, without end.  Accepted when `kitc.py` gives those files the
+  time limit, and a cell whose proof does not end is a gap with that reason.
 - *`HWP_irqnow`'s reifier step after step 114* (found at step 114): about 0.09 s slower (1.90 to 1.99 s, in four timings), the other
   kernels the same: what of the value rows its reading meets; after step 115 about 0.03 s more (1.90 to 1.94 s and 1.97 to 2.00 s, in
-  two timings).  Accepted when its reifier step measures as step 113's.
+  two timings); after step 118 0.05 to 0.10 s more (2.00 to 2.05 s and 1.95 to 2.05 s, in two timings: the bounds of its value rows).
+  Accepted when its reifier step measures as step 113's.
 - ~~*The gate's examples and corpus side by side*~~ (found at step 114) — **done, step 115**: `make.sh` once, `corpus.sh` told so (`KQ_MADE=1`). `corpus.sh` begins with `make.sh`, which compiles every proof
   again and rewrites the `.vo` files the examples are reading, so the two cannot run together as they are (step 114's first try).  The
   rebuild once, before both, and the corpus told it is done.  Accepted when a chain's gate runs the two together, its kernels' times
@@ -6245,6 +6250,20 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Left, with cells*: a counter in a value in a value used as a counter (`A_zx_cvc_opt_pair`): the match takes the counters one level deep; §12.A.
 - *Cells*: `A_zx_cvc_*`, 14: a pair in a pair, a record, primitive projections, an `option`, a `sum`, a record matched, a budget, under a successor, a let, inside a recursion, used as a number and as a counter, `Nat.eqb`, two such functions, an `option` of a pair.
 
+**Step 118, a counter given back in a value, used as a counter — the result (2026-11-13).**  Built as designed:
+- *The reader* (`KQRReify.v`): `vt_np`, `nb_go`'s values, `nb_all` with value rows, `vt_lef`, `nb_stmt`'s value form, `nb_namev`; `nc_vcall`, `nc_vch`, `nc_has`, `nc_tr` with the environment, `nc_cd`, `nc_ul`, `nc_sub`'s and `nc_any`'s match on such a call, `nc_rows` with value rows.  *`KQRWf.v`*: `nb_vh0`, `nb_vh`, `nb_stepv`, `kq_vh`, `kq_vd`.  *`kitc.py`*: the value bounds' lemmas, `kq_vd`, `kq_vh`, the room.
+- *Found while building* (on the work laptop): a `match` given to `assert_fails` runs where it is given, not under it (`idtac; match ..`); `callee_ok_eqb`'s room was `True` to `kitc.py` wherever no `__v` row is, wrong for a record through the slot block; step 116's reduction of a projection of a constructor took `Nat.leb t 3` for one, the `3` a constructor, and reduced the test further at each round, without end: kept only where what it gives is a part of the constructor; a counter in a pair in a pair: what a bound matches on, taken apart too; `kitc.py` wrote `try unfold f; ` with nothing after where a program has a helper giving back a counter and no counter's row (since step 83); a proof that does not end stops a table: the reflect route's proof files have no time limit (§12.F).
+- *Checked on the work laptop* (the repository at step 117 with this step's files, the families of values, of values and memories, of records, of counters and of the program's parameters, and the new cells: 1451): every verdict step 117's but the cells read.
+- *The reifier's step on the kernels' programs* (on the work laptop, one core, interleaved, three rounds, the fastest, F62, in clean copies of two trees, the repository with step 117's reader / with this one; two such timings): `HWP_kernel` 3.37 / 3.30 s and 3.26 / 3.30, `HWP_own` 2.32 / 2.27 and 2.34 / 2.30, the same; `HWP_irqnow` 2.00 / 2.05 and 1.95 / 2.05, 0.05 to 0.10 s slower: the bounds of its value rows and the walk of its uses, made now where a program has value rows; §12.F's item.
+- *Cells*: 14 more (`A_zx_cvc_*`), 13 proved, `A_zx_cvc_opt_pair` a gap.  Two gaps read: `A_zx_cv_as_counter`, `A_fx_nat_pair`.
+- The C: the 99 programs byte-identical.  The construct table (on `8d96856`): **4046 of 4188 through the verified compiler**, 76
+  by design, 65 gaps, 1 not Rocq (was 4031 of 4174: 13 of the 14 new cells read, 1 gap; 2 gaps read; no cell lost).  The gate on
+  `8d96856`, the walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding, beside the corpus; the same C:
+  undefined behaviour trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels
+  and `grow` (22 / 23 / 27 / 20 / 19 / 9 s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems
+  each within the list; `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups (an accumulator holding counters, a counter
+  in a value in a value used as a counter, the block follow-ups), §12.F's time limit, then the other categories of §3.5.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6427,11 +6446,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `404fa25` (2026-11-13); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `8d96856` (2026-11-13); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 118's design -- a counter given back in a value, used as a counter: step 83's bound of every counter of a value |
+| (this commit) | §12.V: step 118 (a counter given back in a value, used as a counter: the construct table 4046 of 4188, 76 by design, 65 gaps), the gate; §12.A, §12.F |
+| `8d96856` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + matrix step 118: a counter given back in a value, used as a counter: step 83's bound of every counter of a value, its uses; 14 cells |
+| `3ef0963` | §12.V: step 118's design -- a counter given back in a value, used as a counter: step 83's bound of every counter of a value |
 | `5815a0c` | §12.V: step 117 (a record of one field inside a record: the construct table 4031 of 4174, 76 by design, 66 gaps), the gate; §12.A |
 | `404fa25` | `proved/KQRReify.v` + matrix step 117: a record of one field inside a record: a record's record fields told by their types, not their widths; 10 cells |
 | `0ccfd61` | §12.V: step 117's design -- a record of one field inside a record: a record's record fields told by their types |
