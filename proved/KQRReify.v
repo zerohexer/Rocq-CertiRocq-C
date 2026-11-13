@@ -836,14 +836,17 @@ Variable rt : list rentry.                 (* the program's record types *)
     with its inner records at once, in its fields' order and depth first (the order Rocq's nested patterns bind them, and the
     order of the flat record's numbers); otherwise it is not read *)
 Definition rfw (ri : nat) : list nat := match nth_error rt ri with Some (_, _, _, _, _, None, fw) => fw | _ => [] end.
+Definition rftys (ri : nat) : list term := match nth_error rt ri with Some ((_, ft), _, _, _, _, None, _) => ft | _ => [] end.
+(** (step 117) which fields of a record are records: by their types, not their widths (a record of one number has width 1) *)
+Definition rfr (ri : nat) : list bool := map (fun q => negb (is_ty kn_int q)) (rftys ri).
 (** (step 67) a value holding a boolean or a data type: taken apart one level, never as flat numbers *)
 Definition rgen (ri : nat) : bool := match nth_error rt ri with Some (mf, _, _, _, _, _, _) => match fst mf with [] => false | _ => true end | None => false end.
 Definition slot_ent (q : term) : cent := if is_ty kn_int q then CNum else if is_bool q then CRecB else CRec.
 Definition cty (ci : case_info) (p : predicate term) : term :=
   match pparams p with [] => tInd (ci_ind ci) (puinst p) | ps => tApp (tInd (ci_ind ci) (puinst p)) ps end.
-Definition fents (fw : list nat) : list cent := rev (map (fun w => if Nat.eqb w 1 then CNum else CDead) fw).
-Definition fpend (fw : list nat) : list nat :=
-  map (fun i => length fw - 1 - i) (filter (fun i => Nat.ltb 1 (nth i fw 1)) (seq 0 (length fw))).
+Definition fents (rf : list bool) : list cent := rev (map (fun b : bool => if b then CDead else CNum) rf).
+Definition fpend (rf : list bool) : list nat :=
+  map (fun i => length rf - 1 - i) (filter (fun i => nth i rf false) (seq 0 (length rf))).
 Fixpoint rbr_go (fuel : nat) (ents : list cent) (pend : list nat) (t : term) : option (list cent * term) :=
   match fuel with
   | O => None
@@ -855,7 +858,7 @@ Fixpoint rbr_go (fuel : nat) (ents : list cent) (pend : list nat) (t : term) : o
           | tCase ci2 p2 (tRel j') [br2] =>
               match rindex (cty ci2 p2) rt 0 with
               | Some ri2 =>
-                  let fw2 := rfw ri2 in
+                  let fw2 := rfr ri2 in
                   let k2 := length (bcontext br2) in
                   if Nat.eqb j j' && Nat.eqb (length fw2) k2 && negb (Nat.eqb k2 0)
                   then rbr_go fuel (fents fw2 ++ ents) (fpend fw2 ++ map (fun x => x + k2) rest) (bbody br2)
@@ -869,16 +872,15 @@ Fixpoint rbr_go (fuel : nat) (ents : list cent) (pend : list nat) (t : term) : o
 Definition rbr (ci : case_info) (p : predicate term) (br : branch term) : option (list cent * term) :=
   let k := length (bcontext br) in
   match rindex (cty ci p) rt 0 with
-  | Some ri => let fw := rfw ri in
+  | Some ri => let fw := rfr ri in
                if rgen ri then None else
-               if existsb (Nat.ltb 1) fw then (if Nat.eqb (length fw) k then rbr_go 100 (fents fw) (fpend fw) (bbody br) else None)
+               if existsb (fun b => b) fw then (if Nat.eqb (length fw) k then rbr_go 100 (fents fw) (fpend fw) (bbody br) else None)
                else Some (repeat CNum k, bbody br)
   | None => Some (repeat CNum k, bbody br)
   end.
 
 (** a record holding records taken apart one level (step 43): its fields' types, its record fields' types in the table; a match
     on one, not taken apart at once: its number fields numbers, its record fields records, the last first *)
-Definition rftys (ri : nat) : list term := match nth_error rt ri with Some ((_, ft), _, _, _, _, None, _) => ft | _ => [] end.
 Definition rbs (ci : case_info) (p : predicate term) (br : branch term) : option (nat * list cent * term) :=
   match rindex (cty ci p) rt 0 with
   | Some ri =>
@@ -955,7 +957,7 @@ Definition lets_first (ci : case_info) (p : predicate term) (c : term) (brs : li
 (** the types the readers hold as values: a number, a boolean, a counter, a memory, a record of the program's types *)
 Definition held (ty : term) : bool :=
   is_ty kn_int ty || is_bool ty || is_nat ty || is_ty kn_mem ty
-  || match rindex ty rt 0 with Some ri => if rgen ri then false else negb (existsb (Nat.ltb 1) (rfw ri)) | None => false end.
+  || match rindex ty rt 0 with Some ri => if rgen ri then false else negb (existsb (fun b => b) (rfr ri)) | None => false end.
 (** a let of a constructor of plain values, at a type the readers do not hold, is its body with the value put in (zeta) *)
 Definition zeta_con (t : term) : option term :=
   match t with
@@ -1673,27 +1675,27 @@ with reify_r (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sr
                 | _, _ => None
                 end
               else
-              if existsb (Nat.ltb 1) (rfw ri) then
+              if existsb (fun b => b) (rfr ri) then
                 (* a record holding records (step 32): the outer numbers, then each inner record's fields, depth first *)
-                let fix flat (fu : nat) (fw : list nat) (fs : list term) {struct fu} : option (list sexp) :=
+                let fix flat (fu : nat) (fw : list bool) (fs : list term) {struct fu} : option (list sexp) :=
                   match fu with
                   | O => None
                   | S fu =>
                       let wf := combine fw fs in
-                      match opt_all (map (fun q => reify fuel ctx (snd q)) (filter (fun q => Nat.eqb (fst q) 1) wf)),
+                      match opt_all (map (fun q => reify fuel ctx (snd q)) (filter (fun q => negb (fst q)) wf)),
                             opt_all (map (fun q => match snd q with
                                                    | tApp (tConstruct ind' c' _) args' =>
                                                        match cindex ind' c' args' rt 0 with
-                                                       | Some (ri', np', None) => flat fu (rfw ri') (skipn np' args')
+                                                       | Some (ri', np', None) => flat fu (rfr ri') (skipn np' args')
                                                        | _ => None
                                                        end
                                                    | _ => None
-                                                   end) (filter (fun q => Nat.ltb 1 (fst q)) wf)) with
+                                                   end) (filter (fun q => fst q) wf)) with
                       | Some nums, Some recs => Some (nums ++ concat recs)
                       | _, _ => None
                       end
                   end in
-                match flat 100 (rfw ri) (skipn np args) with
+                match flat 100 (rfr ri) (skipn np args) with
                 | Some es => Some (RMk ri (to_sexps es))
                 | None =>
                     (* a record value among the fields (step 43): the one-level constructor, its numbers and its records *)
@@ -4331,6 +4333,8 @@ Fixpoint al_t (fuel : nat) (Σ : global_env) (mp : modpath) (t : term) {struct f
       | _ => t
       end
   end.
+(** (step 117) a record entry holding records: by its fields' types *)
+Definition rholds (e : rentry) : bool := existsb (fun q => negb (is_ty kn_int q)) (snd (fst (fst (fst (fst (fst (fst e))))))).
 Definition rtab_of (Σ : global_env) (hb : kername -> option term) (kns : list kername) : list rentry :=
   let nrm := al_t 100 Σ (match kns with k :: _ => fst k | [] => MPfile [] end) in
   (* (step 67) the records holding records the bodies use, a value holding booleans or data types wherever it is used: each after what it holds *)
@@ -4362,11 +4366,11 @@ Definition rtab_of (Σ : global_env) (hb : kername -> option term) (kns : list k
      records only from a signature (step 32): built and taken apart in a body it needs nothing (step 25) *)
   let btys := map nrm (fst (fold_left (fun s kn => match body_of Σ kn with Some b => body_rtys 2000 Σ hb b s | None => s end) kns ([], []))) in
   let rt1 := fold_left (fun rt t => match rec_shape Σ t with
-                         | Some e => if (if isgen e then true else existsb (Nat.ltb 1) (snd e)) then rt
+                         | Some e => if (if isgen e then true else rholds e) then rt
                                      else match rindex t rt 0 with Some _ => rt | None => rt ++ [e] end
                          | None => rt end) btys sig_rt in
   fold_left (fun rt t => match rec_shape Σ t with
-                         | Some e => if (if isgen e then true else existsb (Nat.ltb 1) (snd e)) then add_deep 10 rt t else rt
+                         | Some e => if (if isgen e then true else rholds e) then add_deep 10 rt t else rt
                          | None => rt end) btys rt1.
 (** for kitc.py: each record type's text, its constructor's name (a data type's: its constructors' names), its number of fields,
     and a data type's constructors' widths (step 28) *)
@@ -4419,7 +4423,7 @@ Definition rec_text (Σ : global_env) (rt : list rentry) (e : rentry) : string *
            ^ sjoin "|" (map (fun m => "x" ^ sjoin "," (map (fun p : bool * nat => (if fst p then "n"%bs else "r"%bs) ^ string_of_nat (snd p)) m)) (fst mf)))
       end
   | [] =>
-  if existsb (Nat.ltb 1) fw then (ty_text 10 t, match rfields Σ t with Some (cn, _) => ctor_text t cn | None => ""%bs end, n,
+  if rholds e then (ty_text 10 t, match rfields Σ t with Some (cn, _) => ctor_text t cn | None => ""%bs end, n,
     "N:" ^ shape_text 10 Σ t ^ "@" ^ fold_left (fun a j => (if a == "" then ""%bs else a ^ ",") ^ string_of_nat j)
                                                (match rindex t rt 0 with Some ri => rjs rt ri | None => [] end) "") else
   let nm := string_of_kername (inductive_mind i) in

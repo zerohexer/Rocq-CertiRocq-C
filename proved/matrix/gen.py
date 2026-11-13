@@ -3628,6 +3628,27 @@ addA('zx_rr_let', "", 'ric2 (rji2 (pj2 n a)) + rjv2 (pj2 n a)',
      'Record ri2 := mkri2 { ric2 : int }.\nRecord rj2 := mkrj2 { rji2 : ri2; rjv2 : int }.\nFixpoint pj2 (k : nat) (i : int) : rj2 := match k with O => mkrj2 (mkri2 0) i | S m => let r := pj2 m (i + 1) in mkrj2 (mkri2 (ric2 (rji2 r) + 1)) (rjv2 r) end.\n')
 addA('zx_rr_match', "", 'match pj3 n a with mkrj3 (mkri3 c) v => c + v end',
      'Record ri3 := mkri3 { ric3 : int }.\nRecord rj3 := mkrj3 { rji3 : ri3; rjv3 : int }.\nFixpoint pj3 (k : nat) (i : int) : rj3 := match k with O => mkrj3 (mkri3 0) i | S m => match pj3 m (i + 1) with mkrj3 (mkri3 c) v => mkrj3 (mkri3 (c + 1)) v end end.\n')
+# a record of one field, alone and inside a record or a pair (step 117)
+addA('zr1_param', "", 'k (mkro1 a)',
+     'Record ro1 := mkro1 { fo1 : int }.\nDefinition k (x : ro1) : int := fo1 x + 1.\n')
+addA('zr1_ret', "", 'fo1 (mk1 a)',
+     'Record ro1 := mkro1 { fo1 : int }.\nDefinition mk1 (x : int) : ro1 := mkro1 (x + 1).\n')
+addA('zr1_rec', "", 'match p1 n a with mkro1 c => c end',
+     'Record ro1 := mkro1 { fo1 : int }.\nFixpoint p1 (k : nat) (i : int) : ro1 := match k with O => mkro1 i | S m => match p1 m (i + 1) with mkro1 c => mkro1 (c + 1) end end.\n')
+addA('zr1_tail', "", 'fo1 (t1 n (mkro1 a))',
+     'Record ro1 := mkro1 { fo1 : int }.\nFixpoint t1 (k : nat) (q : ro1) : ro1 := match k with O => q | S m => t1 m (mkro1 (fo1 q + 1)) end.\n')
+addA('zr1_let', "", 'let r := mkro1 a in fo1 r + b',
+     'Record ro1 := mkro1 { fo1 : int }.\n')
+addA('zr1_in_pair', "", 'fst (k1 (mkro1 a, b))',
+     'Record ro1 := mkro1 { fo1 : int }.\nDefinition k1 (p : ro1 * int) : int * int := (fo1 (fst p) + snd p, 0).\n')
+addA('zr1_in_rec_last', "", 'match pj5 n a with mkrj5 v (mkri5 c) => c + v end',
+     'Record ri5 := mkri5 { ric5 : int }.\nRecord rj5 := mkrj5 { rjv5 : int; rji5 : ri5 }.\nFixpoint pj5 (k : nat) (i : int) : rj5 := match k with O => mkrj5 i (mkri5 0) | S m => match pj5 m (i + 1) with mkrj5 v (mkri5 c) => mkrj5 v (mkri5 (c + 1)) end end.\n')
+addA('zr1_in_rec_tail', "", 'match pj8 n (mkrj8 (mkri8 0) a) with mkrj8 (mkri8 c) v => c + v end',
+     'Record ri8 := mkri8 { ric8 : int }.\nRecord rj8 := mkrj8 { rji8 : ri8; rjv8 : int }.\nFixpoint pj8 (k : nat) (q : rj8) : rj8 := match k with O => q | S m => match q with mkrj8 (mkri8 c) v => pj8 m (mkrj8 (mkri8 (c + 1)) v) end end.\n')
+addA('zr1_in_rec_deep', "", 'match pd1 n a with mkrd (mkrc (mkrb c)) v => c + v end',
+     'Record rb1 := mkrb { fb : int }.\nRecord rc1 := mkrc { fc : rb1 }.\nRecord rd1 := mkrd { fd : rc1; fv : int }.\nFixpoint pd1 (k : nat) (i : int) : rd1 := match k with O => mkrd (mkrc (mkrb 0)) i | S m => match pd1 m (i + 1) with mkrd (mkrc (mkrb c)) v => mkrd (mkrc (mkrb (c + 1))) v end end.\n')
+addA('zr1_in_rec_proj', "", 'fc2 (fd2 (pe1 n a)) + fv2 (pe1 n a)',
+     'Record rc2 := mkrc2 { fc2 : int }.\nRecord rd2 := mkrd2 { fd2 : rc2; fv2 : int }.\nFixpoint pe1 (k : nat) (i : int) : rd2 := match k with O => mkrd2 (mkrc2 0) i | S m => let r := pe1 m (i + 1) in mkrd2 (mkrc2 (fc2 (fd2 r) + 1)) (fv2 r) end.\n')
 # a local fixpoint giving back a counter (step 113)
 addA('zx_lfc_direct', "", 'Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => O | S q => S (S (cn q)) end) n)',
      '')
