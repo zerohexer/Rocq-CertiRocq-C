@@ -10820,14 +10820,26 @@ Definition nr_rows (Σ : global_env) (mp : modpath) (root : kername) (kns : list
                                                   ^ "_" ^ string_of_nat mb ^ "_" ^ mangle (mem_kn (fst kn) mfix 0))%bs in
                         if (if Nat.leb 2 mb then forallb (fun dj => is_nat (ret_ty (al_t 1000 Σ mp (dtype dj)))) mfix else false) then
                           if existsb (fun r : rprow => let '(_, _, _, s0, _) := r in String.eqb s0 (st 0)) rs then rs else
+                          (* (step 130) the members' counters other than their own, taken at numbers, as step 82's accumulators: a place that
+                             is such in every member that has it, so that a call of any member gives its argument there at numbers *)
+                          let mx := fold_left Nat.max (map (fun dj => length (fst (lams (dbody dj)))) mfix) 0 in
+                          let accu := filter (fun q => forallb (fun dj => let '(tys, body) := lams (dbody dj) in
+                                                          let n := length tys in
+                                                          if Nat.ltb q n then is_nat (nth q tys (tRel 0)) && negb (Nat.eqb q (rarg dj))
+                                                                              && nr_tail_ok 1000 Σ mp n (n - 1 - q) 0 q body
+                                                          else true) mfix) (seq 0 mx) in
                           match opt_all (map (fun dj => let '(tys, body) := lams (dbody dj) in
-                                                option_map (fun b2 => (tys, b2)) (nr_trm mb 1000 Σ mp rs (length tys) 0 [] [] body)) mfix) with
+                                                let n := length tys in
+                                                let accj := filter (fun q => Nat.ltb q n) accu in
+                                                let tys2 := map (fun jt : nat * term => if existsb (Nat.eqb (fst jt)) accj then tConst kn_int [] else snd jt) (combine (seq 0 n) tys) in
+                                                option_map (fun b2 => (tys2, b2)) (nr_trm mb 1000 Σ mp rs n 0 accu (map (fun q => n - 1 - q) accj) body)) mfix) with
                           | Some tbs =>
                               let rdefs := map (fun jt : nat * (list term * term) =>
                                              {| dname := {| binder_name := nNamed (st (fst jt) ^ "__rp__wy")%bs; binder_relevance := Relevant |};
                                                 dtype := pis_of (fst (snd jt)) (tConst kn_int []); rarg := rarg (nth (fst jt) mfix dflt_def);
                                                 dbody := lams_of (fst (snd jt)) (snd (snd jt)) |}) (combine (seq 0 mb) tbs) in
-                              rs ++ map (fun j => (tConst (mem_kn (fst kn) mfix j) [], [], [rp_nr; rp_nrb], st j,
+                              rs ++ map (fun j => (tConst (mem_kn (fst kn) mfix j) [], [],
+                                                   [rp_nr; rp_nrb] ++ map (Nat.add 900) (filter (fun q => Nat.ltb q (length (fst (lams (dbody (nth j mfix dflt_def)))))) accu), st j,
                                                    {| dname := dname (nth j rdefs dflt_def); dtype := dtype (nth j rdefs dflt_def); rarg := rp_nofix;
                                                       dbody := tFix rdefs j |})) (seq 0 mb)
                           | None => rs
@@ -10958,7 +10970,11 @@ Definition nr_ptys (Σ : global_env) (mp : modpath) (k : kername) : list term :=
   match lookup_env Σ k with Some (ConstantDecl cb) => removelast (prod_tys (al_t 1000 Σ mp (cst_type cb))) | _ => [] end.
 Definition nr_stmt (Σ : global_env) (mp : modpath) (r : rprow) : term :=
   let '(h, _, sl, _, d0) := r in
-  let tys0 := if rp_is_nrb sl then match dbody d0 with tFix rds j => removelast (prod_tys (dtype (nth j rds dflt_def))) | _ => [] end else
+  let tys0 := if rp_is_nrb sl then
+                match rp_gds sl, h with
+                | _ :: _, tConst k _ => match lookup_env Σ k with Some (ConstantDecl cb) => removelast (prod_tys (al_t 1000 Σ mp (cst_type cb))) | _ => [] end
+                | _, _ => match dbody d0 with tFix rds j => removelast (prod_tys (dtype (nth j rds dflt_def))) | _ => [] end
+                end else
               match h with
               | tConst k _ => match lookup_env Σ k with
                               | Some (ConstantDecl cb) => removelast (prod_tys (al_t 1000 Σ mp (cst_type cb)))
@@ -11125,7 +11141,11 @@ Definition nr_at (Σ : global_env) (r : rprow) : term :=
   match dbody d0 with
   | tFix rds j =>
       let dj := nth j rds dflt_def in
-      let tys0 := removelast (prod_tys (dtype dj)) in
+      let accs := rp_gds sl in
+      let tys0 := match accs, h with
+                  | _ :: _, tConst k _ => match lookup_env Σ k with Some (ConstantDecl cb) => removelast (prod_tys (cst_type cb)) | _ => removelast (prod_tys (dtype dj)) end
+                  | _, _ => removelast (prod_tys (dtype dj))
+                  end in
       let n := length tys0 in
       let rv := rarg dj in
       let others := filter (fun q => negb (Nat.eqb q rv)) (seq 0 n) in
@@ -11133,7 +11153,7 @@ Definition nr_at (Σ : global_env) (r : rprow) : term :=
       let rels := map (fun q => if Nat.eqb q rv then tRel k else tRel (k - 1 - match idx_of q others 0 with Some p => p | None => 0 end)) (seq 0 n) in
       tLambda anon_b (tInd ind_nat [])
         (pis_of (map (fun q => nth q tys0 (tRel 0)) others)
-           (tApp y_eq [tConst kn_int []; tApp (tConst (rp_name r) []) rels; nr_ofn (nr_src Σ h rels)]))
+           (tApp y_eq [tConst kn_int []; tApp (tConst (rp_name r) []) (map (fun jr : nat * term => if existsb (Nat.eqb (fst jr)) accs then nr_ofn (snd jr) else snd jr) (combine (seq 0 n) rels)); nr_ofn (nr_src Σ h rels)]))
   | _ => tVar "unread"%bs
   end.
 (** a counter a function gives back, made a number at once *)
@@ -11852,7 +11872,10 @@ Definition nb_blk (Σ : global_env) (rows : list rprow) (tab : list (kername * n
           match List.find (fun e => Kername.eqb (fst e) kn) tab with
           | Some (_, f) =>
               let dj := nth j rds dflt_def in
-              let tys0 := removelast (prod_tys (dtype dj)) in
+              let tys0 := match rp_gds sl with
+                          | _ :: _ => match lookup_env Σ kn with Some (ConstantDecl cb) => removelast (prod_tys (cst_type cb)) | _ => removelast (prod_tys (dtype dj)) end
+                          | [] => removelast (prod_tys (dtype dj))
+                          end in
               let n := length tys0 in
               let rv := rarg dj in
               let others := filter (fun q => negb (Nat.eqb q rv)) (seq 0 n) in
