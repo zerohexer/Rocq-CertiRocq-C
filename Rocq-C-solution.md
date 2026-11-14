@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **4083 of 4225, 65 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **4091 of 4233, 65 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1744,9 +1744,13 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   today's reading finds no bound, a parameter holding counters at most its largest counter.  `Nat.leb (fst (qa9 n (O, a))) 3`
   with `qa9 k st` counting up from `st`: step 118's bound of a value's counters is over the function's counter parameters, and
   `fst (qa9 k st)` is at most `k + fst st`, the accumulator's counter in it (`A_zx_ca_as_counter`).  Accepted when it is proved.
-- *A function giving back a counter whose parameter is a value holding a counter* (found at step 122): `Fixpoint qd (k : nat) (st : nat * int)
+- ~~*A function giving back a counter whose parameter is a value holding a counter*~~ (found at step 122) — **done, step 123**: the
+  counter row takes it at numbers, as a value row its accumulators.  `Fixpoint qd (k : nat) (st : nat * int)
   : nat := .. S (qd m (S (fst st), snd st)) ..` (`A_zx_cac_ctr_param`): its row takes the parameter as it is, and step 121's
   accumulators are of value rows.  Accepted when it is proved.
+- *Such a counter used where its value modulo a word is enough* (found at step 123): `Nat.land (qk n (S O, a)) 255` with `qk` doubling
+  its accumulator's counter, so no bound (`A_zx_crp_modulo`): step 104's reading (`nc_trw`) has no environment to make the argument
+  numbers.  Accepted when it is proved.
 - ~~*A record in a record given back by a recursion*~~ (found at step 116) — **done, step 117**: the cause a record of one field, taken for
   a number by its width wherever step 32 reads a record holding records; a record field is told by its type now. `Fixpoint pj (k : nat) (i : int) : rj := .. mkrj (mkri ..) ..`
   with `Record rj := { rji : ri; .. }`, of numbers as of counters (`A_zx_rr_let`, `A_zx_rr_match`, `A_zx_cv_rec_rec`): not read, while a
@@ -6375,6 +6379,20 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Left, with a cell*: such a counter used where its value modulo a word is enough (`A_zx_crp_modulo`): step 104's reading (`nc_trw`) has no environment to make the argument numbers; §12.A.
 - *Cells*: 8 (`A_zx_crp_*`): the counter given back made of the value's, an `option`, a record, the call in an operand, beside a counter accumulator, used as a counter, as a recursion's budget, modulo a word.
 
+**Step 123, a function giving back a counter whose parameter is a value holding a counter — the result (2026-11-14).**  Built as designed:
+- *The reader* (`KQRReify.v`): `nr_trv` at a counter given back, `nr_rows`' counter rows with value accumulators (`__kc`), `nr_acv`, `nr_acu`, `nr_ptys`, `nr_stmt` with them, their calls in `nr_subv` and `nc_tr`, `vt_mades`.  *`KQRWf.v`*: `nb_step`'s and `nc_side`'s second try.  *`kitc.py`*: the `__kc` rows: a counter row's proof and rewriting, the pairing of calls forwards.
+- *Found while building* (on the work laptop): step 104's `nc_trw` has no environment, so its rows' accumulators stay counters (a cell); the use's equation of such a counter used as a counter had nothing to rewrite (its argument at numbers), and rewrote forwards and backwards without end where the bound's side condition kept the largest counter of a constructor unreduced; `nc_side` is defined twice in `KQRWf.v`, the second the one in force.
+- *Checked on the work laptop* (the repository at step 122 with this step's files, the families of values, of values and memories, of records, of counters, of blocks and of the program's parameters, and the new cells: 1719): every verdict step 122's but the cell read.
+- *The reifier's step on the kernels' programs* (on the work laptop, one core, interleaved, three rounds, the fastest, F62, in clean copies of two trees, the repository with step 122's reader / with this one): `HWP_kernel` 3.45 / 3.42 s, `HWP_own` 2.34 / 2.37, `HWP_irqnow` 2.04 / 2.01, the same (both trees slower than at step 122: the machine was busier).
+- *Cells*: 8 more (`A_zx_crp_*`), 7 proved, `A_zx_crp_modulo` a gap, §12.A.  One gap read: `A_zx_cac_ctr_param`.
+- The C: the 99 programs byte-identical.  The construct table (on `e5fa323`): **4091 of 4233 through the verified compiler**, 76
+  by design, 65 gaps, 1 not Rocq (was 4083 of 4225: 7 of the 8 new cells read, 1 gap; 1 gap read; no cell lost).  The gate on
+  `e5fa323`, the walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding, beside the corpus; the same C:
+  undefined behaviour trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels
+  and `grow` (22 / 23 / 25 / 18 / 19 / 10 s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems
+  each within the list; `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups (such a counter used modulo a word, a
+  counter in a value in a value used as a counter, a block of members of other parameters), then the other categories of §3.5.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6557,11 +6575,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `5c965ae` (2026-11-14); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `e5fa323` (2026-11-14); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 123's design -- a function giving back a counter whose parameter is a value holding a counter: counter rows taking accumulators at numbers |
+| (this commit) | §12.V: step 123 (a function giving back a counter whose parameter is a value holding a counter: the construct table 4091 of 4233, 76 by design, 65 gaps), the gate; §12.A |
+| `e5fa323` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + matrix step 123: a function giving back a counter whose parameter is a value holding a counter: counter rows taking accumulators at numbers; 8 cells |
+| `ddd875d` | §12.V: step 123's design -- a function giving back a counter whose parameter is a value holding a counter: counter rows taking accumulators at numbers |
 | `a64aeaa` | §12.V: step 122 (a counter given back by a function taking an accumulator, used as a counter: the construct table 4083 of 4225, 76 by design, 65 gaps), the gate; §12.A |
 | `5c965ae` | `proved/KQRReify.v` + `KQRWf.v` + matrix step 122: a counter given back by a function taking an accumulator, used as a counter: the bound over its largest counter; 8 cells |
 | `32cd4ef` | §12.V: step 122's design -- a counter given back by a function taking an accumulator, used as a counter: the bound over its largest counter |
