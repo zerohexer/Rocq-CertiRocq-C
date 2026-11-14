@@ -1761,7 +1761,8 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   the value put around the branch: `match pq3 n a with Some p => ..
   Nat.leb (fst p) 3 ..` (`A_zx_cvo_proj`): the match keeps the value's bound, not its type, so its projection is not read at numbers.
   Accepted when it is proved.
-- *A match on such a value's call, a counter it takes apart used modulo a word* (found at step 125): `match qp n a with Some c => .. Nat.land c 255 ..`
+- ~~*A match on such a value's call, a counter it takes apart used modulo a word*~~ (found at step 125) — **done, step 128**: taken apart
+  with its counters of no known multiple where every use is modulo a word: `match qp n a with Some c => .. Nat.land c 255 ..`
   with `qp` doubling (`A_zx_cvm_match`): the match's reading (step 118) asks the function's bound.  Accepted when it is proved.
 - ~~*A record in a record given back by a recursion*~~ (found at step 116) — **done, step 117**: the cause a record of one field, taken for
   a number by its width wherever step 32 reads a record holding records; a record field is told by its type now. `Fixpoint pj (k : nat) (i : int) : rj := .. mkrj (mkri ..) ..`
@@ -1830,7 +1831,8 @@ proved once, measured against C written the same way.
   kernels the same: what of the value rows its reading meets; after step 115 about 0.03 s more (1.90 to 1.94 s and 1.97 to 2.00 s, in
   two timings); after step 118 0.05 to 0.10 s more (2.00 to 2.05 s and 1.95 to 2.05 s, in two timings: the bounds of its value rows);
   after step 121 0.04 to 0.05 s more (1.94 to 1.98 s and 1.85 to 1.90 s, in two timings); after steps 125 to 127, in one timing whose
-  rounds spread wide, `HWP_kernel` 3.20 to 3.31 s, `HWP_own` 2.22 to 2.27, `HWP_irqnow` 1.95 to 1.98: to be timed again.  Accepted when its reifier step measures as
+  rounds spread wide, `HWP_kernel` 3.20 to 3.31 s, `HWP_own` 2.22 to 2.27, `HWP_irqnow` 1.95 to 1.98; timed again, 3.17 to 3.11, 2.17 to
+  2.24, 1.94 to 1.95: the same.  Accepted when its reifier step measures as
   step 113's.
 - ~~*The gate's examples and corpus side by side*~~ (found at step 114) — **done, step 115**: `make.sh` once, `corpus.sh` told so (`KQ_MADE=1`). `corpus.sh` begins with `make.sh`, which compiles every proof
   again and rewrites the `.vo` files the examples are reading, so the two cannot run together as they are (step 114's first try).  The
@@ -6460,6 +6462,12 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   each within the list; `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups (a match on a value row's call used modulo
   a word, a block of members of other parameters, a block of different types), then the other categories of §3.5.
 
+**Step 128, a match on a value row's call whose function has no bound, a counter it takes apart used modulo a word (§3.5, §12.A; the gap `A_zx_cvm_match`, found at step 125) — the design (2026-11-14).**  `match qp n a with Some c => if Nat.eqb (Nat.land c 255) O then a else b | None => b end`, `qp` doubling, so no bound: step 118's match on a value row's call asks the function's bound for the counters it takes apart.
+- *The reading* (`nc_sub`, `nc_any`, `nc_vrow` at the empty chain): where the function has no bound, the match on its row's call taken apart with its counters of no known multiple, read where every use of each (`nc_ulow`, step 104's check) is one where its value modulo a word is enough; a field holding counters is not taken so.
+- *The proofs*: as step 125's (`nc_step2`); nothing new.
+- *The C*: a program read before, byte-identical.
+- *Cells*: 3 (`A_zx_cvn_*`): a pair matched under `land`, a record under `even`, an `option` under `testbit`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6649,7 +6657,8 @@ Pushed to the public repository up to `af9345f` (2026-11-14); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: steps 125, 126, 127 (counters in values, modulo a word and in a value in a value: the construct table 4108 of 4249, 76 by design, 64 gaps), one chain for the three; the gate; §12.F, §13.2 |
+| (this commit) | §12.V: step 128's design -- a match on a value row's call whose function has no bound, a counter it takes apart used modulo a word |
+| `fa37afc` | §12.V: steps 125, 126, 127 (counters in values, modulo a word and in a value in a value: the construct table 4108 of 4249, 76 by design, 64 gaps), one chain for the three; the gate; §12.F, §13.2 |
 | `af9345f` | `proved/KQRReify.v` + matrix step 127: a projection of a value a match took out of a value row's call, used as a counter: a match put around the branch; 3 cells |
 | `9ee9740` | §12.V: step 127's design -- a projection of a value a match took out of a value row's call, used as a counter: a match put around the branch |
 | `4db8896` | `proved/KQRReify.v` + matrix step 126: a counter in a value in a value given back, used as a counter: a field holding counters taken apart to any depth; 4 cells |
