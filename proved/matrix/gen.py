@@ -3815,6 +3815,15 @@ addA('zx_cvn_record_even', "", 'match qt n a with mkqrb c v => if Nat.even c the
      'Record qrb := mkqrb { qbc : nat; qbv : int }.\nFixpoint qt (k : nat) (i : int) : qrb := match k with O => mkqrb (S O) i | S m => match qt m (i + 1) with mkqrb c v => mkqrb (Nat.add c c) v end end.\n')
 addA('zx_cvn_opt_testbit', "", 'match qu n a with Some c => if Nat.testbit c 2 then a else b | None => b end',
      'Fixpoint qu (k : nat) (i : int) : option nat := match k with O => Some (S O) | S m => if i <? 0 then None else match qu m (i + 1) with Some c => Some (Nat.add c c) | None => None end end.\n')
+# a mutual block's counter used as a counter, its members' parameters not alike (step 129)
+addA('zx_bca_extra_nat', "", 'if Nat.leb (eb8 n 7) 3 then a else b',
+     'Fixpoint eb8 (m : nat) (j : nat) : nat := match m with O => O | S q => S (ob8 q) end with ob8 (m : nat) : nat := match m with O => 1%nat | S q => eb8 q 7 end.\n')
+addA('zx_bca_three', "", 'if Nat.leb (ec8 n) 3 then a else b',
+     'Fixpoint ec8 (m : nat) : nat := match m with O => O | S q => S (fc8 q 1) end with fc8 (m : nat) (x : int) : nat := match m with O => 1%nat | S q => gc8 q x 2 end with gc8 (m : nat) (x y : int) : nat := match m with O => 2%nat | S q => S (ec8 q) end.\n')
+addA('zx_bca_budget', "", 'ff (ed8 n a) b',
+     'Fixpoint ed8 (m : nat) (x : int) : nat := match m with O => O | S q => S (od8 q) end with od8 (m : nat) : nat := match m with O => 1%nat | S q => ed8 q 1 end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zx_bca_uses_param', "", 'if Nat.leb (ee8 n 5) 3 then a else b',
+     'Fixpoint ee8 (m : nat) (j : nat) : nat := match m with O => j | S q => oe8 q end with oe8 (m : nat) : nat := match m with O => O | S q => ee8 q 5 end.\n')
 # a local fixpoint giving back a counter (step 113)
 addA('zx_lfc_direct', "", 'Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => O | S q => S (S (cn q)) end) n)',
      '')
