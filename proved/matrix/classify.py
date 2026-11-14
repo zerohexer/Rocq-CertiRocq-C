@@ -203,7 +203,7 @@ BY_NAME = {
   "A_zx_cv_rec_rec": "a record in a record given back by a recursion, of numbers or of counters: not read (a record in a record given as a parameter is) (12.A)",
   "A_zx_cvc_opt_pair": "a counter in a value in a value given back, used as a counter: a match on the value's call takes its counters one level deep (12.A)",
   "A_zx_bc_arities": "a mutual block's counter used as a counter, its members' parameters not alike: one bound for them all wants the same parameters (12.A)",
-  "A_zx_crp_modulo": "a counter given back by a function whose parameter is a value holding a counter, used where its value modulo a word is enough: step 104's reading has no environment to make the argument numbers (12.A)",
+  "A_zx_crm_value": "a counter given back in a value, used where its value modulo a word is enough: step 104's reading is of rows giving back a counter, not of value rows (12.A)",
   "A_zh_row_shiftr": "a function giving back a counter built by shiftr: not the same modulo a word, it wants the row's bound (step 83)",
   "A_zh_row_testbit_own": "a test on what a function giving back a counter gives back, in its own recursion: it wants the row's bound or the test on the machine's number",
   "A_zf_r_three": "three constructors or more holding a memory, through a recursion: a sum in a sum",

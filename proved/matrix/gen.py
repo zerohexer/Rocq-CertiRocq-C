@@ -3772,6 +3772,17 @@ addA('zx_crp_budget', "", 'ff (qf n (O, a)) b',
      'Fixpoint qf (k : nat) (st : nat * int) : nat := match k with O => fst st | S m => qf m (S (fst st), snd st) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
 addA('zx_crp_modulo', "", 'if Nat.eqb (Nat.land (qk n (S O, a)) 255) O then a else b',
      'Fixpoint qk (k : nat) (st : nat * int) : nat := match k with O => fst st | S m => qk m (Nat.add (fst st) (fst st), snd st) end.\n')
+# such a counter used where its value modulo a word is enough (step 124)
+addA('zx_crm_testbit', "", 'if Nat.testbit (qk n (S O, a)) 3 then a else b',
+     'Fixpoint qk (k : nat) (st : nat * int) : nat := match k with O => fst st | S m => qk m (Nat.add (fst st) (fst st), snd st) end.\n')
+addA('zx_crm_even', "", 'if Nat.even (qk n (S O, a)) then a else b',
+     'Fixpoint qk (k : nat) (st : nat * int) : nat := match k with O => fst st | S m => qk m (Nat.add (fst st) (fst st), snd st) end.\n')
+addA('zx_crm_mod', "", 'Uint63.of_nat (Nat.modulo (qk n (S O, a)) 16)',
+     'Fixpoint qk (k : nat) (st : nat * int) : nat := match k with O => fst st | S m => qk m (Nat.add (fst st) (fst st), snd st) end.\n')
+addA('zx_crm_option', "", 'if Nat.eqb (Nat.land (ql n None) 255) O then a else b',
+     'Fixpoint ql (k : nat) (o : option nat) : nat := match k with O => match o with Some c => c | None => 1%nat end | S m => ql m (match o with Some c => Some (Nat.add c c) | None => Some 1%nat end) end.\n')
+addA('zx_crm_value', "", 'if Nat.eqb (Nat.land (fst (qm n (S O, a))) 255) O then a else b',
+     'Fixpoint qm (k : nat) (st : nat * int) : nat * int := match k with O => st | S m => qm m (Nat.add (fst st) (fst st), snd st) end.\n')
 # a local fixpoint giving back a counter (step 113)
 addA('zx_lfc_direct', "", 'Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => O | S q => S (S (cn q)) end) n)',
      '')

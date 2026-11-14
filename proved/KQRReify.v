@@ -12132,11 +12132,11 @@ Fixpoint nc_ulow (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rpro
       end
   end.
 (** such an operand as the machine's number: its rows, bounded or not, and its operations the machine's *)
-Fixpoint nc_trw (fuel : nat) (rows : list rprow) (nv : list (nat * (nat * Z))) (sub : term -> term) (t : term) {struct fuel} : term :=
+Fixpoint nc_trw (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (nv : list (nat * (nat * Z))) (sub : term -> term) (t : term) {struct fuel} : term :=
   match fuel with
   | O => nr_ofn (sub t)
   | S fuel =>
-      let go := nc_trw fuel rows nv sub in
+      let go := nc_trw fuel Σ mp rows nv sub in
       if cnt_lit t then nr_ofn t else
       match t with
       | tRel r => if existsb (fun e => Nat.eqb (fst e) r) nv then t else nr_ofn (sub t)
@@ -12155,7 +12155,7 @@ Fixpoint nc_trw (fuel : nat) (rows : list rprow) (nv : list (nat * (nat * Z))) (
                    | Some r =>
                        let accs := match r with (_, _, sl, _, _) => rp_gds sl end in
                        tApp (tConst (rp_name r) [])
-                            (map (fun ja : nat * term => if existsb (Nat.eqb (fst ja)) accs then nr_ofn (sub (snd ja)) else sub (snd ja)) (combine (seq 0 (length args)) args))
+                            (map (fun ja : nat * term => if existsb (Nat.eqb (fst ja)) accs then nr_acu Σ mp rows (nth (fst ja) (nr_ptys Σ mp k) (tRel 0)) (sub (snd ja)) else sub (snd ja)) (combine (seq 0 (length args)) args))
                    | None => nr_ofn (sub t)
                    end
                end
@@ -12248,7 +12248,7 @@ Fixpoint nc_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
             match nc_lowp Σ mp rows tab nv k args with
             | Some p =>
                 tApp (tConst k u) (map (fun ja : nat * term =>
-                                          if Nat.eqb (fst ja) p then tApp (tConst kn_zton []) [tApp (tConst kn_nc_u2z []) [nc_trw 1000 rows nv go (snd ja)]]
+                                          if Nat.eqb (fst ja) p then tApp (tConst kn_zton []) [tApp (tConst kn_nc_u2z []) [nc_trw 1000 Σ mp rows nv go (snd ja)]]
                                           else go (snd ja)) (combine (seq 0 (length args)) args))
             | None => tApp (go (tConst k u)) (map go args)
             end
@@ -12262,7 +12262,7 @@ Fixpoint nc_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
                      (nc_sub fuel Σ mp rows tab ((0%nat, nc_cd 1000 Σ mp rows tab nv v1) :: nc_shift 1 nv) b)
             (* (step 104) a let of such a counter with no bound, every use of it where its value modulo a word is enough: the row's number *)
             else if if is_nat a then nc_low rows tab nv v && nc_ulow 1000 Σ mp rows tab ((0%nat, (1000%nat, 0%Z)) :: nc_shift 1 nv) 0 b else false then
-              tLetIn na (nc_trw 1000 rows nv go v) (tConst kn_int []) (nc_sub fuel Σ mp rows tab ((0%nat, (1000%nat, 0%Z)) :: nc_shift 1 nv) b)
+              tLetIn na (nc_trw 1000 Σ mp rows nv go v) (tConst kn_int []) (nc_sub fuel Σ mp rows tab ((0%nat, (1000%nat, 0%Z)) :: nc_shift 1 nv) b)
             else tLetIn na (go v) a (under 1 b)
         | tCase ci p c brs =>
             let dflt := tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := under (length (bcontext br)) (bbody br) |}) brs) in
