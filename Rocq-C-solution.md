@@ -1737,8 +1737,9 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   (`A_zx_cv_record`)~~ — **done, step 116**: its type at numbers made, a type of its own.  ~~A value's counter used as a counter
   (`A_zx_cv_as_counter`, `A_fx_nat_pair`)~~ — **done, step 118**: step 83's bound of every counter a value gives back.  ~~A value holding
   counters given to a recursion as a parameter (`A_zx_cv_acc`, found at step 115)~~ — **done, step 121**: the row takes it at numbers,
-  each of its calls paired with the function's.  Left: a counter
-  in a value in a value used as a counter (`A_zx_cvc_opt_pair`, found at step 118: a match takes the counters one level deep), a library's (`A_q_divmod`, `A_q_ascii_code`: rows are of
+  each of its calls paired with the function's.  Left: ~~a counter
+  in a value in a value used as a counter (`A_zx_cvc_opt_pair`, found at step 118: a match takes the counters one level deep)~~ — **done,
+  step 126**: a field holding counters a value at most the call's, taken apart to any depth; a library's (`A_q_divmod`, `A_q_ascii_code`: rows are of
   the program's functions).  Accepted when those are proved.
 - ~~*A counter given back by a function taking an accumulator, used as a counter*~~ (found at step 121) — **done, step 122**: where
   today's reading finds no bound, a parameter holding counters at most its largest counter.  `Nat.leb (fst (qa9 n (O, a))) 3`
@@ -1756,6 +1757,9 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   projections around a value row's call read at the row's number.  `Nat.land (fst (qm n (S O, a))) 255`
   with `qm` giving back a pair whose counter doubles (`A_zx_crm_value`): step 104's reading is of rows giving back a counter, not of value
   rows.  Accepted when it is proved.
+- *A projection of a value a match took out of a value row's call, used as a counter* (found at step 126): `match pq3 n a with Some p => ..
+  Nat.leb (fst p) 3 ..` (`A_zx_cvo_proj`): the match keeps the value's bound, not its type, so its projection is not read at numbers.
+  Accepted when it is proved.
 - *A match on such a value's call, a counter it takes apart used modulo a word* (found at step 125): `match qp n a with Some c => .. Nat.land c 255 ..`
   with `qp` doubling (`A_zx_cvm_match`): the match's reading (step 118) asks the function's bound.  Accepted when it is proved.
 - ~~*A record in a record given back by a recursion*~~ (found at step 116) — **done, step 117**: the cause a record of one field, taken for
@@ -6427,6 +6431,13 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Left, with a cell*: a match on such a value's call, a counter it takes apart used modulo a word (`A_zx_cvm_match`): the match's reading (step 118) asks the function's bound; §12.A.
 - *Cells*: 4 (`A_zx_cvm_*`): a value row with no accumulator under `land` and `testbit`, a record's counter under `even`; a match on an `option`.
 
+**Step 126, a counter in a value in a value given back, used as a counter (§3.5, §12.A; the gap `A_zx_cvc_opt_pair`, found at step 118) — the design (2026-11-14).**  `match pq n a with Some (c, j) => if Nat.leb c 3 then j else b | None => b end`, `pq` giving back `option (nat * int)`: step 118's match on a value row's call takes its counter fields apart, and refused a field holding counters, the pair under `Some`, so the match on it was not read.
+- *The reading* (`nc_sub`, `nc_any`): a field holding counters a value whose counters are at most the call's (its entry marked: its multiple plus 2000, which no counter's check takes); a match on such a value at numbers, its counter fields at most that, its fields holding counters marked again, to any depth.
+- *The proofs*: as step 118's; nothing new.
+- *The C*: a program read before, byte-identical.
+- *Left, with a cell*: a projection of such a value used as a counter (`A_zx_cvo_proj`): the match keeps the value's bound, not its type; §12.A.
+- *Cells*: 4 (`A_zx_cvo_*`): a pair in a pair, a record in an `option`, an `option` in a pair in an `option`; a projection of the pair under `Some`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6613,7 +6624,8 @@ Pushed to the public repository up to `fcc1632` (2026-11-14); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 125's design -- a counter given back in a value, used where its value modulo a word is enough: the chain around a value row's call at the row's number |
+| (this commit) | §12.V: step 126's design -- a counter in a value in a value given back, used as a counter: a field holding counters taken apart to any depth |
+| `ab5c8cd` | §12.V: step 125's design -- a counter given back in a value, used where its value modulo a word is enough: the chain around a value row's call at the row's number |
 | `3c8418b` | §12.V: step 124 (such a counter used where its value modulo a word is enough: the construct table 4096 of 4238, 76 by design, 65 gaps), the gate; §12.A |
 | `fcc1632` | `proved/KQRReify.v` + matrix step 124: such a counter used where its value modulo a word is enough: step 104's reading with the environment; 5 cells |
 | `b69ff43` | §12.V: step 124's design -- such a counter used where its value modulo a word is enough: step 104's reading with the environment |
