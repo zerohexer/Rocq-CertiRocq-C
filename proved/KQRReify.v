@@ -11646,15 +11646,18 @@ Fixpoint nb_go (fuel : nat) (Σ : global_env) (mp : modpath) (tab : list (kernam
       | _ => None
       end end
   end.
-Definition nb_of1 (Σ : global_env) (mp : modpath) (tab : list (kername * nbf)) (blk : list nat) (vs co : bool) (d0 : def term) : option nbf :=
+Definition nb_of1 (Σ : global_env) (mp : modpath) (tab : list (kername * nbf)) (blk : list nat) (vs co : bool) (cop : list nat) (d0 : def term) : option nbf :=
   let '(tys, body) := lams (dbody d0) in
   let n := length tys in
   let p := rarg d0 in
   (* (step 122) [vs]: a parameter holding counters (an accumulator) a counter too, at most its largest counter *)
   let isc := fun T => if is_nat T then true else if vs then vt_has 50 Σ T else false in
   (* (step 129) [co]: the counter alone a counter, so that the bound is over it alone (a block whose members' parameters are not alike) *)
-  let iscj := fun (j : nat) (T : term) => if co then Nat.eqb j p && is_nat T else isc T in
-  let cnts := map (fun jt : nat * term => iscj (fst jt) (snd jt)) (combine (seq 0 n) tys) in
+  (* (step 131) and [cop]: places that are a counter in every member that has them (a block's accumulators, step 130) *)
+  let iscj := fun (j : nat) (T : term) => if co then (Nat.eqb j p || existsb (Nat.eqb j) cop) && is_nat T else isc T in
+  (* a call of a member with more parameters hands on what is at those places too: the list long enough for them *)
+  let mxc := fold_left Nat.max (map S cop) 0%nat in
+  let cnts := map (fun jt : nat * term => iscj (fst jt) (snd jt)) (combine (seq 0 n) tys) ++ map (fun q => existsb (Nat.eqb q) cop) (seq n (mxc - n)) in
   let env := rev (map (fun jt : nat * term => if iscj (fst jt) (snd jt) then Some (Some (nb1 n (fst jt)), None) else None) (combine (seq 0 n) tys)) in
   match nb_go 1000 Σ mp tab blk n n 0 p cnts env body with
   | Some (b, st) =>
@@ -11669,9 +11672,9 @@ Definition nb_of1 (Σ : global_env) (mp : modpath) (tab : list (kername * nbf)) 
   | None => None
   end.
 Definition nb_of (Σ : global_env) (mp : modpath) (tab : list (kername * nbf)) (blk : list nat) (d0 : def term) : option nbf :=
-  match nb_of1 Σ mp tab blk false false d0 with
+  match nb_of1 Σ mp tab blk false false [] d0 with
   | Some f => Some f
-  | None => if existsb (fun T => if is_nat T then false else vt_has 50 Σ T) (fst (lams (dbody d0))) then nb_of1 Σ mp tab blk true false d0 else None
+  | None => if existsb (fun T => if is_nat T then false else vt_has 50 Σ T) (fst (lams (dbody d0))) then nb_of1 Σ mp tab blk true false [] d0 else None
   end.
 (** the bounds of the functions read as a number, each after what it calls; a bound worth nothing is none *)
 Definition nb_all (Σ : global_env) (mp : modpath) (rows : list rprow) : list (kername * nbf) :=
@@ -11696,13 +11699,18 @@ Definition nb_all (Σ : global_env) (mp : modpath) (rows : list rprow) : list (k
               else if forallb (Nat.eqb (hd 0 rs)) rs then
                 (* (step 129) members of other parameters, their counter at one place: one bound over the counter alone, each member's over
                    its own parameters *)
-                match opt_all (map (fun dj => nb_of1 Σ mp tab rs false true dj) mfix) with
+                (* (step 131) and the places that are a counter in every member that has them, so that a member giving back such a counter
+                   has a bound *)
+                let r0 := hd 0 rs in
+                let mx := fold_left Nat.max ars 0%nat in
+                let cop := filter (fun q => negb (Nat.eqb q r0) && forallb (fun dj => let tys := fst (lams (dbody dj)) in
+                                       if Nat.ltb q (length tys) then is_nat (nth q tys (tRel 0)) else true) mfix) (seq 0 mx) in
+                match opt_all (map (fun dj => nb_of1 Σ mp tab rs false true cop dj) mfix) with
                 | Some fs =>
-                    let r0 := hd 0 rs in
-                    let w := fold_left Nat.max (map (fun f : nbf => nth r0 (fst f) 0%nat) fs) 0%nat in
+                    let wq := fun q => fold_left Nat.max (map (fun f : nbf => nth q (fst f) 0%nat) fs) 0%nat in
                     let c := fold_left Z.max (map (fun f : nbf => snd f) fs) 0%Z in
-                    if Nat.leb w 1000 && (c <? 4611686018427387904)%Z
-                    then tab ++ map (fun j => (mem_kn (fst kn) mfix j, (map (fun q => if Nat.eqb q r0 then w else 0%nat) (seq 0 (nth j ars 0%nat)), c))) (seq 0 (length mfix))
+                    if Nat.leb (fold_left Nat.add (map wq (seq 0 mx)) 0%nat) 1000 && (c <? 4611686018427387904)%Z
+                    then tab ++ map (fun j => (mem_kn (fst kn) mfix j, (map (fun q => if Nat.eqb q r0 then wq q else if existsb (Nat.eqb q) cop then wq q else 0%nat) (seq 0 (nth j ars 0%nat)), c))) (seq 0 (length mfix))
                     else tab
                 | None => tab
                 end

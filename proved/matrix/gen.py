@@ -3829,6 +3829,11 @@ addA('zx_bcp_both', "", 'Uint63.of_nat (ef8 n 3)',
      'Fixpoint ef8 (m : nat) (j : nat) : nat := match m with O => j | S q => S (of8 q (S j)) end with of8 (m : nat) (j : nat) : nat := match m with O => O | S q => ef8 q j end.\n')
 addA('zx_bcp_value', "", 'Uint63.of_nat (eg8 n 2)',
      'Fixpoint eg8 (m : nat) (j : nat) : nat := match m with O => j | S q => og8 q end with og8 (m : nat) : nat := match m with O => 1%nat | S q => eg8 q 4 end.\n')
+# a mutual block's counter used as a counter, a member giving back another counter of its own (step 131)
+addA('zx_bcq_grown', "", 'if Nat.leb (eh8 n 1) 9 then a else b',
+     'Fixpoint eh8 (m : nat) (j : nat) : nat := match m with O => j | S q => oh8 q (S j) end with oh8 (m : nat) (j : nat) : nat := match m with O => O | S q => eh8 q j end.\n')
+addA('zx_bcq_budget', "", 'ff (ei8 n 3) b',
+     'Fixpoint ei8 (m : nat) (j : nat) : nat := match m with O => j | S q => oi8 q end with oi8 (m : nat) : nat := match m with O => 1%nat | S q => ei8 q 2 end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
 # a local fixpoint giving back a counter (step 113)
 addA('zx_lfc_direct', "", 'Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => O | S q => S (S (cn q)) end) n)',
      '')
