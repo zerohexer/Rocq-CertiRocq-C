@@ -3841,6 +3841,13 @@ addA('zx_mix_three', "", 'Uint63.of_nat (ep9 n) + gp9 n a',
      'Fixpoint ep9 (m : nat) : nat := match m with O => O | S q => S (fp9 q) end with fp9 (m : nat) : nat := match m with O => 1%nat | S q => if gp9 q 2 <? 0 then O else ep9 q end with gp9 (m : nat) (x : int) : int := match m with O => x | S q => Uint63.of_nat (fp9 q) * 2 + x end.\n')
 addA('zx_mix_arith', "", 'oq9 n a',
      'Fixpoint eq9 (m : nat) : nat := match m with O => 1%nat | S q => if oq9 q 0 <? 5 then S (eq9 q) else eq9 q end with oq9 (m : nat) (x : int) : int := match m with O => x | S q => x + Uint63.of_nat (eq9 q) * Uint63.of_nat (eq9 q) end.\n')
+# a library's function giving back a value holding counters (step 133)
+addA('q_dm_snd', "", 'Uint63.of_nat (snd (Nat.divmod n 5 0 5))',
+     '')
+addA('q_dm_match', "", 'match Nat.divmod n 7 0 7 with (q, r) => Uint63.of_nat q + Uint63.of_nat r end',
+     '')
+addA('q_dm_in_rec', "", 'dq n a',
+     'Fixpoint dq (k : nat) (x : int) : int := match k with O => x | S m => dq m (x + Uint63.of_nat (fst (Nat.divmod k 2 0 2))) end.\n')
 # a local fixpoint giving back a counter (step 113)
 addA('zx_lfc_direct', "", 'Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => O | S q => S (S (cn q)) end) n)',
      '')

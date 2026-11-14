@@ -124,7 +124,6 @@ BY_NAME = {
   "A_q_cl_fold": "a record of functions or a class's instance given to a recursive function",
   "A_q_nat_ret_len": "a function giving back a counter, a counter as a field",
   "A_q_nat_ret_acc": "a function giving back a counter, a counter as a field",
-  "A_q_divmod": "a function giving back a counter, a counter as a field",
   "A_q_ascii_code": "a function giving back a counter, a counter as a field",
   "A_q_float_lit": "floating point (§12.I)",
   "A_m_e_enum_ret": "a value and a memory given back together by a recursion or a loop, the value not one number",

@@ -10795,9 +10795,41 @@ Fixpoint nr_intb (fuel : nat) (cm : list bool) (mb base : nat) (t : term) {struc
       | _ => Some t
       end
   end.
-Definition nr_rows (Σ : global_env) (mp : modpath) (root : kername) (kns : list kername) : list rprow :=
+(** (step 133) a library's fixpoint giving back a value holding counters, which the program reaches: a value row of it too (not a counter
+    row, so that what the program's arithmetic is read as stays) *)
+Definition nr_libv (Σ : global_env) (mp : modpath) (kn : kername) : bool :=
+  match lookup_env Σ kn with
+  | Some (ConstantDecl cb) =>
+      let T := ret_ty (al_t 1000 Σ mp (cst_type cb)) in
+      if is_nat T then false else
+      match vt_of Σ T, cst_body cb with
+      | Some _, Some b => match vm_norm b with Some _ => true | None => false end
+      | _, _ => false
+      end
+  | _ => false
+  end.
+(** the constants a term names *)
+Fixpoint nr_cs (fuel : nat) (t : term) {struct fuel} : list kername :=
+  match fuel with
+  | O => []
+  | S fuel =>
+      match t with
+      | tConst k _ => [k]
+      | tApp f args => nr_cs fuel f ++ flat_map (nr_cs fuel) args
+      | tLambda _ _ b => nr_cs fuel b
+      | tLetIn _ v _ b => nr_cs fuel v ++ nr_cs fuel b
+      | tCase _ _ c brs => nr_cs fuel c ++ flat_map (fun br => nr_cs fuel (bbody br)) brs
+      | tFix mfix _ => flat_map (fun d => nr_cs fuel (dbody d)) mfix
+      | _ => []
+      end
+  end.
+Definition nr_nodupk (l : list kername) : list kername := fold_left (fun acc k => if existsb (Kername.eqb k) acc then acc else acc ++ [k]) l [].
+Definition nr_rows (Σ : global_env) (mp : modpath) (root : kername) (kns0 : list kername) : list rprow :=
+  (* (step 133) and the library's value functions the reached functions name *)
+  let kns := kns0 ++ nr_nodupk (filter (fun k => if existsb (Kername.eqb k) kns0 then false else nr_libv Σ mp k)
+                                      (flat_map (fun kn => match lookup_env Σ kn with Some (ConstantDecl cb) => match cst_body cb with Some b => nr_cs 100000 b | None => [] end | _ => [] end) kns0)) in
   fold_left (fun rs kn =>
-    if if (if in_prog mp (fst kn) then true else eq_mp (fst kn) copy_mp) then negb (Kername.eqb kn root) else false then
+    if if (if in_prog mp (fst kn) then true else if eq_mp (fst kn) copy_mp then true else nr_libv Σ mp kn) then negb (Kername.eqb kn root) else false then
       match lookup_env Σ kn with
       | Some (ConstantDecl cb) =>
           let ty := al_t 1000 Σ mp (cst_type cb) in
