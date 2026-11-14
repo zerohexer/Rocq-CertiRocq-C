@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **4096 of 4238, 65 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **4108 of 4249, 64 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1829,7 +1829,8 @@ proved once, measured against C written the same way.
 - *`HWP_irqnow`'s reifier step after step 114* (found at step 114): about 0.09 s slower (1.90 to 1.99 s, in four timings), the other
   kernels the same: what of the value rows its reading meets; after step 115 about 0.03 s more (1.90 to 1.94 s and 1.97 to 2.00 s, in
   two timings); after step 118 0.05 to 0.10 s more (2.00 to 2.05 s and 1.95 to 2.05 s, in two timings: the bounds of its value rows);
-  after step 121 0.04 to 0.05 s more (1.94 to 1.98 s and 1.85 to 1.90 s, in two timings).  Accepted when its reifier step measures as
+  after step 121 0.04 to 0.05 s more (1.94 to 1.98 s and 1.85 to 1.90 s, in two timings); after steps 125 to 127, in one timing whose
+  rounds spread wide, `HWP_kernel` 3.20 to 3.31 s, `HWP_own` 2.22 to 2.27, `HWP_irqnow` 1.95 to 1.98: to be timed again.  Accepted when its reifier step measures as
   step 113's.
 - ~~*The gate's examples and corpus side by side*~~ (found at step 114) — **done, step 115**: `make.sh` once, `corpus.sh` told so (`KQ_MADE=1`). `corpus.sh` begins with `make.sh`, which compiles every proof
   again and rewrites the `.vo` files the examples are reading, so the two cannot run together as they are (step 114's first try).  The
@@ -6445,6 +6446,20 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: a program read before, byte-identical.
 - *Cells*: 3 (`A_zx_cvp_*`): a record's projections under `Some`, a record of primitive projections, the first of a pair given back.
 
+**Steps 125, 126, 127 — the results (2026-11-14), one chain for the three (owner, 2026-11-14).**  Built as designed:
+- *Step 125, a counter given back in a value, used where its value modulo a word is enough*: the reader (`KQRReify.v`): `nc_vrow`, `nc_wx` and `nc_low` with the environment, `nc_trw`'s chain around a value row's call; *`KQRWf.v`*: `nc_step2`; *`kitc.py`*: `kq_nc`'s third try.  Checked on the work laptop (the repository at step 124 with its files, the families of values, of values and memories, of records, of counters, of blocks and of the program's parameters, and the new cells: 1728): every verdict step 124's but the cell read.  *Cells*: 4 more (`A_zx_cvm_*`), 3 proved, `A_zx_cvm_match` a gap, §12.A.  One gap read: `A_zx_crm_value`.
+- *Step 126, a counter in a value in a value given back, used as a counter*: the reader: `nc_sub`'s and `nc_any`'s match, a field holding counters a value at most the call's.  Checked so (1732): every verdict step 125's but the cell read.  *Cells*: 4 more (`A_zx_cvo_*`), 3 proved, `A_zx_cvo_proj` a gap, §12.A.  One gap read: `A_zx_cvc_opt_pair`.
+- *Step 127, a projection of a value a match took out of a value row's call, used as a counter*: the reader: `nc_lift`, `nc_lifts`.  Checked so (1735): every verdict step 126's but the cell read.  *Cells*: 3 more (`A_zx_cvp_*`), 3 proved.  One gap read: `A_zx_cvo_proj`.
+- *The reifier's step on the kernels' programs* (on the work laptop, one core, interleaved, three rounds, the fastest, F62, in clean copies of two trees, the repository at step 124 / at step 127): `HWP_kernel` 3.20 / 3.31 s, `HWP_own` 2.22 / 2.27, `HWP_irqnow` 1.95 / 1.98, 0.03 to 0.11 s slower in one timing whose rounds spread wide (3.20 to 3.96 s in the first tree); §12.F's item.
+- *The run*: one chain for the three steps (owner, 2026-11-14), on the last step's code commit, the table 14 cells at a time under 14 GB (it was 8 to 10).
+- The C: the 99 programs byte-identical.  The construct table (on `af9345f`): **4108 of 4249 through the verified compiler**, 76
+  by design, 64 gaps, 1 not Rocq (was 4096 of 4238: 10 of the 11 new cells read, 1 gap; 3 gaps read; no cell lost).  The gate on
+  `af9345f`, the walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding, beside the corpus; the same C:
+  undefined behaviour trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels
+  and `grow` (23 / 22 / 23 / 19 / 19 / 9 s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems
+  each within the list; `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups (a match on a value row's call used modulo
+  a word, a block of members of other parameters, a block of different types), then the other categories of §3.5.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6529,6 +6544,9 @@ this public file; the rules of §13.3 hold wherever the runs go.
 - when the translator or the walk changed: the kernels (`hw/build_proved.sh` for the five, or `hw/check.sh`) and the full
   construct table;
 - for a release: the same with `KQ_MONO=1` (no cache).
+- *since 2026-11-14 (the owner's decision)*: the C check, the gate and the full table run once per three steps, on the last one's code
+  commit, the table 14 cells at a time under 14 GB; each step has its own labs, its wide lab, its design and code commits, and its lines in
+  the batch's record; the push follows the batch's chain.
 
 ### 13.3 Machine rules
 
@@ -6627,11 +6645,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `fcc1632` (2026-11-14); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `af9345f` (2026-11-14); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 127's design -- a projection of a value a match took out of a value row's call, used as a counter: a match put around the branch |
+| (this commit) | §12.V: steps 125, 126, 127 (counters in values, modulo a word and in a value in a value: the construct table 4108 of 4249, 76 by design, 64 gaps), one chain for the three; the gate; §12.F, §13.2 |
+| `af9345f` | `proved/KQRReify.v` + matrix step 127: a projection of a value a match took out of a value row's call, used as a counter: a match put around the branch; 3 cells |
+| `9ee9740` | §12.V: step 127's design -- a projection of a value a match took out of a value row's call, used as a counter: a match put around the branch |
 | `4db8896` | `proved/KQRReify.v` + matrix step 126: a counter in a value in a value given back, used as a counter: a field holding counters taken apart to any depth; 4 cells |
 | `bdc042b` | §12.V: step 126's design -- a counter in a value in a value given back, used as a counter: a field holding counters taken apart to any depth |
 | `ab5c8cd` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + matrix step 125: a counter given back in a value, used where its value modulo a word is enough: the chain around a value row's call at the row's number; 4 cells |
