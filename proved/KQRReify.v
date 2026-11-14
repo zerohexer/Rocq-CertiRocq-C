@@ -12187,6 +12187,32 @@ Fixpoint nc_trw (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
       | _ => nr_ofn (sub t)
       end end
   end.
+(** (step 127) a projection of a value a match took out (a field holding counters): a match on the value put around the branch, so that
+    the projection is that match's field (step 115's form) *)
+Definition nc_lift (Σ : global_env) (Tf : term) (w : nat) (rt : term) (t : term) : term :=
+  if pj_occ 100000 Σ w t then
+    match (match Tf with tApp (tInd iw uw) pw => Some (iw, uw, pw) | tInd iw uw => Some (iw, uw, []) | _ => None end) with
+    | Some (iw, uw, pw) =>
+        match vt_flds Σ iw pw 0 with
+        | Some fs =>
+            let n := length fs in
+            tCase {| ci_ind := iw; ci_npar := length pw; ci_relevance := Relevant |}
+                  {| puinst := uw; pparams := pw; pcontext := [anon_b]; preturn := lift0 1 rt |}
+                  (tRel w) [{| bcontext := repeat anon_b n; bbody := pj_sub 100000 Σ iw n w 0 (lift0 n t) |}]
+        | None => t
+        end
+    | None => t
+    end
+  else t.
+(** the branch's fields holding counters so put first, each that has a projection in the branch *)
+Definition nc_lifts (Σ : global_env) (fs : list (option term)) (kk : nat) (rt : option term) (t : term) : term :=
+  match rt with
+  | Some r => fold_left (fun b j => match nth j fs None with
+                                    | Some Tf => if is_nat Tf then b else nc_lift Σ Tf (kk - 1 - j) (lift0 kk r) b
+                                    | None => b
+                                    end) (seq 0 kk) t
+  | None => t
+  end.
 (** the counter as a number *)
 Fixpoint nc_tr (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (tab : list (kername * nbf)) (nv : list (nat * (nat * Z))) (sub : term -> term) (t : term) {struct fuel} : term :=
   match fuel with
@@ -12292,6 +12318,8 @@ Fixpoint nc_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
         | tCase ci p c brs =>
             let dflt := tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := under (length (bcontext br)) (bbody br) |}) brs) in
             let dp := MPfile (mp_file mp) in
+            (* (step 127) the branches' type, where it does not depend on what is matched *)
+            let rt0 := if noccur_between 0 1 (preturn p) then Some (subst1 (tRel 0) 0 (preturn p)) else None in
             (* (step 126) the branches of a match on a value whose counters are at most [cx]: a counter field at most it, a field holding
                counters a value at most it (its entry marked: its multiple + 2000) *)
             let vbrs := fun cx : nat * Z =>
@@ -12303,7 +12331,7 @@ Fixpoint nc_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
                                                            | Some Tf => [((kk - 1 - j)%nat, if is_nat Tf then cx else ((fst cx + 2000)%nat, snd cx))]
                                                            | None => []
                                                            end) (seq 0 kk) ++ nc_shift kk nv in
-                             Some {| bcontext := bcontext (snd kb); bbody := nc_sub fuel Σ mp rows tab nv2 (bbody (snd kb)) |}
+                             Some {| bcontext := bcontext (snd kb); bbody := nc_sub fuel Σ mp rows tab nv2 (nc_lifts Σ fs kk rt0 (bbody (snd kb))) |}
                          | None => None
                          end) (combine (seq 0 (length brs)) brs)) in
             let pv := {| pparams := vt_int Σ dp (pparams p); puinst := puinst p; pcontext := pcontext p; preturn := preturn p |} in
@@ -12371,7 +12399,8 @@ Fixpoint nc_any (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
                       nc_any fuel Σ mp rows tab (flat_map (fun j => match nth j fs None with
                                                                   | Some Tf => [((kk - 1 - j)%nat, if is_nat Tf then cx else ((fst cx + 2000)%nat, snd cx))]
                                                                   | None => []
-                                                                  end) (seq 0 kk) ++ nc_shift kk nv) lo (bbody (snd kb))
+                                                                  end) (seq 0 kk) ++ nc_shift kk nv) lo
+                             (nc_lifts Σ fs kk (if noccur_between 0 1 (preturn p) then Some (subst1 (tRel 0) 0 (preturn p)) else None) (bbody (snd kb)))
                   | None => false
                   end) (combine (seq 0 (length brs)) brs) in
             let plain := fun _ : unit => if go c then true else existsb (fun br => under (length (bcontext br)) (bbody br)) brs in

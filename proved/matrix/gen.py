@@ -3801,6 +3801,13 @@ addA('zx_cvo_deep', "", 'match pz n a with Some (Some c, j) => if Nat.leb c 3 th
      'Fixpoint pz (k : nat) (i : int) : option (option nat * int) := match k with O => if i <? 0 then None else Some (Some O, i) | S m => match pz m (i + 1) with Some (Some c, j) => Some (Some (S c), j) | Some (None, j) => Some (None, j) | None => None end end.\n')
 addA('zx_cvo_proj', "", 'match pq3 n a with Some p => if Nat.leb (fst p) 3 then snd p else b | None => b end',
      'Fixpoint pq3 (k : nat) (i : int) : option (nat * int) := match k with O => if i <? 0 then None else Some (O, i) | S m => match pq3 m (i + 1) with Some (c, j) => Some (S c, j) | None => None end end.\n')
+# a projection of a value a match took out of a value row's call, used as a counter (step 127)
+addA('zx_cvp_record', "", 'match po9 n a with Some r => if Nat.leb (q9c r) 3 then q9v r else b | None => b end',
+     'Record qr9 := mkqr9 { q9c : nat; q9v : int }.\nFixpoint po9 (k : nat) (i : int) : option qr9 := match k with O => if i <? 0 then None else Some (mkqr9 O i) | S m => match po9 m (i + 1) with Some (mkqr9 c v) => Some (mkqr9 (S c) v) | None => None end end.\n')
+addA('zx_cvp_prim', "", 'match pa9 n a with Some r => if Nat.leb (qac r) 3 then qav r else b | None => b end',
+     'Set Primitive Projections.\nRecord qra := mkqra { qac : nat; qav : int }.\nUnset Primitive Projections.\nFixpoint pa9 (k : nat) (i : int) : option qra := match k with O => if i <? 0 then None else Some (mkqra O i) | S m => match pa9 m (i + 1) with Some r => Some (mkqra (S (qac r)) (qav r)) | None => None end end.\n')
+addA('zx_cvp_pair_first', "", 'match pp3 n a with (p, j) => if Nat.leb (fst p) 3 then j else b end',
+     'Fixpoint pp3 (k : nat) (i : int) : (nat * int) * int := match k with O => ((O, i), i) | S m => match pp3 m (i + 1) with ((c, x), j) => ((S c, x), j) end end.\n')
 # a local fixpoint giving back a counter (step 113)
 addA('zx_lfc_direct', "", 'Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => O | S q => S (S (cn q)) end) n)',
      '')
