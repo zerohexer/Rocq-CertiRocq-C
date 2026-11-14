@@ -6366,6 +6366,15 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   parameter is a value holding a counter, a counter in a value in a value used as a counter, a block of members of other
   parameters), then the other categories of §3.5.
 
+**Step 123, a function giving back a counter whose parameter is a value holding a counter (§3.5, §12.A; the gap `A_zx_cac_ctr_param`, found at step 122) — the design (2026-11-14).**  `Fixpoint qd (k : nat) (st : nat * int) : nat := .. S (qd m (S (fst st), snd st)) ..`: step 82's row takes the parameter as it is, a counter held in a pair, and step 121's accumulators are of value rows.
+- *The row* (`nr_rows`, `nr_trv`): a counter row's parameters holding counters, not counters themselves, taken at numbers as a value row's accumulators, the row named `<f>__kc<rarg>_<arity>`; where the body is not read so, step 82's row, as before.  `nr_trv` reads a counter given back: its own calls (their accumulators' arguments at numbers), `S`, `+` and `*`, matches and lets, and the rest as step 82's `nr_trm` reads it.
+- *The statement* (`nr_stmt`, `nr_acv`): `F k (cv st) = of_nat (f k st)`, the accumulators made numbers on the left, a counter's by `of_nat` as before.
+- *The calls of such a row* (`nr_acu`, in `nr_subv` and `nc_tr`): the arguments at its accumulators at numbers, a value's read as a row's body reads it.  *The made types* (`vt_mades`): of a counter row's accumulators' types too.
+- *The proofs* (`kitc.py`, `KQRWf.v`): a counter row's, by its hypothesis rewritten backwards as before; where the counter is used as a counter, the row's lemma rewritten forwards by step 121's pairing of calls (`<name>_kva<j>`), since the use's argument is at numbers already.  A bound over a value parameter (step 122's) of a counter given back: a second try of `nb_step` with what is posed tidied and the goal's projections of constructors reduced; the bound posed where the counter is used, the same (`nc_side`).  Each a second try, so that every proof found before stays as it was.
+- *The C*: a program read before, byte-identical.
+- *Left, with a cell*: such a counter used where its value modulo a word is enough (`A_zx_crp_modulo`): step 104's reading (`nc_trw`) has no environment to make the argument numbers; §12.A.
+- *Cells*: 8 (`A_zx_crp_*`): the counter given back made of the value's, an `option`, a record, the call in an operand, beside a counter accumulator, used as a counter, as a recursion's budget, modulo a word.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6552,7 +6561,8 @@ Pushed to the public repository up to `5c965ae` (2026-11-14); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 122 (a counter given back by a function taking an accumulator, used as a counter: the construct table 4083 of 4225, 76 by design, 65 gaps), the gate; §12.A |
+| (this commit) | §12.V: step 123's design -- a function giving back a counter whose parameter is a value holding a counter: counter rows taking accumulators at numbers |
+| `a64aeaa` | §12.V: step 122 (a counter given back by a function taking an accumulator, used as a counter: the construct table 4083 of 4225, 76 by design, 65 gaps), the gate; §12.A |
 | `5c965ae` | `proved/KQRReify.v` + `KQRWf.v` + matrix step 122: a counter given back by a function taking an accumulator, used as a counter: the bound over its largest counter; 8 cells |
 | `32cd4ef` | §12.V: step 122's design -- a counter given back by a function taking an accumulator, used as a counter: the bound over its largest counter |
 | `5d86b84` | §12.V: step 121 (a value holding counters given to a recursion as a parameter: the construct table 4075 of 4217, 76 by design, 65 gaps), the gate; §12.A |
