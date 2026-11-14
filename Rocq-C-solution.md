@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **4054 of 4196, 65 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **4075 of 4217, 65 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1735,10 +1735,14 @@ the gate (examples, corpus, kernels if the walk changed) passes.
 - *A counter in a value, left at step 114*: ~~a value in a value (`A_zx_cv_nested`)~~ — **done, step 115**: the value rows' types
   holding counters at any depth, projections and lets of such values read.  ~~A record of the program's with a counter field
   (`A_zx_cv_record`)~~ — **done, step 116**: its type at numbers made, a type of its own.  ~~A value's counter used as a counter
-  (`A_zx_cv_as_counter`, `A_fx_nat_pair`)~~ — **done, step 118**: step 83's bound of every counter a value gives back.  Left: a counter
+  (`A_zx_cv_as_counter`, `A_fx_nat_pair`)~~ — **done, step 118**: step 83's bound of every counter a value gives back.  ~~A value holding
+  counters given to a recursion as a parameter (`A_zx_cv_acc`, found at step 115)~~ — **done, step 121**: the row takes it at numbers,
+  each of its calls paired with the function's.  Left: a counter
   in a value in a value used as a counter (`A_zx_cvc_opt_pair`, found at step 118: a match takes the counters one level deep), a library's (`A_q_divmod`, `A_q_ascii_code`: rows are of
-  the program's functions), a value holding counters given to a recursion as a parameter (`A_zx_cv_acc`, found at step 115: its row
-  would take it at numbers, a statement of another form).  Accepted when those are proved.
+  the program's functions).  Accepted when those are proved.
+- *A counter given back by a function taking an accumulator, used as a counter* (found at step 121): `Nat.leb (fst (qa9 n (O, a))) 3`
+  with `qa9 k st` counting up from `st`: step 118's bound of a value's counters is over the function's counter parameters, and
+  `fst (qa9 k st)` is at most `k + fst st`, the accumulator's counter in it (`A_zx_ca_as_counter`).  Accepted when it is proved.
 - ~~*A record in a record given back by a recursion*~~ (found at step 116) — **done, step 117**: the cause a record of one field, taken for
   a number by its width wherever step 32 reads a record holding records; a record field is told by its type now. `Fixpoint pj (k : nat) (i : int) : rj := .. mkrj (mkri ..) ..`
   with `Record rj := { rji : ri; .. }`, of numbers as of counters (`A_zx_rr_let`, `A_zx_rr_match`, `A_zx_cv_rec_rec`): not read, while a
@@ -1804,8 +1808,9 @@ proved once, measured against C written the same way.
   time limit, and a cell whose proof does not end is a gap with that reason.
 - *`HWP_irqnow`'s reifier step after step 114* (found at step 114): about 0.09 s slower (1.90 to 1.99 s, in four timings), the other
   kernels the same: what of the value rows its reading meets; after step 115 about 0.03 s more (1.90 to 1.94 s and 1.97 to 2.00 s, in
-  two timings); after step 118 0.05 to 0.10 s more (2.00 to 2.05 s and 1.95 to 2.05 s, in two timings: the bounds of its value rows).
-  Accepted when its reifier step measures as step 113's.
+  two timings); after step 118 0.05 to 0.10 s more (2.00 to 2.05 s and 1.95 to 2.05 s, in two timings: the bounds of its value rows);
+  after step 121 0.04 to 0.05 s more (1.94 to 1.98 s and 1.85 to 1.90 s, in two timings).  Accepted when its reifier step measures as
+  step 113's.
 - ~~*The gate's examples and corpus side by side*~~ (found at step 114) — **done, step 115**: `make.sh` once, `corpus.sh` told so (`KQ_MADE=1`). `corpus.sh` begins with `make.sh`, which compiles every proof
   again and rewrites the `.vo` files the examples are reading, so the two cannot run together as they are (step 114's first try).  The
   rebuild once, before both, and the corpus told it is done.  Accepted when a chain's gate runs the two together, its kernels' times
@@ -6317,6 +6322,21 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Left, with a cell*: a counter given back by a function taking an accumulator, used as a counter (`A_zx_ca_as_counter`): step 118's bound is over the counter parameters, and here the accumulator's counter is in it; §12.A.
 - *Cells*: 21 (`A_zx_ca_*`): a call matched on, the accumulator matched on, an `option`, a record of the program's, a record of primitive projections, the counter not first, two accumulators, another type given back, a helper with an accumulator, a `let` as the argument, used in a recursion, used as a counter, a `nat` accumulator beside it, the accumulator handed on unchanged, a pair in a pair; a parameter taken apart before the counter's match, of numbers, of a pair given back, with a counter, of a function giving back a counter (before it and inside it), an `option` accumulator taken apart first.
 
+**Step 121, a value holding counters given to a recursion as a parameter — the result (2026-11-14).**  Built as designed:
+- *The reader* (`KQRReify.v`): `nr_rows`' accumulators and its fallback to step 114's row, `nr_trv` with them (its own calls, matched on or not, a call of another such row, a projection's match where it is), `y_fix68` for a value row's body and a counter row's, `nv_stmt` with them, `nv_cargs` in `nr_subv`, `nc_sub`, `nc_tr`, `vt_mades`.  *`KQRWf.v`*: `nv_acceq`, `nv_stepb`.  *`kitc.py`*: the `__kva` rows, each one's pairing of calls (`<name>_kva<j>`), in its proof and in the uses' rewriting.
+- *Found while building* (on the work laptop): the reifier reads a recursion over a counter whose body begins with the counter's match or comes to it by step 68's form; a match on the accumulator lifted around the whole body put it first (`nr_trv`), and the rows were made from the body as written (`y_fix68`); a call of the row matched on had its arguments read without the accumulators; a use's argument made numbers kept the source's constructor of a record of primitive projections (`nv_cargs` reads it as a row's body does); `cbn` with a list of constants leaves a primitive projection of a constructor (`nv_acceq`).
+- *Checked on the work laptop* (the repository at step 120 with this step's files, the families of values, of values and memories, of records, of counters, of blocks and of the program's parameters, and the new cells: 1703): every verdict step 120's but the cell read.
+- *The reifier's step on the kernels' programs* (on the work laptop, one core, interleaved, three rounds, the fastest, F62, in clean copies of two trees, the repository with step 120's reader / with this one; two such timings): `HWP_kernel` 3.16 / 3.18 s and 3.08 / 3.12, `HWP_own` 2.28 / 2.25 and 2.15 / 2.17, the same; `HWP_irqnow` 1.94 / 1.98 and 1.85 / 1.90, 0.04 to 0.05 s slower; §12.F's item.
+- *Cells*: 21 more (`A_zx_ca_*`), 20 proved, `A_zx_ca_as_counter` a gap, §12.A.  One gap read: `A_zx_cv_acc`.
+- The C: the 99 programs byte-identical.  The construct table (on `46a8e25`): **4075 of 4217 through the verified compiler**, 76
+  by design, 65 gaps, 1 not Rocq (was 4054 of 4196: 20 of the 21 new cells read, 1 gap; 1 gap read; no cell lost).  The gate on
+  `46a8e25`, the walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding, beside the corpus; the same C:
+  undefined behaviour trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels
+  and `grow` (27 / 24 / 26 / 20 / 20 / 9 s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems
+  each within the list; `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups (a counter given back by a function taking
+  an accumulator used as a counter, a counter in a value in a value used as a counter, a block of members of other parameters),
+  then the other categories of §3.5.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6499,11 +6519,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `73b4041` (2026-11-14); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `46a8e25` (2026-11-14); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 121's design -- a value holding counters given to a recursion as a parameter: value rows taking accumulators at numbers |
+| (this commit) | §12.V: step 121 (a value holding counters given to a recursion as a parameter: the construct table 4075 of 4217, 76 by design, 65 gaps), the gate; §12.A |
+| `46a8e25` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + matrix step 121: a value holding counters given to a recursion as a parameter: value rows taking accumulators at numbers, each call paired with the function's; 21 cells |
+| `67506ea` | §12.V: step 121's design -- a value holding counters given to a recursion as a parameter: value rows taking accumulators at numbers |
 | `b21d29b` | §12.V: step 120 (a mutual block's counter used as a counter: the construct table 4054 of 4196, 76 by design, 65 gaps), the gate; §12.A |
 | `73b4041` | `proved/KQRReify.v` + `kitc.py` + matrix step 120: a mutual block's counter used as a counter: one bound for the block's members, proved by one mutual fixpoint; 8 cells |
 | `2553413` | §12.V: step 120's design -- a mutual block's counter used as a counter: one bound for the block's members |
