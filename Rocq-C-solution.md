@@ -1783,7 +1783,8 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   step 131**: the bound counts the block's accumulators' places too:
   `Fixpoint ee8 (m : nat) (j : nat) : nat := match m with O => j | ..` used as `Nat.leb (ee8 n 5) 3` (`A_zx_bca_uses_param`): step 129's
   bound is over the counter alone.  Accepted when it is proved.
-- *A block of different types one of whose members gives back a counter* (found at step 111): step 62 reads such a block by writing
+- ~~*A block of different types one of whose members gives back a counter*~~ (found at step 111) — **done, step 132**: a block of rows over
+  members giving back counters or numbers: step 62 reads such a block by writing
   the others into the one they call, and step 111's rows are of blocks whose members all give back counters.  Accepted when
   `A_zx_mixed` is proved.
 - ~~*A counter a function gives back, used as a counter inside a bit operation*~~ (found at step 101) — **done, step 102**: the cause was
@@ -6514,6 +6515,14 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: a program read before, byte-identical.
 - *Cells*: 2 (`A_zx_bcq_*`): the other counter grown through the block and given back, as a recursion's budget.
 
+**Step 132, a block of different types one of whose members gives back a counter (§3.5, §12.A; the gap `A_zx_mixed`, found at step 111) — the design (2026-11-15).**  `Fixpoint em (m : nat) : nat .. om q 1 .. with om (m : nat) (x : int) : int .. Uint63.of_nat (em q) + x ..`: step 62 reads a block of different types where one member is the only one called and calls none of the others back, and step 111's block rows need every member to give back a counter.
+- *The rows* (`nr_rows`' block branch, `nr_intb`): a block whose members give back counters or numbers, at least one a counter: a counter member's row as step 111's, its calls of a member giving back a number kept (that member's row gives back the same number); a member giving back a number is its body, each counter member's call made a number (`of_nat` of it) the row's call, a counter member's call anywhere else none.  The block is reached from either kind of member (a use may call only the one giving back a number).  Such a member's row marked in its slots (1990).
+- *The statements* (`nr_stmt`, `nr_at`): a member giving back a number, the function itself on the right, no `of_nat`.  *The uses* (`nr_subv`): a call of such a member, its row's call.
+- *A block's bound* (`nb_all`): none where a member gives back a number.
+- *The proofs*: as step 111's (the hypotheses rewritten backwards, from the function to the row, for both kinds); nothing new.
+- *The C*: a program read before, byte-identical.
+- *Cells*: 3 (`A_zx_mix_*`): only the counter member used, a block of three members, a member giving back a number made of the counter's in arithmetic.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6703,7 +6712,9 @@ Pushed to the public repository up to `518ca0f` (2026-11-14); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 131's design -- a mutual block's counter used as a counter, a member giving back another counter parameter of its own: the bound counts the block's accumulators' places |
+| (this commit) | §12.V: step 132's design -- a block of different types one of whose members gives back a counter: a block of rows over counters and numbers |
+| `ed0413e` | `proved/KQRReify.v` + matrix step 131: a mutual block's counter used as a counter, a member giving back another counter parameter of its own: the bound counts the block's accumulators' places; 2 cells |
+| `e01d303` | §12.V: step 131's design -- a mutual block's counter used as a counter, a member giving back another counter parameter of its own: the bound counts the block's accumulators' places |
 | `bf5829f` | §12.V: steps 128, 129, 130 (a match on a value row's call with no bound, a block of other arities, a block's other counters: the construct table 4118 of 4258, 76 by design, 63 gaps), one chain for the three; the gate; §12.A |
 | `518ca0f` | `proved/KQRReify.v` + matrix step 130: a mutual block giving back counters, a member taking another counter as a parameter: the block's rows take it at numbers; 2 cells |
 | `60f697a` | §12.V: step 130's design -- a mutual block giving back counters, a member taking another counter as a parameter: the block's rows take it at numbers |
