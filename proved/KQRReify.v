@@ -12057,7 +12057,10 @@ Definition nc_vrow (Σ : global_env) (mp : modpath) (rows : list rprow) (c : ter
                          if rp_is_nrv sl then match h0 with tConst k0 _ => Kername.eqb k0 k && Nat.eqb (length args) (rp_ar d0) | _ => false end else false) rows with
       | Some r =>
           let src := match lookup_env Σ k with Some (ConstantDecl cb) => ret_ty (al_t 1000 Σ mp (cst_type cb)) | _ => tVar "none"%bs end in
-          match pj_ty Σ src (rev l) with Some (Some T') => if is_nat T' then Some (r, k, args) else None | _ => None end
+          match l with
+          | [] => if vt_has 50 Σ src then Some (r, k, args) else None
+          | _ => match pj_ty Σ src (rev l) with Some (Some T') => if is_nat T' then Some (r, k, args) else None | _ => None end
+          end
       | None => None
       end
   | _ => None
@@ -12353,7 +12356,31 @@ Fixpoint nc_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
                 | Some b2s => tCase (vt_ci Σ dp ci) pv (tApp (tConst (rp_name r) []) (nv_cargs Σ mp rows r kc go cargs)) b2s
                 | None => dflt
                 end
-            | None => dflt
+            | None =>
+                (* (step 128) a value row's call whose function has no bound: its counters of no known multiple, read where only their value
+                   modulo a word is used *)
+                match nc_vrow Σ mp rows c [] with
+                | Some (r, kc, cargs) =>
+                    (* every use of each counter it takes apart one where its value modulo a word is enough (step 104's check) *)
+                    let okb := forallb (fun kb : nat * branch term =>
+                                 let kk := length (bcontext (snd kb)) in
+                                 match vt_flds Σ (ci_ind ci) (pparams p) (fst kb) with
+                                 | Some fs =>
+                                     let nv2 := flat_map (fun j => match nth j fs None with Some _ => [((kk - 1 - j)%nat, (1000%nat, 0%Z))] | None => [] end) (seq 0 kk) ++ nc_shift kk nv in
+                                     forallb (fun j => match nth j fs None with
+                                                       | Some Tf => if is_nat Tf then nc_ulow 1000 Σ mp rows tab nv2 (kk - 1 - j) (bbody (snd kb)) else false
+                                                       | None => true
+                                                       end) (seq 0 kk)
+                                 | None => false
+                                 end) (combine (seq 0 (length brs)) brs) in
+                    if okb then
+                      match vbrs (1000%nat, 0%Z) with
+                      | Some b2s => tCase (vt_ci Σ dp ci) pv (tApp (tConst (rp_name r) []) (nv_cargs Σ mp rows r kc go cargs)) b2s
+                      | None => dflt
+                      end
+                    else dflt
+                | None => dflt
+                end
             end end
         | tFix mfix k => tFix (map (fun df => {| dname := dname df; dtype := dtype df; rarg := rarg df; dbody := under (length mfix) (dbody df) |}) mfix) k
         | _ => t
@@ -12417,7 +12444,12 @@ Fixpoint nc_any (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
             | Some _ =>
                 (* (step 118) a match on such a value's call: its counters held as such numbers *)
                 vany (nc_cd 1000 Σ mp rows tab nv c)
-            | None => plain tt
+            | None =>
+                (* (step 128) one whose function has no bound: its counters of no known multiple *)
+                match nc_vrow Σ mp rows c [] with
+                | Some _ => if vany (1000%nat, 0%Z) then true else plain tt
+                | None => plain tt
+                end
             end end
         | tFix mfix _ => existsb (fun df => under (length mfix) (dbody df)) mfix
         | _ => false

@@ -3808,6 +3808,13 @@ addA('zx_cvp_prim', "", 'match pa9 n a with Some r => if Nat.leb (qac r) 3 then 
      'Set Primitive Projections.\nRecord qra := mkqra { qac : nat; qav : int }.\nUnset Primitive Projections.\nFixpoint pa9 (k : nat) (i : int) : option qra := match k with O => if i <? 0 then None else Some (mkqra O i) | S m => match pa9 m (i + 1) with Some r => Some (mkqra (S (qac r)) (qav r)) | None => None end end.\n')
 addA('zx_cvp_pair_first', "", 'match pp3 n a with (p, j) => if Nat.leb (fst p) 3 then j else b end',
      'Fixpoint pp3 (k : nat) (i : int) : (nat * int) * int := match k with O => ((O, i), i) | S m => match pp3 m (i + 1) with ((c, x), j) => ((S c, x), j) end end.\n')
+# a match on a value row's call with no bound, a counter it takes apart used modulo a word (step 128)
+addA('zx_cvn_pair_land', "", 'match qs n a with (c, j) => if Nat.eqb (Nat.land c 255) O then j else b end',
+     'Fixpoint qs (k : nat) (i : int) : nat * int := match k with O => (S O, i) | S m => match qs m (i + 1) with (c, j) => (Nat.add c c, j) end end.\n')
+addA('zx_cvn_record_even', "", 'match qt n a with mkqrb c v => if Nat.even c then v else b end',
+     'Record qrb := mkqrb { qbc : nat; qbv : int }.\nFixpoint qt (k : nat) (i : int) : qrb := match k with O => mkqrb (S O) i | S m => match qt m (i + 1) with mkqrb c v => mkqrb (Nat.add c c) v end end.\n')
+addA('zx_cvn_opt_testbit', "", 'match qu n a with Some c => if Nat.testbit c 2 then a else b | None => b end',
+     'Fixpoint qu (k : nat) (i : int) : option nat := match k with O => Some (S O) | S m => if i <? 0 then None else match qu m (i + 1) with Some c => Some (Nat.add c c) | None => None end end.\n')
 # a local fixpoint giving back a counter (step 113)
 addA('zx_lfc_direct', "", 'Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => O | S q => S (S (cn q)) end) n)',
      '')
