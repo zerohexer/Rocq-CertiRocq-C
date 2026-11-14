@@ -1739,8 +1739,8 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   counters given to a recursion as a parameter (`A_zx_cv_acc`, found at step 115)~~ — **done, step 121**: the row takes it at numbers,
   each of its calls paired with the function's.  Left: ~~a counter
   in a value in a value used as a counter (`A_zx_cvc_opt_pair`, found at step 118: a match takes the counters one level deep)~~ — **done,
-  step 126**: a field holding counters a value at most the call's, taken apart to any depth; a library's (`A_q_divmod`, `A_q_ascii_code`: rows are of
-  the program's functions).  Accepted when those are proved.
+  step 126**: a field holding counters a value at most the call's, taken apart to any depth; a library's (~~`A_q_divmod`~~ — **done, step 133**: a library's fixpoint giving back a value holding counters gets a value row;
+  `A_q_ascii_code`: rows are of the program's functions and fixpoints).  Accepted when those are proved.
 - ~~*A counter given back by a function taking an accumulator, used as a counter*~~ (found at step 121) — **done, step 122**: where
   today's reading finds no bound, a parameter holding counters at most its largest counter.  `Nat.leb (fst (qa9 n (O, a))) 3`
   with `qa9 k st` counting up from `st`: step 118's bound of a value's counters is over the function's counter parameters, and
@@ -6523,6 +6523,12 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: a program read before, byte-identical.
 - *Cells*: 3 (`A_zx_mix_*`): only the counter member used, a block of three members, a member giving back a number made of the counter's in arithmetic.
 
+**Step 133, a library's function giving back a value holding counters (§3.5, §12.A; the gap `A_q_divmod`, found at step 114) — the design (2026-11-15).**  `Uint63.of_nat (fst (Nat.divmod n 3 0 3))`: value rows are made of the program's functions, and `nr_rows` walks only the constants the reading reaches, which stops at the program's.
+- *The rows* (`nr_libv`, `nr_cs`, `nr_rows`): a library's fixpoint giving back a value holding counters, named by a function the reading reaches, gets step 114's value row; not a counter row, so that what the program's arithmetic is read as stays as it was.
+- *The proofs*: as step 114's; nothing new.
+- *The C*: a program read before, byte-identical.
+- *Cells*: 3 (`A_q_dm_*`): the second of `divmod`'s pair, a match on it, used in a recursion.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6712,7 +6718,9 @@ Pushed to the public repository up to `518ca0f` (2026-11-14); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 132's design -- a block of different types one of whose members gives back a counter: a block of rows over counters and numbers |
+| (this commit) | §12.V: step 133's design -- a library's function giving back a value holding counters: its value row |
+| `9e2bb16` | `proved/KQRReify.v` + matrix step 132: a block of different types one of whose members gives back a counter: a block of rows over counters and numbers; 3 cells |
+| `64f1fa8` | §12.V: step 132's design -- a block of different types one of whose members gives back a counter: a block of rows over counters and numbers |
 | `ed0413e` | `proved/KQRReify.v` + matrix step 131: a mutual block's counter used as a counter, a member giving back another counter parameter of its own: the bound counts the block's accumulators' places; 2 cells |
 | `e01d303` | §12.V: step 131's design -- a mutual block's counter used as a counter, a member giving back another counter parameter of its own: the bound counts the block's accumulators' places |
 | `bf5829f` | §12.V: steps 128, 129, 130 (a match on a value row's call with no bound, a block of other arities, a block's other counters: the construct table 4118 of 4258, 76 by design, 63 gaps), one chain for the three; the gate; §12.A |
