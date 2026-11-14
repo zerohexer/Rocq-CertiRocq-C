@@ -12291,26 +12291,42 @@ Fixpoint nc_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
             else tLetIn na (go v) a (under 1 b)
         | tCase ci p c brs =>
             let dflt := tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := under (length (bcontext br)) (bbody br) |}) brs) in
-            match nc_vcall rows tab c with
-            | Some (r, kc, cargs) =>
-                (* (step 118) a match on such a value's call: the row's, its counters numbers at most what the value's are *)
-                let dp := MPfile (mp_file mp) in
-                let cx := nc_cd 1000 Σ mp rows tab nv c in
-                match opt_all (map (fun kb : nat * branch term =>
+            let dp := MPfile (mp_file mp) in
+            (* (step 126) the branches of a match on a value whose counters are at most [cx]: a counter field at most it, a field holding
+               counters a value at most it (its entry marked: its multiple + 2000) *)
+            let vbrs := fun cx : nat * Z =>
+                opt_all (map (fun kb : nat * branch term =>
                          let kk := length (bcontext (snd kb)) in
                          match vt_flds Σ (ci_ind ci) (pparams p) (fst kb) with
                          | Some fs =>
-                             if existsb (fun o : option term => match o with Some Tf => negb (is_nat Tf) | None => false end) fs then None else
-                             let nv2 := map (fun j => ((kk - 1 - j)%nat, cx)) (filter (fun j => match nth j fs None with Some _ => true | None => false end) (seq 0 kk)) ++ nc_shift kk nv in
+                             let nv2 := flat_map (fun j => match nth j fs None with
+                                                           | Some Tf => [((kk - 1 - j)%nat, if is_nat Tf then cx else ((fst cx + 2000)%nat, snd cx))]
+                                                           | None => []
+                                                           end) (seq 0 kk) ++ nc_shift kk nv in
                              Some {| bcontext := bcontext (snd kb); bbody := nc_sub fuel Σ mp rows tab nv2 (bbody (snd kb)) |}
                          | None => None
-                         end) (combine (seq 0 (length brs)) brs)) with
-                | Some b2s => tCase (vt_ci Σ dp ci) {| pparams := vt_int Σ dp (pparams p); puinst := puinst p; pcontext := pcontext p; preturn := preturn p |}
-                                    (tApp (tConst (rp_name r) []) (nv_cargs Σ mp rows r kc go cargs)) b2s
+                         end) (combine (seq 0 (length brs)) brs)) in
+            let pv := {| pparams := vt_int Σ dp (pparams p); puinst := puinst p; pcontext := pcontext p; preturn := preturn p |} in
+            match c with
+            | tRel w =>
+                match List.find (fun e => Nat.eqb (fst e) w) nv with
+                | Some (_, (mw, zw)) =>
+                    if Nat.leb 2000 mw then
+                      match vbrs ((mw - 2000)%nat, zw) with Some b2s => tCase (vt_ci Σ dp ci) pv c b2s | None => dflt end
+                    else dflt
+                | None => dflt
+                end
+            | _ =>
+            match nc_vcall rows tab c with
+            | Some (r, kc, cargs) =>
+                (* (step 118) a match on such a value's call: the row's, its counters numbers at most what the value's are *)
+                let cx := nc_cd 1000 Σ mp rows tab nv c in
+                match vbrs cx with
+                | Some b2s => tCase (vt_ci Σ dp ci) pv (tApp (tConst (rp_name r) []) (nv_cargs Σ mp rows r kc go cargs)) b2s
                 | None => dflt
                 end
             | None => dflt
-            end
+            end end
         | tFix mfix k => tFix (map (fun df => {| dname := dname df; dtype := dtype df; rarg := rarg df; dbody := under (length mfix) (dbody df) |}) mfix) k
         | _ => t
         end
@@ -12346,19 +12362,34 @@ Fixpoint nc_any (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
               nc_any fuel Σ mp rows tab ((0%nat, (1000%nat, 0%Z)) :: nc_shift 1 nv) lo b
             else if go v then true else under 1 b
         | tCase ci p c brs =>
-            match nc_vcall rows tab c with
-            | Some _ =>
-                (* (step 118) a match on such a value's call: its counters held as such numbers *)
-                let cx := nc_cd 1000 Σ mp rows tab nv c in
+            (* (step 126) a field holding counters a value at most what the value's counters are, its entry marked *)
+            let vany := fun cx : nat * Z =>
                 existsb (fun kb : nat * branch term =>
                   let kk := length (bcontext (snd kb)) in
                   match vt_flds Σ (ci_ind ci) (pparams p) (fst kb) with
                   | Some fs =>
-                      nc_any fuel Σ mp rows tab (map (fun j => ((kk - 1 - j)%nat, cx)) (filter (fun j => match nth j fs None with Some _ => true | None => false end) (seq 0 kk)) ++ nc_shift kk nv) lo (bbody (snd kb))
+                      nc_any fuel Σ mp rows tab (flat_map (fun j => match nth j fs None with
+                                                                  | Some Tf => [((kk - 1 - j)%nat, if is_nat Tf then cx else ((fst cx + 2000)%nat, snd cx))]
+                                                                  | None => []
+                                                                  end) (seq 0 kk) ++ nc_shift kk nv) lo (bbody (snd kb))
                   | None => false
-                  end) (combine (seq 0 (length brs)) brs)
-            | None => if go c then true else existsb (fun br => under (length (bcontext br)) (bbody br)) brs
-            end
+                  end) (combine (seq 0 (length brs)) brs) in
+            let plain := fun _ : unit => if go c then true else existsb (fun br => under (length (bcontext br)) (bbody br)) brs in
+            match (match c with
+                   | tRel w => match List.find (fun e => Nat.eqb (fst e) w) nv with
+                               | Some (_, (mw, zw)) => if Nat.leb 2000 mw then Some ((mw - 2000)%nat, zw) else None
+                               | None => None
+                               end
+                   | _ => None
+                   end) with
+            | Some cx => vany cx
+            | None =>
+            match nc_vcall rows tab c with
+            | Some _ =>
+                (* (step 118) a match on such a value's call: its counters held as such numbers *)
+                vany (nc_cd 1000 Σ mp rows tab nv c)
+            | None => plain tt
+            end end
         | tFix mfix _ => existsb (fun df => under (length mfix) (dbody df)) mfix
         | _ => false
         end

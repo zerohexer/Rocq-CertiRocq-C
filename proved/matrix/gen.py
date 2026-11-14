@@ -3792,6 +3792,15 @@ addA('zx_cvm_record', "", 'if Nat.even (q7c (qo n a)) then a else b',
      'Record qr7 := mkqr7 { q7c : nat; q7v : int }.\nFixpoint qo (k : nat) (i : int) : qr7 := match k with O => mkqr7 (S O) i | S m => let r := qo m (i + 1) in mkqr7 (Nat.add (q7c r) (q7c r)) (q7v r) end.\n')
 addA('zx_cvm_match', "", 'match qp n a with Some c => if Nat.eqb (Nat.land c 255) O then a else b | None => b end',
      'Fixpoint qp (k : nat) (i : int) : option nat := match k with O => Some (S O) | S m => if i <? 0 then None else match qp m (i + 1) with Some c => Some (Nat.add c c) | None => None end end.\n')
+# a counter in a value in a value given back, used as a counter (step 126)
+addA('zx_cvo_pair_pair', "", 'match pp2 n a with ((c, x), j) => if Nat.leb c 3 then j + x else b end',
+     'Fixpoint pp2 (k : nat) (i : int) : (nat * int) * int := match k with O => ((O, i), i) | S m => match pp2 m (i + 1) with ((c, x), j) => ((S c, x), j) end end.\n')
+addA('zx_cvo_opt_rec', "", 'match po8 n a with Some r => match r with mkqr8 c v => if Nat.leb c 3 then v else b end | None => b end',
+     'Record qr8 := mkqr8 { q8c : nat; q8v : int }.\nFixpoint po8 (k : nat) (i : int) : option qr8 := match k with O => if i <? 0 then None else Some (mkqr8 O i) | S m => match po8 m (i + 1) with Some (mkqr8 c v) => Some (mkqr8 (S c) v) | None => None end end.\n')
+addA('zx_cvo_deep', "", 'match pz n a with Some (Some c, j) => if Nat.leb c 3 then j else b | _ => b end',
+     'Fixpoint pz (k : nat) (i : int) : option (option nat * int) := match k with O => if i <? 0 then None else Some (Some O, i) | S m => match pz m (i + 1) with Some (Some c, j) => Some (Some (S c), j) | Some (None, j) => Some (None, j) | None => None end end.\n')
+addA('zx_cvo_proj', "", 'match pq3 n a with Some p => if Nat.leb (fst p) 3 then snd p else b | None => b end',
+     'Fixpoint pq3 (k : nat) (i : int) : option (nat * int) := match k with O => if i <? 0 then None else Some (O, i) | S m => match pq3 m (i + 1) with Some (c, j) => Some (S c, j) | None => None end end.\n')
 # a local fixpoint giving back a counter (step 113)
 addA('zx_lfc_direct', "", 'Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => O | S q => S (S (cn q)) end) n)',
      '')
