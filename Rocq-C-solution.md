@@ -1757,7 +1757,8 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   projections around a value row's call read at the row's number.  `Nat.land (fst (qm n (S O, a))) 255`
   with `qm` giving back a pair whose counter doubles (`A_zx_crm_value`): step 104's reading is of rows giving back a counter, not of value
   rows.  Accepted when it is proved.
-- *A projection of a value a match took out of a value row's call, used as a counter* (found at step 126): `match pq3 n a with Some p => ..
+- ~~*A projection of a value a match took out of a value row's call, used as a counter*~~ (found at step 126) — **done, step 127**: a match on
+  the value put around the branch: `match pq3 n a with Some p => ..
   Nat.leb (fst p) 3 ..` (`A_zx_cvo_proj`): the match keeps the value's bound, not its type, so its projection is not read at numbers.
   Accepted when it is proved.
 - *A match on such a value's call, a counter it takes apart used modulo a word* (found at step 125): `match qp n a with Some c => .. Nat.land c 255 ..`
@@ -6438,6 +6439,12 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Left, with a cell*: a projection of such a value used as a counter (`A_zx_cvo_proj`): the match keeps the value's bound, not its type; §12.A.
 - *Cells*: 4 (`A_zx_cvo_*`): a pair in a pair, a record in an `option`, an `option` in a pair in an `option`; a projection of the pair under `Some`.
 
+**Step 127, a projection of a value a match took out of a value row's call, used as a counter (§3.5, §12.A; the gap `A_zx_cvo_proj`, found at step 126) — the design (2026-11-14).**  `match pq3 n a with Some p => if Nat.leb (fst p) 3 then snd p else b | None => b end`: step 126 takes a field holding counters apart where a match takes it apart, and keeps the value's bound, not its type, so a projection of it was not read at numbers.
+- *The reading* (`nc_lift`, `nc_lifts`, in `nc_sub` and `nc_any`): where a branch projects such a field, a match on the field put around the branch (step 115's form, `pj_sub`), the match's type the branches' where it does not depend on what is matched; step 126 then takes it apart.
+- *The proofs*: as step 118's; nothing new.
+- *The C*: a program read before, byte-identical.
+- *Cells*: 3 (`A_zx_cvp_*`): a record's projections under `Some`, a record of primitive projections, the first of a pair given back.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6624,8 +6631,11 @@ Pushed to the public repository up to `fcc1632` (2026-11-14); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 126's design -- a counter in a value in a value given back, used as a counter: a field holding counters taken apart to any depth |
-| `ab5c8cd` | §12.V: step 125's design -- a counter given back in a value, used where its value modulo a word is enough: the chain around a value row's call at the row's number |
+| (this commit) | §12.V: step 127's design -- a projection of a value a match took out of a value row's call, used as a counter: a match put around the branch |
+| `4db8896` | `proved/KQRReify.v` + matrix step 126: a counter in a value in a value given back, used as a counter: a field holding counters taken apart to any depth; 4 cells |
+| `bdc042b` | §12.V: step 126's design -- a counter in a value in a value given back, used as a counter: a field holding counters taken apart to any depth |
+| `ab5c8cd` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + matrix step 125: a counter given back in a value, used where its value modulo a word is enough: the chain around a value row's call at the row's number; 4 cells |
+| `85d890e` | §12.V: step 125's design -- a counter given back in a value, used where its value modulo a word is enough: the chain around a value row's call at the row's number; §12.A |
 | `3c8418b` | §12.V: step 124 (such a counter used where its value modulo a word is enough: the construct table 4096 of 4238, 76 by design, 65 gaps), the gate; §12.A |
 | `fcc1632` | `proved/KQRReify.v` + matrix step 124: such a counter used where its value modulo a word is enough: step 104's reading with the environment; 5 cells |
 | `b69ff43` | §12.V: step 124's design -- such a counter used where its value modulo a word is enough: step 104's reading with the environment |
