@@ -1752,9 +1752,12 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   `Nat.land (qk n (S O, a)) 255` with `qk` doubling
   its accumulator's counter, so no bound (`A_zx_crp_modulo`): step 104's reading (`nc_trw`) has no environment to make the argument
   numbers.  Accepted when it is proved.
-- *A counter given back in a value, used where its value modulo a word is enough* (found at step 124): `Nat.land (fst (qm n (S O, a))) 255`
+- ~~*A counter given back in a value, used where its value modulo a word is enough*~~ (found at step 124) — **done, step 125**: the chain of
+  projections around a value row's call read at the row's number.  `Nat.land (fst (qm n (S O, a))) 255`
   with `qm` giving back a pair whose counter doubles (`A_zx_crm_value`): step 104's reading is of rows giving back a counter, not of value
   rows.  Accepted when it is proved.
+- *A match on such a value's call, a counter it takes apart used modulo a word* (found at step 125): `match qp n a with Some c => .. Nat.land c 255 ..`
+  with `qp` doubling (`A_zx_cvm_match`): the match's reading (step 118) asks the function's bound.  Accepted when it is proved.
 - ~~*A record in a record given back by a recursion*~~ (found at step 116) — **done, step 117**: the cause a record of one field, taken for
   a number by its width wherever step 32 reads a record holding records; a record field is told by its type now. `Fixpoint pj (k : nat) (i : int) : rj := .. mkrj (mkri ..) ..`
   with `Record rj := { rji : ri; .. }`, of numbers as of counters (`A_zx_rr_let`, `A_zx_rr_match`, `A_zx_cv_rec_rec`): not read, while a
@@ -6417,6 +6420,13 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   modulo a word, a counter in a value in a value used as a counter, a block of members of other parameters), then the other
   categories of §3.5.
 
+**Step 125, a counter given back in a value, used where its value modulo a word is enough (§3.5, §12.A; the gap `A_zx_crm_value`, found at step 124) — the design (2026-11-14).**  `Nat.land (fst (qm n (S O, a))) 255` with `qm` giving back a pair whose counter doubles, so no bound: step 104's reading is of rows giving back a counter, and step 118's chain of projections around a value row's call (`nc_vch`) asks the function's bound.
+- *The reading* (`nc_vrow`, in `nc_wx` and `nc_trw`): a chain of projections around a value row's call ending in a counter, bound or not, the same modulo a word at the row's number: the chain at numbers around the row's call (`pj_mk`), its accumulators' arguments made numbers (`nv_cargs`); `nc_wx` and `nc_low` take the environment for it.
+- *The proofs* (`KQRWf.nc_step2`; `kitc.py`): `kq_nc`'s third try: the value rows rewritten forwards too (by the pairing of calls where they take accumulators), then the value's call taken apart on both sides, so that what stands in its place is a counter's number.  A third try, so that every proof found before stays as it was.
+- *The C*: a program read before, byte-identical.
+- *Left, with a cell*: a match on such a value's call, a counter it takes apart used modulo a word (`A_zx_cvm_match`): the match's reading (step 118) asks the function's bound; §12.A.
+- *Cells*: 4 (`A_zx_cvm_*`): a value row with no accumulator under `land` and `testbit`, a record's counter under `even`; a match on an `option`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6603,7 +6613,8 @@ Pushed to the public repository up to `fcc1632` (2026-11-14); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 124 (such a counter used where its value modulo a word is enough: the construct table 4096 of 4238, 76 by design, 65 gaps), the gate; §12.A |
+| (this commit) | §12.V: step 125's design -- a counter given back in a value, used where its value modulo a word is enough: the chain around a value row's call at the row's number |
+| `3c8418b` | §12.V: step 124 (such a counter used where its value modulo a word is enough: the construct table 4096 of 4238, 76 by design, 65 gaps), the gate; §12.A |
 | `fcc1632` | `proved/KQRReify.v` + matrix step 124: such a counter used where its value modulo a word is enough: step 104's reading with the environment; 5 cells |
 | `b69ff43` | §12.V: step 124's design -- such a counter used where its value modulo a word is enough: step 104's reading with the environment |
 | `90ce7a3` | §12.V: step 123 (a function giving back a counter whose parameter is a value holding a counter: the construct table 4091 of 4233, 76 by design, 65 gaps), the gate; §12.A |
