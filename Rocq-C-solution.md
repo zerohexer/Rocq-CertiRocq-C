@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **4091 of 4233, 65 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **4096 of 4238, 65 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1748,9 +1748,13 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   counter row takes it at numbers, as a value row its accumulators.  `Fixpoint qd (k : nat) (st : nat * int)
   : nat := .. S (qd m (S (fst st), snd st)) ..` (`A_zx_cac_ctr_param`): its row takes the parameter as it is, and step 121's
   accumulators are of value rows.  Accepted when it is proved.
-- *Such a counter used where its value modulo a word is enough* (found at step 123): `Nat.land (qk n (S O, a)) 255` with `qk` doubling
+- ~~*Such a counter used where its value modulo a word is enough*~~ (found at step 123) — **done, step 124**: `nc_trw` with the environment.
+  `Nat.land (qk n (S O, a)) 255` with `qk` doubling
   its accumulator's counter, so no bound (`A_zx_crp_modulo`): step 104's reading (`nc_trw`) has no environment to make the argument
   numbers.  Accepted when it is proved.
+- *A counter given back in a value, used where its value modulo a word is enough* (found at step 124): `Nat.land (fst (qm n (S O, a))) 255`
+  with `qm` giving back a pair whose counter doubles (`A_zx_crm_value`): step 104's reading is of rows giving back a counter, not of value
+  rows.  Accepted when it is proved.
 - ~~*A record in a record given back by a recursion*~~ (found at step 116) — **done, step 117**: the cause a record of one field, taken for
   a number by its width wherever step 32 reads a record holding records; a record field is told by its type now. `Fixpoint pj (k : nat) (i : int) : rj := .. mkrj (mkri ..) ..`
   with `Record rj := { rji : ri; .. }`, of numbers as of counters (`A_zx_rr_let`, `A_zx_rr_match`, `A_zx_cv_rec_rec`): not read, while a
@@ -6399,6 +6403,20 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Left, with a cell*: a counter given back in a value, used where its value modulo a word is enough (`A_zx_crm_value`): step 104's reading is of rows giving back a counter, not of value rows; §12.A.
 - *Cells*: 5 (`A_zx_crm_*`): `testbit`, `even`, a remainder by a power of two, an `option` accumulator; a counter given back in a value.
 
+**Step 124, such a counter used where its value modulo a word is enough — the result (2026-11-14).**  Built as designed:
+- *The reader* (`KQRReify.v`): `nc_trw` with the environment, its rows' accumulators by `nr_acu`.
+- *Checked on the work laptop* (the repository at step 123 with this step's files, the families of values, of values and memories, of records, of counters, of blocks and of the program's parameters, and the new cells: 1724): every verdict step 123's but the cell read.
+- *The reifier's step on the kernels' programs* (on the work laptop, one core, interleaved, three rounds, the fastest, F62, in clean copies of two trees, the repository with step 123's reader / with this one): `HWP_kernel` 3.22 / 3.13 s, `HWP_own` 2.21 / 2.22, `HWP_irqnow` 1.89 / 1.91, the same.
+- *Cells*: 5 more (`A_zx_crm_*`), 4 proved, `A_zx_crm_value` a gap, §12.A.  One gap read: `A_zx_crp_modulo`.
+- The C: the 99 programs byte-identical.  The construct table (on `fcc1632`): **4096 of 4238 through the verified compiler**, 76
+  by design, 65 gaps, 1 not Rocq (was 4091 of 4233: 4 of the 5 new cells read, 1 gap; 1 gap read; no cell lost).  The gate on
+  `fcc1632`, the walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding, beside the corpus; the same C:
+  undefined behaviour trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels
+  and `grow` (22 / 22 / 25 / 19 / 19 / 9 s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems
+  each within the list; `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups (a counter given back in a value used
+  modulo a word, a counter in a value in a value used as a counter, a block of members of other parameters), then the other
+  categories of §3.5.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6581,11 +6599,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `e5fa323` (2026-11-14); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `fcc1632` (2026-11-14); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 124's design -- such a counter used where its value modulo a word is enough: step 104's reading with the environment |
+| (this commit) | §12.V: step 124 (such a counter used where its value modulo a word is enough: the construct table 4096 of 4238, 76 by design, 65 gaps), the gate; §12.A |
+| `fcc1632` | `proved/KQRReify.v` + matrix step 124: such a counter used where its value modulo a word is enough: step 104's reading with the environment; 5 cells |
+| `b69ff43` | §12.V: step 124's design -- such a counter used where its value modulo a word is enough: step 104's reading with the environment |
 | `90ce7a3` | §12.V: step 123 (a function giving back a counter whose parameter is a value holding a counter: the construct table 4091 of 4233, 76 by design, 65 gaps), the gate; §12.A |
 | `e5fa323` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + matrix step 123: a function giving back a counter whose parameter is a value holding a counter: counter rows taking accumulators at numbers; 8 cells |
 | `ddd875d` | §12.V: step 123's design -- a function giving back a counter whose parameter is a value holding a counter: counter rows taking accumulators at numbers |
