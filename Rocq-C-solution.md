@@ -1771,8 +1771,12 @@ the gate (examples, corpus, kernels if the walk changed) passes.
 - ~~*A mutual block's counter used as a counter*~~ (found at step 111) — **done, step 120**: one bound for the block's members, read with
   every call of the block a recursive call, proved by one mutual fixpoint.  `Nat.leb (ev n) 3`: step 83's bound is read and proved of single
   functions.  Accepted when `A_zx_as_counter` is proved.
-- *A mutual block's counter used as a counter, its members' parameters not alike* (found at step 120): `Fixpoint ea (m : nat) : nat .. with
+- ~~*A mutual block's counter used as a counter, its members' parameters not alike*~~ (found at step 120) — **done, step 129**: a bound over
+  the counter alone: `Fixpoint ea (m : nat) : nat .. with
   oa (m : nat) (x : int) : nat ..` (`A_zx_bc_arities`): the block's one bound is over the same parameters.  Accepted when it is proved.
+- *A mutual block giving back counters, a member taking another counter as a parameter* (found at step 129): `Fixpoint eb8 (m : nat) (j : nat)
+  : nat .. with ob8 (m : nat) : nat .. eb8 q 7 ..` (`A_zx_bca_extra_nat`, `A_zx_bca_uses_param`): step 111's block rows take no
+  accumulator.  Accepted when they are proved.
 - *A block of different types one of whose members gives back a counter* (found at step 111): step 62 reads such a block by writing
   the others into the one they call, and step 111's rows are of blocks whose members all give back counters.  Accepted when
   `A_zx_mixed` is proved.
@@ -6468,6 +6472,13 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: a program read before, byte-identical.
 - *Cells*: 3 (`A_zx_cvn_*`): a pair matched under `land`, a record under `even`, an `option` under `testbit`.
 
+**Step 129, a mutual block's counter used as a counter, its members' parameters not alike (§3.5, §12.A; the gap `A_zx_bc_arities`, found at step 120) — the design (2026-11-14).**  `Fixpoint ea (m : nat) : nat .. with oa (m : nat) (x : int) : nat ..`, used as `Nat.leb (ea n) 3`: step 120's one bound for a block is over the members' common parameters, and a call of another member was checked against the caller's.
+- *The bound* (`nb_of1`'s `co`, `nb_all`): where the members' parameters are not alike and their counter is at one place, a bound over the counter alone: the counter the only counter read, so a call of the block hands on nothing else and a member using another parameter has no bound; the block's weight and constant the most of its members', each member's statement over its own parameters.
+- *The proofs*: as step 120's (one mutual fixpoint over the members' statements); nothing new.
+- *The C*: a program read before, byte-identical.
+- *Left, with cells*: a block giving back counters, a member taking another counter as a parameter (`A_zx_bca_extra_nat`, `A_zx_bca_uses_param`): step 111's block rows take no accumulator; §12.A.
+- *Cells*: 4 (`A_zx_bca_*`): a member taking a number more, three members of three arities, the block's counter as a recursion's budget; a member taking a counter more, used or not.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6657,7 +6668,9 @@ Pushed to the public repository up to `af9345f` (2026-11-14); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 128's design -- a match on a value row's call whose function has no bound, a counter it takes apart used modulo a word |
+| (this commit) | §12.V: step 129's design -- a mutual block's counter used as a counter, its members' parameters not alike: a bound over the counter alone |
+| `716d3d8` | `proved/KQRReify.v` + matrix step 128: a match on a value row's call whose function has no bound, a counter it takes apart used modulo a word; 3 cells |
+| `3fe3a0c` | §12.V: step 128's design -- a match on a value row's call whose function has no bound, a counter it takes apart used modulo a word |
 | `fa37afc` | §12.V: steps 125, 126, 127 (counters in values, modulo a word and in a value in a value: the construct table 4108 of 4249, 76 by design, 64 gaps), one chain for the three; the gate; §12.F, §13.2 |
 | `af9345f` | `proved/KQRReify.v` + matrix step 127: a projection of a value a match took out of a value row's call, used as a counter: a match put around the branch; 3 cells |
 | `9ee9740` | §12.V: step 127's design -- a projection of a value a match took out of a value row's call, used as a counter: a match put around the branch |
