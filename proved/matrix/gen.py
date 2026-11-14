@@ -3695,6 +3695,49 @@ addA('zx_bc_in_rec', "", 'gb n a',
      'Fixpoint ev (m : nat) : nat := match m with O => O | S q => S (od q) end with od (m : nat) : nat := match m with O => 1%nat | S q => ev q end.\nFixpoint gb (k : nat) (x : int) : int := match k with O => x | S m => if Nat.leb (ev m) 3 then gb m (x + 1) else x end.\n')
 addA('zx_bc_arities', "", 'if Nat.leb (ea n) 3 then a else b',
      'Fixpoint ea (m : nat) : nat := match m with O => O | S q => S (oa q 1) end with oa (m : nat) (x : int) : nat := match m with O => 1%nat | S q => ea q end.\n')
+# a value holding counters given to a recursion as a parameter (step 121)
+addA('zx_ca_nontail', "", 'Uint63.of_nat (fst (qa1 n (O, a))) + snd (qa1 n (O, a))',
+     'Fixpoint qa1 (k : nat) (st : nat * int) : nat * int := match k with O => st | S m => match qa1 m (fst st, snd st + 1) with (c, j) => (S c, j) end end.\n')
+addA('zx_ca_matched', "", 'Uint63.of_nat (fst (qa2 n (O, a)))',
+     'Fixpoint qa2 (k : nat) (st : nat * int) : nat * int := match k with O => st | S m => match st with (c, j) => qa2 m (S c, j + 1) end end.\n')
+addA('zx_ca_option', "", 'match qa3 n None with Some c => Uint63.of_nat c | None => b end',
+     'Fixpoint qa3 (k : nat) (o : option nat) : option nat := match k with O => o | S m => qa3 m (match o with Some c => Some (S c) | None => Some O end) end.\n')
+addA('zx_ca_record', "", 'Uint63.of_nat (q4c (qa4 n (mkqr4 O a))) + q4v (qa4 n (mkqr4 O a))',
+     'Record qr4 := mkqr4 { q4c : nat; q4v : int }.\nFixpoint qa4 (k : nat) (st : qr4) : qr4 := match k with O => st | S m => qa4 m (mkqr4 (S (q4c st)) (q4v st + 1)) end.\n')
+addA('zx_ca_prim', "", 'Uint63.of_nat (q5c (qa5 n (mkqr5 O a))) + q5v (qa5 n (mkqr5 O a))',
+     'Set Primitive Projections.\nRecord qr5 := mkqr5 { q5c : nat; q5v : int }.\nUnset Primitive Projections.\nFixpoint qa5 (k : nat) (st : qr5) : qr5 := match k with O => st | S m => qa5 m (mkqr5 (S (q5c st)) (q5v st + 1)) end.\n')
+addA('zx_ca_params', "", 'Uint63.of_nat (fst (qa6 a (O, b) n)) + snd (qa6 a (O, b) n)',
+     'Fixpoint qa6 (i : int) (st : nat * int) (k : nat) : nat * int := match k with O => st | S m => qa6 (i + 1) (S (fst st), snd st + i) m end.\n')
+addA('zx_ca_two', "", 'Uint63.of_nat (fst (qa7 n (O, a) None))',
+     'Fixpoint qa7 (k : nat) (s1 : nat * int) (s2 : option nat) : nat * int := match k with O => match s2 with Some c => (Nat.add (fst s1) c, snd s1) | None => s1 end | S m => qa7 m (S (fst s1), snd s1) (Some k) end.\n')
+addA('zx_ca_other_ret', "", 'match qa8 n (O, a) with Some c => Uint63.of_nat c | None => b end',
+     'Fixpoint qa8 (k : nat) (st : nat * int) : option nat := match k with O => if snd st <? 0 then None else Some (fst st) | S m => qa8 m (S (fst st), snd st + 1) end.\n')
+addA('zx_ca_helper', "", 'Uint63.of_nat (fst (qa10 n (O, a)))',
+     'Fixpoint qa9 (k : nat) (st : nat * int) : nat * int := match k with O => st | S m => qa9 m (S (fst st), snd st + 1) end.\nFixpoint qa10 (k : nat) (st : nat * int) : nat * int := match k with O => qa9 3 st | S m => qa10 m (S (fst st), snd st) end.\n')
+addA('zx_ca_let_arg', "", 'let s0 := (S O, a) in Uint63.of_nat (fst (qa9 n s0)) + snd (qa9 n s0)',
+     'Fixpoint qa9 (k : nat) (st : nat * int) : nat * int := match k with O => st | S m => qa9 m (S (fst st), snd st + 1) end.\n')
+addA('zx_ca_in_rec', "", 'qa11 n a',
+     'Fixpoint qa9 (k : nat) (st : nat * int) : nat * int := match k with O => st | S m => qa9 m (S (fst st), snd st + 1) end.\nFixpoint qa11 (k : nat) (x : int) : int := match k with O => x | S m => qa11 m (x + Uint63.of_nat (fst (qa9 2 (O, x)))) end.\n')
+addA('zx_ca_as_counter', "", 'if Nat.leb (fst (qa9 n (O, a))) 3 then a else b',
+     'Fixpoint qa9 (k : nat) (st : nat * int) : nat * int := match k with O => st | S m => qa9 m (S (fst st), snd st + 1) end.\n')
+addA('zx_ca_nat_acc', "", 'Uint63.of_nat (fst (qa12 n O a))',
+     'Fixpoint qa12 (k : nat) (c : nat) (i : int) : nat * int := match k with O => (c, i) | S m => qa12 m (S c) (i + 1) end.\n')
+addA('zx_ca_unchanged', "", 'Uint63.of_nat (fst (qa13 n (O, a)))',
+     'Fixpoint qa13 (k : nat) (st : nat * int) : nat * int := match k with O => st | S m => let r := qa13 m st in (S (fst r), snd r) end.\n')
+addA('zx_ca_nested', "", 'Uint63.of_nat (fst (fst (qa14 n ((O, a), b))))',
+     'Fixpoint qa14 (k : nat) (st : (nat * int) * int) : (nat * int) * int := match k with O => st | S m => qa14 m ((S (fst (fst st)), snd (fst st)), snd st + 1) end.\n')
+addA('zx_ca_top_match_int', "", 'qb1 n (a, b)',
+     'Fixpoint qb1 (k : nat) (st : int * int) : int := match st with (c, j) => match k with O => c + j | S m => qb1 m (c + 1, j) end end.\n')
+addA('zx_ca_top_match', "", 'Uint63.of_nat (fst (qa15 n (O, a)))',
+     'Fixpoint qa15 (k : nat) (st : nat * int) : nat * int := match st with (c, j) => match k with O => (c, j) | S m => qa15 m (S c, j + 1) end end.\n')
+addA('zx_ca_top_match_pair', "", 'fst (qb2 n (a, b))',
+     'Fixpoint qb2 (k : nat) (st : int * int) : int * int := match st with (c, j) => match k with O => (c, j) | S m => qb2 m (c + 1, j) end end.\n')
+addA('zx_ca_top_counter', "", 'Uint63.of_nat (qc1 n (a, b))',
+     'Fixpoint qc1 (k : nat) (st : int * int) : nat := match st with (c, j) => match k with O => O | S m => S (qc1 m (c + 1, j)) end end.\n')
+addA('zx_ca_top_counter_in', "", 'Uint63.of_nat (qc2 n (a, b))',
+     'Fixpoint qc2 (k : nat) (st : int * int) : nat := match k with O => O | S m => match st with (c, j) => S (qc2 m (c + 1, j)) end end.\n')
+addA('zx_ca_top_option', "", 'match qa16 n None with Some c => Uint63.of_nat c | None => b end',
+     'Fixpoint qa16 (k : nat) (o : option nat) : option nat := match o with Some c => match k with O => Some c | S m => qa16 m (Some (S c)) end | None => match k with O => None | S m => qa16 m (Some O) end end.\n')
 # a local fixpoint giving back a counter (step 113)
 addA('zx_lfc_direct', "", 'Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => O | S q => S (S (cn q)) end) n)',
      '')

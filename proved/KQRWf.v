@@ -874,6 +874,38 @@ Ltac nv_step IH :=
                 | match goal with |- context [match ?c with _ => _ end] =>
                     lazymatch c with context [match _ with _ => _ end] => fail | _ => let e := fresh "kqe" in destruct c eqn:e end end
                 | match goal with e : _ = _ |- _ => solve [cbn in e; discriminate e] end ]).
+(** (step 121) an accumulator's argument at numbers is the source's argument made numbers: each value taken apart, the counters'
+    numbers by [kq_nr], the rows' calls by [kq_rw] *)
+Ltac nv_acceq :=
+  solve [ repeat (cbn beta iota zeta delta [fst snd proj1_sig];
+                  first [ reflexivity
+                        | kq_nr
+                        | prim_rw
+                        | kq_rw
+                        (* a primitive projection of a constructor, which [cbn] here leaves *)
+                        | match goal with |- context [?f ?x] => is_proj (f x); let h := vm_head x in is_constructor h; let c2 := eval cbn in (f x) in progress (change (f x) with c2) end
+                        | match goal with |- context [match ?v with _ => _ end] => is_var v; destruct v end
+                        | match goal with |- context [?f ?v] => is_var v; is_proj (f v); destruct v end
+                        | progress f_equal ]) ].
+(** (step 121) a row taking accumulators at numbers: its statement [F k (cv st) = cv (f k st)]; each call of the row, [F m a'], paired
+    with a call of the function, [f m a], whose arguments made numbers are [a'] ([pr], from [kitc.py]: the statement at [a] put in, the
+    row's call made the statement's left side first, by [nv_acceq]); then as [nv_step] *)
+Ltac nv_stepb IH pr :=
+  repeat (cbn beta iota zeta delta [fst snd proj1_sig]; kq_unf;
+          first [ prim_rw
+                | kq_rw
+                | progress pr
+                | progress (rewrite ?IH)
+                | kq_nr
+                | reflexivity
+                | match goal with |- context [match ?c with _ => _ end] =>
+                    lazymatch c with ?f ?x => let h := vm_head x in is_constructor h; let c2 := eval cbn in c in lazymatch x with context [c2] => progress (change c with c2) end end end
+                | match goal with |- context [?f ?x] => is_proj (f x); let h := vm_head x in is_constructor h; let c2 := eval cbn in (f x) in progress (change (f x) with c2) end
+                (* a variable taken apart first: a call of the row under its match comes out before the function's call is taken apart *)
+                | match goal with |- context [match ?v with _ => _ end] => is_var v; destruct v end
+                | match goal with |- context [match ?c with _ => _ end] =>
+                    lazymatch c with context [match _ with _ => _ end] => fail | _ => let e := fresh "kqe" in destruct c eqn:e end end
+                | match goal with e : _ = _ |- _ => solve [cbn in e; discriminate e] end ]).
 (** (step 111) the same, the induction hypotheses' rewriting given: a block's rows proved together, one hypothesis per member *)
 Ltac nr_stepT rw :=
   repeat (cbn beta iota zeta delta [fst snd proj1_sig]; kq_unf;
