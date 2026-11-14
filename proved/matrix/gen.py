@@ -3834,6 +3834,13 @@ addA('zx_bcq_grown', "", 'if Nat.leb (eh8 n 1) 9 then a else b',
      'Fixpoint eh8 (m : nat) (j : nat) : nat := match m with O => j | S q => oh8 q (S j) end with oh8 (m : nat) (j : nat) : nat := match m with O => O | S q => eh8 q j end.\n')
 addA('zx_bcq_budget', "", 'ff (ei8 n 3) b',
      'Fixpoint ei8 (m : nat) (j : nat) : nat := match m with O => j | S q => oi8 q end with oi8 (m : nat) : nat := match m with O => 1%nat | S q => ei8 q 2 end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+# a block of different types one of whose members gives back a counter (step 132)
+addA('zx_mix_count_only', "", 'Uint63.of_nat (en9 n)',
+     'Fixpoint en9 (m : nat) : nat := match m with O => O | S q => if on9 q 1 <? 0 then O else S (en9 q) end with on9 (m : nat) (x : int) : int := match m with O => x | S q => Uint63.of_nat (en9 q) + x end.\n')
+addA('zx_mix_three', "", 'Uint63.of_nat (ep9 n) + gp9 n a',
+     'Fixpoint ep9 (m : nat) : nat := match m with O => O | S q => S (fp9 q) end with fp9 (m : nat) : nat := match m with O => 1%nat | S q => if gp9 q 2 <? 0 then O else ep9 q end with gp9 (m : nat) (x : int) : int := match m with O => x | S q => Uint63.of_nat (fp9 q) * 2 + x end.\n')
+addA('zx_mix_arith', "", 'oq9 n a',
+     'Fixpoint eq9 (m : nat) : nat := match m with O => 1%nat | S q => if oq9 q 0 <? 5 then S (eq9 q) else eq9 q end with oq9 (m : nat) (x : int) : int := match m with O => x | S q => x + Uint63.of_nat (eq9 q) * Uint63.of_nat (eq9 q) end.\n')
 # a local fixpoint giving back a counter (step 113)
 addA('zx_lfc_direct', "", 'Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => O | S q => S (S (cn q)) end) n)',
      '')

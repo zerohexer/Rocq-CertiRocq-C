@@ -194,7 +194,6 @@ BY_NAME = {
   "A_zd_r_default": "the memory before a call that gave nothing, used after it",
   "A_ze_own_call_12": "tests that cannot be moves in one expression, an own call in each: what follows written in each arm",
   "A_zz_in_fix_call": "a local mutual fixpoint calling the function it stands in: its members would take that function as a parameter (12.A)",
-  "A_zx_mixed": "a block of different types (step 62's) one of whose members gives back a counter: step 111's rows are of blocks whose members all give back counters (12.A)",
   "A_zx_cv_as_counter": "a counter of a value given back, used as a counter: a value row's field has no bound (12.A)",
   "A_zx_cv_record": "a record of the program's with a counter field: a value row's counters are its type's parameters (12.A)",
   "A_zx_cv_nested": "a counter in a value in a value (option (nat * int)): a value row's counters are its type's own parameters (12.A)",
