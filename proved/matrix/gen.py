@@ -3738,6 +3738,23 @@ addA('zx_ca_top_counter_in', "", 'Uint63.of_nat (qc2 n (a, b))',
      'Fixpoint qc2 (k : nat) (st : int * int) : nat := match k with O => O | S m => match st with (c, j) => S (qc2 m (c + 1, j)) end end.\n')
 addA('zx_ca_top_option', "", 'match qa16 n None with Some c => Uint63.of_nat c | None => b end',
      'Fixpoint qa16 (k : nat) (o : option nat) : option nat := match o with Some c => match k with O => Some c | S m => qa16 m (Some (S c)) end | None => match k with O => None | S m => qa16 m (Some O) end end.\n')
+# a counter given back by a function taking an accumulator, used as a counter (step 122)
+addA('zx_cac_option', "", 'match qa3 n None with Some c => if Nat.leb c 3 then a else b | None => b end',
+     'Fixpoint qa3 (k : nat) (o : option nat) : option nat := match k with O => o | S m => qa3 m (match o with Some c => Some (S c) | None => Some O end) end.\n')
+addA('zx_cac_record', "", 'if Nat.leb (q4c (qa4 n (mkqr4 O a))) 3 then a else b',
+     'Record qr4 := mkqr4 { q4c : nat; q4v : int }.\nFixpoint qa4 (k : nat) (st : qr4) : qr4 := match k with O => st | S m => qa4 m (mkqr4 (S (q4c st)) (q4v st + 1)) end.\n')
+addA('zx_cac_budget', "", 'ff (fst (qa9 n (O, a))) b',
+     'Fixpoint qa9 (k : nat) (st : nat * int) : nat * int := match k with O => st | S m => qa9 m (S (fst st), snd st + 1) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zx_cac_nontail', "", 'if Nat.leb (fst (qa1 n (O, a))) 3 then a else b',
+     'Fixpoint qa1 (k : nat) (st : nat * int) : nat * int := match k with O => st | S m => match qa1 m (fst st, snd st + 1) with (c, j) => (S c, j) end end.\n')
+addA('zx_cac_ctr_param', "", 'if Nat.leb (qd n (O, a)) 3 then a else b',
+     'Fixpoint qd (k : nat) (st : nat * int) : nat := match k with O => O | S m => S (qd m (S (fst st), snd st)) end.\n')
+addA('zx_cac_start', "", 'if Nat.leb (fst (qa9 n (n, a))) 3 then a else b',
+     'Fixpoint qa9 (k : nat) (st : nat * int) : nat * int := match k with O => st | S m => qa9 m (S (fst st), snd st + 1) end.\n')
+addA('zx_cac_two_ctr', "", 'if Nat.leb (snd (qe n (O, S O))) 3 then a else b',
+     'Fixpoint qe (k : nat) (st : nat * nat) : nat * nat := match k with O => st | S m => qe m (S (fst st), snd st) end.\n')
+addA('zx_cac_in_rec', "", 'gq n a',
+     'Fixpoint qa9 (k : nat) (st : nat * int) : nat * int := match k with O => st | S m => qa9 m (S (fst st), snd st + 1) end.\nFixpoint gq (k : nat) (x : int) : int := match k with O => x | S m => if Nat.leb (fst (qa9 m (O, x))) 3 then gq m (x + 1) else x end.\n')
 # a local fixpoint giving back a counter (step 113)
 addA('zx_lfc_direct', "", 'Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => O | S q => S (S (cn q)) end) n)',
      '')

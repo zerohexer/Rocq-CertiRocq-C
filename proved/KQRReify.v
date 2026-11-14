@@ -11583,12 +11583,14 @@ Fixpoint nb_go (fuel : nat) (Σ : global_env) (mp : modpath) (tab : list (kernam
       | _ => None
       end end
   end.
-Definition nb_of (Σ : global_env) (mp : modpath) (tab : list (kername * nbf)) (blk : list nat) (d0 : def term) : option nbf :=
+Definition nb_of1 (Σ : global_env) (mp : modpath) (tab : list (kername * nbf)) (blk : list nat) (vs : bool) (d0 : def term) : option nbf :=
   let '(tys, body) := lams (dbody d0) in
   let n := length tys in
   let p := rarg d0 in
-  let cnts := map is_nat tys in
-  let env := rev (map (fun jt : nat * term => if is_nat (snd jt) then Some (Some (nb1 n (fst jt)), None) else None) (combine (seq 0 n) tys)) in
+  (* (step 122) [vs]: a parameter holding counters (an accumulator) a counter too, at most its largest counter *)
+  let isc := fun T => if is_nat T then true else if vs then vt_has 50 Σ T else false in
+  let cnts := map isc tys in
+  let env := rev (map (fun jt : nat * term => if isc (snd jt) then Some (Some (nb1 n (fst jt)), None) else None) (combine (seq 0 n) tys)) in
   match nb_go 1000 Σ mp tab blk n n 0 p cnts env body with
   | Some (b, st) =>
       let bf := match b with Some f => f | None => nb0 n end in
@@ -11600,6 +11602,11 @@ Definition nb_of (Σ : global_env) (mp : modpath) (tab : list (kername * nbf)) (
                             else if nth j cnts false then 1%nat else 0%nat) (seq 0 n), snd bf)
       else None
   | None => None
+  end.
+Definition nb_of (Σ : global_env) (mp : modpath) (tab : list (kername * nbf)) (blk : list nat) (d0 : def term) : option nbf :=
+  match nb_of1 Σ mp tab blk false d0 with
+  | Some f => Some f
+  | None => if existsb (fun T => if is_nat T then false else vt_has 50 Σ T) (fst (lams (dbody d0))) then nb_of1 Σ mp tab blk true d0 else None
   end.
 (** the bounds of the functions read as a number, each after what it calls; a bound worth nothing is none *)
 Definition nb_all (Σ : global_env) (mp : modpath) (rows : list rprow) : list (kername * nbf) :=
@@ -11698,6 +11705,62 @@ Fixpoint vt_lef (fuel : nat) (Σ : global_env) (T x L : term) {struct fuel} : op
       | None => None
       end
   end.
+(** (step 122) the largest counter in a value, a number: a match taking the value apart, the most of its fields' (0 where it holds none);
+    a record of primitive projections by its projections *)
+Definition nb_max := <% Nat.max %>.
+Definition nb_mxl (l : list term) : term :=
+  match l with [] => nb_nat 0 | a :: r => fold_left (fun b c => tApp nb_max [b; c]) r a end.
+Fixpoint vt_mx (fuel : nat) (Σ : global_env) (T x : term) {struct fuel} : option term :=
+  match fuel with
+  | O => None
+  | S fuel =>
+      if is_nat T then Some x else
+      match (match T with tApp (tInd i u) ps => Some (i, u, ps) | tInd i u => Some (i, u, []) | _ => None end) with
+      | Some (i, u, ps) =>
+          match lookup_env Σ (inductive_mind i) with
+          | Some (InductiveDecl mib) =>
+              match nth_error (ind_bodies mib) (inductive_ind i) with
+              | Some oib =>
+                  match ind_projs oib, ind_ctors oib with
+                  | _ :: _, [_] =>
+                      match vt_flds Σ i ps 0 with
+                      | Some fs =>
+                          option_map nb_mxl
+                            (opt_all (flat_map (fun jf : nat * option term =>
+                               match snd jf with
+                               | Some Tf => [vt_mx fuel Σ Tf (tProj {| proj_ind := i; proj_npars := length ps; proj_arg := fst jf |} x)]
+                               | None => []
+                               end) (combine (seq 0 (length fs)) fs)))
+                      | None => None
+                      end
+                  | _, _ =>
+                  match opt_all (map (fun ck : nat * constructor_body =>
+                           let n := length (cstr_args (snd ck)) in
+                           match vt_flds Σ i ps (fst ck) with
+                           | Some fs =>
+                               option_map (fun l => {| bcontext := repeat anon_b n; bbody := nb_mxl l |})
+                                 (opt_all (flat_map (fun jf : nat * option term =>
+                                    match snd jf with
+                                    | Some Tf => [vt_mx fuel Σ Tf (tRel (n - 1 - fst jf))]
+                                    | None => []
+                                    end) (combine (seq 0 n) fs)))
+                           | None => None
+                           end) (combine (seq 0 (length (ind_ctors oib))) (ind_ctors oib))) with
+                  | Some brs => Some (tCase {| ci_ind := i; ci_npar := length ps; ci_relevance := Relevant |}
+                                            {| puinst := u; pparams := ps; pcontext := [anon_b]; preturn := tInd ind_nat [] |} x brs)
+                  | None => None
+                  end
+                  end
+              | None => None
+              end
+          | _ => None
+          end
+      | None => None
+      end
+  end.
+(** (step 122) a parameter in a bound: a counter itself, or the largest counter of a value *)
+Definition nb_par (Σ : global_env) (T x : term) : term :=
+  if is_nat T then x else match vt_mx 20 Σ T x with Some y => y | None => tVar "unread"%bs end.
 Definition nb_name (kn : kername) (d0 : def term) : kername :=
   (copy_mp, mangle kn ^ "__b" ^ string_of_nat (length (fst (lams (dbody d0)))) ^ "_" ^ string_of_nat (rarg d0) ^ "__bq__wy"%bs).
 (** (step 118) a value's bound: its own name, so that its proof takes its values apart *)
@@ -11722,7 +11785,7 @@ Definition z_tm (z : Z) : term :=
 Definition nb_cst (c : Z) : term := if (c <? 5000)%Z then nb_nat (Z.to_nat c) else tApp (tConst kn_zton []) [z_tm c].
 (** (step 120) a block's bounds: each member's, the counter first, named by its row and its number of parameters, and at a counter, for
     kitc.py's mutual fixpoint over them; the member's parameters from its row *)
-Definition nb_blk (rows : list rprow) (tab : list (kername * nbf)) : list (kername * term * kername * term) :=
+Definition nb_blk (Σ : global_env) (rows : list rprow) (tab : list (kername * nbf)) : list (kername * term * kername * term) :=
   flat_map (fun r : rprow =>
     let '(h0, _, sl, st, d0) := r in
     match h0, dbody d0 with
@@ -11740,7 +11803,8 @@ Definition nb_blk (rows : list rprow) (tab : list (kername * nbf)) : list (kerna
               let L := fold_right (fun jr (b : term) =>
                          let w := nth (fst jr) (fst f) 0%nat in
                          if Nat.eqb w 0 then b
-                         else tApp (tConst nr_nat_add []) [if Nat.eqb w 1 then snd jr else tApp (tConst nr_nat_mul []) [nb_nat w; snd jr]; b])
+                         else let x := nb_par Σ (nth (fst jr) tys0 (tRel 0)) (snd jr) in
+                              tApp (tConst nr_nat_add []) [if Nat.eqb w 1 then x else tApp (tConst nr_nat_mul []) [nb_nat w; x]; b])
                          (nb_cst (snd f)) (combine (seq 0 n) rels) in
               let body := pis_of (map (fun q => nth q tys0 (tRel 0)) others) (tApp nb_le [mkApps (tConst kn []) rels; L]) in
               let sb := (st ^ "__bnd" ^ string_of_nat n)%bs in
@@ -11760,7 +11824,8 @@ Definition nb_stmt (Σ : global_env) (mp : modpath) (kn : kername) (f : nbf) : t
   let L := fold_right (fun jr (b : term) =>
              let w := nth (fst jr) (fst f) 0%nat in
              if Nat.eqb w 0 then b
-             else tApp (tConst nr_nat_add []) [if Nat.eqb w 1 then snd jr else tApp (tConst nr_nat_mul []) [nb_nat w; snd jr]; b])
+             else let x := nb_par Σ (nth (fst jr) tys0 (tRel 0)) (snd jr) in
+                  tApp (tConst nr_nat_add []) [if Nat.eqb w 1 then x else tApp (tConst nr_nat_mul []) [nb_nat w; x]; b])
              (nb_cst (snd f)) (combine (seq 0 m) rels) in
   let rty := match lookup_env Σ kn with Some (ConstantDecl cb) => ret_ty (al_t 1000 Σ mp (cst_type cb)) | _ => tVar "none"%bs end in
   if is_nat rty then pis_of tys0 (tApp nb_le [mkApps (tConst kn []) rels; L])
@@ -11876,6 +11941,14 @@ Fixpoint nc_cd (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow)
       | tRel r => match List.find (fun e => Nat.eqb (fst e) r) nv with Some e => snd e | None => (1%nat, 0%Z) end
       | tConstruct _ 0 _ => (0%nat, 0%Z)
       | tApp (tConstruct _ 1 _) [e] => let x := go e in (fst x, Z.succ (snd x))
+      (* (step 122) a value of a constructor holding counters: at most the sum of its counters *)
+      | tApp (tConstruct i c _) args =>
+          match vt_flds Σ i (firstn (vt_np Σ i) args) c with
+          | Some fs => fold_left nc_padd (map (fun fa : option term * term => go (snd fa))
+                                               (filter (fun fa : option term * term => match fst fa with Some _ => true | None => false end)
+                                                       (combine fs (skipn (vt_np Σ i) args)))) (0%nat, 0%Z)
+          | None => (1000%nat, 0%Z)
+          end
       | tApp (tConst k _) args =>
           if Kername.eqb k nr_nat_add then fold_left nc_padd (map go args) (0%nat, 0%Z)
           else if Kername.eqb k kn_c_shiftl then
@@ -12511,7 +12584,7 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
   (* (step 120) a block's bounds: each member's, and at a counter *)
   let S0 := if nbu then
               fold_left (fun S2 e => let '(k1, t1, k2, t2) := e in
-                           add_decl (add_decl S2 k1 (tSort sProp) t1) k2 (tProd anon_b (tInd ind_nat []) (tSort sProp)) t2) (nb_blk rows nbt) S0
+                           add_decl (add_decl S2 k1 (tSort sProp) t1) k2 (tProd anon_b (tInd ind_nat []) (tSort sProp)) t2) (nb_blk (conv_all Σ mp) rows nbt) S0
             else S0 in
   (* (step 78) the lemmas that come first, each after what it calls; the values' types, for the slot block's room *)
   let S0 := match vrows with

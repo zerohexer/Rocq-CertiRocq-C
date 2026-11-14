@@ -581,6 +581,15 @@ Qed.
 Ltac kq_bd := idtac.
 (** (step 118) a value's bound posed: rewritten by what a match took apart, reduced, split; and, where a program has one, its call taken
     apart with its bound: [kitc.py] sets them *)
+(** (step 122) a projection of a constructor in a hypothesis, [fst (n, i)], [q4c (mkqr4 c v)]: reduced where what it gives is a part of the
+    constructor (an accumulator's bound puts them there) *)
+Ltac nb_pjc :=
+  match goal with
+  | H : context [?f ?x] |- _ =>
+      let h := vm_head x in is_constructor h;
+      let c2 := eval cbn in (f x) in
+      lazymatch x with context [c2] => progress (change (f x) with c2 in H) end
+  end.
 Ltac nb_vh0 :=
   repeat first [
     match goal with e : ?x = ?v, H : context [?x] |- _ =>
@@ -590,7 +599,8 @@ Ltac nb_vh0 :=
       lazymatch type of H with _ = _ => fail | _ =>
         tryif is_var p then destruct p
         else lazymatch p with context [match _ with _ => _ end] => fail | _ => let e := fresh "kqe" in destruct p eqn:e end end end
-  | match goal with H : _ /\ _ |- _ => destruct H end ].
+  | match goal with H : _ /\ _ |- _ => destruct H end
+  | nb_pjc ].
 (** where [lia] comes next: a projection of a constructor reduced too, on the goal *)
 Ltac nb_vh := nb_vh0; try simpl.
 Ltac kq_vh := idtac.
