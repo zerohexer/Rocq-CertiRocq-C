@@ -724,7 +724,8 @@ Ltac nc_opf :=
       | _ => let v := eval vm_compute in (2 ^ Z.of_nat k)%Z in pose proof (nc_setbit_lez a k : (Z.of_nat (Nat.setbit a k) <= Z.of_nat a + v)%Z) end
   | |- context [Nat.double ?a] => lazymatch goal with _ : Nat.double a = _ |- _ => fail | _ => pose proof (Nat.double_twice a) end
   end.
-Ltac nc_side ::= kq_bd; kq_vh; nc_shl; nb_bitf; nc_opf; nr_numf; lia.
+(* (step 123) where it does not hold so: the bounds posed tidied (a value parameter's largest counter, of a constructor) *)
+Ltac nc_side ::= first [ kq_bd; kq_vh; nc_shl; nb_bitf; nc_opf; nr_numf; lia | kq_bd; kq_vh; nb_vh0; nc_shl; nb_bitf; nc_opf; nr_numf; lia ].
 (** (step 104) where only the value modulo a word of a counter is used ([land] with a number below a word, [testbit] below 63, [even], [odd],
     [mod] by a divisor of [2^63]): the same at the row's number, whatever the counter is, so no bound of it is asked *)
 Lemma nc_low_of : forall x, Uint63.of_Z (Z.of_nat (Z.to_nat (Uint63.to_Z (Uint63.of_Z (Z.of_nat x))))) = Uint63.of_Z (Z.of_nat x).
@@ -774,6 +775,8 @@ Ltac nc_step rw ::=
 Ltac nb_step tac :=
   repeat (cbn beta iota zeta;
           first [ solve [tac; nb_bitf; nr_numf; lia]
+                (* (step 123) a bound over a value parameter: what is posed tidied, the goal's projections of constructors reduced *)
+                | solve [tac; nb_vh; nb_bitf; nr_numf; lia]
                 | match goal with |- context [match ?c with _ => _ end] =>
                     lazymatch c with context [match _ with _ => _ end] => fail | _ => destruct c end end ]).
 (** (step 118) a value's bound, each of its counters: what its matches take apart, with their equations, so that the bounds posed of

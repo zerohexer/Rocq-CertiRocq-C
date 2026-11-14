@@ -951,12 +951,12 @@ def reflect(name, entry, prog, no_proof):
     kqfn = lambda x: "" if re.search(r"__l\d+(__v\d+)?$", x) else kqunm(x).split("kqcopy.")[-1]
     fqf = [(m, kqfn(re.match(r"(.*)__f\d+__fq__wy$", m).group(1)), int(re.search(r"__f(\d+)__fq__wy$", m).group(1))) for m in fqs]
     vmr = any(re.search(r"__v\d+__rq__wy$", m) for m, _ in rrs)
-    qmr = any(re.search(r"__[qkm]\d+__rq__wy$|__kb\d+_\d+_\d+_.*__rq__wy$|__kv\d+__rq__wy$|__kva\d+_\d+__rq__wy$", m) for m, _ in rrs)
+    qmr = any(re.search(r"__[qkm]\d+__rq__wy$|__kb\d+_\d+_\d+_.*__rq__wy$|__kv\d+__rq__wy$|__kva\d+_\d+__rq__wy$|__kc\d+_\d+__rq__wy$", m) for m, _ in rrs)
     rrw2 = []
     roomw = max([int(r[2]) for r in recs] + [1])
     roomR = f"({roomw} <= Sint63.to_Z (KQ.KQBound.kq_len 63) + 1)%Z" if roomw > 1 else "True"
     hrb = f"(Hr : {roomR}) " if vmr else ""
-    keepf = " ".join(sorted({"KQ.KQRun.kq_nat"} | ({"Uint63.of_Z", "Z.of_nat", "Nat.add", "Nat.mul"} if any(re.search(r"__k\d+__rq__wy$|__kb\d+_\d+_\d+_.*__rq__wy$", m) for m, _ in rrs) else set()) | {x for m, h in rrs for x in (h, m[:-len("__rq__wy")] + "__rp__wy") if x} | {f[1] for f in fqf if f[1]} | {x for x in (kqfn(re.match(r"(.*)__[vqk]\d+__rq__wy$", m).group(1)) for m, _ in rrs if re.search(r"__[vqk]\d+__rq__wy$", m)) if x}
+    keepf = " ".join(sorted({"KQ.KQRun.kq_nat"} | ({"Uint63.of_Z", "Z.of_nat", "Nat.add", "Nat.mul"} if any(re.search(r"__k\d+__rq__wy$|__kc\d+_\d+__rq__wy$|__kb\d+_\d+_\d+_.*__rq__wy$", m) for m, _ in rrs) else set()) | {x for m, h in rrs for x in (h, m[:-len("__rq__wy")] + "__rp__wy") if x} | {f[1] for f in fqf if f[1]} | {x for x in (kqfn(re.match(r"(.*)__[vqk]\d+__rq__wy$", m).group(1)) for m, _ in rrs if re.search(r"__[vqk]\d+__rq__wy$", m)) if x}
                             | {f[0] for f in fs if f[0] in fix1} | {f[0].rsplit(".", 1)[-1] + "__wy" for f in fs if f[0].rsplit(".", 1)[-1] + "__wy" in made}))
     if vmr:
         if roomw > 1:
@@ -1002,7 +1002,7 @@ def reflect(name, entry, prog, no_proof):
             continue
         F = m[:-len("__rq__wy")] + "__rp__wy"
         # (step 78) what is read through the slot block: its statement names the function by what follows the row
-        h = kqfn(re.match(r"(.*)__(?:[vqkm]\d+|kv\d+|kva\d+_\d+)__rq__wy$", m).group(1)) if re.search(r"__(?:[vqkm]\d+|kv\d+|kva\d+_\d+)__rq__wy$", m) else h
+        h = kqfn(re.match(r"(.*)__(?:[vqkm]\d+|kv\d+|kva\d+_\d+|kc\d+_\d+)__rq__wy$", m).group(1)) if re.search(r"__(?:[vqkm]\d+|kv\d+|kva\d+_\d+|kc\d+_\d+)__rq__wy$", m) else h
         unf = " ".join(x for x in [h, F] if x)
         unfc = ", ".join(x for x in [h, F] if x)
         if m.endswith("__n__rq__wy"):
@@ -1012,21 +1012,22 @@ def reflect(name, entry, prog, no_proof):
             t += (f"Lemma {name}_rr{j} {hrb}: {m}.\nProof. unfold {m}. intros; unfold {unfc}; first [solve [KQRWf.own_step0] | solve [cbn; KQRWf.own_step0] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step0]]. Qed.\n")
         else:
             # (step 78) the counter of a function read through the slot block may stand anywhere
-            mv = re.search(r"__(?:[vqgkm]|kv|kva)(\d+)(?:_\d+)?__rq__wy$", m)
+            mv = re.search(r"__(?:[vqgkm]|kv|kva|kc)(\d+)(?:_\d+)?__rq__wy$", m)
             rv = int(mv.group(1)) if mv else 0
             d0 = f"do {rv} intro; " if rv else ""
-            ost = "KQRWf.nr_step" if re.search(r"__k\d+__rq__wy$", m) else "KQRWf.nv_step" if re.search(r"__kv\d+__rq__wy$", m) else "KQRWf.own_step"
+            ost = "KQRWf.nr_step" if re.search(r"__k\d+__rq__wy$|__kc\d+_\d+__rq__wy$", m) else "KQRWf.nv_step" if re.search(r"__kv\d+__rq__wy$", m) else "KQRWf.own_step"
             # (step 121) a row taking accumulators at numbers: each of its calls paired with the function's call whose arguments made numbers
             # are its, the statement at those put in (KQRWf.nv_stepb); the same pairing rewrites the uses
-            mva = re.search(r"__kva\d+_(\d+)__rq__wy$", m)
+            mva = re.search(r"__kva\d+_(\d+)__rq__wy$|__kc\d+_(\d+)__rq__wy$", m)
             if mva and h:
-                na = int(mva.group(1))
+                na = int(mva.group(1) or mva.group(2))
                 ys = " ".join(f"?kqy{q}" for q in range(na)); yv = " ".join(f"kqy{q}" for q in range(na))
                 zs = " ".join(f"?kqz{q}" for q in range(na)); zv = " ".join(f"kqz{q}" for q in range(na))
                 t += (f"Ltac {name}_kva{j} L := match goal with |- context [{h} {ys}] => match goal with |- context [{F} {zs}] => "
                       f"let E := constr:(L {yv}) in lazymatch type of E with ?FL = _ => replace ({F} {zv}) with FL by (f_equal; KQRWf.nv_acceq); rewrite E end end end.\n")
-                t += f"Ltac {name}_kvs{j} IH := KQRWf.nv_stepb IH ltac:(repeat {name}_kva{j} IH).\n"
-                ost = f"{name}_kvs{j}"
+                if m.endswith("__rq__wy") and re.search(r"__kva\d+_\d+__rq__wy$", m):
+                    t += f"Ltac {name}_kvs{j} IH := KQRWf.nv_stepb IH ltac:(repeat {name}_kva{j} IH).\n"
+                    ost = f"{name}_kvs{j}"
             t += (f"Lemma {name}_rr{j} {hrb}: {m}.\nProof. unfold {m}. fix IH {rv + 1}. {d0}intros kqn; destruct kqn as [|kqn]; intros; cbn [{unf}]; first [solve [{ost} IH] | solve [cbn; {ost} IH] | solve [cbv beta iota zeta delta -[{keepf}]; {ost} IH]]. Qed.\n")
         rrn.append(f"{name}_rr{j}")
         # (step 76) rewriting compares up to unfolding: such a lemma only where its function is in the goal, or it would turn the operation back
@@ -1034,7 +1035,7 @@ def reflect(name, entry, prog, no_proof):
         if re.search(r"__kva\d+_\d+__rq__wy$", m) and h:
             rrj = f"match goal with Hr : {roomR} |- _ => repeat {name}_kva{j} ({name}_rr{j} Hr) end" if vmr else f"repeat {name}_kva{j} {name}_rr{j}"
         # (step 82) a counter made a number: from what the text has
-        if re.search(r"__k\d+__rq__wy$", m):
+        if re.search(r"__k\d+__rq__wy$|__kc\d+_\d+__rq__wy$", m):
             rrj = f"match goal with Hr : {roomR} |- _ => rewrite <- ?({name}_rr{j} Hr) end" if vmr else f"rewrite <- ?{name}_rr{j}"
         if re.search(r"__q\d+__rq__wy$", m):
             # (step 80) read as a pair: what is known of the pair goes first
@@ -1051,8 +1052,11 @@ def reflect(name, entry, prog, no_proof):
     ncp = bool(bqs) or bool(bbs) or any(m.endswith("__nc__wy") for m, _ in mts)
     if ncp:
         rrk0 = [f"{name}_rr{j}" for j, (m, h) in enumerate(rrs) if re.search(r"__k\d+__rq__wy$|__kb\d+_\d+_\d+_.*__rq__wy$", m)]
+        # (step 123) a counter row taking accumulators holding counters: forward by the pairing of calls
+        rrkc = [j for j, (m, h) in enumerate(rrs) if re.search(r"__kc\d+_\d+__rq__wy$", m)]
         nch = [kqfn(m[:-len("__nch__wy")]) for m, _ in mts if m.endswith("__nch__wy")]
-        rrk = ("try unfold " + ", ".join(nch) + "; " if nch else "") + ("; ".join(f"match goal with Hr : {roomR} |- _ => rewrite ?({x} Hr) end" if vmr else f"rewrite ?{x}" for x in rrk0) or "idtac")
+        rrk = ("try unfold " + ", ".join(nch) + "; " if nch else "") + ("; ".join([f"match goal with Hr : {roomR} |- _ => rewrite ?({x} Hr) end" if vmr else f"rewrite ?{x}" for x in rrk0]
+                                                                               + [f"match goal with Hr : {roomR} |- _ => repeat {name}_kva{j} ({name}_rr{j} Hr) end" if vmr else f"repeat {name}_kva{j} {name}_rr{j}" for j in rrkc]) or "idtac")
         bprev = "fail"
         vds = []
         # (step 120) a block's bounds, the counter first: one mutual fixpoint over them at a counter, each member's call posed by its own

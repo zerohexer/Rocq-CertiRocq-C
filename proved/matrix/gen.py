@@ -3755,6 +3755,23 @@ addA('zx_cac_two_ctr', "", 'if Nat.leb (snd (qe n (O, S O))) 3 then a else b',
      'Fixpoint qe (k : nat) (st : nat * nat) : nat * nat := match k with O => st | S m => qe m (S (fst st), snd st) end.\n')
 addA('zx_cac_in_rec', "", 'gq n a',
      'Fixpoint qa9 (k : nat) (st : nat * int) : nat * int := match k with O => st | S m => qa9 m (S (fst st), snd st + 1) end.\nFixpoint gq (k : nat) (x : int) : int := match k with O => x | S m => if Nat.leb (fst (qa9 m (O, x))) 3 then gq m (x + 1) else x end.\n')
+# a function giving back a counter whose parameter is a value holding a counter (step 123)
+addA('zx_crp_result', "", 'Uint63.of_nat (qf n (O, a))',
+     'Fixpoint qf (k : nat) (st : nat * int) : nat := match k with O => fst st | S m => qf m (S (fst st), snd st) end.\n')
+addA('zx_crp_option', "", 'Uint63.of_nat (qg n None)',
+     'Fixpoint qg (k : nat) (o : option nat) : nat := match k with O => match o with Some c => c | None => O end | S m => qg m (Some k) end.\n')
+addA('zx_crp_record', "", 'Uint63.of_nat (qh n (mkqr6 O a))',
+     'Record qr6 := mkqr6 { q6c : nat; q6v : int }.\nFixpoint qh (k : nat) (st : qr6) : nat := match k with O => q6c st | S m => qh m (mkqr6 (S (q6c st)) (q6v st)) end.\n')
+addA('zx_crp_operand', "", 'Uint63.of_nat (qi n (O, a))',
+     'Fixpoint qi (k : nat) (st : nat * int) : nat := match k with O => fst st | S m => Nat.add (qi m (fst st, snd st)) 2 end.\n')
+addA('zx_crp_with_nat', "", 'Uint63.of_nat (qj n O (S O, a))',
+     'Fixpoint qj (k : nat) (c : nat) (st : nat * int) : nat := match k with O => Nat.add c (fst st) | S m => qj m (S c) (S (fst st), snd st) end.\n')
+addA('zx_crp_as_counter', "", 'if Nat.leb (qf n (O, a)) 3 then a else b',
+     'Fixpoint qf (k : nat) (st : nat * int) : nat := match k with O => fst st | S m => qf m (S (fst st), snd st) end.\n')
+addA('zx_crp_budget', "", 'ff (qf n (O, a)) b',
+     'Fixpoint qf (k : nat) (st : nat * int) : nat := match k with O => fst st | S m => qf m (S (fst st), snd st) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => x | S m => ff m (x + 1) end.\n')
+addA('zx_crp_modulo', "", 'if Nat.eqb (Nat.land (qk n (S O, a)) 255) O then a else b',
+     'Fixpoint qk (k : nat) (st : nat * int) : nat := match k with O => fst st | S m => qk m (Nat.add (fst st) (fst st), snd st) end.\n')
 # a local fixpoint giving back a counter (step 113)
 addA('zx_lfc_direct', "", 'Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => O | S q => S (S (cn q)) end) n)',
      '')
