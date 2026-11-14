@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **4108 of 4249, 64 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **4118 of 4258, 63 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -6492,6 +6492,21 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Left, with a cell*: such a block's counter used as a counter where a member gives back that other counter (`A_zx_bca_uses_param`): step 129's bound is over the counter alone; §12.A.
 - *Cells*: 2 (`A_zx_bcp_*`): the other counter handed on and grown through the block, given back.
 
+**Steps 128, 129, 130 — the results (2026-11-14), one chain for the three.**  Built as designed:
+- *Step 128, a match on a value row's call whose function has no bound, a counter it takes apart used modulo a word*: the reader (`KQRReify.v`): `nc_sub`'s and `nc_any`'s match with no bound, `nc_ulow` its test, `nc_vrow` at the empty chain.  Checked on the work laptop (the repository at step 127 with its files, the families of values, of values and memories, of records, of counters, of blocks and of the program's parameters, and the new cells: 1738): every verdict step 127's but the cell read.  *Cells*: 3 more (`A_zx_cvn_*`), 3 proved.  One gap read: `A_zx_cvm_match`.
+- *Step 129, a mutual block's counter used as a counter, its members' parameters not alike*: the reader: `nb_of1`'s `co`, `nb_all`'s block of other arities.  Checked so (1742): every verdict step 128's but the cell read.  *Cells*: 4 more (`A_zx_bca_*`), 2 proved, `A_zx_bca_extra_nat` and `A_zx_bca_uses_param` gaps.  One gap read: `A_zx_bc_arities`.  *Found while building*: a cell of mine named the program's `a` and `b` in a helper, where they are not; renamed to numbers.
+- *Step 130, a mutual block giving back counters, a member taking another counter as a parameter*: the reader: `nr_rows`' block branch with the block's accumulators, `nr_stmt`, `nr_at`, `nb_blk` over the member's own types.  Checked so (1744): every verdict step 129's but the cell read.  *Cells*: 2 more (`A_zx_bcp_*`), 2 proved.  One gap read: `A_zx_bca_extra_nat`; `A_zx_bca_uses_param` a gap of another cause, §12.A.  *Found while building*: the reifier reads a block whose members take another counter beside their own as none; the block bound's statements took the row's types.
+- *The reifier's step on the kernels' programs* (on the work laptop, one core, interleaved, three rounds, the fastest, F62, in clean copies of two trees, the repository at step 127 / at step 130): `HWP_kernel` 3.15 / 3.12 s, `HWP_own` 2.18 / 2.19, `HWP_irqnow` 1.90 / 1.91, the same.
+- *The run*: one chain for the three steps, on the last step's code commit, the table 14 cells at a time under 14 GB.
+- The C: the 99 programs byte-identical.  The construct table (on `518ca0f`): **4118 of 4258 through the verified compiler**, 76
+  by design, 63 gaps, 1 not Rocq (was 4108 of 4249: 8 of the 9 new cells read, 1 gap; 3 gaps read, 1 found; no cell lost).  The
+  gate on `518ca0f`, the walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding, beside the corpus; the
+  same C: undefined behaviour trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five
+  kernels and `grow` (21 / 22 / 24 / 18 / 20 / 9 s); **109 programs through the verified compiler, 0 refused**, their 109 end
+  theorems each within the list; `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups (a block's counter where a member
+  gives back another counter of its own, a block of different types, a local block calling the function it stands in), then the
+  other categories of §3.5.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6677,11 +6692,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `af9345f` (2026-11-14); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `518ca0f` (2026-11-14); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 130's design -- a mutual block giving back counters, a member taking another counter as a parameter: the block's rows take it at numbers |
+| (this commit) | §12.V: steps 128, 129, 130 (a match on a value row's call with no bound, a block of other arities, a block's other counters: the construct table 4118 of 4258, 76 by design, 63 gaps), one chain for the three; the gate; §12.A |
+| `518ca0f` | `proved/KQRReify.v` + matrix step 130: a mutual block giving back counters, a member taking another counter as a parameter: the block's rows take it at numbers; 2 cells |
+| `60f697a` | §12.V: step 130's design -- a mutual block giving back counters, a member taking another counter as a parameter: the block's rows take it at numbers |
 | `c75340c` | `proved/KQRReify.v` + matrix step 129: a mutual block's counter used as a counter, its members' parameters not alike: a bound over the counter alone; 4 cells |
 | `8470f13` | §12.V: step 129's design -- a mutual block's counter used as a counter, its members' parameters not alike: a bound over the counter alone |
 | `716d3d8` | `proved/KQRReify.v` + matrix step 128: a match on a value row's call whose function has no bound, a counter it takes apart used modulo a word; 3 cells |
