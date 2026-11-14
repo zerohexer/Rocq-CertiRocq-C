@@ -1779,7 +1779,8 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   (`A_zx_bca_uses_param`): step 129's bound is over the counter alone, below: `Fixpoint eb8 (m : nat) (j : nat)
   : nat .. with ob8 (m : nat) : nat .. eb8 q 7 ..` (`A_zx_bca_extra_nat`, `A_zx_bca_uses_param`): step 111's block rows take no
   accumulator.  Accepted when they are proved.
-- *A mutual block's counter used as a counter, a member giving back another counter parameter of its own* (found at step 130):
+- ~~*A mutual block's counter used as a counter, a member giving back another counter parameter of its own*~~ (found at step 130) — **done,
+  step 131**: the bound counts the block's accumulators' places too:
   `Fixpoint ee8 (m : nat) (j : nat) : nat := match m with O => j | ..` used as `Nat.leb (ee8 n 5) 3` (`A_zx_bca_uses_param`): step 129's
   bound is over the counter alone.  Accepted when it is proved.
 - *A block of different types one of whose members gives back a counter* (found at step 111): step 62 reads such a block by writing
@@ -6507,6 +6508,12 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   gives back another counter of its own, a block of different types, a local block calling the function it stands in), then the
   other categories of §3.5.
 
+**Step 131, a mutual block's counter used as a counter, a member giving back another counter parameter of its own (§3.5, §12.A; the gap `A_zx_bca_uses_param`, found at step 130) — the design (2026-11-14).**  `Fixpoint ee8 (m : nat) (j : nat) : nat := match m with O => j | S q => oe8 q end with oe8 ..` used as `Nat.leb (ee8 n 5) 3`: step 129's bound of a block whose members' parameters are not alike is over the counter alone.
+- *The bound* (`nb_of1`'s `cop`, `nb_all`): the places that are a counter in every member that has them (step 130's accumulators) counted too, so that a member giving back such a counter has a bound; a call of a member with more parameters hands on what is at those places (the list of counter places long enough for them); each member's weight there the most of the block's.
+- *The proofs*: as step 120's; nothing new.
+- *The C*: a program read before, byte-identical.
+- *Cells*: 2 (`A_zx_bcq_*`): the other counter grown through the block and given back, as a recursion's budget.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6696,7 +6703,8 @@ Pushed to the public repository up to `518ca0f` (2026-11-14); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: steps 128, 129, 130 (a match on a value row's call with no bound, a block of other arities, a block's other counters: the construct table 4118 of 4258, 76 by design, 63 gaps), one chain for the three; the gate; §12.A |
+| (this commit) | §12.V: step 131's design -- a mutual block's counter used as a counter, a member giving back another counter parameter of its own: the bound counts the block's accumulators' places |
+| `bf5829f` | §12.V: steps 128, 129, 130 (a match on a value row's call with no bound, a block of other arities, a block's other counters: the construct table 4118 of 4258, 76 by design, 63 gaps), one chain for the three; the gate; §12.A |
 | `518ca0f` | `proved/KQRReify.v` + matrix step 130: a mutual block giving back counters, a member taking another counter as a parameter: the block's rows take it at numbers; 2 cells |
 | `60f697a` | §12.V: step 130's design -- a mutual block giving back counters, a member taking another counter as a parameter: the block's rows take it at numbers |
 | `c75340c` | `proved/KQRReify.v` + matrix step 129: a mutual block's counter used as a counter, its members' parameters not alike: a bound over the counter alone; 4 cells |
