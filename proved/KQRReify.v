@@ -12047,13 +12047,32 @@ Definition nc_lo (lo : nat) (x : nat * Z) : bool := if Nat.eqb lo 0 then true el
 (** (step 104) an operand of which only the value modulo a word is used: made of [+], [*], [S], a shift left by a written number, the bit
     operations of step 101, written numbers, variables and functions read as rows, each the same modulo a word (steps 82, 101, 102); [Some true]
     where a row of them has no bound, which is when such a use needs this reading *)
-Fixpoint nc_wx (fuel : nat) (rows : list rprow) (tab : list (kername * nbf)) (nv : list (nat * (nat * Z))) (t : term) {struct fuel} : option bool :=
+(** (step 125) a chain of projections around a value row's call ending in a counter, whether the function has a bound or not: the row, the
+    function, the call's arguments *)
+Definition nc_vrow (Σ : global_env) (mp : modpath) (rows : list rprow) (c : term) (l : list (option (kername * Instance.t) * (inductive * nat * nat)))
+  : option (rprow * kername * list term) :=
+  match c with
+  | tApp (tConst k _) args =>
+      match List.find (fun r : rprow => let '(h0, _, sl, _, d0) := r in
+                         if rp_is_nrv sl then match h0 with tConst k0 _ => Kername.eqb k0 k && Nat.eqb (length args) (rp_ar d0) | _ => false end else false) rows with
+      | Some r =>
+          let src := match lookup_env Σ k with Some (ConstantDecl cb) => ret_ty (al_t 1000 Σ mp (cst_type cb)) | _ => tVar "none"%bs end in
+          match pj_ty Σ src (rev l) with Some (Some T') => if is_nat T' then Some (r, k, args) else None | _ => None end
+      | None => None
+      end
+  | _ => None
+  end.
+Fixpoint nc_wx (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (tab : list (kername * nbf)) (nv : list (nat * (nat * Z))) (t : term) {struct fuel} : option bool :=
   match fuel with
   | O => None
   | S fuel =>
-      let go := nc_wx fuel rows tab nv in
+      let go := nc_wx fuel Σ mp rows tab nv in
       let two := fun a b => match go a, go b with Some x, Some y => Some (x || y) | _, _ => None end in
       if cnt_lit t then Some false else
+      (* (step 125) a counter given back in a value: the same modulo a word at the row's number, where the function has no bound *)
+      match match pj_path 50 Σ t with ((_ :: _) as l, c) => nc_vrow Σ mp rows c l | _ => None end with
+      | Some (_, k, _) => Some (negb (existsb (fun e => Kername.eqb (fst e) k) tab))
+      | None =>
       match t with
       | tRel r => match List.find (fun e => Nat.eqb (fst e) r) nv with Some e => Some (Nat.leb 1000 (fst (snd e))) | None => Some false end
       | tApp (tConstruct i 1 _) [e] => if Kername.eqb (inductive_mind i) (inductive_mind ind_nat) then go e else None
@@ -12069,9 +12088,9 @@ Fixpoint nc_wx (fuel : nat) (rows : list rprow) (tab : list (kername * nbf)) (nv
                    end
                end
       | _ => None
-      end
+      end end
   end.
-Definition nc_low (rows : list rprow) (tab : list (kername * nbf)) (nv : list (nat * (nat * Z))) (a : term) : bool := match nc_wx 1000 rows tab nv a with Some true => true | _ => false end.
+Definition nc_low (Σ : global_env) (mp : modpath) (rows : list rprow) (tab : list (kername * nbf)) (nv : list (nat * (nat * Z))) (a : term) : bool := match nc_wx 1000 Σ mp rows tab nv a with Some true => true | _ => false end.
 Definition nc_pow2 (m : nat) : bool := negb (Nat.eqb m 0) && Nat.eqb (Nat.land m (m - 1)) 0.
 (** where only the value modulo a word of an operand is used: [land] with a number below a word, [testbit] below 63, [even], [odd], [mod] by
     a written power of two; the operand's position *)
@@ -12079,16 +12098,16 @@ Definition nc_lowp (Σ : global_env) (mp : modpath) (rows : list rprow) (tab : l
   if Kername.eqb k kn_c_land then
     match args with
     | [a; b] =>
-        if nc_low rows tab nv a && Nat.leb (nc_c 1000 Σ mp rows tab nv b) 7 then Some 0%nat
-        else if nc_low rows tab nv b && Nat.leb (nc_c 1000 Σ mp rows tab nv a) 7 then Some 1%nat else None
+        if nc_low Σ mp rows tab nv a && Nat.leb (nc_c 1000 Σ mp rows tab nv b) 7 then Some 0%nat
+        else if nc_low Σ mp rows tab nv b && Nat.leb (nc_c 1000 Σ mp rows tab nv a) 7 then Some 1%nat else None
     | _ => None
     end
   else if Kername.eqb k kn_c_testbit then
-    match args with [a; i] => if nc_low rows tab nv a && cnt_lit i && Nat.ltb (cnt_val i) 63 then Some 0%nat else None | _ => None end
+    match args with [a; i] => if nc_low Σ mp rows tab nv a && cnt_lit i && Nat.ltb (cnt_val i) 63 then Some 0%nat else None | _ => None end
   else if Kername.eqb k kn_c_even || Kername.eqb k kn_c_odd then
-    match args with [a] => if nc_low rows tab nv a then Some 0%nat else None | _ => None end
+    match args with [a] => if nc_low Σ mp rows tab nv a then Some 0%nat else None | _ => None end
   else if Kername.eqb k kn_c_mod then
-    match args with [a; m] => if nc_low rows tab nv a && cnt_lit m && nc_pow2 (cnt_val m) then Some 0%nat else None | _ => None end
+    match args with [a; m] => if nc_low Σ mp rows tab nv a && cnt_lit m && nc_pow2 (cnt_val m) then Some 0%nat else None | _ => None end
   else None.
 (** a let's variable [r], held as the row's number, used only where its value modulo a word is enough: in such an operand, at its operations
     and not inside a row's arguments, and nowhere else *)
@@ -12138,6 +12157,12 @@ Fixpoint nc_trw (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
   | S fuel =>
       let go := nc_trw fuel Σ mp rows nv sub in
       if cnt_lit t then nr_ofn t else
+      (* (step 125) a counter given back in a value: the chain around the row's call *)
+      match match pj_path 50 Σ t with ((_ :: _) as l, c) => option_map (fun x => (l, x)) (nc_vrow Σ mp rows c l) | _ => None end with
+      | Some (l, (r, k, cargs)) =>
+          let src := match lookup_env Σ k with Some (ConstantDecl cb) => ret_ty (al_t 1000 Σ mp (cst_type cb)) | _ => tVar "none"%bs end in
+          pj_mk Σ (MPfile (mp_file mp)) src (rev l) (tApp (tConst (rp_name r) []) (nv_cargs Σ mp rows r k sub cargs))
+      | None =>
       match t with
       | tRel r => if existsb (fun e => Nat.eqb (fst e) r) nv then t else nr_ofn (sub t)
       | tApp (tConstruct i 1 _) [e] => tApp (tConst nr_add []) [go e; vm_lit 1]
@@ -12160,7 +12185,7 @@ Fixpoint nc_trw (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
                    end
                end
       | _ => nr_ofn (sub t)
-      end
+      end end
   end.
 (** the counter as a number *)
 Fixpoint nc_tr (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (tab : list (kername * nbf)) (nv : list (nat * (nat * Z))) (sub : term -> term) (t : term) {struct fuel} : term :=
@@ -12261,7 +12286,7 @@ Fixpoint nc_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
               tLetIn na (nc_tr 1000 Σ mp rows tab nv go v1) (tConst kn_int [])
                      (nc_sub fuel Σ mp rows tab ((0%nat, nc_cd 1000 Σ mp rows tab nv v1) :: nc_shift 1 nv) b)
             (* (step 104) a let of such a counter with no bound, every use of it where its value modulo a word is enough: the row's number *)
-            else if if is_nat a then nc_low rows tab nv v && nc_ulow 1000 Σ mp rows tab ((0%nat, (1000%nat, 0%Z)) :: nc_shift 1 nv) 0 b else false then
+            else if if is_nat a then nc_low Σ mp rows tab nv v && nc_ulow 1000 Σ mp rows tab ((0%nat, (1000%nat, 0%Z)) :: nc_shift 1 nv) 0 b else false then
               tLetIn na (nc_trw 1000 Σ mp rows nv go v) (tConst kn_int []) (nc_sub fuel Σ mp rows tab ((0%nat, (1000%nat, 0%Z)) :: nc_shift 1 nv) b)
             else tLetIn na (go v) a (under 1 b)
         | tCase ci p c brs =>
@@ -12317,7 +12342,7 @@ Fixpoint nc_any (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
             if if is_nat a then nc_ok Σ mp rows tab nv v1 else false then
               if nc_lo lo (nc_cd 1000 Σ mp rows tab nv v1) then true
               else nc_any fuel Σ mp rows tab ((0%nat, nc_cd 1000 Σ mp rows tab nv v1) :: nc_shift 1 nv) lo b
-            else if if is_nat a then nc_low rows tab nv v && nc_ulow 1000 Σ mp rows tab ((0%nat, (1000%nat, 0%Z)) :: nc_shift 1 nv) 0 b else false then
+            else if if is_nat a then nc_low Σ mp rows tab nv v && nc_ulow 1000 Σ mp rows tab ((0%nat, (1000%nat, 0%Z)) :: nc_shift 1 nv) 0 b else false then
               nc_any fuel Σ mp rows tab ((0%nat, (1000%nat, 0%Z)) :: nc_shift 1 nv) lo b
             else if go v then true else under 1 b
         | tCase ci p c brs =>

@@ -772,6 +772,17 @@ Ltac nc_step rw ::=
     rw; repeat nc_fold;
     match goal with |- context [Z.to_nat (Uint63.to_Z (Uint63.of_Z (Z.of_nat ?n)))] => first [rewrite (nc_E n) by nc_side | nc_low_rw n] end
   end.
+(** (step 125) the same where a value row's counter is used: the rows rewritten, then the value's call taken apart on both sides, so
+    that what stands in its place is a counter's number *)
+Ltac nc_step2 rw :=
+  match goal with |- context [Z.to_nat (Uint63.to_Z _)] =>
+    rw;
+    repeat (match goal with |- context [match ?c with _ => _ end] =>
+              lazymatch c with context [match _ with _ => _ end] => fail | _ =>
+                lazymatch type of c with nat => fail | bool => fail | _ => let e := fresh "kqe" in destruct c eqn:e end end end);
+    cbn beta iota delta [fst snd]; repeat nc_fold;
+    match goal with |- context [Z.to_nat (Uint63.to_Z (Uint63.of_Z (Z.of_nat ?n)))] => first [rewrite (nc_E n) by nc_side | nc_low_rw n] end
+  end.
 Ltac nb_step tac :=
   repeat (cbn beta iota zeta;
           first [ solve [tac; nb_bitf; nr_numf; lia]

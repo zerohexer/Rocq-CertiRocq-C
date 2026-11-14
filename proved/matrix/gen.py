@@ -3783,6 +3783,15 @@ addA('zx_crm_option', "", 'if Nat.eqb (Nat.land (ql n None) 255) O then a else b
      'Fixpoint ql (k : nat) (o : option nat) : nat := match k with O => match o with Some c => c | None => 1%nat end | S m => ql m (match o with Some c => Some (Nat.add c c) | None => Some 1%nat end) end.\n')
 addA('zx_crm_value', "", 'if Nat.eqb (Nat.land (fst (qm n (S O, a))) 255) O then a else b',
      'Fixpoint qm (k : nat) (st : nat * int) : nat * int := match k with O => st | S m => qm m (Nat.add (fst st) (fst st), snd st) end.\n')
+# a counter given back in a value, used where its value modulo a word is enough (step 125)
+addA('zx_cvm_land', "", 'if Nat.eqb (Nat.land (fst (qn n a)) 255) O then a else b',
+     'Fixpoint qn (k : nat) (i : int) : nat * int := match k with O => (S O, i) | S m => let r := qn m (i + 1) in (Nat.add (fst r) (fst r), snd r) end.\n')
+addA('zx_cvm_testbit', "", 'if Nat.testbit (fst (qn n a)) 3 then a else b',
+     'Fixpoint qn (k : nat) (i : int) : nat * int := match k with O => (S O, i) | S m => let r := qn m (i + 1) in (Nat.add (fst r) (fst r), snd r) end.\n')
+addA('zx_cvm_record', "", 'if Nat.even (q7c (qo n a)) then a else b',
+     'Record qr7 := mkqr7 { q7c : nat; q7v : int }.\nFixpoint qo (k : nat) (i : int) : qr7 := match k with O => mkqr7 (S O) i | S m => let r := qo m (i + 1) in mkqr7 (Nat.add (q7c r) (q7c r)) (q7v r) end.\n')
+addA('zx_cvm_match', "", 'match qp n a with Some c => if Nat.eqb (Nat.land c 255) O then a else b | None => b end',
+     'Fixpoint qp (k : nat) (i : int) : option nat := match k with O => Some (S O) | S m => if i <? 0 then None else match qp m (i + 1) with Some c => Some (Nat.add c c) | None => None end end.\n')
 # a local fixpoint giving back a counter (step 113)
 addA('zx_lfc_direct', "", 'Uint63.of_nat ((fix cn (m : nat) : nat := match m with O => O | S q => S (S (cn q)) end) n)',
      '')

@@ -1111,7 +1111,10 @@ def reflect(name, entry, prog, no_proof):
             if isv:
                 # (step 118) the call taken apart where the text uses its counters, its bound posed first
                 vds.append(f"match goal with |- context [{fn} {xs}] => (try {name}_bt{j}); let e := fresh \"kqe\" in destruct ({fn} {ys}) eqn:e; KQRWf.nb_vh0 end")
-        t += f"Ltac KQRWf.kq_bd ::= repeat {bprev}.\nLtac KQRWf.kq_nc ::= first [KQRWf.nc_step ltac:({rrk}) | KQRWf.nc_match].\nLtac KQRWf.kq_nc_side ::= KQRWf.nc_lia.\n"
+        rrv = ([(f"match goal with Hr : {roomR} |- _ => rewrite ?({name}_rr{j} Hr) by KQRWf.vm_side end" if vmr else f"rewrite ?{name}_rr{j}") for j, (m, h) in enumerate(rrs) if re.search(r"__kv\d+__rq__wy$", m)]
+               + [(f"match goal with Hr : {roomR} |- _ => repeat {name}_kva{j} ({name}_rr{j} Hr) end" if vmr else f"repeat {name}_kva{j} {name}_rr{j}") for j, (m, h) in enumerate(rrs) if re.search(r"__kva\d+_\d+__rq__wy$", m) and h])
+        nc3 = f" | KQRWf.nc_step2 ltac:({rrk}; {'; '.join(rrv)})" if rrv else ""
+        t += f"Ltac KQRWf.kq_bd ::= repeat {bprev}.\nLtac KQRWf.kq_nc ::= first [KQRWf.nc_step ltac:({rrk}) | KQRWf.nc_match{nc3}].\nLtac KQRWf.kq_nc_side ::= KQRWf.nc_lia.\n"
         if vds:
             t += "Ltac KQRWf.kq_vh ::= KQRWf.nb_vh.\nLtac KQRWf.kq_vd ::= first [" + " | ".join(vds) + "].\n"
         keepf = keepf + " Z.to_nat Uint63.to_Z"
