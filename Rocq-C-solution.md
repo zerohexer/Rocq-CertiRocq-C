@@ -6393,6 +6393,12 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   each within the list; `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups (such a counter used modulo a word, a
   counter in a value in a value used as a counter, a block of members of other parameters), then the other categories of §3.5.
 
+**Step 124, such a counter used where its value modulo a word is enough (§3.5, §12.A; the gap `A_zx_crp_modulo`, found at step 123) — the design (2026-11-14).**  `Nat.land (qk n (S O, a)) 255` with `qk k st` doubling its accumulator's counter, so no bound: step 104 reads such a use at the row's number, the same modulo a word, and its reading (`nc_trw`) had no environment to make the accumulator's argument numbers.
+- *The reading* (`nc_trw`): with the environment, a row's accumulators' arguments made numbers as in the other uses (`nr_acu`, step 123).
+- *The C*: a program read before, byte-identical.
+- *Left, with a cell*: a counter given back in a value, used where its value modulo a word is enough (`A_zx_crm_value`): step 104's reading is of rows giving back a counter, not of value rows; §12.A.
+- *Cells*: 5 (`A_zx_crm_*`): `testbit`, `even`, a remainder by a power of two, an `option` accumulator; a counter given back in a value.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6579,7 +6585,8 @@ Pushed to the public repository up to `e5fa323` (2026-11-14); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 123 (a function giving back a counter whose parameter is a value holding a counter: the construct table 4091 of 4233, 76 by design, 65 gaps), the gate; §12.A |
+| (this commit) | §12.V: step 124's design -- such a counter used where its value modulo a word is enough: step 104's reading with the environment |
+| `90ce7a3` | §12.V: step 123 (a function giving back a counter whose parameter is a value holding a counter: the construct table 4091 of 4233, 76 by design, 65 gaps), the gate; §12.A |
 | `e5fa323` | `proved/KQRReify.v` + `KQRWf.v` + `kitc.py` + matrix step 123: a function giving back a counter whose parameter is a value holding a counter: counter rows taking accumulators at numbers; 8 cells |
 | `ddd875d` | §12.V: step 123's design -- a function giving back a counter whose parameter is a value holding a counter: counter rows taking accumulators at numbers |
 | `a64aeaa` | §12.V: step 122 (a counter given back by a function taking an accumulator, used as a counter: the construct table 4083 of 4225, 76 by design, 65 gaps), the gate; §12.A |
