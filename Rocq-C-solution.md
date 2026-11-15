@@ -1808,6 +1808,18 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   and the check, given no bound of `log2`, falls to a path that unfolds it: no answer in 120 s, the same with `sqrt` and `gcd`.  A sum is
   one site only where the check has a bound of each part; `log2`, `sqrt`, `gcd` given theirs.  Accepted when those three are proved and
   an operation with no bound is refused at once.
+- *A counter a function gives back, given to a function that makes its counter larger* (found at step 83) — **step 134**: held at its
+  bound where the call is not well formed otherwise (`KQR.kq_cap`, the bound a term of the program's counters); `ff (cnt n a s) b` with
+  `ff k x := hh (S k) x` (`A_zb_o_callee_grows`).  Accepted when it and the step's cells are proved.
+- *Such a counter given to the function's own recursion* (found at step 134): `Fixpoint pq (k c : nat) .. := .. pq m (S (cnt c x t)) ..`
+  (`A_zx_cg_own_rec`): the recursion's counters are each at most one of the function's (`rec_ok`, `lin1`), and such a counter is any
+  machine number to it; held at its bound, the larger of a min's two linear bounds is taken.  Accepted when it is proved.
+- *A function giving back a counter that uses another's as a counter* (found at step 83): `w`'s body tests `Nat.leb (cnt m i t) 3`
+  (`A_zb_o_counter_row_uses`): a row's body reading another row's counter as a counter.  Accepted when it is proved.
+- *A counter a function gives back, used where the counters are held by weights* (found at step 83): `pp (k c : nat)` handing on `S c`
+  and testing `cnt c x t` (`A_zb_o_weights`): a refusal of the reader's own today.  Accepted when it is proved.
+- *A test in `Z` on such a counter* (found at step 83): `(Z.of_nat (cnt n a s) <? 3)%Z` (`A_z_u_zofnat`): the same test as on the
+  counter, by `Nat2Z.inj_lt`.  Accepted when it is proved.
 
 **B. Compiling from an ordinary `.v` file, as simply as `lean --c`.**
 - ~~A command in an ordinary Rocq file~~ — **done at step 89**, without a command: `python3 proved/kitc.py prog.v [--main=NAME]`: the entry's arguments are read from its signature (numbers and counters from the
@@ -1856,6 +1868,9 @@ proved once, measured against C written the same way.
   found); every table read before classifies the same.  *Measured on the work laptop* (the wide lab of step 133, 1776 cells, 8 at a
   time, the reader's rebuild included): step A 948 s against 1342 s, two cells read otherwise at first (a function named `p1`, `p2`: written short in the session too, then fixed); step B 528 s against 1342 s, every cell's verdict and category the same; 1776 cells served, a session started afresh 162 times, its size 977 MB at the median, 3610 at the most (one cell's own work).  Accepted when the wide lab's verdicts are the same cell by
   cell (done) and the full table's in the batch's chain, the time measured.
+- *The reading of a counter a function gives back, given to the function's own recursion* (found at step 134): `A_zx_cg_own_rec`'s
+  reading runs past the time limit, 122 s and 4.2 GB in one `coqc`, on step 133's reader as on step 134's; in a session beside others
+  the memory stops it first ("the reifier did not run").  Accepted when its reading takes under 10 s, read or refused with its reason.
 - *`HWP_irqnow`'s reifier step after step 114* (found at step 114): about 0.09 s slower (1.90 to 1.99 s, in four timings), the other
   kernels the same: what of the value rows its reading meets; after step 115 about 0.03 s more (1.90 to 1.94 s and 1.97 to 2.00 s, in
   two timings); after step 118 0.05 to 0.10 s more (2.00 to 2.05 s and 1.95 to 2.05 s, in two timings: the bounds of its value rows);
@@ -6561,6 +6576,15 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   the list; `check_trust.py`: `trust unchanged`.  Next: §12.A's follow-ups (a local block calling the function it stands in, a
   library's function giving back a counter that is not a fixpoint), then the other categories of §3.5.
 
+**Step 134, a counter a function gives back, given to a function that makes its counter larger (§3.5, §12.A; the gap `A_zb_o_callee_grows`, left at step 83) — the design (2026-11-15).**  `ff (cnt n a s) b` with `Definition ff (k : nat) (x : int) : int := hh (S k) x`: step 83 reads the use as `ff (Z.to_nat (Uint63.to_Z (F n a s))) b`, and to `wf` a counter made of a machine number is any machine number, `2^63 - 1` at most; step 34's bounds give `ff` a bound above it, `2^63`, and `hh`, given one more, `2^63 + 1`: past a machine number.  What the counter is at most is known: the function's bound (step 83's, `cnt k i t <= k`), at the call's counters, each below the caller's bound.
+- *The bound as a term* (`nc_bt`): of a counter expression, a counter written in the program's own counters at least it: a counter variable or a written counter itself, `S`, `+`, a product by a written counter the same of theirs, a let of such a counter held as its number the term of its value; a counter of a value a function gives back (step 118's chain) the call's; a call of a function with a bound, its coefficients times its arguments' terms and its constant; a helper written out; `pred`, `div`, `modulo`, `div2`, `shiftr`, `land`, `min`, `sub`, `ldiff`, `clearbit` its first counter's; `max`, `lor`, `lxor` the sum.
+- *The use held at it* (`nc_capa`, `nc_sub`'s flag `cap`): in each argument of a call of the program's functions, each such counter, the argument itself or under a library's operation (`Nat.div (cnt n a s) 2`), written `KQR.kq_cap u b`, `u` step 83's number and `b` the term above (the bound read off the counter as written, else as the use reads it); `kq_cap` a definition, `Nat.min`, read as `CMin` (step 66).  To `wf` it is at most `b`'s largest value, the caller's bound less one for `n`, so the callee's bound is the caller's and `hh`'s one more.
+- *Only where the program is not read otherwise*: the rows' rewriting with the flag (`y_allc true`) is the reading's last try (`reify_prog2`), so a program read today is read as today and its C is byte-identical.  The C of such a call: `ff(min(F(n, a, s), n), b)`, one comparison and one move more, at that call only.
+- *The equation* (`kitc.py`): `KQR.kq_cap_l : x <= k -> kq_cap x k = x` among the steps of the uses' rewriting (`kq_nc`), its side condition by `nc_side` from the function's bound; `kq_cap` not unfolded by `cbn` (`simpl never`) nor by `cbv` (kept).
+- *What is proved*: nothing assumed beyond the list: `kq_cap` is a definition, `kq_cap_l` a lemma, the bound and the equation theorems of each program as at step 83.
+- *Left, with cells*: such a counter given to the function's own recursion (`rec_ok` asks a counter at most one of the function's, and the larger of a min's two linear bounds is taken); its reading, there before this step, runs past the time limit (§12.F).
+- *Cells*: 16 (`A_zx_cg_*`): the callee adding a written number, doubling, a product, through a let of the use, two levels down, a sum of two uses, a successor of the use, a nested call, a caller's two counters in the bound, inside a recursion, through a helper, a division, a recursive callee, a value's counter, a block's counter, the own recursion.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6760,7 +6784,8 @@ Pushed to the public repository up to `b792a6a` (2026-11-14); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.F: the table's and the labs' Rocq processes (option 2: long-lived sessions, step A one a cell, step B shared across cells; the wide lab's verdicts the same, its time measured); §12.V: the rows' lemmas proved per program by tactics, an item with its acceptance |
+| (this commit) | §12.V: step 134's design -- a counter a function gives back, given to a function that makes its counter larger: held at its bound; §12.A: step 83's leftovers as items; §12.F |
+| `6e9b3b0` | §12.F: the table's and the labs' Rocq processes (option 2: long-lived sessions, step A one a cell, step B shared across cells; the wide lab's verdicts the same, its time measured); §12.V: the rows' lemmas proved per program by tactics, an item with its acceptance |
 | `07d789f` | `proved/kitc.py` + `proved/kqsess.py` + `proved/matrix/run.sh`: option 2, the cells checked in long-lived Rocq sessions (`KQ_SESSION=1`: one a cell; `KQ_SESSION=2`: shared, set back to a mark after each) |
 | `6eecefb` | §12.V: steps 131, 132, 133 (a block's other counters in its bound, a block of counters and numbers, a library's value function: the construct table 4129 of 4266, 76 by design, 60 gaps), one chain for the three; the gate; §12.A |
 | `b792a6a` | `proved/KQRReify.v` + matrix step 133: a library's function giving back a value holding counters: its value row; 3 cells |
