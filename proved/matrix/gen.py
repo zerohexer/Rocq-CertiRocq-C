@@ -4799,6 +4799,23 @@ addA('zx_cr_value', "", 'if Nat.leb (w n a s) 3 then a else b',
      'Fixpoint pv (k : nat) (i : int) : nat * int := match k with O => (O, i) | S m => let p := pv m (i + 1) in (S (fst p), snd p) end.\nFixpoint w (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if Nat.leb (fst (pv m i)) 3 then S (w m (i + 1) t) else w m (i + 1) t end.\n')
 addA('zx_cr_acc', "", 'if Nat.leb (w n a s) 3 then a else b',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint w (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if Nat.leb (cnt m i t) 3 then S (w m (i + 1) t) else w m (i + 1) t end.\nDefinition w2 (k : nat) (i : int) (t : mem) : nat := w k i t.\n')
+# a test in Z of a counter against a negative number: BCmpZN (step 137)
+addA('zx_zn_ge', "", 'if (Z.of_nat n >=? -5)%Z then a else b',
+     '')
+addA('zx_zn_eq', "", 'if (Z.of_nat n =? -1)%Z then a else b',
+     '')
+addA('zx_zn_le', "", 'if (Z.of_nat n <=? -3)%Z then a else b',
+     '')
+addA('zx_zn_left_lt', "", 'if (-2 <? Z.of_nat n)%Z then a else b',
+     '')
+addA('zx_zn_left_ge', "", 'if (-2 >=? Z.of_nat n)%Z then a else b',
+     '')
+addA('zx_zn_row', "", 'if (Z.of_nat (cnt n a s) >? -1)%Z then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('zx_zn_bool_let', "", 'let t := (Z.of_nat n <=? -3)%Z in if t then a else b',
+     '')
+addA('zx_zn_choice', "", '(if (Z.of_nat n >? -1)%Z then a else b) + 1',
+     '')
 addA('zb_o_weights', "", 'pp n n a s',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint pp (k c : nat) (x : int) (t : mem) : int := match k with O => x | S m => if Nat.leb (cnt c x t) 3 then pp m (S c) (x + 1) t else x end.\n')
 addA('zb_o_row_uses', "", 'fst (w n a s)',

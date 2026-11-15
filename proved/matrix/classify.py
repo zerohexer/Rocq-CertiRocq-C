@@ -197,7 +197,6 @@ BY_NAME = {
   "A_zx_rr_match": "a record in a record given back by a recursion, of numbers or of counters: not read (a record in a record given as a parameter is) (12.A)",
   "A_zx_cv_rec_rec": "a record in a record given back by a recursion, of numbers or of counters: not read (a record in a record given as a parameter is) (12.A)",
   "A_zx_cg_own_rec": "a counter a function gives back, given to the function's own recursion: its reading does not end in time (§12.F)",
-  "A_zx_zt_neg": "a test in Z of a counter with a negative number",
   "A_zx_zt_zsum": "a test in Z on arithmetic in Z of counters",
   "A_zh_row_shiftr": "a function giving back a counter built by shiftr: not the same modulo a word, it wants the row's bound (step 83)",
   "A_zh_row_testbit_own": "a test on what a function giving back a counter gives back, in its own recursion: it wants the row's bound or the test on the machine's number",

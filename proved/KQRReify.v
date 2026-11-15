@@ -1914,7 +1914,17 @@ with reify_b (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sb
                                        | tApp (tConst k _) [c] => if Kername.eqb k kn_zofn then reify_c fuel ctx c else None
                                        | _ => match z_lit t with Some z => if (0 <=? z)%Z then Some (CNumU (z_nu z)) else None | None => None end
                                        end in
-                    match zo a, zo b with Some x, Some y => Some (BCmpZ o x y) | _, _ => None end
+                    match zo a, zo b with
+                    | Some x, Some y => Some (BCmpZ o x y)
+                    | _, _ =>
+                        (* (step 137) a counter against a negative number, on either side *)
+                        let zc := fun t => match t with tApp (tConst k _) [c] => if Kername.eqb k kn_zofn then reify_c fuel ctx c else None | _ => None end in
+                        let zn := fun t => match z_lit t with Some (Zneg p) => Some p | _ => None end in
+                        match zc a, zn b with
+                        | Some x, Some p => Some (BCmpZN o false x p)
+                        | _, _ => match zn a, zc b with Some p, Some y => Some (BCmpZN o true y p) | _, _ => None end
+                        end
+                    end
                 | None => if Kername.eqb kn kn_c_testbit then
                             match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (BTestN x y) | _, _ => None end
                           else helper tt
@@ -3347,6 +3357,7 @@ with cl_b (B : Z) (bs : list cbe) (b : sbool) {struct b} : list site :=
   | BEven c => cl_c B bs c
   | BTestN a c => cl_c B bs a ++ cl_c B bs c
   | BCmpZ _ x y => cl_c B bs x ++ cl_c B bs y
+  | BCmpZN _ _ x _ => cl_c B bs x
   end
 with cl_r (B : Z) (bs : list cbe) (x : srec) {struct x} : list site :=
   match x with
