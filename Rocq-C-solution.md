@@ -1821,7 +1821,8 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   and testing `cnt c x t` (`A_zb_o_weights`): a refusal of the reader's own today.  Accepted when it is proved.
 - ~~*A test in `Z` on such a counter*~~ (found at step 83) — **step 135**: a test in `Z` of any counters, `BCmpZ`, a construct of `S`
   proved once; `(Z.of_nat (cnt n a s) <? 3)%Z` (`A_z_u_zofnat`) proved.
-- *A test in `Z` of a counter with a negative number* (found at step 135): `(Z.of_nat n <? -1)%Z` (`A_zx_zt_neg`): its value is known from
+- ~~*A test in `Z` of a counter with a negative number*~~ (found at step 135) — **step 137**: `BCmpZN`, its value a constant, a construct
+  of `S` proved once; `(Z.of_nat n <? -1)%Z` (`A_zx_zt_neg`): its value is known from
   the counter being at least 0, and `BCmpZ`'s numbers are counters.  Accepted when it is proved.
 - *Arithmetic in `Z` of counters inside such a test* (found at step 135): `(Z.of_nat n + 1 <? 3)%Z` (`A_zx_zt_zsum`): the sum is the
   counters' sum made `Z` (`Nat2Z.inj_add`), and `BCmpZ`'s operands are counters made `Z`; its general form, arithmetic in `Z`
@@ -6621,6 +6622,12 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: a program read before, byte-identical.
 - *Cells*: 10 (`A_zx_cr_*`): `ltb`, `eqb`, the row's own counter in the test, two others' counters, a let of it, a match on it, the row used as a number, a sum of two of it in the test, a value's counter, through a helper.
 
+**Step 137, a test in `Z` of a counter against a negative number (§3.5, §12.A; the gap `A_zx_zt_neg`, found at step 135) — the design (2026-11-16).**  `(Z.of_nat n <? -1)%Z`: step 135's `BCmpZ` takes counters and numbers written at least 0, and a negative number is neither.
+- *A construct of `S`, proved once* (`KQR.v`): `BCmpZN (o : zcmp) (l : bool) (a : scnt) (p : positive)`, the counter `a` against `Zneg p`, `Zneg p` first if `l`; its meaning `zcmps o` of the two in that order, the user's text by conversion.  A counter made `Z` is at least 0 and `Zneg p` below it, so the test's value is known whatever the counter (`zneg_v o l`, `zneg_ok`): its code a constant, as `true` or `false` is (`ccond` a jump to the branch, `cbval` 1 or 0, `csel` the one of the two); `wf` asks of the counter what it asks of any.  Its proof: the meaning is `zneg_v o l` (`zneg_ok`, the counter at least 0: `Nat2Z.is_nonneg`, `nu_z_ok`), then `BTrue`'s or `BFalse`'s.
+- *The reader* (`KQRReify.v`): a test in `Z` not of two counters, a counter against a negative number written, on either side.
+- *The C*: a program read before, byte-identical.
+- *Cells*: 8 (`A_zx_zn_*`): `>=?`, `=?`, `<=?`, the number on the left with `<?` and `>=?`, a counter a function gives back, a boolean let of it, a choice of numbers by it.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6820,7 +6827,9 @@ Pushed to the public repository up to `cec99b2` (2026-11-15); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 136's design -- a function giving back a counter whose body uses another's counter as a counter: its row read as the program's functions are; §12.A |
+| (this commit) | §12.V: step 137's design -- a test in Z of a counter against a negative number: BCmpZN, a constant, a construct of S proved once; §12.A; §14 step 136's code row |
+| `04e743d` | `proved/KQRReify.v` + matrix step 136: a function giving back a counter whose body uses another's counter as a counter: its row read as the program's functions are; 10 cells |
+| `e6569e3` | §12.V: step 136's design -- a function giving back a counter whose body uses another's counter as a counter: its row read as the program's functions are; §12.A |
 | `b3e6523` | §12.V: steps 134, 135 (a counter given to a function that makes its counter larger, held at its bound; a test in Z of counters, a construct of S: the construct table 4164 of 4302, 76 by design, 61 gaps), one chain for the two, the first table in long-lived sessions and what it found (`cec99b2`); the gate; §12.A |
 | `cec99b2` | `proved/kitc.py`: option 2's sessions for the files written for the program only: the program's own files compiled as libraries; a program with a notation or a scope of its own read with no session (step 77's printing) |
 | `656aa77` | `proved/KQR.v` + `KQRReify.v` + matrix step 135: a test in Z of counters, `BCmpZ`: its meaning, code, wf and proof (`BCmpC`'s); the reader; 20 cells |
