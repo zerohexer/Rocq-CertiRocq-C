@@ -1818,8 +1818,12 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   (`A_zb_o_counter_row_uses`): a row's body reading another row's counter as a counter.  Accepted when it is proved.
 - *A counter a function gives back, used where the counters are held by weights* (found at step 83): `pp (k c : nat)` handing on `S c`
   and testing `cnt c x t` (`A_zb_o_weights`): a refusal of the reader's own today.  Accepted when it is proved.
-- *A test in `Z` on such a counter* (found at step 83): `(Z.of_nat (cnt n a s) <? 3)%Z` (`A_z_u_zofnat`): the same test as on the
-  counter, by `Nat2Z.inj_lt`.  Accepted when it is proved.
+- ~~*A test in `Z` on such a counter*~~ (found at step 83) — **step 135**: a test in `Z` of any counters, `BCmpZ`, a construct of `S`
+  proved once; `(Z.of_nat (cnt n a s) <? 3)%Z` (`A_z_u_zofnat`) proved.
+- *A test in `Z` of a counter with a negative number* (found at step 135): `(Z.of_nat n <? -1)%Z` (`A_zx_zt_neg`): its value is known from
+  the counter being at least 0, and `BCmpZ`'s numbers are counters.  Accepted when it is proved.
+- *Arithmetic in `Z` of counters inside such a test* (found at step 135): `(Z.of_nat n + 1 <? 3)%Z` (`A_zx_zt_zsum`): the sum is the
+  counters' sum made `Z` (`Nat2Z.inj_add`), and `BCmpZ`'s operands are counters made `Z`.  Accepted when it is proved.
 
 **B. Compiling from an ordinary `.v` file, as simply as `lean --c`.**
 - ~~A command in an ordinary Rocq file~~ — **done at step 89**, without a command: `python3 proved/kitc.py prog.v [--main=NAME]`: the entry's arguments are read from its signature (numbers and counters from the
@@ -6585,6 +6589,13 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Left, with cells*: such a counter given to the function's own recursion (`rec_ok` asks a counter at most one of the function's, and the larger of a min's two linear bounds is taken); its reading, there before this step, runs past the time limit (§12.F).
 - *Cells*: 16 (`A_zx_cg_*`): the callee adding a written number, doubling, a product, through a let of the use, two levels down, a sum of two uses, a successor of the use, a nested call, a caller's two counters in the bound, inside a recursion, through a helper, a division, a recursive callee, a value's counter, a block's counter, the own recursion.
 
+**Step 135, a test in `Z` of counters (§3.5, §12.A; the gap `A_z_u_zofnat`, left at step 83) — the design (2026-11-15).**  `if (Z.of_nat (cnt n a s) <? 3)%Z then a else b`, and the same of any counter: a test in `Z` whose operands are counters made `Z` is the test on the counters, exactly, and S has no test that means it.
+- *A construct of `S`, proved once* (`KQR.v`): `BCmpZ (o : zcmp) (a b : scnt)`, `o` one of `=?`, `<?`, `<=?`, `>?`, `>=?` of `Z`; its meaning `zcmps o` of each operand's `Z`, `Z.of_nat` of the counter, a written number (`CNumU`) its `Z` itself, so that the meaning is the user's text at any size of number, by conversion.  Its code is `BCmpC`'s (step 30): the counters' machine numbers compared, the operands the other way round for `>?` and `>=?` (`zc_op`, `zc_sw`); `wf` asks what `BCmpC` asks.  Its proof is `BCmpC`'s, with `zcmps_cmpn` (the test of `Z.of_nat` of two counters is the comparison of the counters) and `nu_z_ok`.  No proof per program: the conversion check, as for every construct of `S`.
+- *The reader* (`KQRReify.v`): `Z.eqb`, `Z.ltb`, `Z.leb`, `Z.gtb`, `Z.geb`, each operand `Z.of_nat` of a counter the reader reads (a parameter, a let, a match's, a sum, a counter a function gives back as step 83 reads it) or a `Z` written at least 0 (`CNumU`).
+- *The C*: a program read before, byte-identical (none has such a test).
+- *Left, with cells*: a negative number in such a test (`A_zx_zt_neg`); arithmetic in `Z` of counters inside it (`A_zx_zt_zsum`, `Z.of_nat n + 1`).
+- *Cells*: 20 (`A_zx_zt_*`): each operator, the number on the left, two counters, a sum, a number from 5000 on, 0, a counter a function gives back, inside a recursion, a let, a boolean let, a function giving back the test, `&&`, a match's counter, a choice of numbers by it, a negative number, a sum in `Z`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6784,7 +6795,9 @@ Pushed to the public repository up to `b792a6a` (2026-11-14); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 134's design -- a counter a function gives back, given to a function that makes its counter larger: held at its bound; §12.A: step 83's leftovers as items; §12.F |
+| (this commit) | §12.V: step 135's design -- a test in Z of counters: BCmpZ, a construct of S proved once; §12.A; §14 step 134's code row |
+| `18285f7` | `proved/KQRReify.v` + `KQR.v` + `kitc.py` + matrix step 134: a counter a function gives back, given to a function that makes its counter larger: held at its bound; 16 cells |
+| `caa5151` | §12.V: step 134's design -- a counter a function gives back, given to a function that makes its counter larger: held at its bound; §12.A: step 83's leftovers as items; §12.F |
 | `6e9b3b0` | §12.F: the table's and the labs' Rocq processes (option 2: long-lived sessions, step A one a cell, step B shared across cells; the wide lab's verdicts the same, its time measured); §12.V: the rows' lemmas proved per program by tactics, an item with its acceptance |
 | `07d789f` | `proved/kitc.py` + `proved/kqsess.py` + `proved/matrix/run.sh`: option 2, the cells checked in long-lived Rocq sessions (`KQ_SESSION=1`: one a cell; `KQ_SESSION=2`: shared, set back to a mark after each) |
 | `6eecefb` | §12.V: steps 131, 132, 133 (a block's other counters in its bound, a block of counters and numbers, a library's value function: the construct table 4129 of 4266, 76 by design, 60 gaps), one chain for the three; the gate; §12.A |
