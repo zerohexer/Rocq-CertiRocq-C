@@ -1814,7 +1814,8 @@ the gate (examples, corpus, kernels if the walk changed) passes.
 - *Such a counter given to the function's own recursion* (found at step 134): `Fixpoint pq (k c : nat) .. := .. pq m (S (cnt c x t)) ..`
   (`A_zx_cg_own_rec`): the recursion's counters are each at most one of the function's (`rec_ok`, `lin1`), and such a counter is any
   machine number to it; held at its bound, the larger of a min's two linear bounds is taken.  Accepted when it is proved.
-- *A function giving back a counter that uses another's as a counter* (found at step 83): `w`'s body tests `Nat.leb (cnt m i t) 3`
+- ~~*A function giving back a counter that uses another's as a counter*~~ (found at step 83) — **step 136**: its row read as the program's
+  functions are, the use made the row's number, the row the source's text; `w`'s body tests `Nat.leb (cnt m i t) 3`
   (`A_zb_o_counter_row_uses`): a row's body reading another row's counter as a counter.  Accepted when it is proved.
 - *A counter a function gives back, used where the counters are held by weights* (found at step 83): `pp (k c : nat)` handing on `S c`
   and testing `cnt c x t` (`A_zb_o_weights`): a refusal of the reader's own today.  Accepted when it is proved.
@@ -6613,6 +6614,13 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   109 end theorems each within the list; `check_trust.py`: `trust unchanged`.  Next: step 136 (a function giving back a counter
   whose body uses another's as a counter), then §12.A's other counter and value items, then the rows' lemmas proved once (§12.V).
 
+**Step 136, a function giving back a counter whose body uses another's counter as a counter (§3.5, §12.A; the gap `A_zb_o_counter_row_uses`, left at step 83) — the design (2026-11-15).**  `Fixpoint w (k : nat) (i : int) (t : mem) : nat := .. if Nat.leb (cnt m i t) 3 then S (w m (i + 1) t) else w m (i + 1) t ..`: step 82's row of `w` keeps a test as the source writes it, so its body calls `cnt`, a function S has as its row only; step 83 reads such a use in the program's own functions, not in the rows the reader makes.
+- *The row as the source* (`nr_rows`, unchanged): the row of `w` keeps the test on `cnt`, so its statement, `W k i t = of_nat (w k i t)`, holds at every counter as before (the same test on both sides) and is proved as before.
+- *The row read as the program's functions are* (`y_all`'s loop): a row whose body uses another's counter as a counter is walked with the program's functions, its use made the row's number (step 83's `nc_sub`), what is read the row so rewritten, and its equation with the row as made, under the counters' bound, `kitc.py`'s as for any function so read.  What is made of the row is the source's text once (`y_dedup`: the environment holds it twice, as made and as read).
+- *A let of such a counter that a match tests* (`nr_trm`, `nr_inscr`): kept a counter in the row (made a number, the test would read a number as a counter); its use read as above.  A let used as a number only, as before.
+- *The C*: a program read before, byte-identical.
+- *Cells*: 10 (`A_zx_cr_*`): `ltb`, `eqb`, the row's own counter in the test, two others' counters, a let of it, a match on it, the row used as a number, a sum of two of it in the test, a value's counter, through a helper.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6812,7 +6820,8 @@ Pushed to the public repository up to `cec99b2` (2026-11-15); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: steps 134, 135 (a counter given to a function that makes its counter larger, held at its bound; a test in Z of counters, a construct of S: the construct table 4164 of 4302, 76 by design, 61 gaps), one chain for the two, the first table in long-lived sessions and what it found (`cec99b2`); the gate; §12.A |
+| (this commit) | §12.V: step 136's design -- a function giving back a counter whose body uses another's counter as a counter: its row read as the program's functions are; §12.A |
+| `b3e6523` | §12.V: steps 134, 135 (a counter given to a function that makes its counter larger, held at its bound; a test in Z of counters, a construct of S: the construct table 4164 of 4302, 76 by design, 61 gaps), one chain for the two, the first table in long-lived sessions and what it found (`cec99b2`); the gate; §12.A |
 | `cec99b2` | `proved/kitc.py`: option 2's sessions for the files written for the program only: the program's own files compiled as libraries; a program with a notation or a scope of its own read with no session (step 77's printing) |
 | `656aa77` | `proved/KQR.v` + `KQRReify.v` + matrix step 135: a test in Z of counters, `BCmpZ`: its meaning, code, wf and proof (`BCmpC`'s); the reader; 20 cells |
 | `72937f2` | §12.V: step 135's design -- a test in Z of counters: BCmpZ, a construct of S proved once; §12.A; §14 step 134's code row |
