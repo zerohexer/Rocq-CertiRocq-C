@@ -556,7 +556,7 @@ def shared_term(prog):
             return pre + "".join(x + "." for x in mods) + "kq_shared"
     return None
 
-def reflect(name, entry, prog, no_proof):
+def reflect(name, entry, prog, no_proof, closed=False):
     """--reflect: the verified compiler (proved/KQR.v, Rocq-C-solution.md §1.12).  The reifier reads the entry `main`
     applies and every function it reaches (proved/KQRReify.v); each function is compiled by KQR.compile_f, and gets its
     statement from KQR.compile_f_ok -- proved once -- with the theorems of the functions before it as its callee
@@ -574,9 +574,13 @@ def reflect(name, entry, prog, no_proof):
         + f"\nDefinition {name}_res := ltac:(let k q := (let r := eval vm_compute in (let r0 := KQRReify.reify_prog2 q in (r0, KQRReify.reify_why q, KQRReify.rec_info2 q r0, KQRReify.entry_perm q, KQRReify.fix1_info q, KQRReify.pf_info_r q r0)) in exact r) in\n"
         + f"  run_template_program (tmQuoteRecTransp {entry} false)\n"
         + "  (fun q0 => let b := eval vm_compute in (KQRReify.has_function q0) in\n"
+        # (step 139) a closed term giving a machine number, worked out by Rocq at the reading, where the program has one
+        + ("   let kc q1 := (let c := eval vm_compute in (KQRReify.has_closed q1) in\n"
+           "                 match c with false => k q1 | true => run_template_program (KQRReify.closed_eval q1) (fun q2 => k q2) end) in\n"
+           if closed else "   let kc q1 := k q1 in\n")
         + "   match b with\n"
-        + "   | false => k q0\n"
-        + "   | true => run_template_program (KQRReify.quote_function q0) (fun q => k q)\n"
+        + "   | false => kc q0\n"
+        + "   | true => run_template_program (KQRReify.quote_function q0) (fun q => kc q)\n"
         + "   end)).\n"
         + f"Definition {name}_src := ltac:(let r := eval vm_compute in (option_map fst (fst (fst (fst (fst (fst {name}_res)))))) in exact r).\n"
         + f"Definition {name}_mts := match fst (fst (fst (fst (fst {name}_res)))) with Some x => snd x | None => [] end.\n"
@@ -1428,7 +1432,26 @@ def main():
                 print(name, "NOT READ:", why); continue
             args, wrap = r
         if not walk_mode:
-            r = reflect(name, entry, prog, no_proof)
+            # (step 139) a program not read: read again with its closed terms worked out by Rocq (no session: the first reading is in
+            # it); what the first said is kept where the second does not read it either
+            import io, contextlib
+            def held(f, b):
+                # what f prints, held; on an exit or an error, printed first, as it would have been
+                try:
+                    with contextlib.redirect_stdout(b):
+                        return f()
+                except BaseException:
+                    sys.stdout.write(b.getvalue()); sys.stdout.flush(); raise
+            buf = io.StringIO()
+            r = held(lambda: reflect(name, entry, prog, no_proof), buf)
+            if r is None and re.search(r"Uint63\.of_(nat|Z)\b", prog):
+                buf2 = io.StringIO()
+                SESSION["off"] = True
+                r = held(lambda: reflect(name, entry, prog, no_proof, closed=True), buf2)
+                sys.stdout.write(buf2.getvalue() if r is not None else buf.getvalue())
+            else:
+                sys.stdout.write(buf.getvalue())
+            sys.stdout.flush()
             if not r:
                 print(name, "REFUSED: not compiled by the verified compiler (the reasons above)", flush=True)
                 continue

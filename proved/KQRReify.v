@@ -13392,6 +13392,72 @@ Definition fn_bases (p : program) : list (modpath * string) :=
                      | None => []
                      end) (declarations (fst p)).
 Definition has_function (p : program) : bool := match fn_bases p with [] => false | _ => true end.
+(** (step 139) a closed term giving a machine number, [Uint63.of_nat c] or [Uint63.of_Z c] with [c] closed and not written as a number
+    (a library's function of a constant, a definition of the program): worked out at the reading by Rocq, read as the number it is; the
+    kernel's check of the meaning against the text computes it to the same number.  [Uint63.of_nat c] is [Uint63.of_Z (Z.of_nat c)];
+    a counter written ([Uint63.of_nat 5]) is read as before *)
+Fixpoint ce_cands (fuel : nat) (t : term) {struct fuel} : list term :=
+  match fuel with
+  | O => []
+  | S fuel =>
+      let go := ce_cands fuel in
+      match t with
+      | tApp (tConst k _) [c] =>
+          if Kername.eqb k kn_ofz && closedn 0 c && negb (match z_lit c with Some _ => true | None => false end)
+             && negb (match c with tApp (tConst k2 _) [t2] => Kername.eqb k2 kn_zofn && cnt_lit t2 | _ => false end)
+          then [t] else go c
+      | tApp f args => go f ++ flat_map go args
+      | tLambda _ _ b => go b
+      | tLetIn _ v _ b => go v ++ go b
+      | tCase _ _ c brs => go c ++ flat_map (fun br => go (bbody br)) brs
+      | tFix mfix _ => flat_map (fun d => go (dbody d)) mfix
+      | _ => []
+      end
+  end.
+Fixpoint ce_subst (fuel : nat) (tab : list (term * term)) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := ce_subst fuel tab in
+      match List.find (fun e => teq 100000 (fst e) t) tab with
+      | Some e => snd e
+      | None =>
+          match t with
+          | tApp f args => tApp (go f) (map go args)
+          | tLambda na a b => tLambda na a (go b)
+          | tLetIn na v a b => tLetIn na (go v) a (go b)
+          | tCase ci p c brs => tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := go (bbody br) |}) brs)
+          | tFix mfix k => tFix (map (fun d => {| dname := dname d; dtype := dtype d; rarg := rarg d; dbody := go (dbody d) |}) mfix) k
+          | _ => t
+          end
+      end
+  end.
+Definition ce_mp (p : program) : modpath := match snd p with tConst k _ => fst k | _ => MPfile [] end.
+Definition ce_all (p : program) : list term :=
+  flat_map (fun e : kername * global_decl =>
+              if in_prog (ce_mp p) (fst (fst e)) then
+                match snd e with ConstantDecl cb => match cst_body cb with Some b => ce_cands 100000 b | None => [] end | _ => [] end
+              else []) (declarations (fst p)).
+Definition has_closed (p : program) : bool := match ce_all p with [] => false | _ => true end.
+Definition ce_prog (tab : list (term * term)) (p : program) : program :=
+  ({| universes := universes (fst p);
+      declarations := map (fun e : kername * global_decl =>
+                             if in_prog (ce_mp p) (fst (fst e)) then
+                               match snd e with
+                               | ConstantDecl cb =>
+                                   match cst_body cb with
+                                   | Some b => (fst e, ConstantDecl {| cst_type := cst_type cb; cst_body := Some (ce_subst 100000 tab b);
+                                                                      cst_universes := cst_universes cb; cst_relevance := cst_relevance cb |})
+                                   | None => e
+                                   end
+                               | _ => e
+                               end
+                             else e) (declarations (fst p));
+      retroknowledge := retroknowledge (fst p) |}, snd p).
+Definition closed_eval (p : program) : TemplateMonad program :=
+  let cs := ce_all p in
+  vs <- monad_map (fun t => v <- tmUnquoteTyped PrimInt63.int t ;; v' <- tmEval all v ;; tmQuote v') cs ;;
+  ret (ce_prog (combine cs vs) p).
 (** what a [Qed] hides of a [Function]: its plain functional and the statement of its calls' measures, and what those name.  Asked for only by a program with one: a bind on the whole quote costs a tenth of a second (measured on a kernel's program) *)
 Definition quote_function (p : program) : TemplateMonad program :=
   match fn_bases p with

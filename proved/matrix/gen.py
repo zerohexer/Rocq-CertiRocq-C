@@ -4829,6 +4829,23 @@ addA('zx_cw_let', "", 'pp n n a s',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint pp (k c : nat) (x : int) (t : mem) : int := match k with O => x | S m => let u := cnt c x t in if Nat.leb u 3 then pp m (S c) (x + Uint63.of_nat u) t else x end.\n')
 addA('zx_cw_zero', "", 'pp n O a s',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint pp (k c : nat) (x : int) (t : mem) : int := match k with O => x | S m => if Nat.leb (cnt c x t) 3 then pp m (S c) (x + 1) t else x end.\n')
+# a closed term a library or the program computes, read as its value (step 139)
+addA('zx_ce_strlen', "", 'Uint63.of_nat (Stdlib.Strings.String.length "abc"%string) + a',
+     'From Stdlib Require Import String.\n')
+addA('zx_ce_listlen', "", 'Uint63.of_nat (List.length (cons 1 (cons 2 (cons 3 nil)))) + a',
+     '')
+addA('zx_ce_zpow', "", 'Uint63.of_Z (Z.pow 2 10) + a',
+     '')
+addA('zx_ce_natmul', "", 'Uint63.of_nat (Nat.mul 3 4) + a',
+     '')
+addA('zx_ce_def', "", 'Uint63.of_nat k12 + a',
+     'Definition k12 : nat := 3 * 4.\n')
+addA('zx_ce_in_rec', "", 'fr n a',
+     'Fixpoint fr (k : nat) (x : int) : int := match k with O => x | S m => fr m (x + Uint63.of_Z (Z.pow 2 3)) end.\n')
+addA('zx_ce_twice', "", 'Uint63.of_nat (Nat.mul 3 4) + Uint63.of_nat (Nat.mul 3 4)',
+     '')
+addA('zx_ce_not_closed', "", 'Uint63.of_nat (n + 1) + a',
+     '')
 addA('zb_o_weights', "", 'pp n n a s',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint pp (k c : nat) (x : int) (t : mem) : int := match k with O => x | S m => if Nat.leb (cnt c x t) 3 then pp m (S c) (x + 1) t else x end.\n')
 addA('zb_o_row_uses', "", 'fst (w n a s)',
