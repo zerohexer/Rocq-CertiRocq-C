@@ -4737,6 +4737,47 @@ addA('zx_cg_block', "", 'ff (ev n) b',
      'Fixpoint ev (k : nat) : nat := match k with O => O | S m => S (od m) end\nwith od (k : nat) : nat := match k with O => O | S m => ev m end.\nFixpoint hh (k : nat) (x : int) : int := match k with O => x | S m => hh m (x + 1) end.\nDefinition ff (k : nat) (x : int) : int := hh (S k) x.\n')
 addA('zx_cg_own_rec', "", 'pq n n a s',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint pq (k c : nat) (x : int) (t : mem) : int := match k with O => x + Uint63.of_nat c | S m => pq m (S (cnt c x t)) (x + 1) t end.\n')
+# a test in Z of counters: BCmpZ (step 135)
+addA('zx_zt_lt', "", 'if (Z.of_nat n <? 3)%Z then a else b',
+     '')
+addA('zx_zt_le', "", 'if (Z.of_nat n <=? 3)%Z then a else b',
+     '')
+addA('zx_zt_eq', "", 'if (Z.of_nat n =? 3)%Z then a else b',
+     '')
+addA('zx_zt_gt', "", 'if (Z.of_nat n >? 3)%Z then a else b',
+     '')
+addA('zx_zt_ge', "", 'if (Z.of_nat n >=? 3)%Z then a else b',
+     '')
+addA('zx_zt_lit_left', "", 'if (3 <? Z.of_nat n)%Z then a else b',
+     '')
+addA('zx_zt_two', "", 'if (Z.of_nat n <? Z.of_nat (S n))%Z then a else b',
+     '')
+addA('zx_zt_sum', "", 'if (Z.of_nat (n + n) <=? 10)%Z then a else b',
+     '')
+addA('zx_zt_big', "", 'if (Z.of_nat n <? 1000000)%Z then a else b',
+     '')
+addA('zx_zt_zero', "", 'if (Z.of_nat n =? 0)%Z then a else b',
+     '')
+addA('zx_zt_row_ge', "", 'if (Z.of_nat (cnt n a s) >=? 2)%Z then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('zx_zt_in_rec', "", 'zr n a',
+     'Fixpoint zr (k : nat) (x : int) : int := match k with O => x | S m => if (Z.of_nat m <? 5)%Z then zr m (x + 1) else zr m (x * 2) end.\n')
+addA('zx_zt_let', "", 'let c := S n in if (Z.of_nat c <? 4)%Z then a else b',
+     '')
+addA('zx_zt_bool_let', "", 'let t := (Z.of_nat n <? 3)%Z in if t then a else b',
+     '')
+addA('zx_zt_ret_bool', "", 'if zt n then a else b',
+     'Definition zt (k : nat) : bool := (Z.of_nat k >? 2)%Z.\n')
+addA('zx_zt_and', "", 'if (Z.of_nat n <? 3)%Z && (0 <? Z.of_nat n)%Z then a else b',
+     '')
+addA('zx_zt_match', "", 'match n with O => a | S m => if (Z.of_nat m >? 2)%Z then a else b end',
+     '')
+addA('zx_zt_choice', "", '(if (Z.of_nat n <? 3)%Z then a else b) + 1',
+     '')
+addA('zx_zt_neg', "", 'if (Z.of_nat n <? -1)%Z then a else b',
+     '')
+addA('zx_zt_zsum', "", 'if (Z.of_nat n + 1 <? 3)%Z then a else b',
+     '')
 addA('zb_o_weights', "", 'pp n n a s',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint pp (k c : nat) (x : int) (t : mem) : int := match k with O => x | S m => if Nat.leb (cnt c x t) 3 then pp m (S c) (x + 1) t else x end.\n')
 addA('zb_o_row_uses', "", 'fst (w n a s)',

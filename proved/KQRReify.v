@@ -141,6 +141,17 @@ Definition nbop_of (kn : kername) : option nbop :=
   else if Kername.eqb kn kn_c_shiftr then Some NShiftr else if Kername.eqb kn kn_c_clearbit then Some NClear else None.
 Definition kn_zton := kn_of <% Z.to_nat %>.
 Definition kn_zofn := kn_of <% Z.of_nat %>.
+(* (step 135) a test in Z of counters: its operator; a Z written as the number a counter is written with from 5000 on (CNumU) *)
+Definition kn_z_eqb := kn_of <% Z.eqb %>.
+Definition kn_z_ltb := kn_of <% Z.ltb %>.
+Definition kn_z_leb := kn_of <% Z.leb %>.
+Definition kn_z_gtb := kn_of <% Z.gtb %>.
+Definition kn_z_geb := kn_of <% Z.geb %>.
+Definition zcmp_v (kn : kername) : option zcmp :=
+  if Kername.eqb kn kn_z_eqb then Some ZEq else if Kername.eqb kn kn_z_ltb then Some ZLt else if Kername.eqb kn kn_z_leb then Some ZLe
+  else if Kername.eqb kn kn_z_gtb then Some ZGt else if Kername.eqb kn kn_z_geb then Some ZGe else None.
+Definition z_nu (z : Z) : Number.uint :=
+  match z with Zpos p => Number.UIntDecimal (Pos.to_uint p) | _ => Number.UIntDecimal (Decimal.D0 Decimal.Nil) end.
 Definition kn_s2z := kn_of <% Sint63.to_Z %>.
 Definition kn_u2z := kn_of <% Uint63.to_Z %>.
 Definition kn_ofz := kn_of <% Uint63.of_Z %>.
@@ -1895,9 +1906,19 @@ with reify_b (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sb
             match (if eq_mp (fst kn) prim_mp then cmp_v (snd kn) else None) with
             | Some c => match reify fuel ctx a, reify fuel ctx b with Some x, Some y => Some (BCmp c x y) | _, _ => None end
             (* (step 92) after the comparisons, the common case *)
-            | None => if Kername.eqb kn kn_c_testbit then
-                        match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (BTestN x y) | _, _ => None end
-                      else helper tt
+            | None =>
+                match zcmp_v kn with
+                | Some o =>
+                    (* (step 135) a test in Z: each operand Z.of_nat of a counter, or a Z written, at least 0 *)
+                    let zo := fun t => match t with
+                                       | tApp (tConst k _) [c] => if Kername.eqb k kn_zofn then reify_c fuel ctx c else None
+                                       | _ => match z_lit t with Some z => if (0 <=? z)%Z then Some (CNumU (z_nu z)) else None | None => None end
+                                       end in
+                    match zo a, zo b with Some x, Some y => Some (BCmpZ o x y) | _, _ => None end
+                | None => if Kername.eqb kn kn_c_testbit then
+                            match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (BTestN x y) | _, _ => None end
+                          else helper tt
+                end
             end
             end
       | _ => helper tt
@@ -3325,6 +3346,7 @@ with cl_b (B : Z) (bs : list cbe) (b : sbool) {struct b} : list site :=
   | BOfRec y => cl_r B bs y
   | BEven c => cl_c B bs c
   | BTestN a c => cl_c B bs a ++ cl_c B bs c
+  | BCmpZ _ x y => cl_c B bs x ++ cl_c B bs y
   end
 with cl_r (B : Z) (bs : list cbe) (x : srec) {struct x} : list site :=
   match x with
