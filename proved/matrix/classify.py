@@ -182,7 +182,6 @@ BY_NAME = {
   "A_z_u_leb": "a counter a function gives back used as a counter: its bound",
   "A_z_u_match": "a counter a function gives back used as a counter: its bound",
   "A_zb_o_local": "a function giving back a counter, a counter as a field",
-  "A_zb_o_counter_row_uses": "a function giving back a counter that uses another's as a counter",
   "A_zb_o_weights": "a counter a function gives back, used where the counters are held by weights",
   "A_zc_c_mutual": "a class or a record of functions given to a mutual block",
   "A_zc_r_mutual": "a class or a record of functions given to a mutual block",

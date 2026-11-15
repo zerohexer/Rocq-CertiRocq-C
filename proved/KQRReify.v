@@ -10182,6 +10182,21 @@ Fixpoint nr_tail_ok (fuel : nat) (Σ : global_env) (mp : modpath) (self v d : na
       | u => nr_only 10000 self v d p u
       end
   end.
+(** (step 136) a variable a match takes apart or tests somewhere in [t] (the de Bruijn index [n] there) *)
+Fixpoint nr_inscr (fuel : nat) (n : nat) (t : term) {struct fuel} : bool :=
+  match fuel with
+  | O => true
+  | S fuel =>
+      let go := nr_inscr fuel in
+      match t with
+      | tCase _ _ c brs => negb (noccur_between n 1 c) || existsb (fun br => go (n + length (bcontext br)) (bbody br)) brs
+      | tApp f args => go n f || existsb (go n) args
+      | tLambda _ _ b => go (S n) b
+      | tLetIn _ v _ b => go n v || go (S n) b
+      | tFix mfix _ => existsb (fun df => go (n + length mfix) (dbody df)) mfix
+      | _ => false
+      end
+  end.
 (** what a function giving back a counter is as a number; a counter among the variables a number, [accs] the rels of those that are numbers already *)
 Fixpoint nr_trm (m : nat) (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (self d : nat) (accs : list nat) (nv : list nat) (t : term) {struct fuel} : option term :=
   match fuel with
@@ -10265,7 +10280,8 @@ Fixpoint nr_trm (m : nat) (fuel : nat) (Σ : global_env) (mp : modpath) (rows : 
           | None => None
           end
       | tLetIn na v ty b =>
-          if is_nat ty then
+          (* (step 136) a let of a counter a match tests: the counter kept, its uses read as the program's functions' are *)
+          if if is_nat ty then negb (nr_inscr 1000 0 b) else false then
             match go v, nr_trm m fuel Σ mp rows self (S d) accs (0 :: map S nv) b with
             | Some v2, Some b2 => Some (tLetIn na v2 (tConst kn_int []) b2)
             | _, _ => None
@@ -13074,14 +13090,26 @@ Definition y_allc (cap : bool) (Σ : global_env) (mp : modpath) (root : kername)
           end
       | _ => st
       end
-    else st) (snd (reach_go false 1000 Σ mp root root ([], []))) (S0, match rows with [] => false | _ => true end).
+    else st) (snd (reach_go false 1000 Σ mp root root ([], []))
+              (* (step 136) and the rows of functions giving back a counter whose body uses another's counter as a counter: read as the
+                 program's functions are, each use made the row's number, the row itself the source's text *)
+              ++ flat_map (fun r : rprow => let '(_, _, sl, _, d0) := r in
+                             if if rp_is_nr sl then nc_any 100000 (conv_all Σ mp) mp rows nbt [] 0 (dbody d0) else false then [rp_name r] else []) rows)
+            (S0, match rows with [] => false | _ => true end).
 Definition y_all := y_allc false.
 (** the rows of those: the head of the environment, where [y_all] put them *)
 Fixpoint ends_wy (s : string) : bool :=
   if String.eqb s "__wy"%bs then true else
   match s with String.EmptyString => false | String.String _ r => ends_wy r end.
+(** (step 136) a row read as the program's functions are is in the environment twice, as made and as read (its uses rewritten):
+    what is made is the first, the source's text *)
+Fixpoint y_dedup (seen : list kername) (l : copytab) : copytab :=
+  match l with
+  | [] => []
+  | x :: r => let '(k, _, _, _) := x in if existsb (Kername.eqb k) seen then y_dedup seen r else x :: y_dedup (k :: seen) r
+  end.
 Definition y_rows (Σ : global_env) : copytab :=
-  flat_map (fun e =>
+  y_dedup [] (flat_map (fun e =>
     if eq_mp (fst (fst e)) copy_mp then
       if ends_wy (snd (fst e)) then
         match snd e with
@@ -13089,7 +13117,7 @@ Definition y_rows (Σ : global_env) : copytab :=
         | _ => []
         end
       else []
-    else []) (rev (firstn 200 (declarations Σ))).
+    else []) (rev (firstn 200 (declarations Σ)))).
 Definition reify_prog2c (lo : bool) (bt0 : kername -> option Z) (chk : bool) (p : program) : option (list (kername * sig * fbody) * list (string * term)) :=
   match p with
   | (Σ0000, tConst root _) =>
