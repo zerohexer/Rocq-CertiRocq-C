@@ -1213,9 +1213,12 @@ def reflect(name, entry, prog, no_proof):
     for j, f in enumerate(fs):
         if f[0] in yf:
             W = yf[f[0]]
-            if ncf(f) and wsl(f) != "nil":
-                # the counters held by weights: not yet
-                t += "Check KQ_refused__a_counter_given_back_used_where_the_counters_are_held_by_weights.\n"
+            if ncf(f) and wsl(f) != "nil" and f[0] in fix1:
+                # (step 138) the counters held by weights: the equation where each weighted polynomial of them is below the bound
+                t += (f"Lemma {name}_rqy{j} {hrb}: KQR.eqCv {f[1]} _ (KQR.eqN {kl(f)} {f[3]} _) (fun kqcs => KQR.allb_lt {wsl(f)} (List.map Z.of_nat kqcs) {bnz(f, j)}%Z) {W} {f[0]}.\n"
+                      f"Proof. cbn [KQR.eqCv KQR.eqN]. fix IH 1. intros kqn; destruct kqn as [|kqn]; intros; cbn [{W} {f[0]}]; cbn [KQR.allb_lt KQR.pevalz KQR.prodz List.map List.fold_right List.nth fst snd] in *; "
+                      f"first [solve [KQRWf.own_step IH] | solve [cbn; KQRWf.own_step IH] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step IH]{altn}]. Qed.\n")
+                continue
             if ncf(f):
                 t += (f"Lemma {name}_rqy{j} {hrb}: KQR.eqCb {bnz(f, j)}%Z {f[1]} _ (KQR.eqN {kl(f)} {f[3]} _) {W} {f[0]}.\n"
                       + (f"Proof. cbn [KQR.eqCb KQR.eqN]. fix IH 1. intros kqn kqH; destruct kqn as [|kqn]; intros; cbn [{W} {f[0]}]; first [solve [KQRWf.own_step IH] | solve [cbn; KQRWf.own_step IH] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.own_step IH]{altn}]. Qed.\n" if f[0] in fix1 else
@@ -1251,7 +1254,9 @@ def reflect(name, entry, prog, no_proof):
                     # (step 118) the slot block's room, where the program gives back a record through it and has no __v row
                     rr0 = (f"{name}_room {rq0}" if vmr else f"(fun _ => Logic.I) (fun _ => {rq0})" if roomw <= 1 else
                            f"(fun Hs => Hs {[int(r[2]) for r in recs].index(roomw)}%nat (proj1 (PeanoNat.Nat.ltb_lt 1%nat {roomw}%nat) eq_refl)) (fun _ => {rq0})")
-                    t += (f"Proof. exact_no_check (@KQR.callee_ok_eqb {inst} {name}_prog (KQR.gid1 {j}) {bnz(f, j)}%Z {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)} ({roomR}) {W} {f[0]} {rr0}"
+                    # (step 138) where its counters are held by weights, callee_ok_eqv, the weights its argument
+                    eql, vsa = ("callee_ok_eqv", f" {wsl(f)}") if wsl(f) != "nil" else ("callee_ok_eqb", "")
+                    t += (f"Proof. exact_no_check (@KQR.{eql} {inst} {name}_prog (KQR.gid1 {j}) {bnz(f, j)}%Z {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)}{vsa} ({roomR}) {W} {f[0]} {rr0}"
                           f" (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j}) eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl)). Qed.\n")
                     continue
                 t += (f"Proof. exact_no_check (@KQR.callee_ok_eqr {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)} {wsl(f)} ({roomR}) {W} {f[0]} {name}_room {rq0}"

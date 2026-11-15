@@ -12460,6 +12460,39 @@ Proof.
   { intros s. cbn [callf]. symmetry. apply appnT_eqN. apply (appc_eqCb B x _ (eqN k m _) h h' cvs L C Eh'). }
   unfold calln, callm, callmw in *. cbn [sw sr sq sn sk] in *. destruct w; [destruct H as [M' H]; exists M'|]; rewrite !E; exact H.
 Qed.
+(** (step 138) the same where the counters are held by weights (steps 37 to 39): the equation where each weighted polynomial of them
+    is below the bound, as [cfits] takes them; [allb_lt] that, a conjunction the polynomials at numbers make linear *)
+Fixpoint allb_lt (vs : list poly) (zs : list Z) (B : Z) : Prop :=
+  match vs with [] => True | P :: vs' => (pevalz P zs < B)%Z /\ allb_lt vs' zs B end.
+Lemma cfits_allb : forall gs B cvs, cfits gs B cvs -> allb_lt (sv gs) (map Z.of_nat cvs) B.
+Proof.
+  intros gs B cvs C. unfold cfits in C. destruct (sv gs) as [|P vs]; [exact Logic.I|].
+  induction C as [|P0 l HP C IH]; [exact Logic.I | split; [exact HP | exact IH]].
+Qed.
+Fixpoint eqCv (x : nat) (A : Type) (R : A -> A -> Prop) (pre : list nat -> Prop) {struct x} : ctype x A -> ctype x A -> Prop :=
+  match x as x0 return ctype x0 A -> ctype x0 A -> Prop with
+  | O => fun h h' => pre [] -> R h h'
+  | S x => fun h h' => forall c, eqCv x A R (fun l => pre (c :: l)) (h c) (h' c)
+  end.
+Lemma appc_eqCv : forall x A (R : A -> A -> Prop) pre h h' cvs, length cvs = x -> pre cvs -> eqCv x A R pre h h' ->
+  R (appc x A h cvs) (appc x A h' cvs).
+Proof.
+  induction x as [|x IH]; intros A R pre h h' cvs L Hp H.
+  - destruct cvs; [exact (H Hp) | discriminate L].
+  - destruct cvs as [|c cvs]; [discriminate L|]. cbn [appc].
+    apply (IH A R (fun l => pre (c :: l))); [injection L; auto | exact Hp | apply H].
+Qed.
+Lemma callee_ok_eqv : forall P id B x k m r w q b v (R : Prop) (h h' : ftype (mksig9 x k m r w q b v false)),
+  (slot_room -> R) -> (R -> eqCv x _ (eqN k m _) (fun cvs => allb_lt v (map Z.of_nat cvs) B) h h') ->
+  callee_ok P id B (mksig9 x k m r w q b v false) h -> callee_ok P id B (mksig9 x k m r w q b v false) h'.
+Proof.
+  intros P id B x k m r w q b v R h h' HR Eh H Hsl. pose proof (Eh (HR Hsl)) as Eh'.
+  unfold callee_ok in *. intros cvs vs M L K C. specialize (H Hsl cvs vs M L K C).
+  pose proof (cfits_allb (mksig9 x k m r w q b v false) B cvs C) as Ca.
+  assert (E : forall s, callf (mksig9 x k m r w q b v false) h' cvs vs s = callf (mksig9 x k m r w q b v false) h cvs vs s).
+  { intros s. cbn [callf]. symmetry. apply appnT_eqN. apply (appc_eqCv x _ (eqN k m _) (fun cvs => allb_lt v (map Z.of_nat cvs) B) h h' cvs L Ca Eh'). }
+  unfold calln, callm, callmw in *. cbn [sw sr sq sn sk] in *. destruct w; [destruct H as [M' H]; exists M'|]; rewrite !E; exact H.
+Qed.
 Theorem compile_f_ok : forall P cs gidf j gs b,
   find P (gidf j) = Some (compile_f gidf j gs b) -> wf_f (map (@projT1 _ _) cs) gs b = true -> callees_ok P gidf cs ->
   Nat.leb (length cs) j = true -> (Z.of_nat j <? 1099511627776)%Z = true ->
