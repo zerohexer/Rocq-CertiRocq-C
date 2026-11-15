@@ -90,14 +90,15 @@ def session_send(cmd, marker):
         out.append(line)
 def coqc(path, extra=()):
     mode = os.environ.get("KQ_SESSION")
-    if mode not in ("1", "2") or extra:
+    full = path if os.path.isabs(path) else os.path.join(GEN, path)
+    # only the files written here for the program go into a session; the program's own files are compiled, as a library
+    if mode not in ("1", "2") or extra or SESSION.get("off") or os.path.dirname(os.path.abspath(full)) != os.path.abspath(GEN):
         return coqc0(path, extra)
     if mode == "2" and SESSION["srv"] is None and SESSION["p"] is None and not SESSION["loaded"] and not USER:
         SESSION["srv"] = server_connect()
     if SESSION["p"] is None and SESSION["srv"] is None:
         SESSION["p"] = subprocess.Popen(["coqtop", "-q", "-w", "-all", "-R", ROOT, "KQ", "-Q", os.path.join(ROOT, "proved"), "KQC", "-Q", GEN, "KQG", *USER],
                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=GEN, bufsize=1)
-    full = path if os.path.isabs(path) else os.path.join(GEN, path)
     base = os.path.splitext(os.path.basename(full))[0]
     text = open(full).read()
     for x in SESSION["loaded"]:
@@ -593,6 +594,9 @@ def reflect(name, entry, prog, no_proof):
         + (f'Redirect "{name}_rsh" Eval vm_compute in (match {q}{name}_src with Some l => map (fun f => (snd (fst (fst f)), '
            f'KQR.sh_ok {shared} (snd f))) l | None => [] end).\n' if shared else ""))
     if q:
+        # (option 2) a notation or a scope of the program's: what the reader found is printed where it is not open, the reading
+        # required, not imported (step 77): no session for this program, every file compiled
+        SESSION["off"] = True
         rc, out = coqc(f0)
         if rc == 0:
             f0b = os.path.join(GEN, f"{name}_ro.v")
