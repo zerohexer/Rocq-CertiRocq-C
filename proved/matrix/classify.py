@@ -295,7 +295,9 @@ def classify(name, line):
         return "ok", ""
     if name in DESIGN_CELLS:
         return "design", ""
-    if INVALID.search(line):
+    # Rocq refusing the program itself (kitc.py: "Rocq refused the file"); a check of the files kitc.py writes that failed is not that,
+    # whatever its error says (KQ_SESSION=1, 2: the session's error, kept whole, names a refusal's mark as a reference not found)
+    if INVALID.search(line) and ("Rocq refused the file" in line or "REFLECT CHECK FAILED" not in line):
         return "invalid", ""
     if name in BY_NAME:
         return "gap", BY_NAME[name]

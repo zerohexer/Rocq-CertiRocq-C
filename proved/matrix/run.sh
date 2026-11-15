@@ -13,6 +13,13 @@ rm -rf "$OUT"; python3 proved/matrix/gen.py "$OUT" > /dev/null || exit 1
 for p in $(echo "${PATT:-_}" | tr + ' '); do ls "$OUT"/*"$p"*.body 2>/dev/null; done | sort -u > "$OUT/cells.list"
 # every cell is translated afresh: the translator may have changed since its last run
 for b in $(cat "$OUT/cells.list"); do n=$(basename "$b" .body); rm -f "proved/gen/${n}_t.vo" "proved/gen/${n}_t.glob"; done
+# (KQ_SESSION=2) PJ Rocq sessions, each checking cell after cell with the libraries loaded once (proved/kqsess.py); a cell takes a free one
+if [ "$KQ_SESSION" = 2 ]; then
+  export KQ_SESS_DIR=$(mktemp -d) KQ_SESS_N=${PJ:-3}; SP=""
+  for i in $(seq 0 $((KQ_SESS_N - 1))); do python3 proved/kqsess.py "$KQ_SESS_DIR" $i & SP="$SP $!"; done
+  for i in $(seq 0 $((KQ_SESS_N - 1))); do w=0; while [ ! -S "$KQ_SESS_DIR/s$i.sock" ] && [ $w -lt 600 ]; do sleep 0.1; w=$((w + 1)); done; done
+fi
 xargs -P "${PJ:-3}" -I{} sh -c 'python3 proved/kitc.py --no-build {} 2>&1 | grep -v "^Warning\|^to KQC\|^$" | head -3 |
   tr "\n" " " | cut -c1-400; echo' < "$OUT/cells.list" > "$OUT/results.txt"
+[ "$KQ_SESSION" = 2 ] && { kill $SP 2>/dev/null; wait; rm -rf "$KQ_SESS_DIR"; }
 python3 proved/matrix/classify.py "$OUT/results.txt" ${MD:+--md proved/matrix/MATRIX.md}

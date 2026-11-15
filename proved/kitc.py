@@ -32,10 +32,90 @@ USER = []
 USER_FILES = []   # those files: each its path and the prefix of its names
 LOADED = []       # the files it loads, whose text is read in place
 
-def coqc(path, extra=()):
+def coqc0(path, extra=()):
     r = subprocess.run(["coqc", "-w", "-all", "-R", ROOT, "KQ", "-Q", os.path.join(ROOT, "proved"), "KQC", "-Q", GEN, "KQG", *USER, *extra, path],
                        capture_output=True, text=True, cwd=GEN)
     return r.returncode, r.stdout + r.stderr
+
+# (option 2, step A) KQ_SESSION=1: one Rocq session for this run, its libraries loaded once: each file Load'ed into it, what it requires of
+# the files loaded before it there taken from the session (no .vo of them: `From KQG Require .. X` dropped, `KQG.X.` made `Top.`).  The same
+# files, checked by the same Rocq; a run is one cell, so no state crosses cells.  Calls with extra options go to coqc.
+SESSION = {"p": None, "n": 0, "loaded": [], "srv": None, "lock": None}
+# (step B) KQ_SESSION=2: a session of proved/kqsess.py, shared across cells: the first free one of KQ_SESS_N under KQ_SESS_DIR, held
+# under its lock for this run; when this run ends it is set back to the mark after its libraries (kqsess.py)
+def server_connect():
+    import fcntl, socket
+    d = os.environ.get("KQ_SESS_DIR")
+    if not d:
+        return None
+    for i in range(int(os.environ.get("KQ_SESS_N", "0"))):
+        try:
+            fd = os.open(os.path.join(d, f"s{i}.lock"), os.O_CREAT | os.O_RDWR, 0o600)
+        except OSError:
+            continue
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            c = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            c.connect(os.path.join(d, f"s{i}.sock"))
+        except OSError:
+            os.close(fd)
+            continue
+        SESSION["lock"] = fd
+        return c.makefile("rw", encoding="utf-8")
+    return None
+def session_send(cmd, marker):
+    if SESSION["srv"] is not None:
+        import json
+        f = SESSION["srv"]
+        try:
+            f.write(json.dumps({"cmd": cmd}) + "\n")
+            f.flush()
+            r = f.readline()
+        except OSError:
+            r = ""
+        if not r:
+            return False, ""
+        r = json.loads(r)
+        return r["ok"], r["out"]
+    p = SESSION["p"]
+    p.stdin.write(cmd + "\n" + f"Fail Check {marker}.\n")
+    p.stdin.flush()
+    out = []
+    while True:
+        line = p.stdout.readline()
+        if line == "":
+            return False, "".join(out)
+        if marker in line:
+            return True, "".join(out)
+        out.append(line)
+def coqc(path, extra=()):
+    mode = os.environ.get("KQ_SESSION")
+    if mode not in ("1", "2") or extra:
+        return coqc0(path, extra)
+    if mode == "2" and SESSION["srv"] is None and SESSION["p"] is None and not SESSION["loaded"] and not USER:
+        SESSION["srv"] = server_connect()
+    if SESSION["p"] is None and SESSION["srv"] is None:
+        SESSION["p"] = subprocess.Popen(["coqtop", "-q", "-w", "-all", "-R", ROOT, "KQ", "-Q", os.path.join(ROOT, "proved"), "KQC", "-Q", GEN, "KQG", *USER],
+                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=GEN, bufsize=1)
+    full = path if os.path.isabs(path) else os.path.join(GEN, path)
+    base = os.path.splitext(os.path.basename(full))[0]
+    text = open(full).read()
+    for x in SESSION["loaded"]:
+        text = re.sub(r"^From KQG Require(?: Import)? " + re.escape(x) + r"\.\s*$", "", text, flags=re.M)
+        text = text.replace("KQG." + x + ".", "Top.")
+    # (step 86's rule) a function named p1 or p2 by its short name: `.p1` is a token of MetaRocq's notations; the session's reading names it `Top.p1`
+    text = re.sub(r"\bTop\.(p[12])\b", r"\1", text)
+    w = os.path.join(GEN, "W_" + base + ".v")
+    open(w, "w").write(text)
+    SESSION["n"] += 1
+    ok, out = session_send(f'Load "W_{base}".', f"kq_session_done_{SESSION['n']}")
+    if not ok:
+        SESSION["p"] = SESSION["srv"] = None
+        return 1, out
+    bad = re.search(r"^(?:Toplevel input|Error)", out, flags=re.M) and re.search(r"\bError\b", out)
+    if not bad:
+        SESSION["loaded"].append(base)
+    return (1 if bad else 0), out
 
 def required(text):
     """the files a text requires, as paths under its directory: `Require [Import|Export] a b.`, `From d Require ..`"""
