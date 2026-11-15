@@ -102,6 +102,8 @@ Definition kn_nat_leb := kn_of <% Nat.leb %>.
 Definition kn_nat_pred := kn_of <% Nat.pred %>.
 Definition kn_nat_add := kn_of <% Nat.add %>.   (* a sum of counters (step 33) *)
 Definition kn_c_min := kn_of <% Nat.min %>.
+(* (step 134) a counter held at its bound by the reader: a min (KQR.kq_cap) *)
+Definition kn_kq_cap := kn_of <% KQR.kq_cap %>.
 Definition kn_c_max := kn_of <% Nat.max %>.
 Definition kn_c_sub := kn_of <% Nat.sub %>.
 Definition kn_c_div2 := kn_of <% Nat.div2 %>.
@@ -1550,7 +1552,7 @@ with reify_c (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sc
       else if Kername.eqb kn kn_nat_add then
         match args with [a; b] => match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (CAdd x y) | _, _ => None end | _ => None end
       (* (step 66) *)
-      else if Kername.eqb kn kn_c_min then
+      else if Kername.eqb kn kn_c_min || Kername.eqb kn kn_kq_cap then
         match args with [a; b] => match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (CMin x y) | _, _ => None end | _ => None end
       else if Kername.eqb kn kn_c_max then
         match args with [a; b] => match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (CMax x y) | _, _ => None end | _ => None end
@@ -12419,16 +12421,99 @@ Definition nc_ul (Σ : global_env) (mp : modpath) (rows : list rprow) (tab : lis
       end
   | _ => t1
   end.
-Fixpoint nc_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (tab : list (kername * nbf)) (nv : list (nat * (nat * Z))) (t : term) {struct fuel} : term :=
+(** (step 134) a counter written in the program's own counters, at least the counter [t] is: a counter variable itself (a let holding such
+    a counter as its number: the term [bv] keeps for it), a written counter itself, [S], [+], a product by a written counter the same of
+    theirs; a function's call with its bound in [tab] the sum of its coefficients times its arguments' terms and its constant; a helper of
+    the program written out; [pred], [div], [modulo], [div2], [shiftr], [land], [min], [ldiff], [clearbit] its first counter's; [max],
+    [lor], [lxor] the sum.  None where none is known *)
+Fixpoint nc_natt (k : nat) : term := match k with O => tConstruct ind_nat 0 [] | S k => tApp (tConstruct ind_nat 1 []) [nc_natt k] end.
+Definition nc_addt (a b : term) : term := tApp (tConst nr_nat_add []) [a; b].
+Fixpoint nc_bt (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (tab : list (kername * nbf)) (nv : list (nat * (nat * Z))) (bv : list (nat * term)) (t : term) {struct fuel} : option term :=
+  match fuel with
+  | O => None
+  | S fuel =>
+      let go := nc_bt fuel Σ mp rows tab nv bv in
+      if cnt_lit t then Some t else
+      (* (step 118) a counter of a value a function gives back: the call's bound, which is of every counter the value holds *)
+      match nc_vch Σ mp rows tab t with
+      | Some (_, c, _) => go c
+      | None =>
+      match t with
+      | tRel r =>
+          match List.find (fun e => Nat.eqb (fst e) r) bv with
+          | Some e => Some (snd e)
+          | None => if existsb (fun e => Nat.eqb (fst e) r) nv then None else Some t
+          end
+      | tApp (tConstruct i 1 u) [e] =>
+          if Kername.eqb (inductive_mind i) (inductive_mind ind_nat) then option_map (fun b => tApp (tConstruct i 1 u) [b]) (go e) else None
+      | tApp (tConst k u) args =>
+          if Kername.eqb k nr_nat_add then
+            match args with [a; b] => match go a, go b with Some x, Some y => Some (nc_addt x y) | _, _ => None end | _ => None end
+          else if Kername.eqb k nr_nat_mul then
+            match args with
+            | [a; b] => if cnt_lit a then option_map (fun y => tApp (tConst k u) [a; y]) (go b)
+                        else if cnt_lit b then option_map (fun x => tApp (tConst k u) [x; b]) (go a) else None
+            | _ => None
+            end
+          else if Kername.eqb k kn_nat_pred || Kername.eqb k kn_c_div2 then
+            match args with [a] => go a | _ => None end
+          else if Kername.eqb k kn_c_div || Kername.eqb k kn_c_mod || Kername.eqb k kn_c_shiftr || Kername.eqb k kn_c_land
+                  || Kername.eqb k kn_c_min || Kername.eqb k kn_c_ldiff || Kername.eqb k kn_c_clearbit || Kername.eqb k kn_c_sub then
+            match args with a :: _ => go a | _ => None end
+          else if Kername.eqb k kn_c_max || Kername.eqb k kn_c_lor || Kername.eqb k kn_c_lxor then
+            match args with [a; b] => match go a, go b with Some x, Some y => Some (nc_addt x y) | _, _ => None end | _ => None end
+          else
+            match List.find (fun e => Kername.eqb (fst e) k) tab with
+            | Some e =>
+                let c := snd (snd e) in
+                if (0 <=? c)%Z && (c <? 4096)%Z then
+                  fold_left (fun acc ja => match acc with
+                                           | None => None
+                                           | Some s0 =>
+                                               let w := nth (fst ja) (fst (snd e)) 0%nat in
+                                               if Nat.eqb w 0 then Some s0 else
+                                               match go (snd ja) with
+                                               | Some x => Some (nc_addt (if Nat.eqb w 1 then x else tApp (tConst nr_nat_mul []) [nc_natt w; x]) s0)
+                                               | None => None
+                                               end
+                                           end) (combine (seq 0 (length args)) args) (Some (nc_natt (Z.to_nat c)))
+                else None
+            | None =>
+                if in_prog mp (fst k) then
+                  match body_of Σ k with
+                  | Some b => match lams b with
+                              | (_, tFix _ _) => None
+                              | (tys, _) => if Nat.eqb (length tys) (length args) then go (al_beta args (al_t 100000 Σ mp b)) else None
+                              end
+                  | None => None
+                  end
+                else None
+            end
+      | _ => None
+      end end
+  end.
+Definition nc_bshift (k : nat) (bv : list (nat * term)) : list (nat * term) := map (fun e => ((k + fst e)%nat, lift0 k (snd e))) bv.
+(** (step 134) on the reading that asks for it ([cap] 1), a counter given to a call of the program's functions, at its bound: [kq_cap] of it
+    and the term above, so that the callee's bound need be no more than the caller's counters': the argument read with each such
+    counter in it held so ([cap] 2), itself or under a library's operation *)
+Definition nc_bnd (Σ : global_env) (mp : modpath) (rows : list rprow) (tab : list (kername * nbf)) (bv : list (nat * term)) (nv : list (nat * (nat * Z))) (a a1 : term) : option term :=
+  (* the bound read off the counter as written first (a library's operation not written out), else as the use reads it *)
+  match nc_bt 1000 Σ mp rows tab nv bv a with Some b => Some b | None => nc_bt 1000 Σ mp rows tab nv bv a1 end.
+Definition nc_capa (mp : modpath) (cap : nat) (k : kername) (go go2 : term -> term) (a : term) : term :=
+  if if Nat.leb 1 cap then in_prog mp (fst k) else false then go2 a else go a.
+Fixpoint nc_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (tab : list (kername * nbf)) (cap : nat) (bv : list (nat * term)) (nv : list (nat * (nat * Z))) (t : term) {struct fuel} : term :=
   match fuel with
   | O => t
   | S fuel =>
-      let go := nc_sub fuel Σ mp rows tab nv in
-      let under := fun k => nc_sub fuel Σ mp rows tab (nc_shift k nv) in
+      let go := nc_sub fuel Σ mp rows tab cap bv nv in
+      let under := fun k => nc_sub fuel Σ mp rows tab cap (nc_bshift k bv) (nc_shift k nv) in
       if cnt_lit t then t else
       let t1 := nc_ul Σ mp rows tab nv t in
       if nc_ok Σ mp rows tab nv t1
-      then tApp (tConst kn_zton []) [tApp (tConst kn_nc_u2z []) [nc_tr 1000 Σ mp rows tab nv go t1]]
+      then (let u := tApp (tConst kn_zton []) [tApp (tConst kn_nc_u2z []) [nc_tr 1000 Σ mp rows tab nv (if Nat.eqb cap 2 then nc_sub fuel Σ mp rows tab 1 bv nv else go) t1]] in
+            (* (step 134) inside a counter argument whose counters are held at their bounds ([cap] 2): this one too, the outermost: what it
+               is made of read as it is read elsewhere *)
+            if Nat.eqb cap 2 then match nc_bnd Σ mp rows tab bv nv t t1 with Some b => tApp (tConst kn_kq_cap []) [u; b] | None => u end else u)
       else
         match t with
         | tApp (tConst k u) args =>
@@ -12437,7 +12522,7 @@ Fixpoint nc_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
                 tApp (tConst k u) (map (fun ja : nat * term =>
                                           if Nat.eqb (fst ja) p then tApp (tConst kn_zton []) [tApp (tConst kn_nc_u2z []) [nc_trw 1000 Σ mp rows nv go (snd ja)]]
                                           else go (snd ja)) (combine (seq 0 (length args)) args))
-            | None => tApp (go (tConst k u)) (map go args)
+            | None => tApp (go (tConst k u)) (map (nc_capa mp cap k go (nc_sub fuel Σ mp rows tab 2 bv nv)) args)
             end
         | tApp f args => tApp (go f) (map go args)
         | tLambda na a b => tLambda na a (under 1 b)
@@ -12446,10 +12531,14 @@ Fixpoint nc_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
             (* a let of such a counter: the number, once *)
             if if is_nat a then nc_ok Σ mp rows tab nv v1 else false then
               tLetIn na (nc_tr 1000 Σ mp rows tab nv go v1) (tConst kn_int [])
-                     (nc_sub fuel Σ mp rows tab ((0%nat, nc_cd 1000 Σ mp rows tab nv v1) :: nc_shift 1 nv) b)
+                     (nc_sub fuel Σ mp rows tab cap
+                             ((* (step 134) its bound's term, under the let *)
+                              match (if Nat.leb 1 cap then nc_bnd Σ mp rows tab bv nv v v1 else None) with Some bt => [(0%nat, lift0 1 bt)] | None => [] end
+                              ++ nc_bshift 1 bv)
+                             ((0%nat, nc_cd 1000 Σ mp rows tab nv v1) :: nc_shift 1 nv) b)
             (* (step 104) a let of such a counter with no bound, every use of it where its value modulo a word is enough: the row's number *)
             else if if is_nat a then nc_low Σ mp rows tab nv v && nc_ulow 1000 Σ mp rows tab ((0%nat, (1000%nat, 0%Z)) :: nc_shift 1 nv) 0 b else false then
-              tLetIn na (nc_trw 1000 Σ mp rows nv go v) (tConst kn_int []) (nc_sub fuel Σ mp rows tab ((0%nat, (1000%nat, 0%Z)) :: nc_shift 1 nv) b)
+              tLetIn na (nc_trw 1000 Σ mp rows nv go v) (tConst kn_int []) (nc_sub fuel Σ mp rows tab cap (nc_bshift 1 bv) ((0%nat, (1000%nat, 0%Z)) :: nc_shift 1 nv) b)
             else tLetIn na (go v) a (under 1 b)
         | tCase ci p c brs =>
             let dflt := tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := under (length (bcontext br)) (bbody br) |}) brs) in
@@ -12467,7 +12556,7 @@ Fixpoint nc_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
                                                            | Some Tf => [((kk - 1 - j)%nat, if is_nat Tf then cx else ((fst cx + 2000)%nat, snd cx))]
                                                            | None => []
                                                            end) (seq 0 kk) ++ nc_shift kk nv in
-                             Some {| bcontext := bcontext (snd kb); bbody := nc_sub fuel Σ mp rows tab nv2 (nc_lifts Σ fs kk rt0 (bbody (snd kb))) |}
+                             Some {| bcontext := bcontext (snd kb); bbody := nc_sub fuel Σ mp rows tab cap (nc_bshift kk bv) nv2 (nc_lifts Σ fs kk rt0 (bbody (snd kb))) |}
                          | None => None
                          end) (combine (seq 0 (length brs)) brs)) in
             let pv := {| pparams := vt_int Σ dp (pparams p); puinst := puinst p; pcontext := pcontext p; preturn := preturn p |} in
@@ -12761,7 +12850,7 @@ Fixpoint nf_red (fuel : nat) (Σ : global_env) (mp : modpath) (t : term) {struct
       | _ => t
       end
   end.
-Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env * bool :=
+Definition y_allc (cap : bool) (Σ : global_env) (mp : modpath) (root : kername) : global_env * bool :=
   let kns0 := snd (reach_go false 1000 Σ mp root root ([], [])) in
   (* (step 111) a local mutual block lifted first, as the reading lifts it (steps 108, 110), its members named for [y_rows]
      ([__wy]): a block giving back counters has its rows made over them *)
@@ -12915,7 +13004,7 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
                          | [] => nr_sub 100000 (conv_all Σ mp) mp rows b0a
                          | _ => rp_sub 100000 rows (cl_s (conv_all Σ mp) mp cls (nr_sub 100000 (conv_all Σ mp) mp rows b0a))
                          end in
-              let b0c := if nc_rows rows then nc_sub 100000 (conv_all Σ mp) mp rows nbt [] b0n else b0n in
+              let b0c := if nc_rows rows then nc_sub 100000 (conv_all Σ mp) mp rows nbt (if cap then 1 else 0) [] [] b0n else b0n in
               let b0x := mo_t 100000 Σ mp (lu_t 100000 Σ b0c) in
               (* (step 69) its calls of what is read in another form *)
               let b0 := (if existsb (fun r : rprow => let '(_, _, sl, _, _) := r in rp_is_vm sl) rows then vm_yr gts else cf_red gts) (vm_sub 100000 (conv_all Σ mp) rows false (rp_sub 100000 rows (er_sub 100000 rows [] (sp_sub 100000 (conv_all Σ mp) mp rows (om_s (conv_all Σ mp) mp omrows (match (if anyq then [] else vrows ++ qrows), anyq with [], false => vm_unf 6 Σ mp b0x | _, _ => vm_pj 100000 (conv_all Σ mp) mp (vm_yr gts (vm_qsub 100000 (conv_all Σ mp) mp qs (vm_lets 100000 (conv_all Σ mp) (fun k => if vm_isr rows k then true else existsb (fun e : kername * kername * list term => Kername.eqb (fst (fst e)) k) qs) (fun k => match lookup_env (conv_all Σ mp) k with Some (ConstantDecl cb) => ret_ty (al_t 1000 Σ mp (cst_type cb)) | _ => tRel 0 end) 100000 (ret_ty ty0) (vm_zfix 100000 (vm_ginl 100000 (conv_all Σ mp) mp rows (vm_unf 6 Σ mp b0x)))))) end)))))) in
@@ -12964,6 +13053,7 @@ Definition y_all (Σ : global_env) (mp : modpath) (root : kername) : global_env 
       | _ => st
       end
     else st) (snd (reach_go false 1000 Σ mp root root ([], []))) (S0, match rows with [] => false | _ => true end).
+Definition y_all := y_allc false.
 (** the rows of those: the head of the environment, where [y_all] put them *)
 Fixpoint ends_wy (s : string) : bool :=
   if String.eqb s "__wy"%bs then true else
@@ -13165,7 +13255,20 @@ Definition reify_prog2 (p : program) : option (list (kername * sig * fbody) * li
               | (Σy, true) =>
                   match reify_prog2m false (Σy, tConst root []) with
                   | Some r => jn_try (Σy, tConst root []) r
-                  | None => reify_prog2m true (Σy, tConst root [])
+                  | None =>
+                      match reify_prog2m true (Σy, tConst root []) with
+                      | Some r => Some r
+                      | None =>
+                          (* (step 134) last: the counters given to the program's calls held at their bounds *)
+                          match y_allc true Σ (fst root) root with
+                          | (Σc, true) =>
+                              match reify_prog2m false (Σc, tConst root []) with
+                              | Some r => jn_try (Σc, tConst root []) r
+                              | None => reify_prog2m true (Σc, tConst root [])
+                              end
+                          | _ => None
+                          end
+                      end
                   end
               | _ => None
               end

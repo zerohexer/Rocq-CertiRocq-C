@@ -4704,6 +4704,39 @@ addA('zb_o_helper_call', "", 'if Nat.leb (hh n) 3 then a else b',
      'Fixpoint tw (k : nat) : nat := match k with O => O | S m => S (tw m) end.\nDefinition hh (k : nat) : nat := S (tw k).\n')
 addA('zb_o_callee_grows', "", 'ff (cnt n a s) b',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint hh (k : nat) (x : int) : int := match k with O => x | S m => hh m (x + 1) end.\nDefinition ff (k : nat) (x : int) : int := hh (S k) x.\n')
+# a counter a function gives back, given to a function that makes its counter larger: held at its bound (step 134)
+addA('zx_cg_add3', "", 'ff (cnt n a s) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint hh (k : nat) (x : int) : int := match k with O => x | S m => hh m (x + 1) end.\nDefinition ff (k : nat) (x : int) : int := hh (k + 3) x.\n')
+addA('zx_cg_double', "", 'ff (cnt n a s) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint hh (k : nat) (x : int) : int := match k with O => x | S m => hh m (x + 1) end.\nDefinition ff (k : nat) (x : int) : int := hh (k + k) x.\n')
+addA('zx_cg_mul2', "", 'ff (cnt n a s) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint hh (k : nat) (x : int) : int := match k with O => x | S m => hh m (x + 1) end.\nDefinition ff (k : nat) (x : int) : int := hh (2 * k) x.\n')
+addA('zx_cg_let', "", 'let c := cnt n a s in ff c b + ff c a',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint hh (k : nat) (x : int) : int := match k with O => x | S m => hh m (x + 1) end.\nDefinition ff (k : nat) (x : int) : int := hh (S k) x.\n')
+addA('zx_cg_two_levels', "", 'ff (cnt n a s) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint hh (k : nat) (x : int) : int := match k with O => x | S m => hh m (x + 1) end.\nDefinition gg (k : nat) (x : int) : int := hh (S k) x.\nDefinition ff (k : nat) (x : int) : int := gg (S k) x.\n')
+addA('zx_cg_sum_uses', "", 'ff (cnt n a s + cnt n b s) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint hh (k : nat) (x : int) : int := match k with O => x | S m => hh m (x + 1) end.\nDefinition ff (k : nat) (x : int) : int := hh (S k) x.\n')
+addA('zx_cg_succ_use', "", 'ff (S (cnt n a s)) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint hh (k : nat) (x : int) : int := match k with O => x | S m => hh m (x + 1) end.\nDefinition ff (k : nat) (x : int) : int := hh (S k) x.\n')
+addA('zx_cg_nested', "", 'ff (cnt (cnt n a s) b s) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint hh (k : nat) (x : int) : int := match k with O => x | S m => hh m (x + 1) end.\nDefinition ff (k : nat) (x : int) : int := hh (S k) x.\n')
+addA('zx_cg_two_counters', "", 'ff (cnt2 n (S n) a s) b',
+     'Fixpoint cnt2 (k j : nat) (i : int) (t : mem) : nat := match k with O => j | S m => if rd 0 i t =? 0 then cnt2 m j (i + 1) t else S (cnt2 m j (i + 1) t) end.\nFixpoint hh (k : nat) (x : int) : int := match k with O => x | S m => hh m (x + 1) end.\nDefinition ff (k : nat) (x : int) : int := hh (S k) x.\n')
+addA('zx_cg_in_rec', "", 'pr n a s',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint hh (k : nat) (x : int) : int := match k with O => x | S m => hh m (x + 1) end.\nDefinition ff (k : nat) (x : int) : int := hh (S k) x.\nFixpoint pr (k : nat) (x : int) (t : mem) : int := match k with O => x | S m => pr m (ff (cnt m x t) x) t end.\n')
+addA('zx_cg_helper', "", 'ff (hc n a s) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint hh (k : nat) (x : int) : int := match k with O => x | S m => hh m (x + 1) end.\nDefinition hc (k : nat) (i : int) (t : mem) : nat := cnt k i t + 1.\nDefinition ff (k : nat) (x : int) : int := hh (S k) x.\n')
+addA('zx_cg_div', "", 'ff (Nat.div (cnt n a s) 2) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint hh (k : nat) (x : int) : int := match k with O => x | S m => hh m (x + 1) end.\nDefinition ff (k : nat) (x : int) : int := hh (S k) x.\n')
+addA('zx_cg_callee_rec', "", 'ff (cnt n a s) b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint hh (k : nat) (x : int) : int := match k with O => x | S m => hh m (x + 1) end.\nFixpoint ff (k : nat) (x : int) : int := match k with O => hh (S (S k)) x | S m => ff m (x + 1) end.\n')
+addA('zx_cg_value_row', "", 'ff (fst (pv n a)) b',
+     'Fixpoint pv (k : nat) (i : int) : nat * int := match k with O => (O, i) | S m => let p := pv m (i + 1) in (S (fst p), snd p) end.\nFixpoint hh (k : nat) (x : int) : int := match k with O => x | S m => hh m (x + 1) end.\nDefinition ff (k : nat) (x : int) : int := hh (S k) x.\n')
+addA('zx_cg_block', "", 'ff (ev n) b',
+     'Fixpoint ev (k : nat) : nat := match k with O => O | S m => S (od m) end\nwith od (k : nat) : nat := match k with O => O | S m => ev m end.\nFixpoint hh (k : nat) (x : int) : int := match k with O => x | S m => hh m (x + 1) end.\nDefinition ff (k : nat) (x : int) : int := hh (S k) x.\n')
+addA('zx_cg_own_rec', "", 'pq n n a s',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint pq (k c : nat) (x : int) (t : mem) : int := match k with O => x + Uint63.of_nat c | S m => pq m (S (cnt c x t)) (x + 1) t end.\n')
 addA('zb_o_weights', "", 'pp n n a s',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint pp (k c : nat) (x : int) (t : mem) : int := match k with O => x | S m => if Nat.leb (cnt c x t) 3 then pp m (S c) (x + 1) t else x end.\n')
 addA('zb_o_row_uses', "", 'fst (w n a s)',

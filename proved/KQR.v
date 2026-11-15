@@ -12933,6 +12933,12 @@ Lemma all_ok_callees : forall P gidf cs, all_ok P gidf cs 0 -> callees_ok P gidf
 Proof. intros P gidf cs H. split; [intros f; exact (all_ok_nth P gidf cs 0 H f) | exact (all_ok_kits P gidf cs 0 H)]. Qed.
 
 End Recs.
+(** (step 134) a counter the reader holds at its bound, so that the callee's bound need be no more than the caller's counters': a min,
+    read as [CMin]; where the bound holds, the counter itself *)
+Definition kq_cap (x k : nat) : nat := Nat.min x k.
+Arguments kq_cap : simpl never.
+Lemma kq_cap_l : forall x k : nat, (x <= k)%nat -> kq_cap x k = x.
+Proof. intros x k H. unfold kq_cap. apply Nat.min_l. exact H. Qed.
 Notation mksig8 x k m r w q b v := (mksig9 x k m r w q b v false).
 
 (** a program with no record types *)

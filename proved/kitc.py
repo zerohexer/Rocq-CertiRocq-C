@@ -1036,7 +1036,7 @@ def reflect(name, entry, prog, no_proof):
     roomw = max([int(r[2]) for r in recs] + [1])
     roomR = f"({roomw} <= Sint63.to_Z (KQ.KQBound.kq_len 63) + 1)%Z" if roomw > 1 else "True"
     hrb = f"(Hr : {roomR}) " if vmr else ""
-    keepf = " ".join(sorted({"KQ.KQRun.kq_nat"} | ({"Uint63.of_Z", "Z.of_nat", "Nat.add", "Nat.mul"} if any(re.search(r"__k\d+__rq__wy$|__kc\d+_\d+__rq__wy$|__kb\d+_\d+_\d+_.*__rq__wy$", m) for m, _ in rrs) else set()) | {x for m, h in rrs for x in (h, m[:-len("__rq__wy")] + "__rp__wy") if x} | {f[1] for f in fqf if f[1]} | {x for x in (kqfn(re.match(r"(.*)__[vqk]\d+__rq__wy$", m).group(1)) for m, _ in rrs if re.search(r"__[vqk]\d+__rq__wy$", m)) if x}
+    keepf = " ".join(sorted({"KQ.KQRun.kq_nat", "KQR.kq_cap"} | ({"Uint63.of_Z", "Z.of_nat", "Nat.add", "Nat.mul"} if any(re.search(r"__k\d+__rq__wy$|__kc\d+_\d+__rq__wy$|__kb\d+_\d+_\d+_.*__rq__wy$", m) for m, _ in rrs) else set()) | {x for m, h in rrs for x in (h, m[:-len("__rq__wy")] + "__rp__wy") if x} | {f[1] for f in fqf if f[1]} | {x for x in (kqfn(re.match(r"(.*)__[vqk]\d+__rq__wy$", m).group(1)) for m, _ in rrs if re.search(r"__[vqk]\d+__rq__wy$", m)) if x}
                             | {f[0] for f in fs if f[0] in fix1} | {f[0].rsplit(".", 1)[-1] + "__wy" for f in fs if f[0].rsplit(".", 1)[-1] + "__wy" in made}))
     if vmr:
         if roomw > 1:
@@ -1194,7 +1194,7 @@ def reflect(name, entry, prog, no_proof):
         rrv = ([(f"match goal with Hr : {roomR} |- _ => rewrite ?({name}_rr{j} Hr) by KQRWf.vm_side end" if vmr else f"rewrite ?{name}_rr{j}") for j, (m, h) in enumerate(rrs) if re.search(r"__kv\d+__rq__wy$", m)]
                + [(f"match goal with Hr : {roomR} |- _ => repeat {name}_kva{j} ({name}_rr{j} Hr) end" if vmr else f"repeat {name}_kva{j} {name}_rr{j}") for j, (m, h) in enumerate(rrs) if re.search(r"__kva\d+_\d+__rq__wy$", m) and h])
         nc3 = f" | KQRWf.nc_step2 ltac:({rrk}; {'; '.join(rrv)})" if rrv else ""
-        t += f"Ltac KQRWf.kq_bd ::= repeat {bprev}.\nLtac KQRWf.kq_nc ::= first [KQRWf.nc_step ltac:({rrk}) | KQRWf.nc_match{nc3}].\nLtac KQRWf.kq_nc_side ::= KQRWf.nc_lia.\n"
+        t += f"Ltac KQRWf.kq_bd ::= repeat {bprev}.\nLtac KQRWf.kq_nc ::= first [KQRWf.nc_step ltac:({rrk}) | rewrite (KQR.kq_cap_l _ _) by KQRWf.nc_side | KQRWf.nc_match{nc3}].\nLtac KQRWf.kq_nc_side ::= KQRWf.nc_lia.\n"
         if vds:
             t += "Ltac KQRWf.kq_vh ::= KQRWf.nb_vh.\nLtac KQRWf.kq_vd ::= first [" + " | ".join(vds) + "].\n"
         keepf = keepf + " Z.to_nat Uint63.to_Z"
