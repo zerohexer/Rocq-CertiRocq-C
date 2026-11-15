@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **4129 of 4266, 60 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **4164 of 4302, 61 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1808,7 +1808,7 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   and the check, given no bound of `log2`, falls to a path that unfolds it: no answer in 120 s, the same with `sqrt` and `gcd`.  A sum is
   one site only where the check has a bound of each part; `log2`, `sqrt`, `gcd` given theirs.  Accepted when those three are proved and
   an operation with no bound is refused at once.
-- *A counter a function gives back, given to a function that makes its counter larger* (found at step 83) — **step 134**: held at its
+- ~~*A counter a function gives back, given to a function that makes its counter larger*~~ (found at step 83) — **done, step 134**: held at its
   bound where the call is not well formed otherwise (`KQR.kq_cap`, the bound a term of the program's counters); `ff (cnt n a s) b` with
   `ff k x := hh (S k) x` (`A_zb_o_callee_grows`).  Accepted when it and the step's cells are proved.
 - *Such a counter given to the function's own recursion* (found at step 134): `Fixpoint pq (k c : nat) .. := .. pq m (S (cnt c x t)) ..`
@@ -1823,7 +1823,8 @@ the gate (examples, corpus, kernels if the walk changed) passes.
 - *A test in `Z` of a counter with a negative number* (found at step 135): `(Z.of_nat n <? -1)%Z` (`A_zx_zt_neg`): its value is known from
   the counter being at least 0, and `BCmpZ`'s numbers are counters.  Accepted when it is proved.
 - *Arithmetic in `Z` of counters inside such a test* (found at step 135): `(Z.of_nat n + 1 <? 3)%Z` (`A_zx_zt_zsum`): the sum is the
-  counters' sum made `Z` (`Nat2Z.inj_add`), and `BCmpZ`'s operands are counters made `Z`.  Accepted when it is proved.
+  counters' sum made `Z` (`Nat2Z.inj_add`), and `BCmpZ`'s operands are counters made `Z`; its general form, arithmetic in `Z`
+  where a proof gives the range, is D3's later option, kept separate: the owner's decision before it is built.  Accepted when it is proved.
 
 **B. Compiling from an ordinary `.v` file, as simply as `lean --c`.**
 - ~~A command in an ordinary Rocq file~~ — **done at step 89**, without a command: `python3 proved/kitc.py prog.v [--main=NAME]`: the entry's arguments are read from its signature (numbers and counters from the
@@ -1871,7 +1872,10 @@ proved once, measured against C written the same way.
   check of the files `kitc.py` writes, whose error a session keeps whole (`A_zb_o_weights`: a refusal's mark named as a reference not
   found); every table read before classifies the same.  *Measured on the work laptop* (the wide lab of step 133, 1776 cells, 8 at a
   time, the reader's rebuild included): step A 948 s against 1342 s, two cells read otherwise at first (a function named `p1`, `p2`: written short in the session too, then fixed); step B 528 s against 1342 s, every cell's verdict and category the same; 1776 cells served, a session started afresh 162 times, its size 977 MB at the median, 3610 at the most (one cell's own work).  Accepted when the wide lab's verdicts are the same cell by
-  cell (done) and the full table's in the batch's chain, the time measured.
+  cell (done) and the full table's in the batch's chain, the time measured: done at steps 134, 135's chain, after what the first such
+  table found and the wide lab, not holding every family, had not (the program's own files, a program's own notation: `cec99b2`):
+  every cell's verdict and category the last table's but the steps' own, 18 minutes against 53, 12 sessions under 14 GB (14 idle ones
+  hold about as much as the limit).  A change to how the cells run is accepted on the full table, never on the wide lab alone.
 - *The reading of a counter a function gives back, given to the function's own recursion* (found at step 134): `A_zx_cg_own_rec`'s
   reading runs past the time limit, 122 s and 4.2 GB in one `coqc`, on step 133's reader as on step 134's; in a session beside others
   the memory stops it first ("the reifier did not run").  Accepted when its reading takes under 10 s, read or refused with its reason.
@@ -6596,6 +6600,19 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Left, with cells*: a negative number in such a test (`A_zx_zt_neg`); arithmetic in `Z` of counters inside it (`A_zx_zt_zsum`, `Z.of_nat n + 1`).
 - *Cells*: 20 (`A_zx_zt_*`): each operator, the number on the left, two counters, a sum, a number from 5000 on, 0, a counter a function gives back, inside a recursion, a let, a boolean let, a function giving back the test, `&&`, a match's counter, a choice of numbers by it, a negative number, a sum in `Z`.
 
+**Steps 134, 135 — the results (2026-11-15), one chain for the two.**  Built as designed:
+- *Step 134, a counter a function gives back, given to a function that makes its counter larger*: the reader (`KQRReify.v`): `nc_bt` (the bound as a term), `nc_bnd`, `nc_capa`, `nc_sub`'s `cap` (1 at a call of the program's functions, whose arguments are read at 2, where each such counter is held at its bound; what a held counter is made of read at 1) and `bv` (the bound terms of lets holding such counters), `y_allc`, `reify_prog2`'s last try; `kq_cap` read as `CMin`.  *`KQR.v`*: `kq_cap`, `kq_cap_l`.  *`kitc.py`*: `kq_cap_l` in `kq_nc`, `kq_cap` kept from `cbv`.  *Found while building* (on the work laptop): a counter under a library's operation in the argument (`Nat.div (cnt n a s) 2`) is not the argument itself, so each such counter is held where it stands; holding the counters a held counter is made of too (`cnt (cnt n a s) b s`) made the use's proof run past the time limit, so only the outermost; a value's counter takes the call's bound.  Checked on the work laptop (the repository at step 133 with this step's files, step 133's wide lab and the new cells: 1792, the cells in long-lived sessions): every verdict and category step 133's but the cell read.  *Cells*: 16 more (`A_zx_cg_*`), 15 proved, `A_zx_cg_own_rec` a gap, §12.A (its reading runs past the time limit on step 133's reader too, §12.F).  One gap read: `A_zb_o_callee_grows`.
+- *Step 135, a test in `Z` of counters*: *`KQR.v`*: `zcmp`, `zcmps`, `zc_op`, `zc_sw`, `zcmps_cmpn`; `BCmpZ`'s meaning, its code in `ccond`, `cbval`, `csel` (`BCmpC`'s, the operands the other way round for `>?` and `>=?`), `wfb`, `sh_b`, its case of the compiler's proof (`BCmpC`'s, the operator taken apart at the comparison) and of `denote_nomem` and its two siblings (`BTestN`'s); the reader: `zcmp_v`, `z_nu`, `BCmpZ` in `reify_b`, `cl_c`.  *Found while building*: the three inductions over the syntax give each constructor its case by its place, so the new one takes the next type's first case until it has its own.  Checked on the work laptop (the repository at step 134 with this step's files, step 134's wide lab and the tests of counters, `A_c`: 1940): every verdict and category step 134's and the last table's but the cell read.  *Cells*: 20 more (`A_zx_zt_*`), 18 proved; `A_zx_zt_neg` and `A_zx_zt_zsum` gaps, §12.A (arithmetic in `Z` of counters is D3's later option, `Z` where a proof gives the range: the owner's).  One gap read: `A_z_u_zofnat`.
+- *The reifier's step on the kernels' programs* (on the work laptop, one core, interleaved, three rounds, the fastest, F62, in clean copies of two trees, the repository at step 133 / at step 135; two such timings): `HWP_kernel` 3.15 / 3.20 s and 3.12 / 3.14, `HWP_own` 2.26 / 2.29 and 2.17 / 2.17, `HWP_irqnow` 1.93 / 2.03 and 1.90 / 1.89: the same (the first timing's rounds spread wide, step 135's last 2.52 s).
+- *The run*: one chain for the two steps (the laptop free while step 136 is designed), on the last step's code commit, the table in 12 long-lived Rocq sessions under 14 GB (§12.F), the first full table so.  It found what the wide lab, which does not hold every family, had not: the program's own files (`A_file_*`, 38 cells) were loaded into the session where they are libraries to compile (`kitc.py` found no `.vo`), and a program with a notation of its own (`A_p_pipe`) had what the reader found printed where the notation is open (step 77 prints it apart for that); fixed (`cec99b2`: a session takes only the files `kitc.py` writes for the program, and a program with a notation or a scope of its own none), the table run again on it: every cell's verdict and category the last table's but the two gaps read and the new cells, 18 minutes (53 before, 14 processes at a time).  Three cells' failed checks now shown in the table's lines, the same gaps as before: their errors held `coqc`'s warnings, which the table's filter drops.  The C check and the gate on `656aa77`: `cec99b2` changes only the sessions, which they do not use.
+- The C: the 99 programs byte-identical.  The construct table (on `cec99b2`): **4164 of 4302 through the verified compiler**, 76
+  by design, 61 gaps, 1 not Rocq (was 4129 of 4266: all 36 new cells read but 3, each a gap with its item (§12.A); 2 gaps read; no
+  cell lost).  The gate on `656aa77`, the walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding, beside
+  the corpus; the same C: undefined behaviour trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 /
+  36; the five kernels and `grow` (21 / 22 / 25 / 18 / 19 / 9 s); **109 programs through the verified compiler, 0 refused**, their
+  109 end theorems each within the list; `check_trust.py`: `trust unchanged`.  Next: step 136 (a function giving back a counter
+  whose body uses another's as a counter), then §12.A's other counter and value items, then the rows' lemmas proved once (§12.V).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6791,11 +6808,14 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `b792a6a` (2026-11-14); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `cec99b2` (2026-11-15); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 135's design -- a test in Z of counters: BCmpZ, a construct of S proved once; §12.A; §14 step 134's code row |
+| (this commit) | §12.V: steps 134, 135 (a counter given to a function that makes its counter larger, held at its bound; a test in Z of counters, a construct of S: the construct table 4164 of 4302, 76 by design, 61 gaps), one chain for the two, the first table in long-lived sessions and what it found (`cec99b2`); the gate; §12.A |
+| `cec99b2` | `proved/kitc.py`: option 2's sessions for the files written for the program only: the program's own files compiled as libraries; a program with a notation or a scope of its own read with no session (step 77's printing) |
+| `656aa77` | `proved/KQR.v` + `KQRReify.v` + matrix step 135: a test in Z of counters, `BCmpZ`: its meaning, code, wf and proof (`BCmpC`'s); the reader; 20 cells |
+| `72937f2` | §12.V: step 135's design -- a test in Z of counters: BCmpZ, a construct of S proved once; §12.A; §14 step 134's code row |
 | `18285f7` | `proved/KQRReify.v` + `KQR.v` + `kitc.py` + matrix step 134: a counter a function gives back, given to a function that makes its counter larger: held at its bound; 16 cells |
 | `caa5151` | §12.V: step 134's design -- a counter a function gives back, given to a function that makes its counter larger: held at its bound; §12.A: step 83's leftovers as items; §12.F |
 | `6e9b3b0` | §12.F: the table's and the labs' Rocq processes (option 2: long-lived sessions, step A one a cell, step B shared across cells; the wide lab's verdicts the same, its time measured); §12.V: the rows' lemmas proved per program by tactics, an item with its acceptance |
