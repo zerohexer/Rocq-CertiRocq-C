@@ -1838,6 +1838,24 @@ proved once, measured against C written the same way.
   stop a gap of its own reason. the reflect route's proof files are checked with no time limit (the walk's
   have `KQ_TIMEOUT`), so a tactic that loops holds a cell, and with it the table, without end.  Accepted when `kitc.py` gives those files the
   time limit, and a cell whose proof does not end is a gap with that reason.
+- *The table's and the labs' Rocq processes* (measured 2026-11-15, three cells on one core with the cache off: every cell starts `coqc`
+  twice, its reading and its proofs, and each start loads the route's libraries, about 1.3 s, two thirds of a small cell; the reading's
+  work 0.5 to 2.7 s, the proofs 0.2 to 0.3 s, `kitc.py`'s own 0.1 to 0.4 s; the files' Requires of the retired translator's libraries
+  cost 4%) — **done (option 2, the owner's choice, 2026-11-15)**: the cells checked in long-lived Rocq sessions, the same files by the
+  same Rocq, nothing added to what is trusted.  `KQ_SESSION=1` (step A): one session per cell, each file `Load`ed into it, what it
+  requires of the files before it taken from the session (`From KQG Require .. X` dropped, `KQG.X.` written `Top.`, and step 86's rule
+  for `p1`, `p2`: `Top.p1` short).  `KQ_SESSION=2` (step B, `proved/kqsess.py`, `matrix/run.sh`): PJ sessions shared across cells, the
+  libraries loaded once each, not imported; a cell takes a free one under its lock, and when it leaves the session drops a proof left
+  open and goes back to a mark made after the libraries (`Reset kq_mark`): what the cell defined, redefined (`Ltac .. ::=`), loaded
+  (`KQRWf`), set or opened is gone (probed: each of these).  A session that fails, grows past a size (`KQ_SESS_MB`, 1100 MB; 1000 for the table's 14) or has served 60 cells starts
+  afresh; a program with files of its own takes step A.  `KQRWf` is not loaded beforehand: only the proofs that need it load it, as
+  with `coqc`.  Compiling one program (`kitc.py` without the variable), the C check and the gate keep `coqc`.  `native_compute` is not
+  used: it would add OCaml's native compiler to what is trusted, and it would shorten the reifier's evaluation alone, a part of the
+  reading.  The classifier reads "not Rocq" off Rocq's refusal of the program only (`kitc.py`: "Rocq refused the file"), never off a failed
+  check of the files `kitc.py` writes, whose error a session keeps whole (`A_zb_o_weights`: a refusal's mark named as a reference not
+  found); every table read before classifies the same.  *Measured on the work laptop* (the wide lab of step 133, 1776 cells, 8 at a
+  time, the reader's rebuild included): step A 948 s against 1342 s, two cells read otherwise at first (a function named `p1`, `p2`: written short in the session too, then fixed); step B 528 s against 1342 s, every cell's verdict and category the same; 1776 cells served, a session started afresh 162 times, its size 977 MB at the median, 3610 at the most (one cell's own work).  Accepted when the wide lab's verdicts are the same cell by
+  cell (done) and the full table's in the batch's chain, the time measured.
 - *`HWP_irqnow`'s reifier step after step 114* (found at step 114): about 0.09 s slower (1.90 to 1.99 s, in four timings), the other
   kernels the same: what of the value rows its reading meets; after step 115 about 0.03 s more (1.90 to 1.94 s and 1.97 to 2.00 s, in
   two timings); after step 118 0.05 to 0.10 s more (2.00 to 2.05 s and 1.95 to 2.05 s, in two timings: the bounds of its value rows);
@@ -6584,6 +6602,15 @@ check is fast and reliable.  (2) Growth, construct by construct from the constru
 proof case; programs outside `S` keep the fallback (translator + walk).  Accepted when every example, corpus program and kernel
 compiles through `compile` with only the conversion check, the trusted base is unchanged (`Print Assumptions`), the check's time
 is measured, and the construct table is unchanged or better; then the walk is retired.
+- *The rows' lemmas, proved per program by tactics* (the owner's question, 2026-11-15): since step 82 the rows of counters and values
+  (`__k`, `__kc`, `__kv`, `__kva`, `__kb`) come with statements `kitc.py` writes for each program and proves by Ltac (`KQRWf.nr_step`,
+  `nv_step`, `nv_stepb`, `nb_step`, `nc_step` and the rest), and the uses are rewritten with them (`kq_rw`, `kq_nc`): proof search per
+  program, against D26 and §0.10's row 8b ("only the conversion check `denote s = f`").  Sound, the kernel checks each proof, and 0.2 to
+  0.3 s a cell; but the tactics' failures and loops of steps 119 to 125 came from it.  The design that meets 8b: a row's construction and
+  its statement made by functions over `S` and proved once, as `compile` is, so that a row is checked by conversion as a function is.
+  Taken when the families of counters and values stop changing, so that it is proved once over their final form.  Accepted when no
+  program's check uses a tactic (the generated files hold only `exact`, `change` and conversion), the gate passes with the walk switched
+  off and the table's verdicts are unchanged.
 
 ---
 
@@ -6606,7 +6633,8 @@ bash proved/corpus.sh [times]           # every program of hand.tsv; "times" als
 bash hw/spec.sh                         # the laws, the model, the demos, the library theorems rest on the laws alone
 bash hw/check.sh                        # the kernels under QEMU's processor and under KVM, with their controls
 bash hw/build_proved.sh NAME            # one kernel through the proved route; hw/run.sh NAME_p boots it
-bash proved/matrix/run.sh [OUT]         # the construct table (PATT=a+b: some cells; PJ: cells at a time; MD=1: write MATRIX.md)
+bash proved/matrix/run.sh [OUT]         # the construct table (PATT=a+b: some cells; PJ: cells at a time; MD=1: write MATRIX.md;
+                                        #   KQ_SESSION=2: the cells in PJ Rocq sessions, proved/kqsess.py, §12.F)
 python3 proved/matrix/gen.py OUT        # only the table's programs (run.sh calls it)
 python3 proved/matrix/classify.py RESULTS --md proved/matrix/MATRIX.md   # classify saved results again (run.sh calls it)
 python3 tools/mkloopspec.py > proved/KQLoopSpec.v
@@ -6732,7 +6760,9 @@ Pushed to the public repository up to `b792a6a` (2026-11-14); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: steps 131, 132, 133 (a block's other counters in its bound, a block of counters and numbers, a library's value function: the construct table 4129 of 4266, 76 by design, 60 gaps), one chain for the three; the gate; §12.A |
+| (this commit) | §12.F: the table's and the labs' Rocq processes (option 2: long-lived sessions, step A one a cell, step B shared across cells; the wide lab's verdicts the same, its time measured); §12.V: the rows' lemmas proved per program by tactics, an item with its acceptance |
+| `07d789f` | `proved/kitc.py` + `proved/kqsess.py` + `proved/matrix/run.sh`: option 2, the cells checked in long-lived Rocq sessions (`KQ_SESSION=1`: one a cell; `KQ_SESSION=2`: shared, set back to a mark after each) |
+| `6eecefb` | §12.V: steps 131, 132, 133 (a block's other counters in its bound, a block of counters and numbers, a library's value function: the construct table 4129 of 4266, 76 by design, 60 gaps), one chain for the three; the gate; §12.A |
 | `b792a6a` | `proved/KQRReify.v` + matrix step 133: a library's function giving back a value holding counters: its value row; 3 cells |
 | `3eba656` | §12.V: step 133's design -- a library's function giving back a value holding counters: its value row |
 | `9e2bb16` | `proved/KQRReify.v` + matrix step 132: a block of different types one of whose members gives back a counter: a block of rows over counters and numbers; 3 cells |
