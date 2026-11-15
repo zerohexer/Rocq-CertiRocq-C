@@ -1817,7 +1817,8 @@ the gate (examples, corpus, kernels if the walk changed) passes.
 - ~~*A function giving back a counter that uses another's as a counter*~~ (found at step 83) — **step 136**: its row read as the program's
   functions are, the use made the row's number, the row the source's text; `w`'s body tests `Nat.leb (cnt m i t) 3`
   (`A_zb_o_counter_row_uses`): a row's body reading another row's counter as a counter.  Accepted when it is proved.
-- *A counter a function gives back, used where the counters are held by weights* (found at step 83): `pp (k c : nat)` handing on `S c`
+- ~~*A counter a function gives back, used where the counters are held by weights*~~ (found at step 83) — **step 138**: the use's
+  equation stated where the weights' polynomials are below the bound (`callee_ok_eqv`); `pp (k c : nat)` handing on `S c`
   and testing `cnt c x t` (`A_zb_o_weights`): a refusal of the reader's own today.  Accepted when it is proved.
 - ~~*A test in `Z` on such a counter*~~ (found at step 83) — **step 135**: a test in `Z` of any counters, `BCmpZ`, a construct of `S`
   proved once; `(Z.of_nat (cnt n a s) <? 3)%Z` (`A_z_u_zofnat`) proved.
@@ -6641,6 +6642,12 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   the list; `check_trust.py`: `trust unchanged`.  Next: step 138 (§12.A's remaining counter items: weights, the own recursion),
   then the rows' lemmas proved once (§12.V).
 
+**Step 138, a counter a function gives back, used where the counters are held by weights (§3.5, §12.A; the gap `A_zb_o_weights`, left at step 83) — the design (2026-11-16).**  `Fixpoint pp (k c : nat) (x : int) (t : mem) : int := .. if Nat.leb (cnt c x t) 3 then pp m (S c) (x + 1) t else x ..`: `pp`'s counters have a weighted bound (step 37: `k + c` does not grow), and `kitc.py` refused a use in such a function, since the use's equation is stated where each counter is below the bound (`eqCb`, `callee_ok_eqb`), and the theorem of a function with weights takes its counters where each weighted polynomial of them is (`cfits`).
+- *`KQR.v`*: `allb_lt` (each polynomial of the counters below the bound, a conjunction), `cfits_allb` (what `cfits` gives), `eqCv` (an equation where the counters meet a condition given), `appc_eqCv`, `callee_ok_eqv` (`callee_ok_eqb`'s where the condition is the weights', from `cfits` itself): lemmas, nothing assumed.
+- *`kitc.py`*: such a function's equation stated with `eqCv` at its weights and bound, proved as before (`own_step`), the polynomials made linear first (`allb_lt`, `pevalz`, `prodz`, the pairs' projections), so that `lia` takes each counter's bound from them; its theorem transferred by `callee_ok_eqv`.  The refusal is gone.
+- *The C*: a program read before, byte-identical.
+- *Cells*: 6 (`A_zx_cw_*`): the weights `2k + c`, the use on the counter that falls, a match on the use, two uses in one test, a let of the use, the second counter from 0.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6840,7 +6847,8 @@ Pushed to the public repository up to `8449d6c` (2026-11-16); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: steps 136, 137 (a function giving back a counter whose body uses another's as a counter, its row read as the program's functions are; a test in Z of a counter against a negative number, a constant: the construct table 4184 of 4320, 76 by design, 59 gaps), one chain for the two; the gate; §12.A |
+| (this commit) | §12.V: step 138's design -- a counter a function gives back, used where the counters are held by weights: callee_ok_eqv; §12.A |
+| `46ca38d` | §12.V: steps 136, 137 (a function giving back a counter whose body uses another's as a counter, its row read as the program's functions are; a test in Z of a counter against a negative number, a constant: the construct table 4184 of 4320, 76 by design, 59 gaps), one chain for the two; the gate; §12.A |
 | `8449d6c` | `proved/KQR.v` + `KQRReify.v` + matrix step 137: a test in Z of a counter against a negative number, `BCmpZN`: its meaning, its code a constant, wf and proof; the reader; 8 cells |
 | `df0ead6` | §12.V: step 137's design -- a test in Z of a counter against a negative number: BCmpZN, a constant, a construct of S proved once; §12.A; §14 step 136's code row |
 | `04e743d` | `proved/KQRReify.v` + matrix step 136: a function giving back a counter whose body uses another's counter as a counter: its row read as the program's functions are; 10 cells |
