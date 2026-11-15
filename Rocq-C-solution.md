@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **4184 of 4320, 59 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **4202 of 4334, 55 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -6653,6 +6653,19 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: a program read before, byte-identical.
 - *Cells*: 8 (`A_zx_ce_*`): a string's length, a written list's length, `Z.pow 2 10`, `Nat.mul 3 4`, a definition of the program, inside a recursion, twice, and one with a variable in it (read as before).
 
+**Steps 138, 139 — the results (2026-11-16), one chain for the two.**  Built as designed:
+- *Step 138, a counter a function gives back, used where the counters are held by weights*: *`KQR.v`*: `allb_lt`, `cfits_allb`, `eqCv`, `appc_eqCv`, `callee_ok_eqv`.  *`kitc.py`*: the equation of such a function at its weights (`eqCv`), the polynomials made linear first, its theorem by `callee_ok_eqv`; the refusal gone.  *Found while building* (on the work laptop, the goals printed where the proof stopped): the polynomials' pairs left unprojected kept `lia` from them, and the induction's hypothesis unused.  Checked on the work laptop (the repository at step 137 with this step's files, step 135's wide lab: 1964): every verdict and category the last table's but the cell read.  *Cells*: 6 more (`A_zx_cw_*`), 6 proved.  One gap read: `A_zb_o_weights`.
+- *Step 139, a closed term a library or the program computes, read as its value*: the reader (`KQRReify.v`): `ce_cands`, `ce_all`, `has_closed`, `closed_eval`, `ce_subst`, `ce_prog`; *`kitc.py`*: the reading file evaluates the closed terms where the program has one.  *Found while building*: `Uint63.of_nat` is an abbreviation, `Uint63.of_Z (Z.of_nat ..)`, so the closed term is looked for under `Uint63.of_Z` alone, a counter written excluded; a cell named `String.length`, which the table's header gives MetaRocq's strings; done on every reading, the pass worked out a counter's arithmetic on numbers written in unary and six cells read before were lost to the time limit (`A_zk_num_*`), so it is the second reading of a program not read otherwise.  Checked on the work laptop (the repository at step 138 with this step's files, step 135's wide lab and the programs `A_p_`: 2059): every verdict and category the last table's but the cells read.  *Cells*: 8 more (`A_zx_ce_*`), 8 proved.  Three gaps read: `A_q_ascii_code`, `A_p_ascii`, `A_p_z_to_int`.
+- *The reifier's step on the kernels' programs* (on the work laptop, one core, interleaved, three rounds, the fastest, F62, in clean copies of two trees, the repository at step 137 / at step 139): `HWP_kernel` 3.13 / 3.11 s, `HWP_own` 2.19 / 2.19, `HWP_irqnow` 1.91 / 1.91: the same (the second reading runs only on a program not read otherwise, which the kernels are not).
+- *The run*: one chain for the two steps (the laptop free while step 140 is designed), on the last step's code commit, the table in 12 long-lived Rocq sessions under 14 GB (§12.F).
+- The C: the 99 programs byte-identical.  The construct table (on `d5f4aac`): **4202 of 4334 through the verified compiler**, 76
+  by design, 55 gaps, 1 not Rocq (was 4184 of 4320: all 14 new cells read; 4 gaps read; no cell lost).  The gate on `d5f4aac`, the
+  walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding, beside the corpus; the same C: undefined
+  behaviour trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels and `grow`
+  (22 / 24 / 24 / 18 / 20 / 9 s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems each within
+  the list; `check_trust.py`: `trust unchanged`.  Next: step 140 (a function giving back a counter whose row needs its own bound:
+  shiftr, a test on its own counter), then the rows' lemmas proved once (§12.V).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6848,11 +6861,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `8449d6c` (2026-11-16); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `d5f4aac` (2026-11-16); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 139's design -- a closed term a library or the program computes, read as its value; §14 step 138's code row |
+| (this commit) | §12.V: steps 138, 139 (a counter used where the counters are held by weights, callee_ok_eqv; a closed term read as its value: the construct table 4202 of 4334), one chain for the two; the gate; §12.A |
+| `d5f4aac` | `proved/KQRReify.v` + `kitc.py` + matrix step 139: a closed term a library or the program computes, read as its value: worked out by Rocq at a second reading of a program not read otherwise; 8 cells |
+| `a938694` | §12.V: step 139's design -- a closed term a library or the program computes, read as its value; §14 step 138's code row |
 | `7ad1df4` | `proved/KQR.v` + `kitc.py` + matrix step 138: a counter a function gives back, used where the counters are held by weights: allb_lt, eqCv, callee_ok_eqv; 6 cells |
 | `7e93f01` | §12.V: step 138's design -- a counter a function gives back, used where the counters are held by weights: callee_ok_eqv; §12.A |
 | `46ca38d` | §12.V: steps 136, 137 (a function giving back a counter whose body uses another's as a counter, its row read as the program's functions are; a test in Z of a counter against a negative number, a constant: the construct table 4184 of 4320, 76 by design, 59 gaps), one chain for the two; the gate; §12.A |
