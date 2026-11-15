@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **4164 of 4302, 61 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **4184 of 4320, 59 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -6628,6 +6628,19 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: a program read before, byte-identical.
 - *Cells*: 8 (`A_zx_zn_*`): `>=?`, `=?`, `<=?`, the number on the left with `<?` and `>=?`, a counter a function gives back, a boolean let of it, a choice of numbers by it.
 
+**Steps 136, 137 — the results (2026-11-16), one chain for the two.**  Built as designed:
+- *Step 136, a function giving back a counter whose body uses another's counter as a counter*: the reader (`KQRReify.v`): `y_all`'s loop over the rows whose body holds such a use too, `y_dedup` in `y_rows`, `nr_inscr` in `nr_trm`'s let.  *Found while building* (on the work laptop): the row read so is in the environment twice, as made and as read, and was made twice ("already exists"), so what is made is the first, the source's; a let of the other's counter that the row's test reads was made a number in the row, so its test read a number as a counter.  Checked on the work laptop (the repository at step 135 with this step's files, step 135's wide lab: 1950, the cells in long-lived sessions): every verdict and category the last table's but the cell read.  *Cells*: 10 more (`A_zx_cr_*`), 10 proved.  One gap read: `A_zb_o_counter_row_uses`.
+- *Step 137, a test in `Z` of a counter against a negative number*: *`KQR.v`*: `zneg_v`, `zneg_ok`; `BCmpZN`'s meaning, its code in `ccond`, `cbval`, `csel` (a constant), `wfb`, `sh_b`, its case of the compiler's proof and of `denote_nomem` and its two siblings; the reader: `BCmpZN` in `reify_b`, `cl_c`.  *Found while building*: three first compiles stopped, each at the next tactic (a binder's type, `cbn` unfolding too much, a rewrite whose equation the destruct had already used).  Checked on the work laptop (the repository at step 136 with this step's files, step 135's wide lab: 1958): every verdict and category the last table's but the cell read.  *Cells*: 8 more (`A_zx_zn_*`), 8 proved.  One gap read: `A_zx_zt_neg`.
+- *The reifier's step on the kernels' programs* (on the work laptop, one core, interleaved, three rounds, the fastest, F62, in clean copies of two trees, the repository at step 135 / at step 137): `HWP_kernel` 3.14 / 3.13 s, `HWP_own` 2.15 / 2.16, `HWP_irqnow` 1.89 / 1.90, the same.
+- *The run*: one chain for the two steps (the laptop free while step 138 is designed), on the last step's code commit, the table in 12 long-lived Rocq sessions under 14 GB (§12.F), 18 minutes.
+- The C: the 99 programs byte-identical.  The construct table (on `8449d6c`): **4184 of 4320 through the verified compiler**, 76
+  by design, 59 gaps, 1 not Rocq (was 4164 of 4302: all 18 new cells read; 2 gaps read; no cell lost).  The gate on `8449d6c`, the
+  walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding, beside the corpus; the same C: undefined
+  behaviour trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels and `grow`
+  (23 / 26 / 24 / 18 / 19 / 10 s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems each within
+  the list; `check_trust.py`: `trust unchanged`.  Next: step 138 (§12.A's remaining counter items: weights, the own recursion),
+  then the rows' lemmas proved once (§12.V).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6823,11 +6836,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `cec99b2` (2026-11-15); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `8449d6c` (2026-11-16); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 137's design -- a test in Z of a counter against a negative number: BCmpZN, a constant, a construct of S proved once; §12.A; §14 step 136's code row |
+| (this commit) | §12.V: steps 136, 137 (a function giving back a counter whose body uses another's as a counter, its row read as the program's functions are; a test in Z of a counter against a negative number, a constant: the construct table 4184 of 4320, 76 by design, 59 gaps), one chain for the two; the gate; §12.A |
+| `8449d6c` | `proved/KQR.v` + `KQRReify.v` + matrix step 137: a test in Z of a counter against a negative number, `BCmpZN`: its meaning, its code a constant, wf and proof; the reader; 8 cells |
+| `df0ead6` | §12.V: step 137's design -- a test in Z of a counter against a negative number: BCmpZN, a constant, a construct of S proved once; §12.A; §14 step 136's code row |
 | `04e743d` | `proved/KQRReify.v` + matrix step 136: a function giving back a counter whose body uses another's counter as a counter: its row read as the program's functions are; 10 cells |
 | `e6569e3` | §12.V: step 136's design -- a function giving back a counter whose body uses another's counter as a counter: its row read as the program's functions are; §12.A |
 | `b3e6523` | §12.V: steps 134, 135 (a counter given to a function that makes its counter larger, held at its bound; a test in Z of counters, a construct of S: the construct table 4164 of 4302, 76 by design, 61 gaps), one chain for the two, the first table in long-lived sessions and what it found (`cec99b2`); the gate; §12.A |
