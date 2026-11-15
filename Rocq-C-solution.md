@@ -1740,7 +1740,7 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   each of its calls paired with the function's.  Left: ~~a counter
   in a value in a value used as a counter (`A_zx_cvc_opt_pair`, found at step 118: a match takes the counters one level deep)~~ — **done,
   step 126**: a field holding counters a value at most the call's, taken apart to any depth; a library's (~~`A_q_divmod`~~ — **done, step 133**: a library's fixpoint giving back a value holding counters gets a value row;
-  `A_q_ascii_code`: rows are of the program's functions and fixpoints).  Accepted when those are proved.
+  ~~`A_q_ascii_code`~~ — done, step 139: `nat_of_ascii` of a character written is a closed term, read as its value).  Accepted when those are proved.
 - ~~*A counter given back by a function taking an accumulator, used as a counter*~~ (found at step 121) — **done, step 122**: where
   today's reading finds no bound, a parameter holding counters at most its largest counter.  `Nat.leb (fst (qa9 n (O, a))) 3`
   with `qa9 k st` counting up from `st`: step 118's bound of a value's counters is over the function's counter parameters, and
@@ -6648,6 +6648,11 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: a program read before, byte-identical.
 - *Cells*: 6 (`A_zx_cw_*`): the weights `2k + c`, the use on the counter that falls, a match on the use, two uses in one test, a let of the use, the second counter from 0.
 
+**Step 139, a closed term a library or the program computes, read as its value (§3.5, §12.A; the gaps `A_q_ascii_code`, `A_p_ascii`, `A_p_z_to_int`) — the design (2026-11-16).**  `Uint63.of_nat (nat_of_ascii "a"%char) + a`, `Uint63.of_Z sz + a` with `sz : Z` a definition of the program: the reader does not know the library's function nor the definition's value, and neither has a variable in it.
+- *Worked out at the reading* (`KQRReify.v`: `ce_cands`, `ce_all`, `has_closed`, `closed_eval`, `ce_subst`, `ce_prog`; `kitc.py`'s reading file): each closed subterm of the program's own bodies giving a machine number, `Uint63.of_Z c` with `c` closed (so `Uint63.of_nat c`, which is `Uint63.of_Z (Z.of_nat c)`), not a number written and not a counter written (read as before), is evaluated by Rocq (MetaRocq's `tmUnquoteTyped`, `tmEval all`, `tmQuote`) and put in its place before the reifier reads the body.  Only on a second reading, of a program not read otherwise (`kitc.py`, its text naming `Uint63.of_nat` or `Uint63.of_Z`, read again with no session): a counter's arithmetic on numbers written is read by step 95 without the number ever built, and worked out by Rocq it is built in unary (`Nat.pow 2 40`, the table's `A_zk_num_*`); where the second reading does not read the program either, what the first said is what is printed.  The reading is untrusted: the per-program check, `denote s = f` by conversion, computes the user's own closed term to the same number.  Nothing assumed.
+- *The C*: a program read before, byte-identical.
+- *Cells*: 8 (`A_zx_ce_*`): a string's length, a written list's length, `Z.pow 2 10`, `Nat.mul 3 4`, a definition of the program, inside a recursion, twice, and one with a variable in it (read as before).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6847,7 +6852,9 @@ Pushed to the public repository up to `8449d6c` (2026-11-16); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 138's design -- a counter a function gives back, used where the counters are held by weights: callee_ok_eqv; §12.A |
+| (this commit) | §12.V: step 139's design -- a closed term a library or the program computes, read as its value; §14 step 138's code row |
+| `7ad1df4` | `proved/KQR.v` + `kitc.py` + matrix step 138: a counter a function gives back, used where the counters are held by weights: allb_lt, eqCv, callee_ok_eqv; 6 cells |
+| `7e93f01` | §12.V: step 138's design -- a counter a function gives back, used where the counters are held by weights: callee_ok_eqv; §12.A |
 | `46ca38d` | §12.V: steps 136, 137 (a function giving back a counter whose body uses another's as a counter, its row read as the program's functions are; a test in Z of a counter against a negative number, a constant: the construct table 4184 of 4320, 76 by design, 59 gaps), one chain for the two; the gate; §12.A |
 | `8449d6c` | `proved/KQR.v` + `KQRReify.v` + matrix step 137: a test in Z of a counter against a negative number, `BCmpZN`: its meaning, its code a constant, wf and proof; the reader; 8 cells |
 | `df0ead6` | §12.V: step 137's design -- a test in Z of a counter against a negative number: BCmpZN, a constant, a construct of S proved once; §12.A; §14 step 136's code row |
