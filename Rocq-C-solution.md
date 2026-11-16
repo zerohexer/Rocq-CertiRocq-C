@@ -6718,6 +6718,14 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   the list; `check_trust.py`: `trust unchanged`.  Next: the rows' statements proved once (§12.V), the uses inside mutual blocks
   among them; the counter and value items of §12.A beside it.
 
+**Step 143, the rows' statements proved once, begun: a function giving back a counter as a syntax of its own (§12.V, D26, §0.10's row 8b) — the design (2026-11-17).**  Since step 82 a function giving back a counter has a row, the function as a number, which the reader writes as a term and `kitc.py` proves equal to the function made a number for each program by Ltac (`KQRWf.nr_step`): proof search per program, which D26 and §0.10's row 8b exclude, and the cause of steps 141's and 142's gaps.
+- *A syntax of its own, proved once* (`proved/KQRK.v`, new, after `KQR.v`): `kexp`, the counter given back (the function itself on its counter's predecessor, a counter of S, `S`, `+`, `*` by a written number, `land`, `lor`, `lxor`), and `sbk`, S's lets, tests and counter match around it; their meaning (`denote_kb`; a recursive function's, `denote_kf`, as S's functions of numbers are); `row_kb`, the row made by a function over the syntax, each construct the machine's; `row_of_ok`: the row's meaning is the function's made a number (`ofn`) at every counter and argument, by induction on the counter and on the syntax, with `denote_rec_ext` and Rocq's axioms of the machine's operations (`KQRWf.nr_add`, `nr_S`, `nr_mul`, `nr_land`, ..); `krow`, the function made a number; `unrow_kb`, the counter body read back from the row.  It rests on what `KQR.v` rests on: `proved/TRUSTED.txt` unchanged, `make.sh` printing its lemmas' assumptions with the others'.
+- *The reader* (`KQRReify.v`: `reify_ke`, `reify_kb`, `read_kbody`, `krow_src`, `krow_term`): a function giving back a counter, recursive on its first counter, its parameters in S's order and none a record or taken at numbers, whose body the syntax reads (no call of the program's other functions): its row in S is `row_kb` of it, and what the program's file defines of the row is `krow` of the function, so that the row's statement, `C .. = of_nat (cnt ..)`, holds by conversion.  The function's body as written is kept for it (`y_all`'s marks), so that a function the reading rewrites is read as the user wrote it.  Any other function giving back a counter keeps step 82's row.
+- *`kitc.py`*: such a row's theorem: `compile_f_ok` of its body's meaning, then `callee_ok_eq` with `row_of_ok`, the counter body read back by `unrow_kb` and checked by computation (`row_kb` of it is the row): `exact` only; its statement by `eq_refl`.  The callers' proofs as before (the rows' statements hold as before).
+- *Left* (§12.V): a row taking accumulators at numbers (as a counter where each recursive call hands it on unchanged; a growing one wants step 82's row); the parts the machine's only below a word (step 140) and the uses as counters (step 83: the bound, proved once too); value rows, blocks, a counter and a proof; the callers' equations.
+- *The C*: the same: compared on 34 of the cells whose rows are now made so.
+- *Cells*: none added: the table's families of counters exercise each construct (205 cells' rows made so).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6765,6 +6773,8 @@ is measured, and the construct table is unchanged or better; then the walk is re
   program, against D26 and §0.10's row 8b ("only the conversion check `denote s = f`").  Sound, the kernel checks each proof, and 0.2 to
   0.3 s a cell; but the tactics' failures and loops of steps 119 to 125 came from it.  The design that meets 8b: a row's construction and
   its statement made by functions over `S` and proved once, as `compile` is, so that a row is checked by conversion as a function is.
+  Begun at step 143 (`proved/KQRK.v`): a function giving back a counter as a syntax of its own, its row made from it by `row_kb`, and
+  `row_of_ok`, proved once, its statement; such a row's theorem `exact` only, its statement by conversion.
   Taken when the families of counters and values stop changing, so that it is proved once over their final form; its design takes in
   the uses inside mutual blocks (step 141's cells), which the per-program rewriting cannot reach by conversion.  Accepted when no
   program's check uses a tactic (the generated files hold only `exact`, `change` and conversion), the gate passes with the walk switched
@@ -6918,7 +6928,8 @@ Pushed to the public repository up to `5a388df` (2026-11-16); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: steps 140, 141, 142 (a counter row's part the machine's only below a word kept as the source writes it; the cells of a counter used in a mutual block; a counter given back with a proof: the construct table 4236 of 4385), one chain for the three; the gate; §12.A |
+| (this commit) | §12.V: step 143's design -- the rows' statements proved once, begun: a function giving back a counter as a syntax of its own (KQRK.v), its row made from it, its theorem by row_of_ok |
+| `d212fa3` | §12.V: steps 140, 141, 142 (a counter row's part the machine's only below a word kept as the source writes it; the cells of a counter used in a mutual block; a counter given back with a proof: the construct table 4236 of 4385), one chain for the three; the gate; §12.A |
 | `5a388df` | `proved/KQRReify.v` + matrix step 142: a counter given back with a proof by a function that is not recursive: its value written out at the use (er_row); 10 cells |
 | `06d5e3e` | §12.V: step 142's design -- a counter given back with a proof: the value written out where the function is not recursive; §12.A; §14 step 141's code row |
 | `b6bca72` | `proved/matrix` step 141: a counter a function gives back, used in a mutual block of the program or of rows: 17 cells, 14 gaps (12.A, for the rows proved once), 3 controls |
