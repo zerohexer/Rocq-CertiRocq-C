@@ -4895,6 +4895,41 @@ addA('zx_rk_block', "", 'Uint63.of_Z (Z.of_nat (ea n n))',
      'From Stdlib Require Import ZArith.\nFixpoint ea (k m : nat) : nat := match k with O => m | S j => Nat.shiftr (oa j m) 1 end\nwith oa (k m : nat) : nat := match k with O => m | S j => ea j m end.\n')
 addA('zx_rk_value', "", 'Uint63.of_Z (Z.of_nat (fst (pv n n))) + snd (pv n n)',
      'From Stdlib Require Import ZArith.\nFixpoint pv (k m : nat) : nat * int := match k with O => (m, 0) | S j => (Nat.shiftr (fst (pv j m)) 1, snd (pv j m)) end.\n')
+# a mutual block giving back counters: a member using another's counter, testing a member's call, a part the machine's only below a word (step 141)
+addA('zx_rb_uses', "", 'if Nat.leb (ew n a s) 3 then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ew (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if Nat.leb (cnt m i t) 3 then S (ow m (i + 1) t) else ow m (i + 1) t end\nwith ow (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => ew m (i + 1) t end.\n')
+addA('zx_rb_uses_num', "", 'Uint63.of_nat (ew n a s) + a',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ew (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if Nat.leb (cnt m i t) 3 then S (ow m (i + 1) t) else ow m (i + 1) t end\nwith ow (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => ew m (i + 1) t end.\n')
+addA('zx_rb_shiftr', "", 'Uint63.of_Z (Z.of_nat (ev n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint ev (k m : nat) : nat := match k with O => m | S j => Nat.shiftr (od j m) 1 end\nwith od (k m : nat) : nat := match k with O => m | S j => ev j m end.\n')
+addA('zx_rb_div_both', "", 'Uint63.of_Z (Z.of_nat (ev n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint ev (k m : nat) : nat := match k with O => m | S j => Nat.div (od j m) 2 end\nwith od (k m : nat) : nat := match k with O => m | S j => Nat.div (ev j m) 3 end.\n')
+addA('zx_rb_test_member', "", 'Uint63.of_Z (Z.of_nat (ev n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint ev (k m : nat) : nat := match k with O => m | S j => if Nat.leb (od j m) 3 then S (od j m) else od j m end\nwith od (k m : nat) : nat := match k with O => m | S j => ev j m end.\n')
+addA('zx_rb_test_self', "", 'Uint63.of_Z (Z.of_nat (ev n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint ev (k m : nat) : nat := match k with O => m | S j => od j m end\nwith od (k m : nat) : nat := match k with O => m | S j => if Nat.eqb (od j m) 0 then m else od j m end.\n')
+addA('zx_rb_sub', "", 'Uint63.of_Z (Z.of_nat (ev n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint ev (k m : nat) : nat := match k with O => m | S j => od j m - 1 end\nwith od (k m : nat) : nat := match k with O => m | S j => ev j m end.\n')
+addA('zx_rb_param_only', "", 'Uint63.of_Z (Z.of_nat (ev n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint ev (k m : nat) : nat := match k with O => m | S j => Nat.shiftr m 1 + od j m end\nwith od (k m : nat) : nat := match k with O => m | S j => ev j m end.\n')
+addA('zx_rb_as_counter', "", 'if Nat.leb (ev n n) 3 then a else b',
+     'From Stdlib Require Import ZArith.\nFixpoint ev (k m : nat) : nat := match k with O => m | S j => Nat.shiftr (od j m) 1 end\nwith od (k m : nat) : nat := match k with O => m | S j => ev j m end.\n')
+addA('zx_rb_min', "", 'Uint63.of_Z (Z.of_nat (ev n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint ev (k m : nat) : nat := match k with O => m | S j => Nat.min (od j m) j end\nwith od (k m : nat) : nat := match k with O => m | S j => ev j m end.\n')
+addA('zx_rb_prog_uses', "", 'pe n a s',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint pe (k : nat) (i : int) (t : mem) : int := match k with O => i | S m => if Nat.leb (cnt m i t) 3 then po m (i + 1) t else i end\nwith po (k : nat) (i : int) (t : mem) : int := match k with O => i | S m => pe m (i + 2) t end.\n')
+addA('zx_rb_prog_num', "", 'pe n a s',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint pe (k : nat) (i : int) (t : mem) : int := match k with O => i | S m => Uint63.of_nat (cnt m i t) + po m (i + 1) t end\nwith po (k : nat) (i : int) (t : mem) : int := match k with O => i | S m => pe m (i + 2) t end.\n')
+addA('zx_rb_prog_land', "", 'pe n a s',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint pe (k : nat) (i : int) (t : mem) : int := match k with O => i | S m => if Nat.eqb (Nat.land (cnt m i t) 1) 0 then po m (i + 1) t else i end\nwith po (k : nat) (i : int) (t : mem) : int := match k with O => i | S m => pe m (i + 2) t end.\n')
+addA('zx_rb_prog_budget', "", 'pe n a s',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nFixpoint pe (k : nat) (i : int) (t : mem) : int := match k with O => i | S m => ff (cnt m i t) (po m (i + 1) t) end\nwith po (k : nat) (i : int) (t : mem) : int := match k with O => i | S m => pe m (i + 2) t end.\n')
+addA('zx_rb_prog_ctl_single', "", 'pe n a s',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint pe (k : nat) (i : int) (t : mem) : int := match k with O => i | S m => Uint63.of_nat (cnt m i t) + pe m (i + 1) t end.\n')
+addA('zx_rb_prog_ctl_helper', "", 'pe n a s',
+     'Definition hh (i : int) : int := i * 3.\nFixpoint pe (k : nat) (i : int) (t : mem) : int := match k with O => i | S m => hh i + po m (i + 1) t end\nwith po (k : nat) (i : int) (t : mem) : int := match k with O => i | S m => pe m (i + 2) t end.\n')
+addA('zx_rb_prog_ctl_numrec', "", 'pe n a s',
+     'Fixpoint sm (k : nat) (i : int) : int := match k with O => i | S m => sm m (i + 1) end.\nFixpoint pe (k : nat) (i : int) (t : mem) : int := match k with O => i | S m => sm m i + po m (i + 1) t end\nwith po (k : nat) (i : int) (t : mem) : int := match k with O => i | S m => pe m (i + 2) t end.\n')
 addA('zb_o_weights', "", 'pp n n a s',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint pp (k c : nat) (x : int) (t : mem) : int := match k with O => x | S m => if Nat.leb (cnt c x t) 3 then pp m (S c) (x + 1) t else x end.\n')
 addA('zb_o_row_uses', "", 'fst (w n a s)',
