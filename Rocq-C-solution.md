@@ -1839,6 +1839,12 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   is linear with the counter's coefficient at least 1, `k + m + 7`, which can pass a word where the counters are below `2^62`, while the
   value is at most `max(m, 7)`, and the row's equation needs it below a word.  Accepted when it is proved, the bounds of the functions read
   today unchanged or their programs' C byte-identical.
+- *A counter a function gives back, used in a mutual block* (found at step 141): `.. Uint63.of_nat (cnt m i t) + po m (i + 1) t .. with po ..`
+  (`A_zx_rb_prog_*`), and a block giving back counters whose members use another's counter, test a member's call or keep a part the
+  machine's only below a word (`A_zx_rb_*`, `A_zx_rk_block`): the reading rewrites the block, but its copy is taken for a lifted local
+  block and read before the rows it calls, and the block's theorem is by conversion with the source, which a rewritten block is not.
+  Closed with the rows' statements proved once (§12.V), a use a construct of `S` whose meaning is the source's call.  Accepted when they
+  are proved.
 
 **B. Compiling from an ordinary `.v` file, as simply as `lean --c`.**
 - ~~A command in an ordinary Rocq file~~ — **done at step 89**, without a command: `python3 proved/kitc.py prog.v [--main=NAME]`: the entry's arguments are read from its signature (numbers and counters from the
@@ -6685,6 +6691,11 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: a program read before, byte-identical.
 - *Cells*: 24 (`A_zx_rk_*`): `div`, `modulo`, `sub`, `pred`, `min`, `max` of a counter and of a number, a test of its own value by `leb`, by `eqb`, against a parameter, `testbit` at a counter, inside a sum, a let of its own call tested and one used as a number, a part on parameters only, `log2`, used as a counter, with a memory, two such functions, a local fixpoint, an accumulator, two counters handed on together, a mutual block, a value.
 
+**Step 141, a counter a function gives back, used in a mutual block (§3.5, §12.A; places steps 82, 83, 136 and 140 left without a cell) — the cells (2026-11-16).**  `Fixpoint pe (k : nat) (i : int) (t : mem) : int := .. Uint63.of_nat (cnt m i t) + po m (i + 1) t .. with po ..`, and a block giving back counters whose members use another function's counter, test a member's call or keep a part the machine's only below a word: none is read, the use as a number included, while the same use outside a block is read and a block calling a function of numbers is.
+- *Found* (on the work laptop, a copy of the reading that says where it stops): the reading rewrites the block, each use the row's number, but the block's copy (`pe__wy`) has a block for its body and is taken for a local block lifted to the top (step 111), which is read first, before the rows it calls; and the block's theorem is by conversion with the source (`blkT` over the members), which a rewritten block is not, so it would want an equation over the members together, proved per program by tactics.  That is what the rows' statements proved once (§12.V) remove: there a use is a construct of `S` whose meaning is the source's call, and a block is checked by conversion as it is today.  So these places are cells now, gaps, to be closed with §12.V, whose design takes them in.
+- *The C*: unchanged (the reader and `kitc.py` are not touched).
+- *Cells*: 17 (`A_zx_rb_*`): in a block of the program, the use as a number, in a test, under `land`, as a budget; in a block giving back counters, another's counter in a test and as a number, `shiftr`, `div` in both members, a test of a member's call and of its own, `sub`, a part on parameters only, used as a counter, `min`; and three controls, read: the use outside a block, a block calling a helper, a block calling a recursive function of numbers.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6732,7 +6743,8 @@ is measured, and the construct table is unchanged or better; then the walk is re
   program, against D26 and §0.10's row 8b ("only the conversion check `denote s = f`").  Sound, the kernel checks each proof, and 0.2 to
   0.3 s a cell; but the tactics' failures and loops of steps 119 to 125 came from it.  The design that meets 8b: a row's construction and
   its statement made by functions over `S` and proved once, as `compile` is, so that a row is checked by conversion as a function is.
-  Taken when the families of counters and values stop changing, so that it is proved once over their final form.  Accepted when no
+  Taken when the families of counters and values stop changing, so that it is proved once over their final form; its design takes in
+  the uses inside mutual blocks (step 141's cells), which the per-program rewriting cannot reach by conversion.  Accepted when no
   program's check uses a tactic (the generated files hold only `exact`, `change` and conversion), the gate passes with the walk switched
   off and the table's verdicts are unchanged.
 
@@ -6884,7 +6896,9 @@ Pushed to the public repository up to `d5f4aac` (2026-11-16); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 140's design -- a function giving back a counter whose body has an operation or a test the machine's only below a word: its row keeps such parts as the source writes them, read as the program's functions are; §12.A |
+| (this commit) | §12.V: step 141 -- a counter a function gives back, used in a mutual block: the cells (gaps, for the rows proved once); §12.A; §14 step 140's code row |
+| `2ea11f5` | `proved/KQRReify.v` + `KQRWf.v` + matrix step 140: a function giving back a counter whose body has an operation or a test the machine's only below a word: its row keeps such parts as the source writes them, read as the program's functions are; the bound through div, shiftr, sub, min, max, ..; 24 cells |
+| `eaff010` | §12.V: step 140's design -- a function giving back a counter whose body has an operation or a test the machine's only below a word: its row keeps such parts as the source writes them, read as the program's functions are; §12.A |
 | `9007cdd` | §12.V: steps 138, 139 (a counter used where the counters are held by weights, callee_ok_eqv; a closed term read as its value: the construct table 4202 of 4334), one chain for the two; the gate; §12.A |
 | `d5f4aac` | `proved/KQRReify.v` + `kitc.py` + matrix step 139: a closed term a library or the program computes, read as its value: worked out by Rocq at a second reading of a program not read otherwise; 8 cells |
 | `a938694` | §12.V: step 139's design -- a closed term a library or the program computes, read as its value; §14 step 138's code row |
