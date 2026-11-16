@@ -7621,7 +7621,12 @@ Definition er_row (rows : list rprow) (h : term) (args : list term) : option ter
             | _, _ => false
             end
           else false) rows with
-  | Some r => Some (tApp (tConst (rp_name r) []) args)
+  | Some r =>
+      (* (step 142) a counter given back with a proof by a function that is not recursive: its value written out, as the program's
+         helpers giving back a counter are, so that what uses it reads a counter *)
+      let '(_, _, _, _, d0) := r in
+      if if Nat.eqb (rarg d0) rp_nofix then is_nat (ret_ty (dtype d0)) else false then Some (al_beta args (dbody d0))
+      else Some (tApp (tConst (rp_name r) []) args)
   | None => None
   end.
 Fixpoint er_sub (fuel : nat) (rows : list rprow) (lv : list bool) (t : term) {struct fuel} : term :=

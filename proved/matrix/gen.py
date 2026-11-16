@@ -4930,6 +4930,27 @@ addA('zx_rb_prog_ctl_helper', "", 'pe n a s',
      'Definition hh (i : int) : int := i * 3.\nFixpoint pe (k : nat) (i : int) (t : mem) : int := match k with O => i | S m => hh i + po m (i + 1) t end\nwith po (k : nat) (i : int) (t : mem) : int := match k with O => i | S m => pe m (i + 2) t end.\n')
 addA('zx_rb_prog_ctl_numrec', "", 'pe n a s',
      'Fixpoint sm (k : nat) (i : int) : int := match k with O => i | S m => sm m (i + 1) end.\nFixpoint pe (k : nat) (i : int) (t : mem) : int := match k with O => i | S m => sm m i + po m (i + 1) t end\nwith po (k : nat) (i : int) (t : mem) : int := match k with O => i | S m => pe m (i + 2) t end.\n')
+# a counter given back with a proof (step 142)
+addA('zx_sn_num', "", 'Uint63.of_nat (proj1_sig (cn n)) + a',
+     'Definition cn (k : nat) : {m : nat | True} := exist _ (S k) I.\n')
+addA('zx_sn_budget', "", 'ff (proj1_sig (cn n)) a',
+     'Fixpoint ff (n : nat) (x : int) : int := match n with O => x | S m => ff m (x + 1) end.\nDefinition cn (k : nat) : {m : nat | True} := exist _ (S k) I.\n')
+addA('zx_sn_match', "", 'match cn n with exist m _ => if Nat.ltb m 3 then a else b end',
+     'Definition cn (k : nat) : {m : nat | True} := exist _ (S k) I.\n')
+addA('zx_sn_let', "", 'let c := proj1_sig (cn n) in if Nat.leb c 3 then a else b',
+     'Definition cn (k : nat) : {m : nat | True} := exist _ (S k) I.\n')
+addA('zx_sn_rec', "", 'if Nat.ltb (proj1_sig (cr n)) 3 then a else b',
+     'Fixpoint cr (k : nat) : {m : nat | True} := match k with O => exist _ O I | S j => exist _ (S (proj1_sig (cr j))) I end.\n')
+addA('zx_sn_rec_num', "", 'Uint63.of_nat (proj1_sig (cr n)) + a',
+     'Fixpoint cr (k : nat) : {m : nat | True} := match k with O => exist _ O I | S j => exist _ (S (proj1_sig (cr j))) I end.\n')
+addA('zx_sn_proof', "", 'if Nat.ltb (proj1_sig (cp n)) 3 then a else b',
+     'From Stdlib Require Import Lia.\nDefinition cp (k : nat) : {m : nat | (m <= S k)%nat}.\nProof. exists k. lia. Defined.\n')
+addA('zx_sn_proof_num', "", 'Uint63.of_nat (proj1_sig (cp n)) + a',
+     'From Stdlib Require Import Lia.\nDefinition cp (k : nat) : {m : nat | (m <= S k)%nat}.\nProof. exists k. lia. Defined.\n')
+addA('zx_sn_param', "", 'if Nat.ltb (proj1_sig (cm n a)) 3 then a else b',
+     'Definition cm (k : nat) (x : int) : {m : nat | True} := exist _ (if x <? 0 then k else S k) I.\n')
+addA('zx_sn_in_rec', "", 'gg n a',
+     'Definition cn (k : nat) : {m : nat | True} := exist _ (S k) I.\nFixpoint gg (k : nat) (x : int) : int := match k with O => x | S j => if Nat.ltb (proj1_sig (cn j)) 3 then gg j (x + 1) else gg j x end.\n')
 addA('zb_o_weights', "", 'pp n n a s',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint pp (k c : nat) (x : int) (t : mem) : int := match k with O => x | S m => if Nat.leb (cnt c x t) 3 then pp m (S c) (x + 1) t else x end.\n')
 addA('zb_o_row_uses', "", 'fst (w n a s)',
