@@ -1828,6 +1828,17 @@ the gate (examples, corpus, kernels if the walk changed) passes.
 - *Arithmetic in `Z` of counters inside such a test* (found at step 135): `(Z.of_nat n + 1 <? 3)%Z` (`A_zx_zt_zsum`): the sum is the
   counters' sum made `Z` (`Nat2Z.inj_add`), and `BCmpZ`'s operands are counters made `Z`; its general form, arithmetic in `Z`
   where a proof gives the range, is D3's later option, kept separate: the owner's decision before it is built.  Accepted when it is proved.
+- *A mutual block or a value row with a part the machine's only below a word* (found at step 140): `Fixpoint ea (k m : nat) : nat := ..
+  Nat.shiftr (oa j m) 1 .. with oa ..` (`A_zx_rk_block`), `(Nat.shiftr (fst (pv j m)) 1, snd (pv j m))` (`A_zx_rk_value`): step 140 keeps
+  such parts in a single function's counter row; a block's rows (step 111) and value rows (step 114) are made by other readings.  Accepted
+  when they are proved.
+- *A recursion handing on a counter made of two of its counters* (found at step 140): `cb j m (Nat.shiftr (acc + m) 1)` (`A_zx_rk_acc`): each
+  counter a recursion hands on is at most one of the function's (`rec_ok`), and half a sum of two is at most the larger, which no single one
+  bounds.  Accepted when it is proved.
+- *A counter's bound where the function does not grow with its counter* (found at step 140): `Nat.max (cb j m) 7` (`A_zx_rk_max`): the bound
+  is linear with the counter's coefficient at least 1, `k + m + 7`, which can pass a word where the counters are below `2^62`, while the
+  value is at most `max(m, 7)`, and the row's equation needs it below a word.  Accepted when it is proved, the bounds of the functions read
+  today unchanged or their programs' C byte-identical.
 
 **B. Compiling from an ordinary `.v` file, as simply as `lean --c`.**
 - ~~A command in an ordinary Rocq file~~ — **done at step 89**, without a command: `python3 proved/kitc.py prog.v [--main=NAME]`: the entry's arguments are read from its signature (numbers and counters from the
@@ -6666,6 +6677,14 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   the list; `check_trust.py`: `trust unchanged`.  Next: step 140 (a function giving back a counter whose row needs its own bound:
   shiftr, a test on its own counter), then the rows' lemmas proved once (§12.V).
 
+**Step 140, a function giving back a counter whose body has an operation or a test the machine's only below a word (§3.5, §12.A; the gaps `A_zh_row_shiftr`, `A_zh_row_testbit_own`, left at step 101) — the design (2026-11-16).**  `Fixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.shiftr (cb j m) 1 end`, `.. if Nat.testbit (cb j m) 1 then S (cb j m) else cb j m ..`: step 82's row of such a function is the function as a number, its operations the machine's, which holds at every counter only for the operations that are the same modulo a word (`+`, `*`, `land`, `lor`, `lxor`, `ldiff`); `shiftr`, `div`, `modulo`, `sub`, `pred`, `min`, `max`, `log2` and a test of the function's own value are the machine's only where the value is below a word.  So no row was made, and a test of the function's own call was kept as written with that call the row's, a number where a counter is meant.
+- *The row as the source writes it* (`KQRReify.v`: `nr_trmk`, `nr_srck`, `nr_kept`, `nr_kok`; tried where step 82's row is not made, so a row made today is made as before): each part the row does not read is kept as the source writes it and made a number (`of_nat` of it), the function's own calls in it the function's, not the row's; a test or a let of the function's own call the same (a test kept as written that calls the function is refused in a single function's row only, since a block's members may give back numbers), a let of a counter kept a counter; no accumulator.  The row's statement, `C k m = of_nat (cb k m)`, holds at every counter, the same text on both sides, and is proved as step 82's.
+- *The row read as the program's functions are* (step 136's walk): each use of `cb`'s counter in it is read as `cb`'s row's number, which is the row itself, so that call is the row's recursion (`nr_self`).  Its equation holds where the counters are below the bound (step 83), with `cb`'s bound and `nc_E`; the bounds are made where only a row uses a counter as a counter, too.
+- *The bound* (`nb_go`): `div`, `modulo`, `shiftr`, `div2`, `pred`, `sub`, `clearbit`, `log2`, `sqrt` at most their first operand, `min` at most either, `max` at most the larger, `gcd` at most the sum; *`KQRWf.v`*: `nb_step` poses those facts (`nc_opf`) after what it tried before.
+- *Left, with cells*: a mutual block's row with such a part (`A_zx_rk_block`) and a value row's (`A_zx_rk_value`); a recursion handing on a counter made of two of its counters (`A_zx_rk_acc`, `shiftr (acc + m) 1`); a function that does not grow with its counter, whose linear bound does (`A_zx_rk_max`: `max (cb j m) 7`, bounded by `k + m + 7`): §12.A.
+- *The C*: a program read before, byte-identical.
+- *Cells*: 24 (`A_zx_rk_*`): `div`, `modulo`, `sub`, `pred`, `min`, `max` of a counter and of a number, a test of its own value by `leb`, by `eqb`, against a parameter, `testbit` at a counter, inside a sum, a let of its own call tested and one used as a number, a part on parameters only, `log2`, used as a counter, with a memory, two such functions, a local fixpoint, an accumulator, two counters handed on together, a mutual block, a value.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6865,7 +6884,8 @@ Pushed to the public repository up to `d5f4aac` (2026-11-16); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: steps 138, 139 (a counter used where the counters are held by weights, callee_ok_eqv; a closed term read as its value: the construct table 4202 of 4334), one chain for the two; the gate; §12.A |
+| (this commit) | §12.V: step 140's design -- a function giving back a counter whose body has an operation or a test the machine's only below a word: its row keeps such parts as the source writes them, read as the program's functions are; §12.A |
+| `9007cdd` | §12.V: steps 138, 139 (a counter used where the counters are held by weights, callee_ok_eqv; a closed term read as its value: the construct table 4202 of 4334), one chain for the two; the gate; §12.A |
 | `d5f4aac` | `proved/KQRReify.v` + `kitc.py` + matrix step 139: a closed term a library or the program computes, read as its value: worked out by Rocq at a second reading of a program not read otherwise; 8 cells |
 | `a938694` | §12.V: step 139's design -- a closed term a library or the program computes, read as its value; §14 step 138's code row |
 | `7ad1df4` | `proved/KQR.v` + `kitc.py` + matrix step 138: a counter a function gives back, used where the counters are held by weights: allb_lt, eqCv, callee_ok_eqv; 6 cells |
