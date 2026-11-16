@@ -17,7 +17,7 @@ Inductive kexp : Type :=
 | KSucc (a : kexp)
 | KPlus (a b : kexp)
 | KMulK (l : bool) (k : nat) (a : kexp)     (* k * a, k first if l *)
-| KBitK (o : nbop) (a b : kexp).            (* land, lor, lxor *)
+| KBitK (o : nbop) (a b : kexp).            (* land, lor, lxor, ldiff (step 144) *)
 
 (** a counter function's body: the counter given back, at the end of the lets, tests and counter matches of S's sorts *)
 Inductive sbk : Type :=
@@ -79,6 +79,9 @@ Fixpoint row_ke (a : kexp) : option sexp :=
   | KSucc a => option_map (fun e => SOp Badd e (SInt 1%uint63)) (row_ke a)
   | KPlus a b => match row_ke a, row_ke b with Some x, Some y => Some (SOp Badd x y) | _, _ => None end
   | KMulK l k a => option_map (fun e => if l then SOp Bmul (SInt (ofn k)) e else SOp Bmul e (SInt (ofn k))) (row_ke a)
+  | KBitK NLdiff a b =>
+      (* (step 144) the first's bits not in the second: the first and the second's complement within the 63 bits *)
+      match row_ke a, row_ke b with Some x, Some y => Some (SOp Bland x (SOp Blxor y (SInt 9223372036854775807%uint63))) | _, _ => None end
   | KBitK o a b => match kop o, row_ke a, row_ke b with Some op, Some x, Some y => Some (SOp op x y) | _, _, _ => None end
   end.
 Fixpoint row_kb (k : sbk) : option sexp :=
@@ -142,11 +145,17 @@ Proof.
     destruct l; cbn [wf] in W; cbn [denote_e].
     + apply andb_true_iff in W as [_ W1]. rewrite (IH e1 sigs r mok rk cenv benv renv env s eq_refl W1 Hs T). apply ofn_mul_k.
     + apply andb_true_iff in W as [W1 _]. rewrite (IH e1 sigs r mok rk cenv benv renv env s eq_refl W1 Hs T). apply ofn_mul_k.
-  - destruct (kop o) as [op|] eqn:Eo; [|discriminate E]. destruct (row_ke a) as [x|] eqn:Ea; [|discriminate E].
-    destruct (row_ke b) as [y|] eqn:Eb; [|discriminate E]. injection E as <-. cbn [wf] in W. apply andb_true_iff in W as [Wa Wb].
-    cbn [denote_e denote_ke].
-    rewrite (IHa x sigs r mok rk cenv benv renv env s eq_refl Wa Hs T), (IHb y sigs r mok rk cenv benv renv env s eq_refl Wb Hs T).
-    apply ofn_bit_k; exact Eo.
+  - destruct o.
+    4:{ destruct (row_ke a) as [x|] eqn:Ea; [|discriminate E]. destruct (row_ke b) as [y|] eqn:Eb; [|discriminate E].
+        cbn in E. injection E as <-. cbn [wf] in W. apply andb_true_iff in W as [Wa Wb]. apply andb_true_iff in Wb as [Wb _].
+        cbn [denote_e denote_ke].
+        rewrite (IHa x sigs r mok rk cenv benv renv env s eq_refl Wa Hs T), (IHb y sigs r mok rk cenv benv renv env s eq_refl Wb Hs T).
+        unfold ofn. cbn [nbop_nat]. rewrite KQRWf.nr_ldiff. reflexivity. }
+    all: destruct (kop _) as [op|] eqn:Eo; [|discriminate E]; destruct (row_ke a) as [x|] eqn:Ea; [|discriminate E];
+      destruct (row_ke b) as [y|] eqn:Eb; [|discriminate E]; injection E as <-; cbn [wf] in W; apply andb_true_iff in W as [Wa Wb];
+      cbn [denote_e denote_ke];
+      rewrite (IHa x sigs r mok rk cenv benv renv env s eq_refl Wa Hs T), (IHb y sigs r mok rk cenv benv renv env s eq_refl Wb Hs T);
+      apply ofn_bit_k; exact Eo.
 Qed.
 
 Lemma row_kb_ok : forall k e sigs r mok rk cenv benv renv env s, row_kb k = Some e -> wf sigs r mok nx kk rk e = true ->
@@ -270,6 +279,10 @@ Fixpoint unrow_ke (e : sexp) : option kexp :=
   | SOp Badd a b => match unrow_ke a, unrow_ke b with Some x, Some y => Some (KPlus x y) | _, _ => None end
   | SOp Bmul (SInt n) a => option_map (KMulK true (Z.to_nat (Uint63.to_Z n))) (unrow_ke a)
   | SOp Bmul a (SInt n) => option_map (KMulK false (Z.to_nat (Uint63.to_Z n))) (unrow_ke a)
+  | SOp Bland a (SOp Blxor b (SInt m)) =>
+      if PrimInt63.eqb m 9223372036854775807%uint63
+      then match unrow_ke a, unrow_ke b with Some x, Some y => Some (KBitK NLdiff x y) | _, _ => None end
+      else None
   | SOp Bland a b => match unrow_ke a, unrow_ke b with Some x, Some y => Some (KBitK NLand x y) | _, _ => None end
   | SOp Blor a b => match unrow_ke a, unrow_ke b with Some x, Some y => Some (KBitK NLor x y) | _, _ => None end
   | SOp Blxor a b => match unrow_ke a, unrow_ke b with Some x, Some y => Some (KBitK NLxor x y) | _, _ => None end

@@ -3290,6 +3290,27 @@ Definition read_kbody (Σ : global_env) (hb : kername -> option term) (tc : kern
       else None
   | _ => None
   end.
+(** (step 144) its recursion hands its other counters on unchanged: each own call given, after the predecessor, the counters it was
+    given ([dc] the counters bound above, by lets and matches) *)
+Fixpoint kcs_eq (ccs : scnts) (l : list nat) : bool :=
+  match ccs, l with CNil, [] => true | CCons (CVar i) r, j :: l => Nat.eqb i j && kcs_eq r l | _, _ => false end.
+Fixpoint ke_handon (x dc : nat) (a : kexp) {struct a} : bool :=
+  match a with
+  | KRecC ccs _ => kcs_eq ccs (map (fun i => dc + x - i) (seq 0 x))
+  | KCnt _ => true
+  | KSucc a | KMulK _ _ a => ke_handon x dc a
+  | KPlus a b | KBitK _ a b => ke_handon x dc a && ke_handon x dc b
+  end.
+Fixpoint kb_handon (x dc : nat) (k : sbk) {struct k} : bool :=
+  match k with
+  | KRet a => ke_handon x dc a
+  | KLet _ k | KLetB _ k => kb_handon x dc k
+  | KLetC _ k => kb_handon x (S dc) k
+  | KIf _ _ _ t f | KIfB _ t f => kb_handon x dc t && kb_handon x dc f
+  | KMatch _ k0 k1 => kb_handon x dc k0 && kb_handon x (S dc) k1
+  end.
+Definition kq_handon (Σ : global_env) (b : term) : bool :=
+  match read_kbody Σ (fun _ => None) (fun _ _ => None) [] [] b with Some (gs, _, k1, _, _) => kb_handon (Nat.pred (sn gs)) 0 k1 | None => false end.
 (** the function a row made so stands for and its body as written (the marks [y_all] leaves) *)
 Definition krow_src (Σ : global_env) (kn : kername) : option (kername * term) :=
   if eq_mp (fst kn) copy_mp then
@@ -11077,7 +11098,9 @@ Definition nr_rows (Σ : global_env) (mp : modpath) (root : kername) (kns0 : lis
                     let '(tys, body) := lams (dbody d) in
                     let n := length tys in
                     if Nat.eqb n (length (removelast (prod_tys ty))) then
-                      let accs := filter (fun p => is_nat (nth p tys (tRel 0)) && negb (Nat.eqb p (rarg d))
+                      (* (step 144) none where KQRK's syntax reads the function and its recursion hands its counters on unchanged *)
+                      let accs := if kq_handon Σ b then [] else
+                                  filter (fun p => is_nat (nth p tys (tRel 0)) && negb (Nat.eqb p (rarg d))
                                                    && nr_tail_ok 1000 Σ mp n (n - 1 - p) 0 p body) (seq 0 n) in
                       let tys2 := map (fun jt : nat * term => if existsb (Nat.eqb (fst jt)) accs then tConst kn_int [] else snd jt) (combine (seq 0 n) tys) in
                       (* (step 123) its parameters holding counters, not counters themselves, taken at numbers as a value row's accumulators;
