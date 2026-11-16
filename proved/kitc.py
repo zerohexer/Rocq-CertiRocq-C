@@ -669,7 +669,7 @@ def reflect(name, entry, prog, no_proof, closed=False):
     # (step 60) a fixpoint whose match on its counter gives a function: not a measure's, its theorem a copy's
     cv = {k for k, m in pfs.items() if m[5] == "c"}
     pfs = {k: m for k, m in pfs.items() if m[5] != "c"}
-    t = HDR + f"Set Default Timeout {os.environ.get('KQ_TIMEOUT', '300')}.\n" + "From KQC Require KQR KQRReify KQREnd" + (" KQRWf" if pfs or (os.path.exists(os.path.join(GEN, f"{name}_rmts.out")) and "__wy" in open(os.path.join(GEN, f"{name}_rmts.out")).read()) else "") + ".\nImport ListNotations.\n" + ("From Stdlib Require Import FunInd.\n" if any(m[5] == "f" for m in pfs.values()) else "") + f"From KQG Require Import {name}_r.\n"
+    t = HDR + f"Set Default Timeout {os.environ.get('KQ_TIMEOUT', '300')}.\n" + "From KQC Require KQR KQRK KQRReify KQREnd" + (" KQRWf" if pfs or (os.path.exists(os.path.join(GEN, f"{name}_rmts.out")) and "__wy" in open(os.path.join(GEN, f"{name}_rmts.out")).read()) else "") + ".\nImport ListNotations.\n" + ("From Stdlib Require Import FunInd.\n" if any(m[5] == "f" for m in pfs.values()) else "") + f"From KQG Require Import {name}_r.\n"
     # the program's record types (step 12): each its type, its constructor and match, a value of it; the laws by a fixed script
     rp = os.path.join(GEN, f"{name}_rrec.out")
     # each entry: its type, its constructor (a data type's: its constructors), its number of fields, a data type's widths
@@ -1116,7 +1116,11 @@ def reflect(name, entry, prog, no_proof, closed=False):
                 if m.endswith("__rq__wy") and re.search(r"__kva\d+_\d+__rq__wy$", m):
                     t += f"Ltac {name}_kvs{j} IH := KQRWf.nv_stepb IH ltac:(repeat {name}_kva{j} IH).\n"
                     ost = f"{name}_kvs{j}"
-            t += (f"Lemma {name}_rr{j} {hrb}: {m}.\nProof. unfold {m}. fix IH {rv + 1}. {d0}intros kqn; destruct kqn as [|kqn]; intros; cbn [{unf}]; first [solve [{ost} IH] | solve [cbn; {ost} IH] | solve [cbv beta iota zeta delta -[{keepf}]; {ost} IH]]. Qed.\n")
+            if F.rsplit(".", 1)[-1] + "__kr" in made:
+                # (step 143) a row made from KQRK's syntax: the function made a number, its statement by conversion
+                t += f"Lemma {name}_rr{j} {hrb}: {m}.\nProof. unfold {m}. intros. exact eq_refl. Qed.\n"
+            else:
+                t += (f"Lemma {name}_rr{j} {hrb}: {m}.\nProof. unfold {m}. fix IH {rv + 1}. {d0}intros kqn; destruct kqn as [|kqn]; intros; cbn [{unf}]; first [solve [{ost} IH] | solve [cbn; {ost} IH] | solve [cbv beta iota zeta delta -[{keepf}]; {ost} IH]]. Qed.\n")
         rrn.append(f"{name}_rr{j}")
         # (step 76) rewriting compares up to unfolding: such a lemma only where its function is in the goal, or it would turn the operation back
         rrj = f"match goal with Hr : {roomR} |- _ => rewrite ?({name}_rr{j} Hr) by KQRWf.vm_side end" if vmr else f"rewrite ?{name}_rr{j}"
@@ -1311,6 +1315,16 @@ def reflect(name, entry, prog, no_proof, closed=False):
                       f" {rq(f)} {bo(f)} {wsl(f)} {f[0]} (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sigc(f)}"
                       f" (KQRReify.body_at {name}_funs {j}) eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks})"
                       f" eq_refl eq_refl)). Qed.\n")
+            elif f[0].rsplit(".", 1)[-1] + "__kr" in made:
+                # (step 143) a row made from KQRK's syntax: the theorem of its body's meaning, then of the function made a number, equal
+                # to it at every argument by KQRK.row_of_ok -- proved once -- and conversion; the counter body read back from the row
+                b = f"(KQRReify.body_at {name}_funs {j})"
+                t += (f"Proof. exact_no_check (@KQR.callee_ok_eq {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)} {wsl(f)}"
+                      f" (@KQR.denote_f {inst} {cs} {sig(f)} {b}) {f[0]}"
+                      f" (@KQRK.row_of_ok {inst} {laws} {cs} {int(f[1]) - 1} {kl(f)} {f[3]} {f[5]} {bo(f)} {wsl(f)} (KQRK.unrow_kb0 {b}) (KQRK.unrow_kb1 {b})"
+                      f" (KQR.fr0 {b}) (KQR.fr1 {b}) eq_refl eq_refl eq_refl eq_refl)"
+                      f" (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} {b}"
+                      f" eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl)). Qed.\n")
             else:
                 t += (f"Proof. exact_no_check (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j})"
                       f" eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl). Qed.\n")

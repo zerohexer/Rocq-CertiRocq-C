@@ -14,7 +14,7 @@ FLAGS = ["-R", ROOT, "KQ", "-Q", os.path.join(ROOT, "proved"), "KQC", "-Q", GEN,
 # loaded, not imported: each cell's files import what they import, as when coqc checks them.  KQRWf is not loaded here: only the
 # proofs that need it load it (kitc.py), and a cell that does not see it as coqc would not.
 PRE = ("From Stdlib Require ZArith List.\nFrom MetaRocq.Template Require All.\n"
-       "From KQC Require KQL KQLAuto KQM KQMAuto KQMTrans KQMTop KQLGen KQLProof KQLPrint KQR KQRReify KQREnd.\n"
+       "From KQC Require KQL KQLAuto KQM KQMAuto KQMTrans KQMTop KQLGen KQLProof KQLPrint KQR KQRK KQRReify KQREnd.\n"
        "From KQ Require KQRun.\n")
 MARK = "Definition kq_mark := tt."
 MAX_MB = int(os.environ.get("KQ_SESS_MB", "1100"))

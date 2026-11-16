@@ -16,6 +16,7 @@ From Stdlib Require Import List Uint63 ZArith.
 From MetaRocq.Utils Require Import utils bytestring.
 From MetaRocq.Template Require Import All.
 From KQC Require Import KQL KQLAuto KQMSem KQR.
+From KQC Require Import KQRK.
 Require KQ.KQRun KQ.hw.Runtime KQ.hw.User.
 From Corelib Require Program.Wf.
 From Stdlib Require Sint63.
@@ -2904,6 +2905,102 @@ Fixpoint reify_bb (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
       else None
   end
   end.
+(** (step 143) a function giving back a counter, read into KQRK's syntax: the counter given back -- the function itself, a counter
+    of S, and arithmetic the same modulo a word -- at the end of S's lets, tests and counter matches *)
+Fixpoint reify_ke (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option kexp :=
+  match fuel with
+  | O => None
+  | S fuel =>
+  let reify_args (l : list term) : option sexps :=
+    to_args (map (fun a => match reify fuel ctx a with Some e => Some (inl e) | None =>
+                            match reify_b fuel ctx a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel ctx a) end end) l) in
+  (* the function itself: its counter's predecessor, its counters after the first, its numbers, the memory *)
+  let self_call (u0 : term) : option (scnts * sexps) :=
+    let u := match u0 with tApp (tRel fi) args => tApp (tRel fi) (self_perm ctx fi args) | _ => u0 end in
+    match u with
+    | tApp (tRel fi) (tRel mi :: rest0) =>
+        match option_map (with_caps ctx) (drop_fns ctx fd rest0) with
+        | Some rest =>
+            if is_ent CSelf ctx fi && is_ent CPred ctx mi && Nat.leb fnx (length rest) then
+              match opt_all (map (reify_c fuel ctx) (firstn fnx rest)), read_mem ctx fm (skipn fnx rest) with
+              | Some cs, Some nums => option_map (fun a => (to_scnts cs, a)) (reify_args nums)
+              | _, _ => None
+              end
+            else None
+        | None => None
+        end
+    | _ => None
+    end in
+  if negb (has_self 1000 ctx 0 t) then option_map KCnt (reify_c fuel ctx t) else
+  match self_call t with
+  | Some (cs, a) => Some (KRecC cs a)
+  | None =>
+  match t with
+  | tApp (tConstruct i 1 _) [c] =>
+      if Kername.eqb (inductive_mind i) (inductive_mind ind_nat) then option_map KSucc (reify_ke fuel ctx c) else None
+  | tApp (tConst kn _) [a; b] =>
+      if Kername.eqb kn kn_nat_add then
+        match reify_ke fuel ctx a, reify_ke fuel ctx b with Some x, Some y => Some (KPlus x y) | _, _ => None end
+      else if Kername.eqb kn kn_c_mul then
+        (if cnt_lit a then option_map (KMulK true (cnt_val a)) (reify_ke fuel ctx b)
+         else if cnt_lit b then option_map (KMulK false (cnt_val b)) (reify_ke fuel ctx a) else None)
+      else match nbop_of kn with
+           | Some o => match reify_ke fuel ctx a, reify_ke fuel ctx b with Some x, Some y => Some (KBitK o x y) | _, _ => None end
+           | None => None
+           end
+  | _ => None
+  end
+  end
+  end.
+Fixpoint reify_kb (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sbk :=
+  match fuel with
+  | O => None
+  | S fuel =>
+  let test (c : term) (x y : option sbk) : option sbk :=
+    match x, y with
+    | Some t1, Some t2 =>
+        let c := bnorm fuel c in
+        match (match c with
+               | tApp (tConst kn _) [a; b] => if eq_mp (fst kn) prim_mp then option_map (fun z => (z, a, b)) (cmp_v (snd kn)) else None
+               | _ => None
+               end) with
+        | Some (cmp, a, b) => match reify fuel ctx a, reify fuel ctx b with Some u, Some v => Some (KIf cmp u v t1 t2) | _, _ => None end
+        | None => option_map (fun u => KIfB u t1 t2) (reify_b fuel ctx c)
+        end
+    | _, _ => None
+    end in
+  match head_r t with Some t' => reify_kb fuel ctx t' | None =>
+  match t with
+  | tApp (tLambda _ _ _ as f) args => reify_kb fuel ctx (wout f args)
+  | tApp (tLetIn _ _ _ _ as f) args => reify_kb fuel ctx (wout f args)
+  | tCase ci p c0 [b0; b1] =>
+      let c := if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_bool) then bnorm fuel c0 else c0 in
+      match lets_first ci p c [b0; b1] with Some t' => reify_kb fuel ctx t' | None =>
+      if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_bool) then
+        test c (reify_kb fuel ctx (bbody b0)) (reify_kb fuel ctx (bbody b1))
+      else if Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_nat) then
+        match c with
+        | tRel i =>
+            match cnt_index ctx i, reify_kb fuel ctx (bbody b0), reify_kb fuel (CCnt :: ctx) (bbody b1) with
+            | Some x, Some e0, Some e1 => Some (KMatch x e0 e1)
+            | _, _, _ => None
+            end
+        | _ => None
+        end
+      else None
+      end
+  | tLetIn _ b ty body =>
+      if is_ty kn_int ty then
+        match reify fuel ctx b, reify_kb fuel (CNum :: ctx) body with Some x, Some y => Some (KLet x y) | _, _ => None end
+      else if is_bool ty then
+        match reify_b fuel ctx b, reify_kb fuel (CBool :: ctx) body with Some x, Some y => Some (KLetB x y) | _, _ => None end
+      else if is_nat ty then
+        match reify_c fuel ctx b, reify_kb fuel (CCnt :: ctx) body with Some x, Some y => Some (KLetC x y) | _, _ => None end
+      else None
+  | _ => option_map KRet (reify_ke fuel ctx t)
+  end
+  end
+  end.
 End R.
 
 Fixpoint lams (t : term) : list term * term :=
@@ -3167,6 +3264,42 @@ Definition read_fun_c (Σ : global_env) (hb : kername -> option term) (tc : kern
   | _ => None
   end.
 
+(** (step 143) a function giving back a counter (the body of its fixpoint), recursive on its first counter, its parameters in the
+    order S takes them, none a record: its row's signature (a number given back), KQRK's counter body, and the row's body *)
+Definition read_kbody (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
+  (callees : list (kername * sig)) (b : term) : option (sig * sbk * sbk * sexp * sexp) :=
+  match b with
+  | tFix [d] 0 =>
+      if Nat.eqb (rarg d) 0 then
+        let '(tys, body0) := lams (dbody d) in
+        if negb (is_nat (ret_ty (dtype d))) then None else
+        match read_sig rt tys (tConst kn_int []), body0 with
+        | Some gs, tCase ci _ (tRel cnt) [b0; b1] =>
+            let nx := Nat.pred (sn gs) in
+            if negb (Nat.eqb (sn gs) 0) && Kername.eqb (inductive_mind (ci_ind ci)) (inductive_mind ind_nat)
+               && Nat.eqb cnt ((if sm gs then 1 else 0) + length (sk gs) + nx) && negb (sr gs) && negb (sw gs) && negb (isq gs)
+               && negb (sp gs) && norecs (sk gs) then
+              let ctx := fun_ctx gs ++ [CSelf] in
+              match reify_kb callees (sm gs) nx hb tc [] rt 100000 ctx (bbody b0), reify_kb callees (sm gs) nx hb tc [] rt 100000 (CPred :: ctx) (bbody b1) with
+              | Some k0, Some k1 => match row_kb k0, row_kb k1 with Some e0, Some e1 => Some (gs, k0, k1, e0, e1) | _, _ => None end
+              | _, _ => None
+              end
+            else None
+        | _, _ => None
+        end
+      else None
+  | _ => None
+  end.
+(** the function a row made so stands for and its body as written (the marks [y_all] leaves) *)
+Definition krow_src (Σ : global_env) (kn : kername) : option (kername * term) :=
+  if eq_mp (fst kn) copy_mp then
+    match lookup_env Σ (copy_mp, snd kn ^ "__ks"%bs), lookup_env Σ (copy_mp, snd kn ^ "__kb"%bs) with
+    | Some (ConstantDecl c1), Some (ConstantDecl c2) =>
+        match cst_body c1, cst_body c2 with Some (tConst k _), Some b => Some (k, b) | _, _ => None end
+    | _, _ => None
+    end
+  else None.
+
 (** the same, the parameters in another order (step 41): the body read with each binder at its place in the order the syntax
     takes, a recursive call's arguments put in that order ([CSelfP]) *)
 Definition read_fun_p (dm : bool) (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
@@ -3270,7 +3403,14 @@ Definition read_fun_p (dm : bool) (Σ : global_env) (hb : kername -> option term
 (** one function of the program: as its text reads, its parameters in the syntax's order or not (step 41) *)
 Definition read_fun (Σ : global_env) (hb : kername -> option term) (tc : kername -> list term -> option (kername * list term)) (rt : list rentry)
   (callees : list (kername * sig)) (kn : kername) : option (sig * fbody) :=
-  match fun_perm Σ kn with None => read_fun_c Σ hb tc rt callees kn | Some _ => read_fun_p false Σ hb tc rt callees kn end.
+  (* (step 143) a row of a function giving back a counter: made from KQRK's syntax of the function's own body *)
+  match (match krow_src Σ kn with
+         | Some (_, b) => option_map (fun r => let '(gs, _, _, e0, e1) := r in (gs, FRec e0 e1)) (read_kbody Σ hb tc rt callees b)
+         | None => None
+         end) with
+  | Some r => Some r
+  | None => match fun_perm Σ kn with None => read_fun_c Σ hb tc rt callees kn | Some _ => read_fun_p false Σ hb tc rt callees kn end
+  end.
 
 (** record types with these numbers of fields and nothing else: well-formedness reads only a record type's number of fields *)
 (** the types of a record's record fields (step 43), by their indices in the table *)
@@ -13050,6 +13190,22 @@ Definition y_allc (cap : bool) (Σ : global_env) (mp : modpath) (root : kername)
   (* (step 116) the types at numbers the value rows give back, made *)
   let S0 := vt_add S0 (vt_mades (conv_all Σ mp) mp rows) in
   (* (step 111) a block's rows: each one's statement at a counter too; its statement that at every counter, the counter first *)
+  (* (step 143) a function giving back a counter whose body KQRK's syntax reads (no call of the program's other functions): its row made
+     from that syntax by the reader of functions (read_fun), the function's body as written and its name kept for it *)
+  let S0 := fold_left (fun S2 r => match r with
+              | (tConst kn _, _, [s0], _, _) =>
+                  if Nat.eqb s0 rp_nr then
+                    match body_of (conv_all Σ mp) kn with
+                    | Some b => match read_kbody (conv_all Σ mp) (fun _ => None) (fun _ _ => None) [] [] b with
+                                | Some _ => add_decl (add_decl S2 (copy_mp, snd (rp_name r) ^ "__ks"%bs) (tSort sProp) (tConst kn []))
+                                                     (copy_mp, snd (rp_name r) ^ "__kb"%bs) (tSort sProp) b
+                                | None => S2
+                                end
+                    | None => S2
+                    end
+                  else S2
+              | _ => S2
+              end) rows S0 in
   let S0 := fold_left (fun S2 r => match r with (_, _, sl, _, _) => if rp_is_nrb sl then add_decl S2 (ra_name r) (tProd anon_b (tInd ind_nat []) (tSort sProp)) (nr_at Σ r) else S2 end) rows S0 in
   (* (step 85) what the proof of a class's program unfolds: the methods, the instances, the helpers over them *)
   let S0 := match cls with
@@ -13227,6 +13383,20 @@ Definition y_rows (Σ : global_env) : copytab :=
         end
       else []
     else []) (rev (firstn 200 (declarations Σ)))).
+(** (step 143) what the program's file defines of a row made from KQRK's syntax: the function made a number *)
+Definition kn_krow := kn_of <% @KQRK.krow %>.
+Definition kq_tt := <% tt %>.
+Definition krow_term (Σ : global_env) (kn : kername) : option term :=
+  match krow_src Σ kn with
+  | Some (src, b) =>
+      match read_kbody Σ (fun _ => None) (fun _ _ => None) [] [] b with
+      | Some (gs, _, _, _, _) =>
+          Some (tApp (tConst kn_krow []) [qnat (Nat.pred (sn gs)); qlist (tInd ind_kind []) (map qkind (sk gs));
+                                          tConstruct ind_bool (if sm gs then 0 else 1) []; tConst src []])
+      | None => None
+      end
+  | None => None
+  end.
 Definition reify_prog2c (lo : bool) (bt0 : kername -> option Z) (chk : bool) (p : program) : option (list (kername * sig * fbody) * list (string * term)) :=
   match p with
   | (Σ0000, tConst root _) =>
@@ -13290,7 +13460,8 @@ Definition reify_prog2c (lo : bool) (bt0 : kername -> option Z) (chk : bool) (p 
                       | None => None
                       end
                   end) kns (Some ([], lts)) in
-      option_map (fun et => (fst et, vt_mts Σ0000 (MPfile (mp_file mp)) ++ map (fun e => (snd (snd (fst e)), real_copies 1000 (MPfile (mp_file mp)) (snd e))) (lms ++ snd et))) st
+      option_map (fun et => (fst et, vt_mts Σ0000 (MPfile (mp_file mp)) ++ map (fun e => (snd (snd (fst e)), real_copies 1000 (MPfile (mp_file mp)) (match krow_term Σ0000 (snd (fst e)) with Some t => t | None => snd e end))) (lms ++ snd et)
+                                      ++ flat_map (fun e => match krow_term Σ0000 (snd (fst e)) with Some _ => [(snd (snd (fst e)) ^ "__kr"%bs, kq_tt)] | None => [] end) (lms ++ snd et))) st
   | _ => None
   end.
 (** counter bounds worked out from the call graph (step 34): from the entry down -- the functions come callees first -- each
