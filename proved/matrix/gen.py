@@ -4846,6 +4846,55 @@ addA('zx_ce_twice', "", 'Uint63.of_nat (Nat.mul 3 4) + Uint63.of_nat (Nat.mul 3 
      '')
 addA('zx_ce_not_closed', "", 'Uint63.of_nat (n + 1) + a',
      '')
+# a function giving back a counter, a part of it the machine's only below a word (step 140)
+addA('zx_rk_div', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.div (cb j m) 2 end.\n')
+addA('zx_rk_mod', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.modulo (cb j m) 1000 end.\n')
+addA('zx_rk_sub', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => cb j m - 1 end.\n')
+addA('zx_rk_pred', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.pred (cb j m) end.\n')
+addA('zx_rk_min', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.min (cb j m) j end.\n')
+addA('zx_rk_max', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.max (cb j m) 7 end.\n')
+addA('zx_rk_max_var', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.max (cb j m) j end.\n')
+addA('zx_rk_leb_own', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => if Nat.leb (cb j m) 3 then S (cb j m) else cb j m end.\n')
+addA('zx_rk_eqb_own', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => if Nat.eqb (cb j m) 0 then m else cb j m end.\n')
+addA('zx_rk_ltb_param', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => if Nat.ltb (cb j m) m then S (cb j m) else j end.\n')
+addA('zx_rk_testbit_var', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => if Nat.testbit (cb j m) j then S (cb j m) else cb j m end.\n')
+addA('zx_rk_sum', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.shiftr (cb j m) 1 + 1 end.\n')
+addA('zx_rk_let', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => let x := cb j m in if Nat.leb x 5 then x else Nat.shiftr x 1 end.\n')
+addA('zx_rk_let_num', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => let x := cb j m in Nat.shiftr x 1 + Nat.min x 1 end.\n')
+addA('zx_rk_acc_one', "", 'Uint63.of_Z (Z.of_nat (cb n n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m acc : nat) : nat := match k with O => acc | S j => cb j m (Nat.shiftr acc 1) end.\n')
+addA('zx_rk_param_only', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.shiftr m 1 + cb j m end.\n')
+addA('zx_rk_log2', "", 'Uint63.of_Z (Z.of_nat (cb n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.log2 (cb j m) + 1 end.\n')
+addA('zx_rk_as_counter', "", 'if Nat.leb (cb n n) 3 then a else b',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.shiftr (cb j m) 1 end.\n')
+addA('zx_rk_mem', "", 'Uint63.of_Z (Z.of_nat (cb n a s))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k : nat) (i : int) (t : mem) : nat := match k with O => 100 | S j => Nat.div (cb j (i + 1) t) 2 end.\n')
+addA('zx_rk_two_rows', "", 'if Nat.leb (w n n) 2 then a else b',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.shiftr (cb j m) 1 end.\nFixpoint w (k m : nat) : nat := match k with O => O | S j => if Nat.leb (cb j m) 3 then S (w j m) else w j m end.\n')
+addA('zx_rk_local', "", 'tw n n',
+     'From Stdlib Require Import ZArith.\nDefinition tw (k0 m0 : nat) : int := let fix cb (k m : nat) : nat := match k with O => m | S j => Nat.shiftr (cb j m) 1 end in Uint63.of_nat (cb k0 m0).\n')
+addA('zx_rk_acc', "", 'Uint63.of_Z (Z.of_nat (cb n n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint cb (k m acc : nat) : nat := match k with O => acc | S j => cb j m (Nat.shiftr (acc + m) 1) end.\n')
+addA('zx_rk_block', "", 'Uint63.of_Z (Z.of_nat (ea n n))',
+     'From Stdlib Require Import ZArith.\nFixpoint ea (k m : nat) : nat := match k with O => m | S j => Nat.shiftr (oa j m) 1 end\nwith oa (k m : nat) : nat := match k with O => m | S j => ea j m end.\n')
+addA('zx_rk_value', "", 'Uint63.of_Z (Z.of_nat (fst (pv n n))) + snd (pv n n)',
+     'From Stdlib Require Import ZArith.\nFixpoint pv (k m : nat) : nat * int := match k with O => (m, 0) | S j => (Nat.shiftr (fst (pv j m)) 1, snd (pv j m)) end.\n')
 addA('zb_o_weights', "", 'pp n n a s',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint pp (k c : nat) (x : int) (t : mem) : int := match k with O => x | S m => if Nat.leb (cnt c x t) 3 then pp m (S c) (x + 1) t else x end.\n')
 addA('zb_o_row_uses', "", 'fst (w n a s)',

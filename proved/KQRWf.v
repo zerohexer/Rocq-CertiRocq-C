@@ -788,6 +788,8 @@ Ltac nb_step tac :=
           first [ solve [tac; nb_bitf; nr_numf; lia]
                 (* (step 123) a bound over a value parameter: what is posed tidied, the goal's projections of constructors reduced *)
                 | solve [tac; nb_vh; nb_bitf; nr_numf; lia]
+                (* (step 140) through [div], [shiftr], [modulo], [log2], ..: each at most its first operand (nc_opf) *)
+                | solve [tac; nb_bitf; nc_opf; nr_numf; lia]
                 | match goal with |- context [match ?c with _ => _ end] =>
                     lazymatch c with context [match _ with _ => _ end] => fail | _ => destruct c end end ]).
 (** (step 118) a value's bound, each of its counters: what its matches take apart, with their equations, so that the bounds posed of

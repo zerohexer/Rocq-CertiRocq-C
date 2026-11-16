@@ -10208,15 +10208,41 @@ Fixpoint nr_inscr (fuel : nat) (n : nat) (t : term) {struct fuel} : bool :=
       | _ => false
       end
   end.
-(** what a function giving back a counter is as a number; a counter among the variables a number, [accs] the rels of those that are numbers already *)
-Fixpoint nr_trm (m : nat) (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (self d : nat) (accs : list nat) (nv : list nat) (t : term) {struct fuel} : option term :=
+(** (step 140) a part of a counter row kept as the source writes it: the function's own calls ([tRel k]) the source function's ([kn]) *)
+Fixpoint nr_srck (fuel : nat) (kn : kername) (k : nat) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := nr_srck fuel kn k in
+      match t with
+      | tRel i => if Nat.eqb i k then tConst kn [] else t
+      | tApp f args => tApp (go f) (map go args)
+      | tLambda na a b => tLambda na a (nr_srck fuel kn (S k) b)
+      | tLetIn na v a b => tLetIn na (go v) a (nr_srck fuel kn (S k) b)
+      | tCase ci p c brs => tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := nr_srck fuel kn (k + length (bcontext br)) (bbody br) |}) brs)
+      | tFix mfix i => tFix (map (fun df => {| dname := dname df; dtype := dtype df; rarg := rarg df; dbody := nr_srck fuel kn (k + length mfix) (dbody df) |}) mfix) i
+      | _ => t
+      end
+  end.
+(** such a part names no variable the row holds as a number *)
+Definition nr_kok (nv : list nat) (t : term) : bool := forallb (fun v => noccur_between v 1 t) nv.
+(** (step 140) where the row does not read a part ([r] none), on the reading that keeps them ([kp] the function): that part kept, a number *)
+Definition nr_kept (kp : option kername) (nv : list nat) (k : nat) (t : term) (r : option term) : option term :=
+  match r with
+  | Some x => Some x
+  | None => match kp with Some kn => if nr_kok nv t then Some (nr_ofn (nr_srck 1000 kn k t)) else None | None => None end
+  end.
+(** what a function giving back a counter is as a number; a counter among the variables a number, [accs] the rels of those that are numbers already;
+    (step 140) on the reading [kp], a part that is not the same modulo a word kept as the source writes it *)
+Fixpoint nr_trmk (kp : option kername) (m : nat) (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (self d : nat) (accs : list nat) (nv : list nat) (t : term) {struct fuel} : option term :=
   match fuel with
   | O => None
   | S fuel =>
-      let go := nr_trm m fuel Σ mp rows self d accs nv in
+      let go := nr_trmk kp m fuel Σ mp rows self d accs nv in
       if cnt_lit t then Some (vm_lit (cnt_val t)) else
       match num_lit t with Some u => Some (tInt (Uint63.of_Z (nu_z u))) | None =>
-      match um_red 1000 Σ mp t with
+      nr_kept kp nv (self + d) t
+      (match um_red 1000 Σ mp t with
       | tConstruct i 0 _ => if Kername.eqb (inductive_mind i) (inductive_mind ind_nat) then Some (vm_lit 0) else None
       | tApp (tConstruct i 1 _) [e] =>
           if Kername.eqb (inductive_mind i) (inductive_mind ind_nat)
@@ -10284,23 +10310,30 @@ Fixpoint nr_trm (m : nat) (fuel : nat) (Σ : global_env) (mp : modpath) (rows : 
             | None => None
             end end
       | tCase ci p c brs =>
+          (* the test kept as the source writes it; (step 140) a test on the function's own call: on the reading [kp], the call the
+             source function's, else not read here (a block's members may give back numbers, whose calls a test may name) *)
+          if match kp with Some _ => negb (nr_kok nv c) | None => Nat.eqb m 1 && negb (noccur_between (self + d) m c) end then None else
+          let c := match kp with Some kn => nr_srck 1000 kn (self + d) c | None => c end in
           match opt_all (map (fun br => let k := length (bcontext br) in
                                  option_map (fun b2 => {| bcontext := bcontext br; bbody := b2 |})
-                                 (nr_trm m fuel Σ mp rows self (d + k) accs (map (Nat.add k) nv) (bbody br))) brs) with
+                                 (nr_trmk kp m fuel Σ mp rows self (d + k) accs (map (Nat.add k) nv) (bbody br))) brs) with
           | Some b2s => Some (tCase ci (y_ret p (tConst kn_int [])) c b2s)
           | None => None
           end
       | tLetIn na v ty b =>
-          (* (step 136) a let of a counter a match tests: the counter kept, its uses read as the program's functions' are *)
-          if if is_nat ty then negb (nr_inscr 1000 0 b) else false then
-            match go v, nr_trm m fuel Σ mp rows self (S d) accs (0 :: map S nv) b with
+          (* (step 136) a let of a counter a match tests: the counter kept, its uses read as the program's functions' are; (step 140) on
+             the reading [kp] every let of a counter, so that a part kept may name it *)
+          if if is_nat ty then match kp with Some _ => false | None => negb (nr_inscr 1000 0 b) end else false then
+            match go v, nr_trmk kp m fuel Σ mp rows self (S d) accs (0 :: map S nv) b with
             | Some v2, Some b2 => Some (tLetIn na v2 (tConst kn_int []) b2)
             | _, _ => None
             end
-          else option_map (tLetIn na v ty) (nr_trm m fuel Σ mp rows self (S d) accs (map S nv) b)
+          else if match kp with Some _ => negb (nr_kok nv v) | None => Nat.eqb m 1 && negb (noccur_between (self + d) m v) end then None
+          else option_map (tLetIn na (match kp with Some kn => nr_srck 1000 kn (self + d) v | None => v end) ty) (nr_trmk kp m fuel Σ mp rows self (S d) accs (map S nv) b)
       | _ => None
-      end end
+      end) end
   end.
+Definition nr_trm (m : nat) := nr_trmk None m.
 (** (step 114, 115, 116) a value holding counters: a type holding one is [nat]; an inductive's application one of whose parameters
     holds one ([prod nat int], [option (prod nat int)]); or a type one of whose fields holds one by its own declaration
     ([Record rn := { rcn : nat; rcv : int }], [vt_dirf]): one inductive, not indexed, not recursive, of monomorphic universes, whose
@@ -10920,7 +10953,15 @@ Definition nr_rows (Σ : global_env) (mp : modpath) (root : kername) (kns0 : lis
                       | Some b2 =>
                           rs ++ [(tConst kn [], [], rp_nr :: map (Nat.add 900) accs, mangle kn ^ "__k" ^ string_of_nat (rarg d),
                                   {| dname := dname d; dtype := pis_of tys2 (tConst kn_int []); rarg := rarg d; dbody := lams_of tys2 b2 |})]
-                      | None => rs
+                      | None =>
+                          (* (step 140) an operation or a test the machine's only below a word: the row with no accumulator, each such
+                             part kept as the source writes it, a number, its own calls the function's; read as the program's functions are *)
+                          match nr_trmk (Some kn) 1 1000 Σ mp rs n 0 [] [] body with
+                          | Some b2 =>
+                              rs ++ [(tConst kn [], [], [rp_nr], mangle kn ^ "__k" ^ string_of_nat (rarg d),
+                                      {| dname := dname d; dtype := pis_of tys (tConst kn_int []); rarg := rarg d; dbody := lams_of tys b2 |})]
+                          | None => rs
+                          end
                       end
                       end
                     else rs
@@ -11739,6 +11780,33 @@ Fixpoint nb_go (fuel : nat) (Σ : global_env) (mp : modpath) (tab : list (kernam
                 | _, _ => None
                 end
             | _, _ =>
+            (* (step 140) [div], [modulo], [shiftr], [div2], [pred], [sub], [clearbit], [log2], [sqrt] at most their first operand;
+               [min] at most either, [max] at most the larger, [gcd] at most the sum *)
+            if if Kername.eqb k kn_c_div || Kername.eqb k kn_c_mod || Kername.eqb k kn_c_shiftr || Kername.eqb k kn_c_div2 then true
+               else Kername.eqb k kn_nat_pred || Kername.eqb k kn_c_sub || Kername.eqb k kn_c_clearbit
+                    || Kername.eqb k kn_c_log2 || Kername.eqb k kn_c_sqrt
+            then match args with a :: _ => go d p cnts env a | [] => None end
+            (* [min] at most either: the one with no own call under it where there is one *)
+            else if Kername.eqb k kn_c_min then
+              match args with
+              | [a; b] => match go d p cnts env a, go d p cnts env b with
+                          | Some x, Some y => match snd x, snd y with Some _, None => Some y | _, _ => Some x end
+                          | Some x, None => Some x
+                          | None, y => y
+                          end
+              | _ => None
+              end
+            else if Kername.eqb k kn_c_max then
+              match args with
+              | [a; b] => match go d p cnts env a, go d p cnts env b with Some x, Some y => Some (nb_omx (fst x) (fst y), nb_omx (snd x) (snd y)) | _, _ => None end
+              | _ => None
+              end
+            else if Kername.eqb k kn_c_gcd then
+              match args with
+              | [a; b] => match go d p cnts env a, go d p cnts env b with Some x, Some y => nb_sum x y | _, _ => None end
+              | _ => None
+              end
+            else
             match List.find (fun e => Kername.eqb (fst e) k) tab with
             | Some e0 =>
                 let ws := fst (snd e0) in
@@ -12899,6 +12967,27 @@ Fixpoint nf_red (fuel : nat) (Σ : global_env) (mp : modpath) (t : term) {struct
       | _ => t
       end
   end.
+(** (step 140) a row's own call by its name, inside its fixpoint ([k] binders in), its recursion *)
+Fixpoint nr_selfr (fuel : nat) (kn : kername) (k : nat) (t : term) {struct fuel} : term :=
+  match fuel with
+  | O => t
+  | S fuel =>
+      let go := nr_selfr fuel kn k in
+      match t with
+      | tConst c _ => if Kername.eqb c kn then tRel k else t
+      | tApp f args => tApp (go f) (map go args)
+      | tLambda na a b => tLambda na a (nr_selfr fuel kn (S k) b)
+      | tLetIn na v a b => tLetIn na (go v) a (nr_selfr fuel kn (S k) b)
+      | tCase ci p c brs => tCase ci p (go c) (map (fun br => {| bcontext := bcontext br; bbody := nr_selfr fuel kn (k + length (bcontext br)) (bbody br) |}) brs)
+      | tFix mfix i => tFix (map (fun df => {| dname := dname df; dtype := dtype df; rarg := rarg df; dbody := nr_selfr fuel kn (k + length mfix) (dbody df) |}) mfix) i
+      | _ => t
+      end
+  end.
+Definition nr_self (kn : kername) (t : term) : term :=
+  match t with
+  | tFix [df] 0 => tFix [{| dname := dname df; dtype := dtype df; rarg := rarg df; dbody := nr_selfr 100000 kn 0 (dbody df) |}] 0
+  | _ => t
+  end.
 Definition y_allc (cap : bool) (Σ : global_env) (mp : modpath) (root : kername) : global_env * bool :=
   let kns0 := snd (reach_go false 1000 Σ mp root root ([], [])) in
   (* (step 111) a local mutual block lifted first, as the reading lifts it (steps 108, 110), its members named for [y_rows]
@@ -12988,7 +13077,9 @@ Definition y_allc (cap : bool) (Σ : global_env) (mp : modpath) (root : kername)
                                           | None => false
                                           end
                                       | _ => false
-                                      end else false) kns0 in
+                                      end else false) kns0
+                 (* (step 140) or a row read as the program's functions are (step 136) *)
+                 || existsb (fun r : rprow => let '(_, _, sl, _, d0) := r in if rp_is_nr sl then nc_any 100000 (conv_all Σ mp) mp rows nbt [] 0 (dbody d0) else false) rows in
   let S0 := if nbu then
               fold_left (fun S2 e =>
                 let '(kn, f) := e in
@@ -13054,6 +13145,8 @@ Definition y_allc (cap : bool) (Σ : global_env) (mp : modpath) (root : kername)
                          | _ => rp_sub 100000 rows (cl_s (conv_all Σ mp) mp cls (nr_sub 100000 (conv_all Σ mp) mp rows b0a))
                          end in
               let b0c := if nc_rows rows then nc_sub 100000 (conv_all Σ mp) mp rows nbt (if cap then 1 else 0) [] [] b0n else b0n in
+              (* (step 140) a row read so whose part kept names the source function: the use made its own row's call, its recursion *)
+              let b0c := if eq_mp (fst kn) copy_mp then nr_self kn b0c else b0c in
               let b0x := mo_t 100000 Σ mp (lu_t 100000 Σ b0c) in
               (* (step 69) its calls of what is read in another form *)
               let b0 := (if existsb (fun r : rprow => let '(_, _, sl, _, _) := r in rp_is_vm sl) rows then vm_yr gts else cf_red gts) (vm_sub 100000 (conv_all Σ mp) rows false (rp_sub 100000 rows (er_sub 100000 rows [] (sp_sub 100000 (conv_all Σ mp) mp rows (om_s (conv_all Σ mp) mp omrows (match (if anyq then [] else vrows ++ qrows), anyq with [], false => vm_unf 6 Σ mp b0x | _, _ => vm_pj 100000 (conv_all Σ mp) mp (vm_yr gts (vm_qsub 100000 (conv_all Σ mp) mp qs (vm_lets 100000 (conv_all Σ mp) (fun k => if vm_isr rows k then true else existsb (fun e : kername * kername * list term => Kername.eqb (fst (fst e)) k) qs) (fun k => match lookup_env (conv_all Σ mp) k with Some (ConstantDecl cb) => ret_ty (al_t 1000 Σ mp (cst_type cb)) | _ => tRel 0 end) 100000 (ret_ty ty0) (vm_zfix 100000 (vm_ginl 100000 (conv_all Σ mp) mp rows (vm_unf 6 Σ mp b0x)))))) end)))))) in
