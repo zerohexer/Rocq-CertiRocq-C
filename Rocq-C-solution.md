@@ -6726,6 +6726,12 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: the same: compared on 34 of the cells whose rows are now made so.
 - *Cells*: none added: the table's families of counters exercise each construct (205 cells' rows made so).
 
+**Step 144, a row made from KQRK's syntax where the recursion hands its counters on unchanged; `ldiff` (§12.V) — the design (2026-11-17).**  `Fixpoint cb (k m : nat) : nat := match k with O => m | S j => Nat.land (cb j m) 7 end`: step 82 takes `m`, a counter only handed on and given back, as a number in the row (an accumulator), so the row is not the function made a number at its parameters, and step 143's syntax does not make it.
+- *The reader* (`KQRReify.v`: `kcs_eq`, `ke_handon`, `kb_handon`, `kq_handon`, `nr_rows`): where KQRK's syntax reads the function and every recursive call is given, after the counter's predecessor, the counters it was given, the row takes none at numbers, so that step 143 makes it.  A recursion that changes a counter it hands on keeps step 82's row (it would not be read as S reads a recursion's counters).
+- *`ldiff`* (`KQRK.v`): `KBitK NLdiff` made the first and the second's complement within the 63 bits (`KQRWf.nr_ldiff`), read back by `unrow_ke`; `row_ke_ok`'s case.
+- *The C*: the same: compared on the 26 cells whose rows are made so from this step on (231 in all from step 143).
+- *Cells*: none added (the families of counters exercise it).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6928,7 +6934,9 @@ Pushed to the public repository up to `5a388df` (2026-11-16); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 143's design -- the rows' statements proved once, begun: a function giving back a counter as a syntax of its own (KQRK.v), its row made from it, its theorem by row_of_ok |
+| (this commit) | §12.V: step 144's design -- a row made from KQRK's syntax where the recursion hands its counters on unchanged; ldiff; §14 step 143's code row |
+| `0cea408` | `proved/KQRK.v` (new) + `KQRReify.v` + `kitc.py` + `make.sh` + `kqsess.py` step 143: a function giving back a counter as a syntax of its own; its row made from it (row_kb) and its statement proved once (row_of_ok); such a row's theorem exact only, its statement by conversion |
+| `fd063a7` | §12.V: step 143's design -- the rows' statements proved once, begun: a function giving back a counter as a syntax of its own (KQRK.v), its row made from it, its theorem by row_of_ok |
 | `d212fa3` | §12.V: steps 140, 141, 142 (a counter row's part the machine's only below a word kept as the source writes it; the cells of a counter used in a mutual block; a counter given back with a proof: the construct table 4236 of 4385), one chain for the three; the gate; §12.A |
 | `5a388df` | `proved/KQRReify.v` + matrix step 142: a counter given back with a proof by a function that is not recursive: its value written out at the use (er_row); 10 cells |
 | `06d5e3e` | §12.V: step 142's design -- a counter given back with a proof: the value written out where the function is not recursive; §12.A; §14 step 141's code row |
