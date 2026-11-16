@@ -1845,6 +1845,9 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   block and read before the rows it calls, and the block's theorem is by conversion with the source, which a rewritten block is not.
   Closed with the rows' statements proved once (§12.V), a use a construct of `S` whose meaning is the source's call.  Accepted when they
   are proved.
+- *A counter given back with a proof by a recursive function* (found at step 142): `Fixpoint cr (k : nat) : {m : nat | True} := ..
+  exist _ (S (proj1_sig (cr j))) I ..` (`A_zx_sn_rec`, `A_zx_sn_rec_num`): step 76's row of its value gives back a counter, which no
+  counter row (step 82) nor bound (step 83) is made of.  Accepted when they are proved.
 
 **B. Compiling from an ordinary `.v` file, as simply as `lean --c`.**
 - ~~A command in an ordinary Rocq file~~ — **done at step 89**, without a command: `python3 proved/kitc.py prog.v [--main=NAME]`: the entry's arguments are read from its signature (numbers and counters from the
@@ -6696,6 +6699,11 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: unchanged (the reader and `kitc.py` are not touched).
 - *Cells*: 17 (`A_zx_rb_*`): in a block of the program, the use as a number, in a test, under `land`, as a budget; in a block giving back counters, another's counter in a test and as a number, `shiftr`, `div` in both members, a test of a member's call and of its own, `sub`, a part on parameters only, used as a counter, `min`; and three controls, read: the use outside a block, a block calling a helper, a block calling a recursive function of numbers.
 
+**Step 142, a counter given back with a proof (§3.5, §12.A; the gap `A_e_sig_nat`) — the design (2026-11-16).**  `Definition cn (k : nat) : {m : nat | True} := exist _ (S k) I`, used `Nat.ltb (proj1_sig (cn n)) 3`: step 76 gives a function giving back a value and a proof a row of the value alone (`proj1_sig (cn k)`), and the use is that row's call; but here the value is a counter, so that row gives back a counter and is read as a function of numbers, which it is not (found on the work laptop by a copy of the reading that says which function it stops at).
+- *The value written out* (`KQRReify.v`, `er_row`): where the function giving back the counter and its proof is not recursive, its row's body is put in place of the call, applied to the arguments, as the program's helpers giving back a counter are written out; so what uses it reads a counter, and the kernel's check relates it to `proj1_sig (cn n)` by conversion, the proof dropped.  A counter and a proof given back by a recursion is left (`A_zx_sn_rec`): its value row would want a counter row and a bound of its own, §12.A.
+- *The C*: a program read before, byte-identical.
+- *Cells*: 10 (`A_zx_sn_*`): the use as a number, as a budget, by a match, by a let, a recursion's, as a number, with a proof by a tactic (`m <= S k`, `lia`), as a number, with a parameter of numbers, inside a recursion.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6896,7 +6904,9 @@ Pushed to the public repository up to `d5f4aac` (2026-11-16); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 141 -- a counter a function gives back, used in a mutual block: the cells (gaps, for the rows proved once); §12.A; §14 step 140's code row |
+| (this commit) | §12.V: step 142's design -- a counter given back with a proof: the value written out where the function is not recursive; §12.A; §14 step 141's code row |
+| `b6bca72` | `proved/matrix` step 141: a counter a function gives back, used in a mutual block of the program or of rows: 17 cells, 14 gaps (12.A, for the rows proved once), 3 controls |
+| `9303f4f` | §12.V: step 141 -- a counter a function gives back, used in a mutual block: the cells (gaps, for the rows proved once); §12.A; §14 step 140's code row |
 | `2ea11f5` | `proved/KQRReify.v` + `KQRWf.v` + matrix step 140: a function giving back a counter whose body has an operation or a test the machine's only below a word: its row keeps such parts as the source writes them, read as the program's functions are; the bound through div, shiftr, sub, min, max, ..; 24 cells |
 | `eaff010` | §12.V: step 140's design -- a function giving back a counter whose body has an operation or a test the machine's only below a word: its row keeps such parts as the source writes them, read as the program's functions are; §12.A |
 | `9007cdd` | §12.V: steps 138, 139 (a counter used where the counters are held by weights, callee_ok_eqv; a closed term read as its value: the construct table 4202 of 4334), one chain for the two; the gate; §12.A |
