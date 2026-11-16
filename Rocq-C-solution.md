@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **4202 of 4334, 55 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **4236 of 4385, 72 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -6704,6 +6704,20 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: a program read before, byte-identical.
 - *Cells*: 10 (`A_zx_sn_*`): the use as a number, as a budget, by a match, by a let, a recursion's, as a number, with a proof by a tactic (`m <= S k`, `lia`), as a number, with a parameter of numbers, inside a recursion.
 
+**Steps 140, 141, 142 — the results (2026-11-16), one chain for the three.**  Built as designed:
+- *Step 140, a function giving back a counter whose body has an operation or a test the machine's only below a word*: the reader (`KQRReify.v`): `nr_trmk`, `nr_srck`, `nr_kept`, `nr_kok`, `nr_selfr`, `nr_self`; `nb_go` through `div`, `modulo`, `shiftr`, `div2`, `pred`, `sub`, `clearbit`, `log2`, `sqrt`, `min`, `max`, `gcd`; the bounds where only a row uses a counter as a counter.  *`KQRWf.v`*: `nb_step` poses `nc_opf`'s facts after what it tried before.  *Found while building* (on the work laptop, the reader's rows, bounds and readings and the proofs' goals printed): the reader had no bound through these operations in a function's own body, so a row keeping them read nothing; `max` with a number counted the number at every round; a test of a member's call kept as written is refused only in a single function's row, since a block's members may give back numbers (step 132's cells, found by the wide lab); one cell of mine grew by half at every round, and its refusal was right (replaced by two that do not).  Checked on the work laptop (the repository at step 139 with this step's files, step 139's wide lab and the new cells: 2083): every verdict and category the last table's but the cells read.  *Cells*: 24 more (`A_zx_rk_*`), 20 proved; `A_zx_rk_block`, `A_zx_rk_value`, `A_zx_rk_acc`, `A_zx_rk_max` gaps, §12.A.  Two gaps read: `A_zh_row_shiftr`, `A_zh_row_testbit_own`.
+- *Step 141, a counter a function gives back, used in a mutual block*: the cells only (the reader and `kitc.py` untouched): the reading rewrites such a block, but its copy is taken for a lifted local block and read before the rows it calls, and the block's theorem is by conversion with the source, which a rewritten block is not; closed with the rows proved once (§12.V), §12.A.  *Cells*: 17 more (`A_zx_rb_*`), 14 gaps, 3 controls proved.
+- *Step 142, a counter given back with a proof*: the reader (`KQRReify.v`, `er_row`): where the function giving back the counter and its proof is not recursive, its value written out at the use.  *Found while building* (on the work laptop, a copy of the reading that says which function it stops at): step 76's row of the value gives back a counter and was read as a function of numbers.  Checked on the work laptop (the repository at step 141 with this step's files, step 140's wide lab and the families holding a value and a proof, `A_y_`: 2150): every verdict and category the last table's but the cells read.  *Cells*: 10 more (`A_zx_sn_*`), 8 proved; `A_zx_sn_rec`, `A_zx_sn_rec_num` gaps, §12.A.  One gap read: `A_e_sig_nat`.
+- *The reifier's step on the kernels' programs* (on the work laptop, one core, interleaved, three rounds, the fastest, F62, in clean copies of two trees, the repository at step 139 / at step 142; one timing, whose rounds spread wide, the laptop slower than at the last one: step 139's tree 3.49 s against 3.13 then): `HWP_kernel` 3.49 / 3.57 s, `HWP_own` 2.51 / 2.57, `HWP_irqnow` 2.28 / 2.19: within the spread (the kept parts and the written-out value run only where a row is not made otherwise, which the kernels' are).
+- *The run*: one chain for the three steps, on the last step's code commit, the table in 12 long-lived Rocq sessions under 14 GB (§12.F).
+- The C: the 99 programs byte-identical.  The construct table (on `5a388df`): **4236 of 4385 through the verified compiler**, 76
+  by design, 72 gaps, 1 not Rocq (was 4202 of 4334: all 51 new cells read; 3 gaps read; no cell lost).  The gate on `5a388df`, the
+  walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding, beside the corpus; the same C: undefined
+  behaviour trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels and `grow`
+  (24 / 23 / 25 / 20 / 19 / 9 s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems each within
+  the list; `check_trust.py`: `trust unchanged`.  Next: the rows' statements proved once (§12.V), the uses inside mutual blocks
+  among them; the counter and value items of §12.A beside it.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6900,11 +6914,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `d5f4aac` (2026-11-16); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `5a388df` (2026-11-16); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 142's design -- a counter given back with a proof: the value written out where the function is not recursive; §12.A; §14 step 141's code row |
+| (this commit) | §12.V: steps 140, 141, 142 (a counter row's part the machine's only below a word kept as the source writes it; the cells of a counter used in a mutual block; a counter given back with a proof: the construct table 4236 of 4385), one chain for the three; the gate; §12.A |
+| `5a388df` | `proved/KQRReify.v` + matrix step 142: a counter given back with a proof by a function that is not recursive: its value written out at the use (er_row); 10 cells |
+| `06d5e3e` | §12.V: step 142's design -- a counter given back with a proof: the value written out where the function is not recursive; §12.A; §14 step 141's code row |
 | `b6bca72` | `proved/matrix` step 141: a counter a function gives back, used in a mutual block of the program or of rows: 17 cells, 14 gaps (12.A, for the rows proved once), 3 controls |
 | `9303f4f` | §12.V: step 141 -- a counter a function gives back, used in a mutual block: the cells (gaps, for the rows proved once); §12.A; §14 step 140's code row |
 | `2ea11f5` | `proved/KQRReify.v` + `KQRWf.v` + matrix step 140: a function giving back a counter whose body has an operation or a test the machine's only below a word: its row keeps such parts as the source writes them, read as the program's functions are; the bound through div, shiftr, sub, min, max, ..; 24 cells |
