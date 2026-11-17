@@ -6745,6 +6745,14 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   end theorems each within the list; `check_trust.py`: `trust unchanged`.  Next: the bound of such a function proved once over
   KQRK's syntax (§12.V), then a call of a counter function in S (its uses as counters by conversion).
 
+**Step 145, the bound of a function whose row KQRK's syntax makes, proved once (§12.V, D26, §0.10's row 8b) — the design (2026-11-17).**  Since step 83 the bound of a function giving back a counter, where a use takes it as a counter, is read off its text by the reader (`nb_go`) and proved for each program by Ltac (`KQRWf.nb_step`, in 175 of the files whose rows steps 143 and 144 make): proof search per program, which D26 and §0.10's row 8b exclude.
+- *A function over the syntax, proved once* (`proved/KQRK.v`): `kbound`, the bound from KQRK's syntax: at most `W` times the first counter, plus the other counters, plus `C`, step 83's rule (a round adds at most `W` to the result and to the sum of the counters it hands on, the counters of S bounded by `clinf`); `ke_abs`, `kb_abs`, a value's bound where no own call is under it and where one is; `kbound_ok`: the function is below its bound at every counter and argument, by induction on the counter and on the syntax (`kb_abs_ok`), with `clinf`'s bound (`clinf_le`: `clinf_bound`'s proof, the counters' range, which it does not use, left out); `kbstmt`, the statement as the reader writes it, once reduced.  It rests on what `KQR.v` rests on: `proved/TRUSTED.txt` unchanged.
+- *The reader* (`KQRReify.v`: `kb_bnd`, `kb_isrow`, `kb_nbf`, `kb_stmt`, `kb_marks`): such a function's bound in the table of bounds (`nb_all`) is `kbound`'s, where its first counter's weight and the counters' number are at most 1000, as step 83's; its statement written in `kbstmt`'s form; a mark named by the function and its row tells `kitc.py`.  Any other bound as before.
+- *`kitc.py`*: such a bound's lemma: `kbound_ok` of the row's syntax read back (`unrow_kb`), by conversion: `exact` only.  The uses as counters as before.
+- *Found while designing* (on the work laptop): the kernel compares the reader's statement with the lemma's by unfolding the reader's side first, so a constant of ours in the statement (a function adding the first counter's term) made it unfold `Nat.add` and `Nat.mul` there and work a written number of 2^40 out in unary (over 60 s; 0.3 s with that term written out as a function, the written numbers then compared with each other); `try destruct` of an inequality in `Z` is not a no-op (it applies it); a mark holding the function itself is refused where the function is one the reader made, defined after the marks (two cells of `A_z*_o_local`), so the mark is a name.
+- *Left* (§12.V): the uses as counters (step 83's `nc_sub`, `own_step`, `nc_step`: a call of a counter function in S, by conversion); the bounds of the rows KQRK's syntax does not make (step 140's kept parts, value rows, blocks).
+- *The C*: the same.  *Cells*: none added (the families of counters exercise it).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6793,7 +6801,8 @@ is measured, and the construct table is unchanged or better; then the walk is re
   0.3 s a cell; but the tactics' failures and loops of steps 119 to 125 came from it.  The design that meets 8b: a row's construction and
   its statement made by functions over `S` and proved once, as `compile` is, so that a row is checked by conversion as a function is.
   Begun at step 143 (`proved/KQRK.v`): a function giving back a counter as a syntax of its own, its row made from it by `row_kb`, and
-  `row_of_ok`, proved once, its statement; such a row's theorem `exact` only, its statement by conversion.
+  `row_of_ok`, proved once, its statement; such a row's theorem `exact` only, its statement by conversion.  Its bound since step 145
+  (`kbound`, `kbound_ok`): `exact` only, by conversion.
   Taken when the families of counters and values stop changing, so that it is proved once over their final form; its design takes in
   the uses inside mutual blocks (step 141's cells), which the per-program rewriting cannot reach by conversion.  Accepted when no
   program's check uses a tactic (the generated files hold only `exact`, `change` and conversion), the gate passes with the walk switched
@@ -6947,7 +6956,8 @@ Pushed to the public repository up to `2653cc4` (2026-11-17); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: steps 143, 144 (the rows' statements proved once, begun: a function giving back a counter as a syntax of its own, KQRK.v; the construct table 4236 of 4385), one chain for the two; the gate |
+| (this commit) | §12.V: step 145's design -- the bound of a function whose row KQRK's syntax makes, proved once (kbound, kbound_ok), its statement by conversion |
+| `b159f5a` | §12.V: steps 143, 144 (the rows' statements proved once, begun: a function giving back a counter as a syntax of its own, KQRK.v; the construct table 4236 of 4385), one chain for the two; the gate |
 | `2653cc4` | `proved/KQRReify.v` + `KQRK.v` step 144: a function giving back a counter whose recursion hands its counters on unchanged: its row takes none at numbers, made from KQRK's syntax; ldiff in KQRK's syntax |
 | `ea10bc4` | §12.V: step 144's design -- a row made from KQRK's syntax where the recursion hands its counters on unchanged; ldiff; §14 step 143's code row |
 | `0cea408` | `proved/KQRK.v` (new) + `KQRReify.v` + `kitc.py` + `make.sh` + `kqsess.py` step 143: a function giving back a counter as a syntax of its own; its row made from it (row_kb) and its statement proved once (row_of_ok); such a row's theorem exact only, its statement by conversion |
