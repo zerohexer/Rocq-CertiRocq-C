@@ -6786,6 +6786,8 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   compiler, 0 refused**, their 109 end theorems each within the list; `check_trust.py`: `trust unchanged`.  Next: a use as a
   counter whose counters are not variables (let-bound first), then value rows and blocks the same way (§12.V).
 
+**Step 148, the reifier's step after step 147 (§12.F) — the design (2026-11-17).**  Step 147's look for a counter function's row ran at every constant each function's body names while the program's functions are reached (`kq_row` in `reach_go`), and the reader's check of a function looked up the marks of every callee (`rd_kents`).  The functions reached are mapped to their rows once, after reaching (`kq_rows`, `kn_dedup`), and a callee is looked up only where its name is a row's (`ends_k0rp`).  Accepted when the kernels' reifier step measures as step 144's, every verdict the same.  *The C*: the same.  *Cells*: none added.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6990,7 +6992,8 @@ Pushed to the public repository up to `439812a` (2026-11-17); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: steps 145, 146, 147 (a counter function's bound proved once; its call used as a counter a construct of S, proved once; such uses read so, the callers by conversion: the construct table 4239 of 4385), one chain for the three; the gate; §12.A |
+| (this commit) | §12.V: step 148's design -- the reader's look for a counter function's row, once per function reached and per callee whose name is a row's (§12.F) |
+| `35877e9` | §12.V: steps 145, 146, 147 (a counter function's bound proved once; its call used as a counter a construct of S, proved once; such uses read so, the callers by conversion: the construct table 4239 of 4385), one chain for the three; the gate; §12.A |
 | `439812a` | `proved/KQR.v` + `KQRK.v` + `KQRReify.v` + `kitc.py` step 147: a use as a counter of a function whose row KQRK's syntax makes, read as CCallK of its row; the program's counter functions KQRK.kfuns_of of the rows, the callee's relation by KQRK.krow_entry_ok; the bound's constant a Z |
 | `44c3419` | §12.V: step 147's design -- a use as a counter of a function whose row KQRK's syntax makes, read as that call (CCallK; KQRK.kfuns_of); §12.A; §14 step 146's code row |
 | `bcaa80a` | `proved/KQR.v` + `KQRK.v` + `KQRReify.v` + `KQRChain.v` + `kitc.py` step 146: a call of the program's counter function used as a counter in S (CCallK), its meaning the function itself (Class KFuns), proved once; no program uses it yet |
