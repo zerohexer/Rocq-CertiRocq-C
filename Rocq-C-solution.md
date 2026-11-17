@@ -1844,7 +1844,8 @@ the gate (examples, corpus, kernels if the walk changed) passes.
   machine's only below a word (`A_zx_rb_*`, `A_zx_rk_block`): the reading rewrites the block, but its copy is taken for a lifted local
   block and read before the rows it calls, and the block's theorem is by conversion with the source, which a rewritten block is not.
   Closed with the rows' statements proved once (§12.V), a use a construct of `S` whose meaning is the source's call.  Accepted when they
-  are proved.
+  are proved.  Since step 147 a use as a counter is that construct (`CCallK`): `A_zx_rb_prog_budget`, `_land`, `_uses` proved;
+  `A_zx_rb_prog_num` (a use as a number in the block) and the blocks giving back counters left.
 - *A counter given back with a proof by a recursive function* (found at step 142): `Fixpoint cr (k : nat) : {m : nat | True} := ..
   exist _ (S (proj1_sig (cr j))) I ..` (`A_zx_sn_rec`, `A_zx_sn_rec_num`): step 76's row of its value gives back a counter, which no
   counter row (step 82) nor bound (step 83) is made of.  Accepted when they are proved.
@@ -6760,6 +6761,13 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *`kitc.py`*: the theorems given the program's counter functions (`KQR.no_kfuns` until step 147).
 - *The C*: the same (nothing produces the construct yet).  *Cells*: none added.
 
+**Step 147, a use as a counter of a function whose row KQRK's syntax makes, read as that call (§12.V, D26, §0.10's row 8b) — the design (2026-11-17).**  Step 146's construct, produced: such a use is no longer rewritten into the row's number made a counter, and its caller needs no copy (`__wy`) and no equation proved by Ltac (`own_step`, `nc_step`).
+- *The program's counter functions* (`proved/KQRK.v`: `kent`, `mkkent`, `kfind`, `kbnd`, `kmeans`, `kfuns_of`, `kf_bound`, `kf_mem`, `krow_entry_ok`): built from a list of entries, each a callee's index and its row's syntax, every field total so that no proof is written per program: the function the syntax's meaning (at no counter function: a row's syntax reads no call; the user's function by conversion, as `row_of_ok`'s), its bound `kbound`'s with `kbound_list`'s proof, the callee's relation proved once.  *`KQR.v`*: the bound's constant a `Z` at least 0 (`kbk`, `kbk_nonneg`), so that a large one is written in binary.
+- *The reader* (`KQRReify.v`: `kq_ccall`, `kq_row`, `rd_kents`, `reify_c`): a use `cnt c1 .. args s` in a counter's place, where `cnt`'s row KQRK's syntax makes with its bound KQRK's and its counters are counter variables, is left as written (`nc_sub`, `nc_any`) and read as `CCallK` of the row (found by its name); reaching the program's functions reaches such a function as its row; its check of a function the same counter functions as the proof's (`kfuns_of` of the callees read so far), so that a signature whose bound is too large for such a call is refused there and retried with a smaller one, as before.  A use whose counters are not variables keeps step 83's reading.
+- *`kitc.py`*: the program's instance (`<name>_kfs := KQRK.kfuns_of [..]`, from the rows' marks) given to the theorems; such a callee's part of `all_ok` its relation (`KQRK.krow_entry_ok`, `exact`).
+- *Found while building* (on the work laptop, a small lab of the counter families): reaching from the entry no longer found a row its callers did not name (the caller names the function now), so the program lost it; the reader's check with every counter function of bound 0 kept a signature the proof then refused (a bound of `3 * n` at `n` below 2^62).
+- *Cells*: none added; three gaps closed (`A_zx_rb_prog_budget`, `A_zx_rb_prog_land`, `A_zx_rb_prog_uses`: a counter function used in a mutual block, step 141's).  *Left* (§12.V): a use whose counters are not variables (let-bound first), value rows, blocks, `A_zx_rb_prog_num`.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6809,7 +6817,8 @@ is measured, and the construct table is unchanged or better; then the walk is re
   its statement made by functions over `S` and proved once, as `compile` is, so that a row is checked by conversion as a function is.
   Begun at step 143 (`proved/KQRK.v`): a function giving back a counter as a syntax of its own, its row made from it by `row_kb`, and
   `row_of_ok`, proved once, its statement; such a row's theorem `exact` only, its statement by conversion.  Its bound since step 145
-  (`kbound`, `kbound_ok`): `exact` only, by conversion.
+  (`kbound`, `kbound_ok`): `exact` only, by conversion.  Its uses as counters since steps 146 and 147 (`CCallK`, `KFuns`, `kfuns_of`): the
+  caller read as written, its theorem by conversion.
   Taken when the families of counters and values stop changing, so that it is proved once over their final form; its design takes in
   the uses inside mutual blocks (step 141's cells), which the per-program rewriting cannot reach by conversion.  Accepted when no
   program's check uses a tactic (the generated files hold only `exact`, `change` and conversion), the gate passes with the walk switched
@@ -6963,7 +6972,9 @@ Pushed to the public repository up to `2653cc4` (2026-11-17); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 146's design -- a call of the program's counter function used as a counter, in S (CCallK, the class KFuns), proved once; §14 step 145's code row |
+| (this commit) | §12.V: step 147's design -- a use as a counter of a function whose row KQRK's syntax makes, read as that call (CCallK; KQRK.kfuns_of); §12.A; §14 step 146's code row |
+| `bcaa80a` | `proved/KQR.v` + `KQRK.v` + `KQRReify.v` + `KQRChain.v` + `kitc.py` step 146: a call of the program's counter function used as a counter in S (CCallK), its meaning the function itself (Class KFuns), proved once; no program uses it yet |
+| `b9c1f31` | §12.V: step 146's design -- a call of the program's counter function used as a counter, in S (CCallK, the class KFuns), proved once; §14 step 145's code row |
 | `f0946c7` | `proved/KQRK.v` + `KQRReify.v` + `kitc.py` step 145: the bound of a function whose row KQRK's syntax makes, computed from the syntax (kbound) and proved once (kbound_ok); the reader states it in kbstmt's form, kitc.py proves it by exact |
 | `f83cc77` | §12.V: step 145's design -- the bound of a function whose row KQRK's syntax makes, proved once (kbound, kbound_ok), its statement by conversion |
 | `b159f5a` | §12.V: steps 143, 144 (the rows' statements proved once, begun: a function giving back a counter as a syntax of its own, KQRK.v; the construct table 4236 of 4385), one chain for the two; the gate |
