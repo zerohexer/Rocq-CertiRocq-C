@@ -6788,6 +6788,11 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 
 **Step 148, the reifier's step after step 147 (§12.F) — the design (2026-11-17).**  Step 147's look for a counter function's row ran at every constant each function's body names while the program's functions are reached (`kq_row` in `reach_go`), and the reader's check of a function looked up the marks of every callee (`rd_kents`).  The functions reached are mapped to their rows once, after reaching (`kq_rows`, `kn_dedup`), and a callee is looked up only where its name is a row's (`ends_k0rp`).  Accepted when the kernels' reifier step measures as step 144's, every verdict the same.  *The C*: the same.  *Cells*: none added.
 
+**Step 149, a counter function's call on any counters of S (§12.V) — the design (2026-11-17).**  Step 146's `CCallK` took counter variables, so a use such as `cnt (S n) a s` kept step 83's reading (the caller's copy and its equation by Ltac).  It now takes counters of S, as `SCall` does.
+- *`KQR.v`*: `CCallK f ccs args`, its meaning `kfn f` at their values, its code `SCall`'s; its bounds (`cmax`, `clinf`, `cmaxv`) each counter's, the first's times `kbw f`, through a fixpoint over the counters inside their own (`wsumf`, `wsuml` name it in the proofs); `scnt_ind'`, an induction over a counter whose call has each of its counters' cases, for the bound lemmas (`ws_mono`, `ws_nonneg`, `ws_sum`, `ws_denote`, `kfn_le_ws`, `leval_wsuml`); its case of the compiler's proof `SCall`'s.  Step 146's lemmas over variables removed.
+- *The reader*: `reify_c` reads the call's counters as counters (`reify_c`), `kq_ccall` takes any; the call site its counters' (`cl_c`).
+- *The C*: the same.  *Cells*: none added.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6992,7 +6997,9 @@ Pushed to the public repository up to `439812a` (2026-11-17); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 148's design -- the reader's look for a counter function's row, once per function reached and per callee whose name is a row's (§12.F) |
+| (this commit) | §12.V: step 149's design -- a counter function's call on any counters of S (CCallK as SCall's counters); §14 step 148's code row |
+| `3021688` | `proved/KQRReify.v` step 148: the look for a counter function's row once per function reached (kq_rows) and only for a callee whose name is a row's (ends_k0rp) |
+| `50c53cf` | §12.V: step 148's design -- the reader's look for a counter function's row, once per function reached and per callee whose name is a row's (§12.F) |
 | `35877e9` | §12.V: steps 145, 146, 147 (a counter function's bound proved once; its call used as a counter a construct of S, proved once; such uses read so, the callers by conversion: the construct table 4239 of 4385), one chain for the three; the gate; §12.A |
 | `439812a` | `proved/KQR.v` + `KQRK.v` + `KQRReify.v` + `kitc.py` step 147: a use as a counter of a function whose row KQRK's syntax makes, read as CCallK of its row; the program's counter functions KQRK.kfuns_of of the rows, the callee's relation by KQRK.krow_entry_ok; the bound's constant a Z |
 | `44c3419` | §12.V: step 147's design -- a use as a counter of a function whose row KQRK's syntax makes, read as that call (CCallK; KQRK.kfuns_of); §12.A; §14 step 146's code row |
