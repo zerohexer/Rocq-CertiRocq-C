@@ -67,7 +67,7 @@ theorems     the slab heap keeps its invariant through init/set/free/take; views
    a selector), functions giving back a boolean, values of any inductive type built in place and taken apart, a number and a memory given back, `option` / `sum` and their kind held as their tag and fields — each per-program step in milliseconds, long read-then-write bodies included on our fork of Rocq's kernel
    (D28, `rocq-fork/`); **it is `kitc.py`'s route since 2026-11-02 and the walk is retired** (§12.V step 29): **all 71 of the
    gate's programs**, the five test kernels included, and `lock` on two processors, and **776 of the construct table's 780
-   cells** before the places left unread got cells; with them and the cells added since **4236 of 4385, 72 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
+   cells** before the places left unread got cells; with them and the cells added since **4239 of 4385, 69 gaps, 76 by design** (and 1 program Rocq itself refuses) — a program the reifier does not read is refused with its
    reasons, no proof is searched; the translator and the walk only behind `kitc.py --walk`, the yardstick a program is timed
    against.  Next: the 20 gaps of the places §12.V's steps left unread, each as a construct of `S` in its general form
    (completeness is strict: `CLAUDE.md`), in the order the record of 2026-11-02 gives.
@@ -1926,6 +1926,10 @@ proved once, measured against C written the same way.
   levels of a 256-branch match, cubic in the constructors; simplifying the whole goal at each step unfolds the representation and
   runs out of memory.  A byte match is ordinary in a parser or a driver.  Accepted when `A_q_byte_lit`'s proof file takes under 10 s,
   every law of every program of the gate and the table proved as before.
+- *The reifier's step after step 147* (found at step 147): `HWP_kernel` 3.41 s against 3.21 at step 144 (on the work laptop, in every
+  round), `HWP_own` 2.32 against 2.21, `HWP_irqnow` 1.99 against 1.94.  The look for a counter function's row at every constant reached
+  (`kq_row`) and at each check of a function (`rd_kents`) are the likely cost, not measured yet.  Accepted when the kernels' reifier
+  step measures as step 144's.
 
 **G. Concurrency:** an interleaving semantics of two programs over the marked operations; protocol properties proved once (a
 lock's mutual exclusion, a queue); a ticket lock.
@@ -6768,6 +6772,20 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Found while building* (on the work laptop, a small lab of the counter families): reaching from the entry no longer found a row its callers did not name (the caller names the function now), so the program lost it; the reader's check with every counter function of bound 0 kept a signature the proof then refused (a bound of `3 * n` at `n` below 2^62).
 - *Cells*: none added; three gaps closed (`A_zx_rb_prog_budget`, `A_zx_rb_prog_land`, `A_zx_rb_prog_uses`: a counter function used in a mutual block, step 141's).  *Left* (§12.V): a use whose counters are not variables (let-bound first), value rows, blocks, `A_zx_rb_prog_num`.
 
+**Steps 145, 146, 147 — the results (2026-11-17), one chain for the three.**  Built as designed:
+- *Step 145, the bound of a function whose row KQRK's syntax makes, proved once*: `proved/KQRK.v`: `cbl`, `linat_le`, `clinf_le`, `zsum`, `kbv`, `obnd`, `kv_ok`, `zmx`, `lmx`, `omx`, `oadd`, `kjoin`, `kplus`, `kshift`, `klit`, `lsumc`, `ke_abs`, `kb_abs`, `cy1`, `cxat`, `kb_ok1`, `kb_ok2`, `oxat`, `osnd`, `kbound`, their lemmas, `ke_abs_ok`, `kb_abs_ok`, `evc_cy1`, `appc_absc_any`, `appnT_absnT_any`, `denote_kf_O`, `denote_kf_S`, `kbound_list`, `kbound_pos`, `kbn`, `kbc`, `kbstmt`, `kbn_intro`, `kbc_intro`, `kbound_ok`; the reader (`KQRReify.v`): `kb_bnd`, `kb_isrow`, `kb_nbf` in `nb_all`, `kb_stmt`, `kb_marks`; *`kitc.py`*: such a bound's lemma by `kbound_ok`, `exact` only.  *Found while building* (on the work laptop): the kernel's comparison and `try destruct`, as the design records; a mark holding the function itself was refused where the function is one the reader made (`A_z_o_local`, `A_zb_o_local`, a small lab), so the mark is a name.  Checked on the work laptop (the repository at step 144 with this step's files, step 142's wide lab: 2150): every verdict and category the last table's; 178 bounds proved so in 175 cells' files, 86 by `nb_step` left (the rows KQRK's syntax does not make, 12 of them of functions calling another of the program's); `KQRK.v`'s lemmas rest on 64 names, each in `proved/TRUSTED.txt`.
+- *Step 146, a call of the program's counter function used as a counter, in S*: *`KQR.v`*: `Class KFuns` (`kis`, `kfn`, `kfm`, `kbw`, `kbk`, `kfn_bound`, `kfn_mem`), `no_kfuns`; `CCallK`, its meaning and code, `simple_c`, `noadd`, `cfree`, `cmax`, `clinf`, `cvmx`, `cmaxv`, `pvars`, `cvars`, `wfc`, `sh_c`; `krow_entry`, `krows_ok` in `callees_ok`, `all_ok`'s entry; its case of the three inductions over the syntax and of `cexp_all`, `avals_cvars`, `lt_cvars`, `denote_cvars`, `kfn_le_lin` and the bound lemmas' cases; *`KQRK.v`*: the class in its section; the reader: `cl_c`'s case; *`kitc.py`*: the theorems given `KQR.no_kfuns`.  *Found while building* (on the work laptop): the class's instance left to the end of elaboration makes Rocq's elaborator fail (an anomaly) on an `eq_refl` beside it, so `KQR.v`'s and the reader's examples name it; outside `KQR.v`'s section `cbn` no longer folds the unfolded mutual fixpoint of the meaning back into its constants and `simpl` does, so `KQRK.v`'s proofs use `simpl` there.  Checked on the work laptop (the repository at step 145 with this step's files, step 142's wide lab: 2150): every verdict and category the last table's.
+- *Step 147, a use as a counter of a function whose row KQRK's syntax makes, read as that call*: *`KQRK.v`*: `kent`, `mkkent`, `kfind`, `kbnd`, `kmeans`, `kf_is`, `kf_fn`, `kf_m`, `kf_w`, `kf_k`, `kf_k_nonneg`, `appc_hd_tl`, `kf_bound`, `appnT_nomem`, `kf_mem`, `kfuns_of`, `krow_entry_ok`; *`KQR.v`*: `kbk` a `Z`, `kbk_nonneg`, `kz_bound`; the reader: `kq_ccall` in `nc_sub` and `nc_any`, `kq_row` in `reach_go`, `rd_kents` in its check, `reify_c`'s `CCallK`, `kb_bnd` moved before `krow_src`; *`kitc.py`*: `<name>_kents`, `<name>_kfs`, `krow_entry_ok` in `all_ok`'s part.  *Found while building* (on the work laptop, small labs of the counter families): as the design records.  Checked on the work laptop (the repository at step 146 with this step's files, step 142's wide lab: 2150): every verdict and category the last table's but three gaps closed (`A_zx_rb_prog_budget`, `A_zx_rb_prog_land`, `A_zx_rb_prog_uses`); in that lab's proof files (the walk's copies left out) against step 146's: the callers' copies' equations (`eqCb`) on 388 lines against 592, `own_step` 1203 uses in 765 files against 1311 in 864, 214 programs given their counter functions.
+- *The reifier's step on the kernels' programs* (on the work laptop, one core, interleaved, three rounds, the fastest, F62, in clean copies of the repository at step 144 and at step 147; the chain's own timing put step 144's reader on step 147's `KQR.v`, against which it does not compile, and is set aside): `HWP_kernel` 3.21 / 3.41 s, `HWP_own` 2.21 / 2.32, `HWP_irqnow` 1.94 / 1.99: slower in every round, §12.F.
+- *The run*: one chain for the three steps, on the last step's code commit, the table in 12 long-lived Rocq sessions under 14 GB (§12.F).
+- The C: the 99 programs byte-identical.  The construct table (on `439812a`): **4239 of 4385 through the verified compiler**, 76
+  by design, 69 gaps, 1 not Rocq (was 4236 of 4385: 3 gaps closed (`A_zx_rb_prog_budget`, `A_zx_rb_prog_land`,
+  `A_zx_rb_prog_uses`); no cell lost).  The gate on `439812a`, the walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 /
+  63 freestanding, beside the corpus; the same C: undefined behaviour trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not
+  built with it; corpus 36 / 36; the five kernels and `grow` (24 / 24 / 26 / 21 / 21 / 10 s); **109 programs through the verified
+  compiler, 0 refused**, their 109 end theorems each within the list; `check_trust.py`: `trust unchanged`.  Next: a use as a
+  counter whose counters are not variables (let-bound first), then value rows and blocks the same way (§12.V).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6968,11 +6986,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `2653cc4` (2026-11-17); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `439812a` (2026-11-17); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 147's design -- a use as a counter of a function whose row KQRK's syntax makes, read as that call (CCallK; KQRK.kfuns_of); §12.A; §14 step 146's code row |
+| (this commit) | §12.V: steps 145, 146, 147 (a counter function's bound proved once; its call used as a counter a construct of S, proved once; such uses read so, the callers by conversion: the construct table 4239 of 4385), one chain for the three; the gate; §12.A |
+| `439812a` | `proved/KQR.v` + `KQRK.v` + `KQRReify.v` + `kitc.py` step 147: a use as a counter of a function whose row KQRK's syntax makes, read as CCallK of its row; the program's counter functions KQRK.kfuns_of of the rows, the callee's relation by KQRK.krow_entry_ok; the bound's constant a Z |
+| `44c3419` | §12.V: step 147's design -- a use as a counter of a function whose row KQRK's syntax makes, read as that call (CCallK; KQRK.kfuns_of); §12.A; §14 step 146's code row |
 | `bcaa80a` | `proved/KQR.v` + `KQRK.v` + `KQRReify.v` + `KQRChain.v` + `kitc.py` step 146: a call of the program's counter function used as a counter in S (CCallK), its meaning the function itself (Class KFuns), proved once; no program uses it yet |
 | `b9c1f31` | §12.V: step 146's design -- a call of the program's counter function used as a counter, in S (CCallK, the class KFuns), proved once; §14 step 145's code row |
 | `f0946c7` | `proved/KQRK.v` + `KQRReify.v` + `kitc.py` step 145: the bound of a function whose row KQRK's syntax makes, computed from the syntax (kbound) and proved once (kbound_ok); the reader states it in kbstmt's form, kitc.py proves it by exact |
