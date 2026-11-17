@@ -6806,6 +6806,11 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
   each within the list; `check_trust.py`: `trust unchanged`.  Next: a counter function whose row calls another (the program's
   counter functions given to a row), then value rows and blocks the same way (§12.V).
 
+**Step 150, the program's counter functions callees first (§12.V) — the design (2026-11-17).**  Step 147's instance (`kfuns_of`) gave each counter function's meaning at no counter function, so that a row whose syntax calls another counter function (`KCnt (CCallK ..)`, `A_zb_o_counter_row_uses`'s `w` calling `cnt`) would mean that call as 0.  Built callees first, each entry's meaning and bound at the instance of the entries before it, so that the user's function is that meaning by conversion again; the reader's step to make such a row (step 151) comes next.
+- *`KQRK.v`*: `kmeans_at`, `kbnd_at` (`kbound` at an instance: a call's bound its callee's `kbw`, `kbk`), `kfe_is`, `kfe_fn`, `kfe_m`, `kfe_w`, `kfe_k`, `kfe_k_nonneg`, `kfe_bound`, `kfe_mem`, `kf_ext`, `kfb` (the entries the latest first), `kfb_get`, `kfb_fn`, `krow_entry_kfb`; step 147's `kfuns_of` and `krow_entry_ok` removed.
+- *`kitc.py`*: the program's instance `KQRK.kfb` of its entries, the latest first; such a callee's relation by `krow_entry_kfb`.  *The reader*: its check at `KQRK.kfb` of the same entries.
+- *The C*: the same.  *Cells*: none added.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -7010,7 +7015,8 @@ Pushed to the public repository up to `ba9baae` (2026-11-17); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: steps 148, 149 (the reader's look for a counter function's row once; a counter function's call on any counters of S: the construct table 4239 of 4385), one chain for the two; the gate; §12.F |
+| (this commit) | §12.V: step 150's design -- the program's counter functions callees first, each one's meaning at those before it (KQRK.kfb) |
+| `1eb6a44` | §12.V: steps 148, 149 (the reader's look for a counter function's row once; a counter function's call on any counters of S: the construct table 4239 of 4385), one chain for the two; the gate; §12.F |
 | `ba9baae` | `proved/KQR.v` + `KQRK.v` + `KQRReify.v` step 149: a counter function's call on any counters of S (CCallK's counters scnts, its bounds through each counter's, scnt_ind'); the reader reads them as counters |
 | `3b6a1e1` | §12.V: step 149's design -- a counter function's call on any counters of S (CCallK as SCall's counters); §14 step 148's code row |
 | `3021688` | `proved/KQRReify.v` step 148: the look for a counter function's row once per function reached (kq_rows) and only for a callee whose name is a row's (ends_k0rp) |
