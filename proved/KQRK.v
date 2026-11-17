@@ -7,7 +7,7 @@ From KQC Require KQRWf.
 Import ListNotations.
 
 Section K.
-Context {RTs : RecTypes} {RLs : @RecLaws RTs}.
+Context {RTs : RecTypes} {KFs : @KFuns RTs} {RLs : @RecLaws RTs}.
 
 (** the counter given back: the function itself on its counter's predecessor and these, a counter of S, and arithmetic of them that
     is the same modulo a word (the operations of [row_ke]) *)
@@ -117,7 +117,7 @@ Variables (nx : nat) (kk : list kind).
 Variable rec : list nat -> list val -> mem -> i63.
 Variable reck : list nat -> list val -> mem -> nat.
 Hypothesis Hr : forall cvs l s', length cvs = nx -> map kind_of l = kk -> rec cvs l s' = krec reck cvs l s'.
-Let ext := @denote_rec_ext RTs RLs.
+Let ext := @denote_rec_ext RTs KFs RLs.
 
 Lemma row_ke_ok : forall a e sigs r mok rk cenv benv renv env s, row_ke a = Some e -> wf sigs r mok nx kk rk e = true ->
   fst sigs = map (@projT1 _ _) cs -> rtyped renv rk ->
@@ -125,20 +125,20 @@ Lemma row_ke_ok : forall a e sigs r mok rk cenv benv renv env s, row_ke a = Some
 Proof.
   induction a as [ccs args | c | a IH | a IHa b IHb | l n a IH | o a IHa b IHb];
     intros e sigs r mok rk cenv benv renv env s E W Hs T; cbn [row_ke] in E.
-  - injection E as <-. cbn [denote_e denote_ke]. destruct sigs as [s0 cb0]. cbn [fst] in Hs. subst s0. cbn [wf] in W.
+  - injection E as <-. simpl denote_e; cbn [denote_ke]. destruct sigs as [s0 cb0]. cbn [fst] in Hs. subst s0. cbn [wf] in W.
     apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [W Wc]. apply andb_true_iff in W as [W _].
     apply andb_true_iff in W as [W Wk]. apply andb_true_iff in W as [_ Wn]. apply Nat.eqb_eq in Wn. apply kinds_eqb_eq in Wk.
     rewrite (proj1 (proj2 (proj2 (proj2 ext))) ccs cs rec (krec reck) cenv benv renv env s r mok nx kk rk cb0 Hr Wc T).
     rewrite (proj1 (proj2 ext) args cs rec (krec reck) cenv benv renv env s r mok nx kk rk cb0 Hr Ws T).
     apply Hr; [rewrite len_denote_cs; exact Wn | erewrite kinds_denote_es by eassumption; exact Wk].
-  - injection E as <-. cbn [denote_e denote_ke]. destruct sigs as [s0 cb0]. cbn [fst] in Hs. subst s0. cbn [wf] in W.
+  - injection E as <-. simpl denote_e; cbn [denote_ke]. destruct sigs as [s0 cb0]. cbn [fst] in Hs. subst s0. cbn [wf] in W.
     apply andb_true_iff in W as [_ Wc].
     rewrite (proj1 (proj2 (proj2 ext)) c cs rec (krec reck) cenv benv renv env s r mok nx kk rk cb0 Hr Wc T). reflexivity.
   - destruct (row_ke a) as [e1|] eqn:E1; cbn in E; [|discriminate E]. injection E as <-. cbn [wf] in W.
-    apply andb_true_iff in W as [W1 _]. cbn [denote_e denote_ke].
+    apply andb_true_iff in W as [W1 _]. simpl denote_e; cbn [denote_ke].
     rewrite (IH e1 sigs r mok rk cenv benv renv env s eq_refl W1 Hs T). apply ofn_succ_k.
   - destruct (row_ke a) as [x|] eqn:Ea; [|discriminate E]. destruct (row_ke b) as [y|] eqn:Eb; [|discriminate E].
-    injection E as <-. cbn [wf] in W. apply andb_true_iff in W as [Wa Wb]. cbn [denote_e denote_ke].
+    injection E as <-. cbn [wf] in W. apply andb_true_iff in W as [Wa Wb]. simpl denote_e; cbn [denote_ke].
     rewrite (IHa x sigs r mok rk cenv benv renv env s eq_refl Wa Hs T), (IHb y sigs r mok rk cenv benv renv env s eq_refl Wb Hs T).
     apply ofn_add_k.
   - destruct (row_ke a) as [e1|] eqn:E1; cbn in E; [|discriminate E]. injection E as <-. cbn [denote_ke].
@@ -148,12 +148,12 @@ Proof.
   - destruct o.
     4:{ destruct (row_ke a) as [x|] eqn:Ea; [|discriminate E]. destruct (row_ke b) as [y|] eqn:Eb; [|discriminate E].
         cbn in E. injection E as <-. cbn [wf] in W. apply andb_true_iff in W as [Wa Wb]. apply andb_true_iff in Wb as [Wb _].
-        cbn [denote_e denote_ke].
+        simpl denote_e; cbn [denote_ke].
         rewrite (IHa x sigs r mok rk cenv benv renv env s eq_refl Wa Hs T), (IHb y sigs r mok rk cenv benv renv env s eq_refl Wb Hs T).
         unfold ofn. cbn [nbop_nat]. rewrite KQRWf.nr_ldiff. reflexivity. }
     all: destruct (kop _) as [op|] eqn:Eo; [|discriminate E]; destruct (row_ke a) as [x|] eqn:Ea; [|discriminate E];
       destruct (row_ke b) as [y|] eqn:Eb; [|discriminate E]; injection E as <-; cbn [wf] in W; apply andb_true_iff in W as [Wa Wb];
-      cbn [denote_e denote_ke];
+      simpl denote_e; cbn [denote_ke];
       rewrite (IHa x sigs r mok rk cenv benv renv env s eq_refl Wa Hs T), (IHb y sigs r mok rk cenv benv renv env s eq_refl Wb Hs T);
       apply ofn_bit_k; exact Eo.
 Qed.
@@ -166,33 +166,33 @@ Proof.
     intros e sigs r mok rk cenv benv renv env s E W Hs T; cbn [row_kb] in E.
   - cbn [denote_kb]. exact (row_ke_ok a e sigs r mok rk cenv benv renv env s E W Hs T).
   - destruct (row_kb k) as [e2|] eqn:E2; cbn in E; [|discriminate E]. injection E as <-. cbn [wf] in W.
-    apply andb_true_iff in W as [W1 W2]. cbn [denote_e denote_kb]. destruct sigs as [s0 cb0]. cbn [fst] in Hs. subst s0.
+    apply andb_true_iff in W as [W1 W2]. simpl denote_e; cbn [denote_kb]. destruct sigs as [s0 cb0]. cbn [fst] in Hs. subst s0.
     rewrite (proj1 ext e1 cs rec (krec reck) cenv benv renv env s r mok nx kk rk cb0 Hr W1 T).
     exact (IH e2 _ r mok rk cenv benv renv _ s eq_refl W2 eq_refl T).
   - destruct (row_kb k) as [e2|] eqn:E2; cbn in E; [|discriminate E]. injection E as <-. cbn [wf] in W.
-    apply andb_true_iff in W as [W1 W2]. cbn [denote_e denote_kb]. destruct sigs as [s0 cb0]. cbn [fst] in Hs. subst s0.
+    apply andb_true_iff in W as [W1 W2]. simpl denote_e; cbn [denote_kb]. destruct sigs as [s0 cb0]. cbn [fst] in Hs. subst s0.
     rewrite (proj1 (proj2 (proj2 (proj2 (proj2 ext)))) b cs rec (krec reck) cenv benv renv env s r mok nx kk rk cb0 Hr W1 T).
     exact (IH e2 _ r mok rk cenv _ renv env s eq_refl W2 eq_refl T).
   - destruct (row_kb k) as [e2|] eqn:E2; cbn in E; [|discriminate E]. injection E as <-. cbn [wf] in W.
-    apply andb_true_iff in W as [W W2]. apply andb_true_iff in W as [W1 _]. cbn [denote_e denote_kb]. destruct sigs as [s0 cb0].
+    apply andb_true_iff in W as [W W2]. apply andb_true_iff in W as [W1 _]. simpl denote_e; cbn [denote_kb]. destruct sigs as [s0 cb0].
     cbn [fst] in Hs. subst s0.
     rewrite (proj1 (proj2 (proj2 ext)) c cs rec (krec reck) cenv benv renv env s r mok nx kk rk cb0 Hr W1 T).
     exact (IH e2 _ r mok rk _ benv renv env s eq_refl W2 eq_refl T).
   - destruct (row_kb t) as [t'|] eqn:Et; [|discriminate E]. destruct (row_kb f) as [f'|] eqn:Ef; [|discriminate E].
     injection E as <-. cbn [wf] in W. apply andb_true_iff in W as [W Wf]. apply andb_true_iff in W as [W Wt].
-    apply andb_true_iff in W as [Wx Wy]. cbn [denote_e denote_kb]. destruct sigs as [s0 cb0]. cbn [fst] in Hs. subst s0.
+    apply andb_true_iff in W as [Wx Wy]. simpl denote_e; cbn [denote_kb]. destruct sigs as [s0 cb0]. cbn [fst] in Hs. subst s0.
     rewrite (proj1 ext x cs rec (krec reck) cenv benv renv env s r mok nx kk rk cb0 Hr Wx T).
     rewrite (proj1 ext y cs rec (krec reck) cenv benv renv env s r mok nx kk rk cb0 Hr Wy T).
     destruct (cmp_sem o _ _); [exact (IHt t' _ r mok rk cenv benv renv env s eq_refl Wt eq_refl T)
                               | exact (IHf f' _ r mok rk cenv benv renv env s eq_refl Wf eq_refl T)].
   - destruct (row_kb t) as [t'|] eqn:Et; [|discriminate E]. destruct (row_kb f) as [f'|] eqn:Ef; [|discriminate E].
     injection E as <-. cbn [wf] in W. apply andb_true_iff in W as [W Wf]. apply andb_true_iff in W as [Wb Wt].
-    cbn [denote_e denote_kb]. destruct sigs as [s0 cb0]. cbn [fst] in Hs. subst s0.
+    simpl denote_e; cbn [denote_kb]. destruct sigs as [s0 cb0]. cbn [fst] in Hs. subst s0.
     rewrite (proj1 (proj2 (proj2 (proj2 (proj2 ext)))) b cs rec (krec reck) cenv benv renv env s r mok nx kk rk cb0 Hr Wb T).
     destruct (denote_b _ _ _ _ _ _ _ b); [exact (IHt t' _ r mok rk cenv benv renv env s eq_refl Wt eq_refl T)
                                           | exact (IHf f' _ r mok rk cenv benv renv env s eq_refl Wf eq_refl T)].
   - destruct (row_kb k0) as [e0|] eqn:E0; [|discriminate E]. destruct (row_kb k1) as [e1|] eqn:E1; [|discriminate E].
-    injection E as <-. cbn [wf] in W. apply andb_true_iff in W as [W0 W1]. cbn [denote_e denote_kb].
+    injection E as <-. cbn [wf] in W. apply andb_true_iff in W as [W0 W1]. simpl denote_e; cbn [denote_kb].
     destruct (nth c cenv O); [exact (IH0 e0 sigs r mok rk cenv benv renv env s eq_refl W0 Hs T)
                              | exact (IH1 e1 _ r mok rk _ benv renv env s eq_refl W1 Hs T)].
 Qed.
@@ -323,7 +323,7 @@ Qed.
 Lemma clinf_le : forall bs pv c cs rec cenv benv renv denv M, cbl bs pv cenv ->
   (Z.of_nat (denote_c cs rec cenv benv renv denv M c) <= leval (clinf bs c) pv)%Z.
 Proof.
-  intros bs pv c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b]; intros cs rec cenv benv renv denv M Cb; cbn [denote_c clinf].
+  intros bs pv c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b | fi vs args]; intros cs rec cenv benv renv denv M Cb; simpl denote_c; cbn [clinf].
   - eapply linat_le; eauto.
   - rewrite leval_zero. lia.
   - rewrite leval_shift. specialize (IH cs rec cenv benv renv denv M Cb). lia.
@@ -354,6 +354,9 @@ Proof.
   - unfold leval. cbn [fst snd evc]. rewrite nu_z_ok. lia.
   - rewrite leval_scale. specialize (IH cs rec cenv benv renv denv M Cb). rewrite <- nu_z_ok. destruct l; rewrite Nat2Z.inj_mul; nia.
   - unfold leval. cbn [fst snd evc]. rewrite cpw_ok. lia.
+  - rewrite leval_shift, leval_add, leval_scale, leval_fold_linat.
+    pose proof (kfn_le_lin fi vs (denote_es cs rec cenv benv renv denv M args) M cenv (fun i => leval (linat bs i) pv) (fun i => linat_le bs pv cenv i Cb)) as K.
+    cbv beta in K. lia.
 Qed.
 
 (** the sum of counters *)
@@ -496,7 +499,7 @@ Qed.
 Lemma lsumc_ok : forall bs pv ccs cs rec cenv benv renv env s, cbl bs pv cenv ->
   (zsum (denote_cs cs rec cenv benv renv env s ccs) <= leval (lsumc bs ccs) pv)%Z.
 Proof.
-  intros bs pv. induction ccs as [|c ccs IH]; intros cs rec cenv benv renv env s Cb; unfold lsumc in *; cbn [denote_cs lc fold_right].
+  intros bs pv. induction ccs as [|c ccs IH]; intros cs rec cenv benv renv env s Cb; unfold lsumc in *; simpl denote_cs; cbn [lc fold_right].
   - rewrite leval_zero. reflexivity.
   - rewrite zsum_cons, leval_add. pose proof (clinf_le bs pv c cs rec cenv benv renv env s Cb). specialize (IH cs rec cenv benv renv env s Cb). lia.
 Qed.

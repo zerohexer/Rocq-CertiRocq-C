@@ -134,6 +134,18 @@ Context {RTs : RecTypes}.
 
 Inductive val := VNum (n : i63) | VBool (b : bool) | VRec (ri : nat) (x : RT ri).
 Definition kind_of (v : val) : kind := match v with VNum _ => KNum | VBool _ => KBool | VRec ri _ => KRec ri end.
+(** (step 146) the program's functions giving back a counter, used as counters: which callees they are ([kis]), each as the function
+    itself ([kfn], the user's by conversion), whether it takes the memory ([kfm]), and its bound, at most [kbw] times its first counter
+    plus its other counters plus [kbk], with its proof ([kfn_bound], per program by KQRK.kbound_ok) *)
+Class KFuns := {
+  kis : nat -> bool;
+  kfn : nat -> list nat -> list val -> mem -> nat;
+  kfm : nat -> bool;
+  kbw : nat -> nat;
+  kbk : nat -> nat;
+  kfn_bound : forall f cvs vs s, (kfn f cvs vs s <= kbw f * hd O cvs + fold_right Nat.add O (tl cvs) + kbk f)%nat;
+  kfn_mem : forall f cvs vs s s', kfm f = false -> kfn f cvs vs s = kfn f cvs vs s' }.
+Context {KFs : KFuns}.
 Definition ofv (v : val) : i63 := match v with VNum n => n | VBool b => b2i b | VRec _ _ => 0%uint63 end.
 (** the numbers a value is passed as: one, or a record's fields *)
 Definition vflat (v : val) : list i63 :=
@@ -278,6 +290,8 @@ with scnt : Type :=
 | CNumU (u : Number.uint)            (* a counter written as a number from 5000 on: Nat.of_num_uint u (step 94) *)
 | CMulU (l : bool) (u : Number.uint) (c : scnt)   (* Nat.mul of a counter and a number written from 5000 on, the number first if l (step 94) *)
 | CPowL (a b : wnum)                 (* Nat.pow of two written numbers: its value (step 95) *)
+| CCallK (f : nat) (vs : list nat) (args : sexps)   (* the program's function f giving back a counter, on these counter variables,
+                                                       numbers, the memory: the function itself (step 146) *)
 with scnts : Type :=
 | CNil
 | CCons (c : scnt) (r : scnts)
@@ -758,6 +772,7 @@ with denote_c (cs : list callee) (rec : list nat -> list val -> mem -> i63) (cen
   | CNumU u => Nat.of_num_uint u
   | CMulU l u c => if l then Nat.mul (Nat.of_num_uint u) (denote_c cs rec cenv benv renv env s c) else Nat.mul (denote_c cs rec cenv benv renv env s c) (Nat.of_num_uint u)
   | CPowL a b => Nat.pow (wval a) (wval b)
+  | CCallK f vs args => kfn f (map (fun i => nth i cenv O) vs) (denote_es cs rec cenv benv renv env s args) s
   end
 with denote_cs (cs : list callee) (rec : list nat -> list val -> mem -> i63) (cenv : list nat) (benv : list bool) (renv : list val)
   (env : list i63) (s : mem) (ccs : scnts) {struct ccs} : list nat :=
@@ -1542,7 +1557,7 @@ Fixpoint all_s (p : sexp -> bool) (es : sexps) : bool :=
     chosen by conditional moves (the translator's merging of calls, D17): arguments that are plain arithmetic (no read, no
     call), each chosen when the two differ ([same_e]: the same variable or the same number) *)
 Definition simple (e : sexp) : bool := spec e && Nat.eqb (nrd e) 0.
-Definition simple_c (c : scnt) : bool := match c with CVar _ | CO => true | CNat e => simple e | CS _ | CPred _ | CAdd _ _ | CMin _ _ | CMax _ _ | CSub _ _ | CDiv2 _ | CMulK _ _ _ | CToNat _ | CToNatU _ | CDivN _ _ | CModN _ _ | CIf _ _ _ | CBitN _ _ _ | CShl _ _ | CLib _ _ _ _ | CLit _ | CNumU _ | CMulU _ _ _ | CPowL _ _ => false end.
+Definition simple_c (c : scnt) : bool := match c with CVar _ | CO => true | CNat e => simple e | CS _ | CPred _ | CAdd _ _ | CMin _ _ | CMax _ _ | CSub _ _ | CDiv2 _ | CMulK _ _ _ | CToNat _ | CToNatU _ | CDivN _ _ | CModN _ _ | CIf _ _ _ | CBitN _ _ _ | CShl _ _ | CLib _ _ _ _ | CLit _ | CNumU _ | CMulU _ _ _ | CPowL _ _ | CCallK _ _ _ => false end.
 Definition binop_eqb (o1 o2 : binop) : bool :=
   match o1, o2 with
   | Badd, Badd | Bsub, Bsub | Bmul, Bmul | Bland, Bland | Blor, Blor | Blxor, Blxor | Bdiv, Bdiv | Bmod, Bmod
@@ -1764,6 +1779,8 @@ with ccnt (c : scnt) (cenv benv : list atom) (renv : list (list atom)) (env : li
   | CMulU _ u c => ccnt c cenv benv renv env nxt (fun A n1 =>
                  Eop n1 Bmul A (Aint (of_Z (nu_z u))) (K (Avar n1) (Pos.succ n1)))
   | CPowL a b => K (Aint (of_Z (zpw (wz a) (wz b)))) nxt
+  | CCallK f vs args => cexps args cenv benv renv env nxt (fun As n1 =>
+                          Ecall n1 (gidf f) (map (fun i => nth i cenv (Aint 0%uint63)) vs ++ As) (K (Avar n1) (Pos.succ n1)))
   end
 with ccnts (ccs : scnts) (cenv benv : list atom) (renv : list (list atom)) (env : list atom) (nxt : ident) (K : list atom -> ident -> exp) {struct ccs} : exp :=
   match ccs with
@@ -2189,12 +2206,12 @@ Fixpoint ctailb (b : sbb) (cenv benv : list atom) (renv : list (list atom)) (env
 End C.
 
 (** a callee's counters nest S at most 2^20 deep; the recursive call's counters after the first are not grown *)
-Fixpoint noadd (c : scnt) : bool := match c with CAdd _ _ | CMin _ _ | CMax _ _ | CSub _ _ | CDiv2 _ | CMulK _ _ _ | CToNat _ | CToNatU _ | CDivN _ _ | CModN _ _ | CIf _ _ _ | CBitN _ _ _ | CShl _ _ | CLib _ _ _ _ | CNumU _ | CMulU _ _ _ | CPowL _ _ => false | CS c | CPred c => noadd c | _ => true end.
+Fixpoint noadd (c : scnt) : bool := match c with CAdd _ _ | CMin _ _ | CMax _ _ | CSub _ _ | CDiv2 _ | CMulK _ _ _ | CToNat _ | CToNatU _ | CDivN _ _ | CModN _ _ | CIf _ _ _ | CBitN _ _ _ | CShl _ _ | CLib _ _ _ _ | CNumU _ | CMulU _ _ _ | CPowL _ _ | CCallK _ _ _ => false | CS c | CPred c => noadd c | _ => true end.
 Definition shallow (c : scnt) : bool := (Z.of_nat (cdepth c) <=? 1048576)%Z && noadd c.
 Definition flat (c : scnt) : bool := Nat.eqb (cdepth c) 0 && noadd c.
 (** a counter bound by a let joins the function's counters, all below its bound: a variable or a budget with no successor
     over it, or one built of [O], [S] and budgets only, at most 2^20 successors deep *)
-Fixpoint cfree (c : scnt) : bool := match c with CS c | CPred c => cfree c | CAdd a b => cfree a && cfree b | CVar _ => false | _ => true end.
+Fixpoint cfree (c : scnt) : bool := match c with CS c | CPred c => cfree c | CAdd a b => cfree a && cfree b | CVar _ | CCallK _ _ _ => false | _ => true end.
 Definition letc_ok (c : scnt) : bool := flat c || (cfree c && shallow c).
 
 (** well formed, in a function whose callees have the signatures [sigs]: the recursive call only where [r] allows it, with
@@ -2267,6 +2284,7 @@ Fixpoint cmax (B : Z) (c : scnt) : Z :=
   | CLib _ _ a b => Z.max (cmax B a) (cmax B b)
   | CLit k => Z.of_nat k
   | CNumU u => nu_z u
+  | CCallK f vs _ => (Z.of_nat (kbw f) * (B - 1) + Z.of_nat (length (tl vs)) * (B - 1) + Z.of_nat (kbk f))%Z
   end.
 (** [wf]'s first argument: the callees' signatures, the function's own bound if it has one, and the bounds of the counters in
     scope (step 35), the nearest first -- none for a counter below the function's own bound (a parameter, a let or a match of
@@ -2310,12 +2328,15 @@ Fixpoint clinf (bs : list cbe) (c : scnt) : linf :=
   | CLib _ _ a b => ladd (clinf bs a) (clinf bs b)
   | CLit k => ([], Z.of_nat k)
   | CNumU u => ([], nu_z u)
+  | CCallK f vs _ => lshift (Z.of_nat (kbk f)) (ladd (lscale (Z.of_nat (kbw f)) (linat bs (hd O vs))) (fold_right (fun i a => ladd (linat bs i) a) lzero (tl vs)))
   end.
 Definition wfctx : Type := (list sig * ((option Z * list poly) * list cbe))%type.
 Definition ub (sigs : wfctx) : Z :=
   match fst (fst (snd sigs)) with Some b => b | None => cbz (length (fst sigs)) end.
 Definition cbv (B : Z) (o : option Z) : Z := match o with Some b => b | None => B end.
 (** the largest value of a counter, each variable below its own bound ([B]: the function's) *)
+(** (step 146) the largest value of a counter variable, each below its own bound *)
+Definition cvmx (B : Z) (bs : list cbe) (i : nat) : Z := Z.max 0 (cbv B (fst (nth i bs cbe0)) - 1).
 Fixpoint cmaxv (B : Z) (bs : list cbe) (c : scnt) : Z :=
   match c with
   | CVar i => Z.max 0 (cbv B (fst (nth i bs cbe0)) - 1) | CO => 0%Z | CS c => (cmaxv B bs c + 1)%Z | CNat e => cnat_max e
@@ -2334,11 +2355,13 @@ Fixpoint cmaxv (B : Z) (bs : list cbe) (c : scnt) : Z :=
   | CLib _ _ a b => Z.max (cmaxv B bs a) (cmaxv B bs b)
   | CLit k => Z.of_nat k
   | CNumU u => nu_z u
+  | CCallK f vs _ => (Z.of_nat (kbw f) * cvmx B bs (hd O vs) + fold_right (fun i a => cvmx B bs i + a) 0 (tl vs) + Z.of_nat (kbk f))%Z
   end.
 (** a counter whose variables are all below the function's own bound *)
 Fixpoint pvars (bs : list cbe) (c : scnt) : bool :=
   match c with
   | CVar i => match fst (nth i bs cbe0) with None => true | Some _ => false end
+  | CCallK _ _ _ => false
   | CS c | CPred c | CDiv2 c | CMulK _ _ c | CMulU _ _ c | CShl _ c => pvars bs c | CAdd a b | CMin a b | CMax a b | CSub a b | CDivN a b | CModN a b | CIf _ a b | CBitN _ a b | CLib _ _ a b => pvars bs a && pvars bs b | _ => true
   end.
 Definition pushc (sigs : wfctx) (o : cbe) : wfctx :=
@@ -2418,6 +2441,8 @@ Definition cfits_b (gs : sig) (B : Z) (sigs : wfctx) (ccs : scnts) : bool :=
   | vs => forallb (fun P => (pevalz P (map (cmaxv (ub sigs) (snd (snd sigs))) (lc ccs)) <? B)%Z) vs
           && all_c (fun c => (cmaxv (ub sigs) (snd (snd sigs)) c <? 9223372036854775808)%Z) ccs && (B <=? 9223372036854775808)%Z
   end.
+(** (step 146) counter variables as counters of S *)
+Fixpoint cvars (vs : list nat) : scnts := match vs with [] => CNil | i :: r => CCons (CVar i) (cvars r) end.
 Fixpoint wf (sigs : wfctx) (r mok : bool) (nx : nat) (k : list kind) (rk : list nat) (e : sexp) {struct e} : bool :=
   match e with
   | SVar _ | SInt _ => true
@@ -2461,7 +2486,15 @@ with wfc (sigs : wfctx) (r mok : bool) (nx : nat) (k : list kind) (rk : list nat
              | CShl w c => wfc sigs r mok nx k rk c && (Z.of_nat w <? 9223372036854775808)%Z
              | CLib o f a b => match nth_error (fst sigs) f with Some g => kit_sigb g o | None => false end
                                && wfc sigs r mok nx k rk a && wfc sigs r mok nx k rk b
-             | CNat e => wf sigs r mok nx k rk e end
+             | CNat e => wf sigs r mok nx k rk e
+             (* (step 146) a counter function of the program, a callee, called as a function of numbers is *)
+             | CCallK f vs args => kis f && implb (kfm f) mok
+                                   && match nth_error (fst sigs) f with
+                                      | Some gs => Nat.eqb (length vs) (sn gs) && kinds_eqb (kinds_s rk args) (sk gs) && implb (sm gs) mok
+                                                   && negb (sr gs) && negb (sw gs || isq gs) && cfits_b gs (fbound gs f) sigs (cvars vs)
+                                      | None => false
+                                      end
+                                   && wfs sigs r mok nx k rk args end
 with wfcs (sigs : wfctx) (r mok : bool) (nx : nat) (k : list kind) (rk : list nat) (cs : scnts) {struct cs} : bool :=
   match cs with CNil => true | CCons c cs => wfc sigs r mok nx k rk c && wfcs sigs r mok nx k rk cs end
 with wfb (sigs : wfctx) (r mok : bool) (nx : nat) (k : list kind) (rk : list nat) (b : sbool) {struct b} : bool :=
@@ -2781,7 +2814,7 @@ with sh_es (sh : list i63) (es : sexps) {struct es} : bool :=
   | SConsR x r => sh_r sh x && sh_es sh r
   end
 with sh_c (sh : list i63) (c : scnt) {struct c} : bool :=
-  match c with CVar _ | CO | CLit _ | CNumU _ | CPowL _ _ => true | CS c | CPred c | CDiv2 c | CMulK _ _ c | CMulU _ _ c | CShl _ c => sh_c sh c | CAdd a b | CMin a b | CMax a b | CSub a b | CDivN a b | CModN a b | CBitN _ a b | CLib _ _ a b => sh_c sh a && sh_c sh b | CNat e | CToNat e | CToNatU e => sh_e sh e | CIf b x y => sh_b sh b && sh_c sh x && sh_c sh y end
+  match c with CVar _ | CO | CLit _ | CNumU _ | CPowL _ _ => true | CS c | CPred c | CDiv2 c | CMulK _ _ c | CMulU _ _ c | CShl _ c => sh_c sh c | CAdd a b | CMin a b | CMax a b | CSub a b | CDivN a b | CModN a b | CBitN _ a b | CLib _ _ a b => sh_c sh a && sh_c sh b | CNat e | CToNat e | CToNatU e => sh_e sh e | CIf b x y => sh_b sh b && sh_c sh x && sh_c sh y | CCallK _ _ args => sh_es sh args end
 with sh_cs (sh : list i63) (cs : scnts) {struct cs} : bool :=
   match cs with CNil => true | CCons c r => sh_c sh c && sh_cs sh r end
 with sh_b (sh : list i63) (b : sbool) {struct b} : bool :=
@@ -3075,10 +3108,17 @@ Definition callee_ok (P : prog) (id : ident) (B : Z) (gs : sig) (h : ftype gs) :
     else runk P id (map ofn cvs ++ flat_map vflat vs) M (calln gs h cvs vs M)
            (if sr gs then callm gs h cvs vs M else match sq gs with Some _ => callm gs h cvs vs M | None => M end).
 
+(** (step 146) a callee a counter function names: called as a function of numbers, it is the counter function made a number *)
+Definition krow_entry (f : nat) (gs : sig) (h : ftype gs) : Prop :=
+  forall cvs vs s, length cvs = sn gs -> map kind_of vs = sk gs -> calln gs h cvs vs s = ofn (kfn f cvs vs s).
+Definition krows_ok (cs : list callee) : Prop := forall f, kis f = true ->
+  match nth_error cs f with Some (existT _ gs h) => krow_entry f gs h | None => True end.
 Definition callees_ok (P : prog) (gidf : nat -> ident) (cs : list callee) : Prop :=
   (forall f, match nth_error cs f with Some (existT _ gs h) => callee_ok P (gidf f) (fbound gs f) gs h | None => True end)
   (* (step 93) and a callee under a kit's signature is the kit's function *)
-  /\ kits_ok cs.
+  /\ kits_ok cs
+  (* (step 146) and a callee a counter function names is that function made a number *)
+  /\ krows_ok cs.
 
 
 (* ================================================================ the theorem, proved once for every syntax tree *)
@@ -3253,6 +3293,12 @@ Lemma lits_lt : forall n l, Forall (fun a => atom_lt a n) (map Aint l).
 Proof. intros n l. induction l as [|a l IH]; constructor; [exact Logic.I | exact IH]. Qed.
 Lemma nth_atom_lt : forall As n, Forall (fun a => atom_lt a n) As -> atom_lt (nth 0 As (Aint 0%uint63)) n.
 Proof. intros [|a As] n H; [exact Logic.I | inversion H; assumption]. Qed.
+(** (step 146) the atoms of counter variables hold the counters; they are below what bounds the counters' atoms *)
+Lemma avals_cvars : forall rho cenvA cenv vs, cenv_ok rho cenvA cenv ->
+  avals rho (map (fun i => nth i cenvA (Aint 0%uint63)) vs) = Some (map ofn (map (fun i => nth i cenv O) vs)).
+Proof. intros rho cenvA cenv vs C. induction vs as [|i vs IH]; cbn [map avals]; [reflexivity|]. rewrite (C i), IH. reflexivity. Qed.
+Lemma lt_cvars : forall cenvA n vs, lt_all cenvA n -> Forall (fun a => atom_lt a n) (map (fun i => nth i cenvA (Aint 0%uint63)) vs).
+Proof. intros cenvA n vs L. induction vs as [|i vs IH]; constructor; [apply L | exact IH]. Qed.
 Lemma avals_app : forall rho l1 l2 v1 v2, avals rho l1 = Some v1 -> avals rho l2 = Some v2 -> avals rho (l1 ++ l2) = Some (v1 ++ v2).
 Proof.
   induction l1 as [|a l1 IH]; intros l2 v1 v2 A1 A2; simpl in *.
@@ -3262,7 +3308,7 @@ Proof.
 Qed.
 
 Lemma no_callees : forall P gidf, callees_ok P gidf [].
-Proof. intros P gidf. split; [intros [|f]; exact Logic.I | intros [|f] o H; discriminate H]. Qed.
+Proof. intros P gidf. split; [intros [|f]; exact Logic.I | split; [intros [|f] o H; discriminate H | intros [|f] _; exact Logic.I]]. Qed.
 
 (** record variables: their atoms, a field's atom, the fields as numbers bound by a match *)
 Lemma avals_nth : forall rho As vs j, avals rho As = Some vs -> aval rho (nth j As (Aint 0%uint63)) = Some (nth j vs 0%uint63).
@@ -3691,6 +3737,9 @@ Proof.
   - intros; reflexivity.
   - intros l w c IH cs rec cenv benv renv env s s' r nx k rk cbo Hr W. cbn [wfc denote_c] in *. rewrite (IH _ _ _ _ _ _ s s' _ _ _ _ _ Hr W). reflexivity.
   - intros; reflexivity.
+  - intros fi vs args IHs cs rec cenv benv renv env s s' r nx k rk cbo Hr W. cbn [wfc denote_c] in *.
+    apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [W _]. apply andb_true_iff in W as [_ Wm].
+    rewrite (IHs _ _ _ _ _ _ s s' _ _ _ _ _ Hr Ws). apply kfn_mem. destruct (kfm fi); [discriminate Wm | reflexivity].
   - intros; reflexivity.
   - intros c IHc ccs IHs cs rec cenv benv renv env s s' r nx k rk cbo Hr W. simpl in *. apply andb_true_iff in W as [Wc Ws].
     rewrite (IHc _ _ _ _ _ _ s s' _ _ _ _ _ Hr Wc), (IHs _ _ _ _ _ _ s s' _ _ _ _ _ Hr Ws). reflexivity.
@@ -3998,6 +4047,8 @@ Proof.
   - intros; reflexivity.
   - intros l w c IH cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [wfc denote_c] in *. rewrite (IH _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr W T). reflexivity.
   - intros; reflexivity.
+  - intros fi vs args IHs cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [wfc denote_c] in *.
+    apply andb_true_iff in W as [_ Ws]. rewrite (IHs _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Ws T). reflexivity.
   - intros; reflexivity.
   - intros c IHc ccs IHs cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [wfcs denote_cs] in *. apply andb_true_iff in W as [Wc Ws].
     rewrite (IHc _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wc T), (IHs _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Ws T). reflexivity.
@@ -4420,6 +4471,8 @@ Proof.
   - intros; reflexivity.
   - intros l w c IH cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [wfc denote_c] in *. rewrite (IH _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr W T). reflexivity.
   - intros; reflexivity.
+  - intros fi vs args IHs cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [wfc denote_c] in *.
+    apply andb_true_iff in W as [_ Ws]. rewrite (IHs _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Ws T). reflexivity.
   - intros; reflexivity.
   - intros c IHc ccs IHs cs rec1 rec2 cenv benv renv env s r mok nx k rk cbo Hr W T. cbn [wfcs denote_cs] in *. apply andb_true_iff in W as [Wc Ws].
     rewrite (IHc _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Wc T), (IHs _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hr Ws T). reflexivity.
@@ -5041,11 +5094,38 @@ Proof.
   - symmetry. apply ppw_ok.
   - lia.
 Qed.
+(** (step 146) a counter function's call on counter variables, each at most [bd] of itself: at most its bound at them *)
+Lemma tl_map_nat : forall (g : nat -> nat) (l : list nat), tl (map g l) = map g (tl l).
+Proof. intros g [|a l]; reflexivity. Qed.
+Lemma fold_bd : forall (g : nat -> nat) (bd : nat -> Z) l, (forall i, (Z.of_nat (g i) <= bd i)%Z) ->
+  (Z.of_nat (fold_right Nat.add O (map g l)) <= fold_right (fun i a => bd i + a) 0 l)%Z.
+Proof. intros g bd l H. induction l as [|i l IH]; cbn [map fold_right]; [lia|]. specialize (H i). lia. Qed.
+Lemma fold_bd_nonneg : forall (bd : nat -> Z) l, (forall i, (0 <= bd i)%Z) -> (0 <= fold_right (fun i a => bd i + a) 0 l)%Z.
+Proof. intros bd l H. induction l as [|i l IH]; cbn [fold_right]; [lia|]. specialize (H i). lia. Qed.
+Lemma fold_bd_const : forall (c : Z) (l : list nat), fold_right (fun _ a => c + a) 0%Z l = (Z.of_nat (length l) * c)%Z.
+Proof. intros c l. induction l as [|i l IH]; cbn [fold_right length]; [lia|]. rewrite IH. lia. Qed.
+Lemma kfn_le_lin : forall f vs args s (cenv : list nat) (bd : nat -> Z), (forall i, (Z.of_nat (nth i cenv O) <= bd i)%Z) ->
+  (Z.of_nat (kfn f (map (fun i => nth i cenv O) vs) args s) <= Z.of_nat (kbw f) * bd (hd O vs) + fold_right (fun i a => bd i + a) 0 (tl vs) + Z.of_nat (kbk f))%Z.
+Proof.
+  intros f vs args s cenv bd H. pose proof (kfn_bound f (map (fun i => nth i cenv O) vs) args s) as K.
+  assert (Hh : (Z.of_nat (hd O (map (fun i => nth i cenv O) vs)) <= bd (hd O vs))%Z).
+  { destruct vs as [|i vs]; cbn [map hd]; [pose proof (H O); lia | apply H]. }
+  pose proof (fold_bd (fun i => nth i cenv O) bd (tl vs) H) as F. rewrite <- tl_map_nat in F.
+  assert (W0 : (0 <= Z.of_nat (kbw f))%Z) by lia. nia.
+Qed.
+Lemma cvmx_nonneg : forall B bs i, (0 <= cvmx B bs i)%Z.
+Proof. intros B bs i. unfold cvmx. lia. Qed.
+Lemma cvmx_mono : forall B1 B2 bs i, (B1 <= B2)%Z -> (cvmx B1 bs i <= cvmx B2 bs i)%Z.
+Proof. intros B1 B2 bs i L. unfold cvmx, cbv. destruct (fst (nth i bs cbe0)); lia. Qed.
+Lemma fold_bd_mono : forall (b1 b2 : nat -> Z) l, (forall i, (b1 i <= b2 i)%Z) ->
+  (fold_right (fun i a => b1 i + a) 0 l <= fold_right (fun i a => b2 i + a) 0 l)%Z.
+Proof. intros b1 b2 l H. induction l as [|i l IH]; cbn [fold_right]; [lia|]. specialize (H i). lia. Qed.
 Lemma cmax_mono : forall c B1 B2, (B1 <= B2)%Z -> (cmax B1 c <= cmax B2 c)%Z.
-Proof. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b]; intros B1 B2 L; cbn [cmax]; try specialize (IH B1 B2 L); try lia.
+Proof. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b | fi vs args]; intros B1 B2 L; cbn [cmax]; try specialize (IH B1 B2 L); try lia.
   all: first [(rewrite <- nu_z_ok; apply Z.max_le_compat; [lia | apply Z.mul_le_mono_nonneg_l; lia])
              | specialize (IHa B1 B2 L); specialize (IHb B1 B2 L); first [lia | apply cbitm_mono; lia]
-             | apply Z.max_le_compat; [nia | pose proof (Z.pow_nonneg 2 (Z.of_nat w) ltac:(lia)); nia]]. Qed.
+             | apply Z.max_le_compat; [nia | pose proof (Z.pow_nonneg 2 (Z.of_nat w) ltac:(lia)); nia]
+             | nia]. Qed.
 (** a budget's largest value (step 37): at least its value, at most 2^60 *)
 Lemma cnat_max_range : forall e, (0 <= cnat_max e <= 1152921504606846976)%Z.
 Proof.
@@ -5068,7 +5148,7 @@ Ltac cn_range := repeat match goal with
 Lemma cmax_bound : forall B c cs rec cenv benv renv denv M, cbound B cenv ->
   (Z.of_nat (denote_c cs rec cenv benv renv denv M c) <= cmax B c)%Z.
 Proof.
-  intros B c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b]; intros cs rec cenv benv renv denv M Cb; cbn [denote_c cmax].
+  intros B c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b | fi vs args]; intros cs rec cenv benv renv denv M Cb; cbn [denote_c cmax].
   - specialize (Cb i). lia.
   - lia.
   - specialize (IH cs rec cenv benv renv denv M Cb). lia.
@@ -5096,12 +5176,14 @@ Proof.
   - rewrite nu_z_ok. lia.
   - specialize (IH cs rec cenv benv renv denv M Cb). rewrite <- nu_z_ok. destruct l; rewrite Nat2Z.inj_mul; nia.
   - rewrite cpw_ok. lia.
+  - pose proof (kfn_le_lin fi vs (denote_es cs rec cenv benv renv denv M args) M cenv (fun _ => (B - 1)%Z) ltac:(intros i; cbv beta; specialize (Cb i); lia)) as K.
+    cbv beta in K. rewrite fold_bd_const in K. lia.
 Qed.
 Lemma cmax_depth : forall B c, noadd c = true -> (1152921504606846976 <= B - 1)%Z -> (cmax B c <= B - 1 + Z.of_nat (cdepth c))%Z.
-Proof. intros B c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b]; intros NA L; cbn [cmax cdepth noadd] in *; try discriminate NA;
+Proof. intros B c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b | fi vs args]; intros NA L; cbn [cmax cdepth noadd] in *; try discriminate NA;
   try specialize (IH NA L); cn_range; lia. Qed.
 Lemma cmax_nonneg : forall B c, (1 <= B)%Z -> (0 <= cmax B c)%Z.
-Proof. intros B c L. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b]; cbn [cmax]; cn_range; first [lia | nia | pose proof (cbitm_nonneg o (cmax B a) (cmax B b) IHa IHb); lia | pose proof (Z.pow_nonneg 2 (Z.of_nat w) ltac:(lia)); nia | rewrite <- nu_z_ok; lia | rewrite <- cpw_ok; lia]. Qed.
+Proof. intros B c L. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b | fi vs args]; cbn [cmax]; cn_range; first [lia | nia | pose proof (cbitm_nonneg o (cmax B a) (cmax B b) IHa IHb); lia | pose proof (Z.pow_nonneg 2 (Z.of_nat w) ltac:(lia)); nia | rewrite <- nu_z_ok; lia | rewrite <- cpw_ok; lia]. Qed.
 
 (** each counter below its own bound (step 35): [B] the function's, an entry of [bs] its own when it has one *)
 (** each counter below its own bound; the counters bound since the body's start below their linear bounds over the function's
@@ -5128,7 +5210,7 @@ Qed.
 Lemma cmaxv_bound : forall B bs pv c cs rec cenv benv renv denv M, cboundv B bs pv cenv ->
   (Z.of_nat (denote_c cs rec cenv benv renv denv M c) <= cmaxv B bs c)%Z.
 Proof.
-  intros B bs pv c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b]; intros cs rec cenv benv renv denv M Cb; cbn [denote_c cmaxv].
+  intros B bs pv c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b | fi vs args]; intros cs rec cenv benv renv denv M Cb; cbn [denote_c cmaxv].
   - pose proof (proj1 Cb i). lia.
   - lia.
   - specialize (IH cs rec cenv benv renv denv M Cb). lia.
@@ -5156,10 +5238,11 @@ Proof.
   - rewrite nu_z_ok. lia.
   - specialize (IH cs rec cenv benv renv denv M Cb). rewrite <- nu_z_ok. destruct l; rewrite Nat2Z.inj_mul; nia.
   - rewrite cpw_ok. lia.
+  - exact (kfn_le_lin fi vs (denote_es cs rec cenv benv renv denv M args) M cenv (cvmx B bs) ltac:(intros i; pose proof (proj1 Cb i); unfold cvmx; lia)).
 Qed.
 Lemma cmaxv_mono : forall bs c B1 B2, (B1 <= B2)%Z -> (cmaxv B1 bs c <= cmaxv B2 bs c)%Z.
 Proof.
-  intros bs c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b]; intros B1 B2 L; cbn [cmaxv]; try specialize (IH B1 B2 L); try lia.
+  intros bs c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b | fi vs args]; intros B1 B2 L; cbn [cmaxv]; try specialize (IH B1 B2 L); try lia.
   - unfold cbv. destruct (fst (nth i bs cbe0)); lia.
   - specialize (IHa B1 B2 L). specialize (IHb B1 B2 L). lia.
   - specialize (IHa B1 B2 L). specialize (IHb B1 B2 L). lia.
@@ -5173,10 +5256,11 @@ Proof.
   - apply Z.max_le_compat; [lia | pose proof (Z.pow_nonneg 2 (Z.of_nat w) ltac:(lia)); nia].
   - specialize (IHa B1 B2 L). specialize (IHb B1 B2 L). lia.
   - rewrite <- nu_z_ok. apply Z.max_le_compat; [lia | apply Z.mul_le_mono_nonneg_l; lia].
+  - pose proof (cvmx_mono B1 B2 bs (hd O vs) L). pose proof (fold_bd_mono (cvmx B1 bs) (cvmx B2 bs) (tl vs) (fun i => cvmx_mono B1 B2 bs i L)). nia.
 Qed.
 Lemma cmaxv_cmax : forall B bs c, (1 <= B)%Z -> pvars bs c = true -> cmaxv B bs c = cmax B c.
 Proof.
-  intros B bs c L. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b]; intros P; cbn [cmaxv cmax pvars] in *; try reflexivity;
+  intros B bs c L. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b | fi vs args]; intros P; cbn [cmaxv cmax pvars] in *; try reflexivity;
     try (rewrite IH by exact P; reflexivity).
   - destruct (fst (nth i bs cbe0)); [discriminate P | cbn [cbv]; lia].
   - apply andb_true_iff in P as [Pa Pb]. rewrite IHa by auto; try rewrite IHb by auto; reflexivity.
@@ -5188,12 +5272,14 @@ Proof.
   - apply andb_true_iff in P as [Pa Pb]. rewrite IHa by auto; try rewrite IHb by auto; reflexivity.
   - apply andb_true_iff in P as [Pa Pb]. rewrite IHa by auto; try rewrite IHb by auto; reflexivity.
   - apply andb_true_iff in P as [Pa Pb]. rewrite IHa by auto; try rewrite IHb by auto; reflexivity.
+  - discriminate P.
 Qed.
 Lemma cmaxv_nonneg : forall B bs c, (0 <= cmaxv B bs c)%Z.
-Proof. intros B bs c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b]; cbn [cmaxv]; cn_range; first [lia | nia | pose proof (cbitm_nonneg o (cmaxv B bs a) (cmaxv B bs b) IHa IHb); lia | pose proof (Z.pow_nonneg 2 (Z.of_nat w) ltac:(lia)); nia | rewrite <- nu_z_ok; lia | rewrite <- cpw_ok; lia]. Qed.
+Proof. intros B bs c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b | fi vs args]; cbn [cmaxv]; cn_range; first [lia | nia | pose proof (cbitm_nonneg o (cmaxv B bs a) (cmaxv B bs b) IHa IHb); lia | pose proof (Z.pow_nonneg 2 (Z.of_nat w) ltac:(lia)); nia | rewrite <- nu_z_ok; lia | rewrite <- cpw_ok; lia
+                                   | pose proof (cvmx_nonneg B bs (hd O vs)); pose proof (fold_bd_nonneg (cvmx B bs) (tl vs) (cvmx_nonneg B bs)); nia]. Qed.
 
 Lemma cmax_free : forall B c, cfree c = true -> noadd c = true -> (cmax B c <= 1152921504606846976 + Z.of_nat (cdepth c))%Z.
-Proof. intros B c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b]; intros F NA; cbn [cfree noadd cmax cdepth] in *; try discriminate;
+Proof. intros B c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b | fi vs args]; intros F NA; cbn [cfree noadd cmax cdepth] in *; try discriminate;
   try specialize (IH F NA); cn_range; lia. Qed.
 
 (** linear bounds (step 37) *)
@@ -5225,10 +5311,12 @@ Proof.
   - apply Nat.ltb_lt in L. apply C3; exact L.
   - apply Nat.ltb_ge in L. rewrite leval_unit. rewrite <- C2. rewrite nth_skipn_nat. replace (length bs + (i - length bs))%nat with i by lia. lia.
 Qed.
+Lemma leval_fold_linat : forall bs pv l, leval (fold_right (fun i a => ladd (linat bs i) a) lzero l) pv = fold_right (fun i a => leval (linat bs i) pv + a) 0%Z l.
+Proof. intros bs pv l. induction l as [|i l IH]; cbn [fold_right]; [apply leval_zero | rewrite leval_add, IH; reflexivity]. Qed.
 Lemma clinf_bound : forall B bs pv c cs rec cenv benv renv denv M, cboundv B bs pv cenv ->
   (Z.of_nat (denote_c cs rec cenv benv renv denv M c) <= leval (clinf bs c) pv)%Z.
 Proof.
-  intros B bs pv c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b]; intros cs rec cenv benv renv denv M Cb; cbn [denote_c clinf].
+  intros B bs pv c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b | fi vs args]; intros cs rec cenv benv renv denv M Cb; cbn [denote_c clinf].
   - eapply linat_bound; eauto.
   - rewrite leval_zero. lia.
   - rewrite leval_shift. specialize (IH cs rec cenv benv renv denv M Cb). lia.
@@ -5259,6 +5347,9 @@ Proof.
   - unfold leval. cbn [fst snd evc]. rewrite nu_z_ok. lia.
   - rewrite leval_scale. specialize (IH cs rec cenv benv renv denv M Cb). rewrite <- nu_z_ok. destruct l; rewrite Nat2Z.inj_mul; nia.
   - unfold leval. cbn [fst snd evc]. rewrite cpw_ok. lia.
+  - rewrite leval_shift, leval_add, leval_scale, leval_fold_linat.
+    pose proof (kfn_le_lin fi vs (denote_es cs rec cenv benv renv denv M args) M cenv (fun i => leval (linat bs i) pv) (fun i => linat_bound B bs pv cenv i Cb)) as K.
+    cbv beta in K. lia.
 Qed.
 Lemma clinf_bounds : forall B bs pv ccs cs rec cenv benv renv denv M, cboundv B bs pv cenv ->
   Forall2 (fun v c => (Z.of_nat v <= leval (clinf bs c) pv)%Z) (denote_cs cs rec cenv benv renv denv M ccs) (lc ccs).
@@ -6162,6 +6253,8 @@ Proof.
   pose proof (cmaxv_bound cbj cbs pv c cs rec cenv benv renv denv M Cb). pose proof (cmaxv_mono cbs c _ _ (ub_ge cbs)). lia.
 Qed.
 (** the counters given to a callee fit its bound (step 37: each, or their weighted sum) *)
+Lemma denote_cvars : forall cs rec cenv benv renv env s vs, denote_cs cs rec cenv benv renv env s (cvars vs) = map (fun i => nth i cenv O) vs.
+Proof. intros cs0 rec0 cenv benv renv env s vs. induction vs as [|i vs IH]; cbn [cvars denote_cs map denote_c]; [reflexivity | rewrite IH; reflexivity]. Qed.
 Lemma cs_fit_bound : forall cbs ccs cenv benv renv denv M gs B', cfits_b gs B' (sigsv cbs) ccs = true ->
   cboundv cbj cbs pv cenv -> cfits gs B' (denote_cs cs rec cenv benv renv denv M ccs).
 Proof.
@@ -6910,7 +7003,7 @@ Proof.
     + cbn [aval]. rewrite PTree.gss. cbn [binop_sem]. f_equal. apply ofn_shiftl. exact Wk'.
   - (* CLib *) intros o fi a IHa b IHb cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W D Iv Rt HK. simpl in *.
     apply andb_true_iff in W as [W Wb]. apply andb_true_iff in W as [Wk Wa].
-    unfold sigsv in Wk. cbn [fst] in Wk. pose proof (proj2 Hcs fi o Wk) as E.
+    unfold sigsv in Wk. cbn [fst] in Wk. pose proof (proj1 (proj2 Hcs) fi o Wk) as E.
     pose proof Iv as (_ & _ & _ & _ & _ & _ & Cb & _).
     pose proof (cmaxv_bound cbj cbs pv a cs rec cenv benv renv denv M Cb) as Da. pose proof (cmaxv_bound cbj cbs pv b cs rec cenv benv renv denv M Cb) as Db.
     apply IHa with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto. { lia. }
@@ -6942,6 +7035,31 @@ Proof.
   - (* CPowL *) intros a b cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W D Iv Rt HK. simpl.
     apply HK; [apply agree_refl | lia | exact Logic.I | ].
     cbn [aval]. f_equal. unfold ofn. rewrite <- cpw_ok. reflexivity.
+  - (* CCallK *) intros fi vs args IHs cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W D Iv Rt HK. simpl in *.
+    apply andb_true_iff in W as [W Ws]. apply andb_true_iff in W as [W Wg]. apply andb_true_iff in W as [Wis _].
+    unfold sigsv in Wg. cbn [fst] in Wg; rewrite nth_sigs in Wg. pose proof (proj1 Hcs fi) as Hc. pose proof (proj2 (proj2 Hcs) fi Wis) as Hk.
+    unfold callee in *. destruct (nth_error cs fi) as [[gs h]|] eqn:E; simpl in Wg; [|discriminate].
+    apply andb_true_iff in Wg as [Wg Wsh]. apply andb_true_iff in Wg as [Wg Wsw]. apply andb_true_iff in Wg as [Wg Wr].
+    apply andb_true_iff in Wg as [Wg Wm]. apply andb_true_iff in Wg as [Wn Wk].
+    assert (Hc2 : forall cvs0 vs0 M0, length cvs0 = sn gs -> map kind_of vs0 = sk gs -> cfits gs (fbound gs fi) cvs0 ->
+              runk P (gidf fi) (map ofn cvs0 ++ flat_map vflat vs0) M0 (calln gs h cvs0 vs0 M0) (if sr gs then callm gs h cvs0 vs0 M0 else M0)).
+    { intros cvs0 vs0 M0 L1 L2 L3. pose proof (Hc Hslot cvs0 vs0 M0 L1 L2 L3) as H0. destruct (sw gs); [discriminate Wsw|]. unfold isq in Wsw. destruct (sq gs); [discriminate Wsw | exact H0]. }
+    pose proof Iv as (_ & _ & C & LC & _).
+    apply IHs with (cenv := cenv) (benv := benv) (renv := renv) (denv := denv) (rk := rk) (cbs := cbs); auto.
+    intros rho2 n2 As A2 Le2 LAs VAs.
+    assert (Lv : length (map (fun i => nth i cenv O) vs) = sn gs) by (rewrite length_map; apply Nat.eqb_eq; exact Wn).
+    assert (Kv : map kind_of (denote_es cs rec cenv benv renv denv M args) = sk gs) by (erewrite kinds_denote_es by eassumption; apply kinds_eqb_eq; exact Wk).
+    destruct (Hc2 (map (fun i => nth i cenv O) vs) (denote_es cs rec cenv benv renv denv M args) M Lv Kv) as (fg & rho' & F & B & EV).
+    { destruct Iv as (_ & _ & _ & _ & _ & _ & Cb & _). rewrite <- (denote_cvars cs rec cenv benv renv denv M vs).
+      exact (cs_fit_bound cbs (cvars vs) cenv benv renv denv M _ _ Wsh Cb). }
+    destruct (sr gs); [discriminate Wr|].
+    eapply K_call; eauto.
+    + apply avals_app; [rewrite (avals_agree rho rho2 nxt _ A2 (lt_cvars cenvA nxt vs LC)); exact (avals_cvars rho cenvA cenv vs C) | exact VAs].
+    + apply HK.
+      * apply agree_set1; [exact A2 | lia].
+      * lia.
+      * simpl. lia.
+      * simpl. rewrite PTree.gss. f_equal. exact (Hk _ _ M Lv Kv).
   - (* CNil *) intros cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W Sh Iv Rt HK. simpl.
     apply HK; [apply agree_refl | lia | constructor | reflexivity].
   - (* CCons *) intros c IHc ccs IHs cenvA benvA renvA envA cenv benv renv denv nxt K rho M v M' rk cbs W Sh Iv Rt HK. simpl in *.
@@ -12831,7 +12949,10 @@ Fixpoint all_ok (P : prog) (gidf : nat -> ident) (cs : list callee) (k : nat) : 
   | [] => True
   | c :: r => (let '(existT _ gs h) := c in
                (* (step 93) a kit entry is also the kit's function; any other the same as before *)
-               if kit_mark gs then kit_entry gs h /\ callee_ok P (gidf k) (fbound gs k) gs h else callee_ok P (gidf k) (fbound gs k) gs h)
+               (* (step 146) a callee a counter function names is also that function made a number *)
+               if kis k then krow_entry k gs h /\
+                             (if kit_mark gs then kit_entry gs h /\ callee_ok P (gidf k) (fbound gs k) gs h else callee_ok P (gidf k) (fbound gs k) gs h)
+               else if kit_mark gs then kit_entry gs h /\ callee_ok P (gidf k) (fbound gs k) gs h else callee_ok P (gidf k) (fbound gs k) gs h)
               /\ all_ok P gidf r (S k)
   end.
 
@@ -13078,7 +13199,7 @@ Proof.
   intros P gidf cs. unfold callee in *. induction cs as [|[gs h] r IH]; intros k H f; simpl in *.
   - destruct f; exact Logic.I.
   - destruct H as [H0 H1]. destruct f as [|f]; simpl.
-    + rewrite Nat.add_0_r. destruct (kit_mark gs); [exact (proj2 H0) | exact H0].
+    + rewrite Nat.add_0_r. destruct (kis k); [destruct H0 as [_ H0]|]; destruct (kit_mark gs); [exact (proj2 H0) | exact H0 | exact (proj2 H0) | exact H0].
     + rewrite <- Nat.add_succ_comm. exact (IH (S k) H1 f).
 Qed.
 Lemma all_ok_kits : forall P gidf cs k, all_ok P gidf cs k -> kits_ok cs.
@@ -13086,14 +13207,29 @@ Proof.
   intros P gidf cs. unfold callee in *. induction cs as [|[gs h] r IH]; intros k H f o E; simpl in *.
   - destruct f; discriminate E.
   - destruct H as [H0 H1]. destruct f as [|f]; simpl in E |- *.
-    + pose proof (kit_sigb_mark gs o E) as Mk. rewrite Mk in H0. f_equal. exact (proj1 H0 o E).
+    + pose proof (kit_sigb_mark gs o E) as Mk. destruct (kis k); [destruct H0 as [_ H0]|]; rewrite Mk in H0; f_equal; exact (proj1 H0 o E).
     + exact (IH (S k) H1 f o E).
 Qed.
 
+Lemma all_ok_krows : forall P gidf cs k, all_ok P gidf cs k -> forall f, kis (k + f) = true ->
+  match nth_error cs f with Some (existT _ gs h) => krow_entry (k + f) gs h | None => True end.
+Proof.
+  intros P gidf cs. unfold callee in *. induction cs as [|[gs h] r IH]; intros k H f Kf; simpl in *.
+  - destruct f; exact Logic.I.
+  - destruct H as [H0 H1]. destruct f as [|f]; simpl.
+    + rewrite Nat.add_0_r in Kf |- *. rewrite Kf in H0. exact (proj1 H0).
+    + rewrite <- Nat.add_succ_comm in Kf |- *. exact (IH (S k) H1 f Kf).
+Qed.
 Lemma all_ok_callees : forall P gidf cs, all_ok P gidf cs 0 -> callees_ok P gidf cs.
-Proof. intros P gidf cs H. split; [intros f; exact (all_ok_nth P gidf cs 0 H f) | exact (all_ok_kits P gidf cs 0 H)]. Qed.
+Proof.
+  intros P gidf cs H. split; [intros f; exact (all_ok_nth P gidf cs 0 H f) | split; [exact (all_ok_kits P gidf cs 0 H) | exact (fun f Kf => all_ok_krows P gidf cs 0 H f Kf)]].
+Qed.
 
 End Recs.
+(** (step 146) no counter function used as a counter: the default *)
+#[global] Instance no_kfuns {RTs : RecTypes} : @KFuns RTs | 100 :=
+  {| kis := fun _ => false; kfn := fun _ _ _ _ => O; kfm := fun _ => false; kbw := fun _ => O; kbk := fun _ => O;
+     kfn_bound := fun _ _ _ _ => Nat.le_0_l _; kfn_mem := fun _ _ _ _ _ _ => eq_refl |}.
 (** (step 134) a counter the reader holds at its bound, so that the callee's bound need be no more than the caller's counters': a min,
     read as [CMin]; where the bound holds, the counter itself *)
 Definition kq_cap (x k : nat) : nat := Nat.min x k.
@@ -13182,7 +13318,7 @@ Proof. Time exact_no_check (eq_refl sum). Time Qed.
 (* end to end: the KQL function is [compile_f] of the syntax; its statement is [compile_f_ok] and the kernel's computation *)
 Definition sum_P := mkprog [(gid1 0, compile_f gid1 0 sum_g sum_b)] [].
 Time Lemma sum_ok : callee_ok sum_P (gid1 0) (cbz 0) sum_g sum.
-Proof. Time exact_no_check (compile_f_ok sum_P [] gid1 0 sum_g sum_b eq_refl eq_refl (no_callees sum_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) sum_P [] gid1 0 sum_g sum_b eq_refl eq_refl (no_callees sum_P gid1) eq_refl eq_refl). Time Qed.
 
 (* a wrong syntax (1 replaced by 2) is refused *)
 Time Fail Definition sum_wrong : sum = denote_f [] sum_g (FRec sum_s0 (SRec CNil (SCons (SOp Badd (SVar 1) (SInt 2)) (SCons (SOp Badd (SVar 0) (SRd (SInt 0) (SVar 1))) SNil)))) := eq_refl.
@@ -13198,11 +13334,11 @@ Definition loop_b := FRec (SVar 0) (SRec CNil (SCons (SOp Badd (SVar 1) (SInt 1)
                                   (SCons (SCall 0 CNil (SCons (SVar 0) (SCons (SRd (SInt 0) (SVar 1)) SNil))) SNil))).
 Definition hl_P := mkprog [(gid1 0, compile_f gid1 0 h_g h_b); (gid1 1, compile_f gid1 1 loop_g loop_b)] [].
 Time Lemma h_ok : callee_ok hl_P (gid1 0) (cbz 0) h_g h.
-Proof. Time exact_no_check (compile_f_ok hl_P [] gid1 0 h_g h_b eq_refl eq_refl (no_callees hl_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) hl_P [] gid1 0 h_g h_b eq_refl eq_refl (no_callees hl_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma loop_ok : callee_ok hl_P (gid1 1) (cbz 1) loop_g loop.
 Proof.
-  refine (compile_f_ok hl_P [existT ftype h_g h] gid1 1 loop_g loop_b eq_refl eq_refl _ eq_refl eq_refl).
-  split; [intros [|[|f]]; simpl; [exact h_ok | exact Logic.I | exact Logic.I] | intros [|[|f]] o H; discriminate H].
+  refine (compile_f_ok (KFs := no_kfuns) hl_P [existT ftype h_g h] gid1 1 loop_g loop_b eq_refl eq_refl _ eq_refl eq_refl).
+  split; [intros [|[|f]]; simpl; [exact h_ok | exact Logic.I | exact Logic.I] | split; [intros [|[|f]] o H; discriminate H | intros f Hf; discriminate Hf]].
 Time Qed.
 
 (* a loop whose body is 300 lets, each with a read of the memory *)
@@ -13520,7 +13656,7 @@ Time Lemma long_is : long = denote_f [] long_g long_b.
 Proof. Time exact_no_check (eq_refl long). Time Qed.
 Definition long_P := mkprog [(gid1 0, compile_f gid1 0 long_g long_b)] [].
 Time Lemma long_ok : callee_ok long_P (gid1 0) (cbz 0) long_g long.
-Proof. Time exact_no_check (compile_f_ok long_P [] gid1 0 long_g long_b eq_refl eq_refl (no_callees long_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) long_P [] gid1 0 long_g long_b eq_refl eq_refl (no_callees long_P gid1) eq_refl eq_refl). Time Qed.
 
 (* ---------------------------------------------------------------- memory writes *)
 (* a loop filling the memory: cell i of block 0 gets 2 i, for n cells *)
@@ -13554,13 +13690,13 @@ Definition init_b := FPlainM (MIf Clt (SVar 0) (SInt 10)
 Definition mem_P := mkprog [(gid1 0, compile_f gid1 0 fill_g fill_b); (gid1 1, compile_f gid1 1 suffix_g suffix_b);
                             (gid1 2, compile_f gid1 2 init_g init_b)] [].
 Time Lemma fill_ok : callee_ok mem_P (gid1 0) (cbz 0) fill_g fill.
-Proof. Time exact_no_check (compile_f_ok mem_P [] gid1 0 fill_g fill_b eq_refl eq_refl (no_callees mem_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) mem_P [] gid1 0 fill_g fill_b eq_refl eq_refl (no_callees mem_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma suffix_ok : callee_ok mem_P (gid1 1) (cbz 1) suffix_g suffix.
-Proof. Time exact_no_check (compile_f_ok mem_P [] gid1 1 suffix_g suffix_b eq_refl eq_refl (no_callees mem_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) mem_P [] gid1 1 suffix_g suffix_b eq_refl eq_refl (no_callees mem_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma init_ok : callee_ok mem_P (gid1 2) (cbz 2) init_g init.
 Proof.
-  refine (compile_f_ok mem_P [existT ftype fill_g fill] gid1 2 init_g init_b eq_refl eq_refl _ eq_refl eq_refl).
-  split; [intros [|[|f]]; simpl; [exact fill_ok | exact Logic.I | exact Logic.I] | intros [|[|f]] o H; discriminate H].
+  refine (compile_f_ok (KFs := no_kfuns) mem_P [existT ftype fill_g fill] gid1 2 init_g init_b eq_refl eq_refl _ eq_refl eq_refl).
+  split; [intros [|[|f]]; simpl; [exact fill_ok | exact Logic.I | exact Logic.I] | split; [intros [|[|f]] o H; discriminate H | intros f Hf; discriminate Hf]].
 Time Qed.
 
 (* linearity is in the syntax: a body that names an older memory has no tree; a tree that writes where the text does not is
@@ -13587,7 +13723,7 @@ Time Lemma chain10_is : chain10 = denote_f [] chain_g chain10_b.
 Proof. Time exact_no_check (eq_refl chain10). Time Qed.
 Definition chain10_P := mkprog [(gid1 0, compile_f gid1 0 chain_g chain10_b)] [].
 Time Lemma chain10_ok : callee_ok chain10_P (gid1 0) (cbz 0) chain_g chain10.
-Proof. Time exact_no_check (compile_f_ok chain10_P [] gid1 0 chain_g chain10_b eq_refl eq_refl (no_callees chain10_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) chain10_P [] gid1 0 chain_g chain10_b eq_refl eq_refl (no_callees chain10_P gid1) eq_refl eq_refl). Time Qed.
 Definition chain20 (s : mem) : mem :=
   let s1 := KQ.KQRun.upd 0 1 (PrimInt63.add (KQ.KQRun.rd 0 0 s) 1) s in
   let s2 := KQ.KQRun.upd 0 2 (PrimInt63.add (KQ.KQRun.rd 0 1 s1) 1) s1 in
@@ -13615,7 +13751,7 @@ Time Lemma chain20_is : chain20 = denote_f [] chain_g chain20_b.
 Proof. Time exact_no_check (eq_refl chain20). Time Qed.
 Definition chain20_P := mkprog [(gid1 0, compile_f gid1 0 chain_g chain20_b)] [].
 Time Lemma chain20_ok : callee_ok chain20_P (gid1 0) (cbz 0) chain_g chain20.
-Proof. Time exact_no_check (compile_f_ok chain20_P [] gid1 0 chain_g chain20_b eq_refl eq_refl (no_callees chain20_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) chain20_P [] gid1 0 chain_g chain20_b eq_refl eq_refl (no_callees chain20_P gid1) eq_refl eq_refl). Time Qed.
 
 
 (* ---------------------------------------------------------------- counters as values *)
@@ -13637,21 +13773,21 @@ Definition bud_b := FPlain (SCall 0 (CCons (CNat (SVar 0)) CNil) (SCons (SInt 0)
 Definition cnt_P := mkprog [(gid1 0, compile_f gid1 0 inner_g inner_b); (gid1 1, compile_f gid1 1 rounds_g rounds_b);
                             (gid1 2, compile_f gid1 2 twice_g twice_b); (gid1 3, compile_f gid1 3 bud_g bud_b)] [].
 Time Lemma inner_ok : callee_ok cnt_P (gid1 0) (cbz 0) inner_g inner.
-Proof. Time exact_no_check (compile_f_ok cnt_P [] gid1 0 inner_g inner_b eq_refl eq_refl (no_callees cnt_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) cnt_P [] gid1 0 inner_g inner_b eq_refl eq_refl (no_callees cnt_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma rounds_ok : callee_ok cnt_P (gid1 1) (cbz 1) rounds_g rounds.
 Proof.
-  Time exact_no_check (compile_f_ok cnt_P [existT ftype inner_g inner] gid1 1 rounds_g rounds_b eq_refl eq_refl
+  Time exact_no_check (compile_f_ok (KFs := no_kfuns) cnt_P [existT ftype inner_g inner] gid1 1 rounds_g rounds_b eq_refl eq_refl
     (all_ok_callees cnt_P gid1 [existT ftype inner_g inner] (conj inner_ok Logic.I)) eq_refl eq_refl).
 Time Qed.
 Time Lemma twice_ok : callee_ok cnt_P (gid1 2) (cbz 2) twice_g twice.
 Proof.
-  Time exact_no_check (compile_f_ok cnt_P [existT ftype inner_g inner; existT ftype rounds_g rounds] gid1 2 twice_g twice_b eq_refl eq_refl
+  Time exact_no_check (compile_f_ok (KFs := no_kfuns) cnt_P [existT ftype inner_g inner; existT ftype rounds_g rounds] gid1 2 twice_g twice_b eq_refl eq_refl
     (all_ok_callees cnt_P gid1 [existT ftype inner_g inner; existT ftype rounds_g rounds] (conj inner_ok (conj rounds_ok Logic.I)))
     eq_refl eq_refl).
 Time Qed.
 Time Lemma bud_ok : callee_ok cnt_P (gid1 3) (cbz 3) bud_g bud.
 Proof.
-  Time exact_no_check (compile_f_ok cnt_P [existT ftype inner_g inner; existT ftype rounds_g rounds; existT ftype twice_g twice]
+  Time exact_no_check (compile_f_ok (KFs := no_kfuns) cnt_P [existT ftype inner_g inner; existT ftype rounds_g rounds; existT ftype twice_g twice]
     gid1 3 bud_g bud_b eq_refl eq_refl
     (all_ok_callees cnt_P gid1 [existT ftype inner_g inner; existT ftype rounds_g rounds; existT ftype twice_g twice]
        (conj inner_ok (conj rounds_ok (conj twice_ok Logic.I)))) eq_refl eq_refl).
@@ -13678,7 +13814,7 @@ Definition relax_b := FRecM MCur (MLet (SRd (SInt 0) (SVar 1)) (MLet (SOp Badd (
 Check (eq_refl : choice_ok (SVar 0) (SVar 1) = true).
 Definition relax_P := mkprog [(gid1 0, compile_f gid1 0 relax_g relax_b)] [].
 Time Lemma relax_ok : callee_ok relax_P (gid1 0) (cbz 0) relax_g relax.
-Proof. Time exact_no_check (compile_f_ok relax_P [] gid1 0 relax_g relax_b eq_refl eq_refl (no_callees relax_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) relax_P [] gid1 0 relax_g relax_b eq_refl eq_refl (no_callees relax_P gid1) eq_refl eq_refl). Time Qed.
 (* the KQL has the conditional move *)
 Fixpoint has_sel (e : exp) : bool :=
   match e with
@@ -13722,11 +13858,11 @@ Definition mark_b := FPlainM (MIfB (BAnd (BCmp Cle (SVar 1) (SVar 0)) (BNot (BCm
 Definition bool_P := mkprog [(gid1 0, compile_f gid1 0 chk_g chk_b); (gid1 1, compile_f gid1 1 cnt_in_g cnt_in_b);
                              (gid1 2, compile_f gid1 2 mark_g mark_b)] [].
 Time Lemma chk_ok : callee_ok bool_P (gid1 0) (cbz 0) chk_g chk.
-Proof. Time exact_no_check (compile_f_ok bool_P [] gid1 0 chk_g chk_b eq_refl eq_refl (no_callees bool_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) bool_P [] gid1 0 chk_g chk_b eq_refl eq_refl (no_callees bool_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma cnt_in_ok : callee_ok bool_P (gid1 1) (cbz 1) cnt_in_g cnt_in.
-Proof. Time exact_no_check (compile_f_ok bool_P [] gid1 1 cnt_in_g cnt_in_b eq_refl eq_refl (no_callees bool_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) bool_P [] gid1 1 cnt_in_g cnt_in_b eq_refl eq_refl (no_callees bool_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma mark_ok : callee_ok bool_P (gid1 2) (cbz 2) mark_g mark.
-Proof. Time exact_no_check (compile_f_ok bool_P [] gid1 2 mark_g mark_b eq_refl eq_refl (no_callees bool_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) bool_P [] gid1 2 mark_g mark_b eq_refl eq_refl (no_callees bool_P gid1) eq_refl eq_refl). Time Qed.
 Check (eq_refl : has_sel (kbody (compile_f gid1 0 chk_g chk_b)) = true).
 (* the conditional moves of a code, and the bit operations that would make boolean values: [chk]'s three choices are
    2 + 2 + 1 moves on the comparisons themselves, no boolean value worked out (the translator's choices on the parts) *)
@@ -13760,10 +13896,10 @@ Definition big_b := FPlain (SCall 0 (CCons (CS (CS (CS (CS (CS (CS (CS (CS (CS (
 Definition lit_P := mkprog [(gid1 0, compile_f gid1 0 tw_g tw_b); (gid1 1, compile_f gid1 1 big_g big_b)] [].
 Strategy opaque [tw big].
 Time Lemma tw_ok : callee_ok lit_P (gid1 0) (cbz 0) tw_g tw.
-Proof. Time exact_no_check (compile_f_ok lit_P [] gid1 0 tw_g tw_b eq_refl eq_refl (no_callees lit_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) lit_P [] gid1 0 tw_g tw_b eq_refl eq_refl (no_callees lit_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma big_ok : callee_ok lit_P (gid1 1) (cbz 1) big_g big.
 Proof.
-  Time exact_no_check (compile_f_ok lit_P [existT ftype tw_g tw] gid1 1 big_g big_b eq_refl eq_refl
+  Time exact_no_check (compile_f_ok (KFs := no_kfuns) lit_P [existT ftype tw_g tw] gid1 1 big_g big_b eq_refl eq_refl
     (all_ok_callees lit_P gid1 [existT ftype tw_g tw] (conj tw_ok Logic.I)) eq_refl eq_refl).
 Time Qed.
 
@@ -13786,12 +13922,12 @@ Definition after_b := FPlainX (XLetM (MCall 0 CNil (SCons (SInt 1) SNil) MCur)
 Definition wr_P := mkprog [(gid1 0, compile_f gid1 0 bump_g bump_b); (gid1 1, compile_f gid1 1 fill_g fill_b);
                            (gid1 2, compile_f gid1 2 after_g after_b)] [].
 Time Lemma bump_ok : callee_ok wr_P (gid1 0) (cbz 0) bump_g bump.
-Proof. Time exact_no_check (compile_f_ok wr_P [] gid1 0 bump_g bump_b eq_refl eq_refl (no_callees wr_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) wr_P [] gid1 0 bump_g bump_b eq_refl eq_refl (no_callees wr_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma fill_ok2 : callee_ok wr_P (gid1 1) (cbz 1) fill_g fill.
-Proof. Time exact_no_check (compile_f_ok wr_P [] gid1 1 fill_g fill_b eq_refl eq_refl (no_callees wr_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) wr_P [] gid1 1 fill_g fill_b eq_refl eq_refl (no_callees wr_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma after_ok : callee_ok wr_P (gid1 2) (cbz 2) after_g mafter.
 Proof.
-  Time exact_no_check (compile_f_ok wr_P [existT ftype bump_g bump; existT ftype fill_g fill] gid1 2 after_g after_b eq_refl eq_refl
+  Time exact_no_check (compile_f_ok (KFs := no_kfuns) wr_P [existT ftype bump_g bump; existT ftype fill_g fill] gid1 2 after_g after_b eq_refl eq_refl
     (all_ok_callees wr_P gid1 [existT ftype bump_g bump; existT ftype fill_g fill] (conj bump_ok (conj fill_ok2 Logic.I))) eq_refl eq_refl).
 Time Qed.
 Print Assumptions after_ok.
@@ -13813,7 +13949,7 @@ Definition argmin_b := FRec (SVar 0) (SLet (SRd (SInt 0) (SVar 2))
                              (SRec CNil (SCons (SOp Badd (SVar 3) (SInt 1)) (SCons (SVar 2) (SCons (SVar 1) SNil)))))).
 Definition argmin_P := mkprog [(gid1 0, compile_f gid1 0 argmin_g argmin_b)] [].
 Time Lemma argmin_ok : callee_ok argmin_P (gid1 0) (cbz 0) argmin_g argmin.
-Proof. Time exact_no_check (compile_f_ok argmin_P [] gid1 0 argmin_g argmin_b eq_refl eq_refl (no_callees argmin_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) argmin_P [] gid1 0 argmin_g argmin_b eq_refl eq_refl (no_callees argmin_P gid1) eq_refl eq_refl). Time Qed.
 Check (eq_refl : has_sel (kbody (compile_f gid1 0 argmin_g argmin_b)) = true).
 
 (* ---------------------------------------------------------------- narrow memory: cells of 4 bytes *)
@@ -13831,9 +13967,9 @@ Definition sum32_g := mksig 1 (nk 2) true false false None.
 Definition sum32_b := FRec (SVar 0) (SRec CNil (SCons (SOp Badd (SVar 1) (SInt 1)) (SCons (SOp Badd (SVar 0) (SRd32 (SInt 1) (SVar 1))) SNil))).
 Definition nar_P := mkprog [(gid1 0, compile_f gid1 0 acc32_g acc32_b); (gid1 1, compile_f gid1 1 sum32_g sum32_b)] [].
 Time Lemma acc32_ok : callee_ok nar_P (gid1 0) (cbz 0) acc32_g acc32.
-Proof. Time exact_no_check (compile_f_ok nar_P [] gid1 0 acc32_g acc32_b eq_refl eq_refl (no_callees nar_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) nar_P [] gid1 0 acc32_g acc32_b eq_refl eq_refl (no_callees nar_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma sum32_ok : callee_ok nar_P (gid1 1) (cbz 1) sum32_g sum32.
-Proof. Time exact_no_check (compile_f_ok nar_P [] gid1 1 sum32_g sum32_b eq_refl eq_refl (no_callees nar_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) nar_P [] gid1 1 sum32_g sum32_b eq_refl eq_refl (no_callees nar_P gid1) eq_refl eq_refl). Time Qed.
 Print Assumptions acc32_ok.
 
 (* ---------------------------------------------------------------- a function given as a term *)
@@ -13848,7 +13984,7 @@ Definition tcopy_b := FRec (SVar 0) (SRec CNil (SCons (SOp Badd (SVar 0) (SInt 3
 Definition tcopy_P := mkprog [(gid1 0, compile_f gid1 0 tcopy_g tcopy_b)] [].
 Time Lemma tcopy_ok : callee_ok tcopy_P (gid1 0) (cbz 0) tcopy_g tcopy.
 Proof.
-  Time exact_no_check (compile_f_okr tcopy_P [] gid1 0 0 (nk 1) false (SVar 0) (SRec CNil (SCons (SOp Badd (SVar 0) (SInt 3)) SNil)) None [] tcopy
+  Time exact_no_check (compile_f_okr (KFs := no_kfuns) tcopy_P [] gid1 0 0 (nk 1) false (SVar 0) (SRec CNil (SCons (SOp Badd (SVar 0) (SInt 3)) SNil)) None [] tcopy
     eq_refl eq_refl (no_callees tcopy_P gid1) eq_refl eq_refl eq_refl (fun n => eq_refl)).
 Time Qed.
 Time Fail Definition tcopy_plain : tcopy = denote_f [] tcopy_g tcopy_b := eq_refl.
@@ -13872,10 +14008,10 @@ Definition degt_g := mksig 1 (nk 0) true false true None.
 Definition degt_b := FPlainX (XCall 0 (CCons (CVar 0) CNil) (SCons (SInt 1) (SCons (SInt 0) SNil)) (MUpd (SInt 1) (SInt 0) (SInt 0) MCur)).
 Definition deg_P := mkprog [(gid1 0, compile_f gid1 0 deg_g deg_b); (gid1 1, compile_f gid1 1 degt_g degt_b)] [].
 Time Lemma deg_ok : callee_ok deg_P (gid1 0) (cbz 0) deg_g deg.
-Proof. Time exact_no_check (compile_f_ok deg_P [] gid1 0 deg_g deg_b eq_refl eq_refl (no_callees deg_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) deg_P [] gid1 0 deg_g deg_b eq_refl eq_refl (no_callees deg_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma degt_ok : callee_ok deg_P (gid1 1) (cbz 1) degt_g deg_top.
 Proof.
-  Time exact_no_check (compile_f_ok deg_P [existT ftype deg_g deg] gid1 1 degt_g degt_b eq_refl eq_refl
+  Time exact_no_check (compile_f_ok (KFs := no_kfuns) deg_P [existT ftype deg_g deg] gid1 1 degt_g degt_b eq_refl eq_refl
     (all_ok_callees deg_P gid1 [existT ftype deg_g deg] (conj deg_ok Logic.I)) eq_refl eq_refl).
 Time Qed.
 Print Assumptions degt_ok.
@@ -13903,7 +14039,7 @@ Definition tdcopy_b := FRecX (XRet (SVar 0)) tdcopy_x1.
 Definition tdcopy_P := mkprog [(gid1 0, compile_f gid1 0 tdcopy_g tdcopy_b)] [].
 Time Lemma tdcopy_ok : callee_ok tdcopy_P (gid1 0) (cbz 0) tdcopy_g tdcopy.
 Proof.
-  Time exact_no_check (compile_f_okrx tdcopy_P [] gid1 0 0 (nk 2) (XRet (SVar 0)) tdcopy_x1 None [] tdcopy
+  Time exact_no_check (compile_f_okrx (KFs := no_kfuns) tdcopy_P [] gid1 0 0 (nk 2) (XRet (SVar 0)) tdcopy_x1 None [] tdcopy
     eq_refl eq_refl (no_callees tdcopy_P gid1) eq_refl eq_refl eq_refl (fun n => eq_refl)).
 Time Qed.
 Print Assumptions tdcopy_ok.
@@ -13924,10 +14060,10 @@ Definition bcall_g := mksig 1 [KNum] true false false None.
 Definition bcall_b := FPlain (SCall 0 (CCons (CVar 0) CNil) (SCons (SInt 0) (SCons (SInt 0) (SConsB (BCmp Clt (SVar 0) (SInt 5)) SNil)))).
 Definition bcount_P := mkprog [(gid1 0, compile_f gid1 0 bcount_g bcount_b); (gid1 1, compile_f gid1 1 bcall_g bcall_b)] [].
 Time Lemma bcount_ok : callee_ok bcount_P (gid1 0) (cbz 0) bcount_g bcount.
-Proof. Time exact_no_check (compile_f_ok bcount_P [] gid1 0 bcount_g bcount_b eq_refl eq_refl (no_callees bcount_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) bcount_P [] gid1 0 bcount_g bcount_b eq_refl eq_refl (no_callees bcount_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma bcall_ok : callee_ok bcount_P (gid1 1) (cbz 1) bcall_g bcall.
 Proof.
-  Time exact_no_check (compile_f_ok bcount_P [existT ftype bcount_g bcount] gid1 1 bcall_g bcall_b eq_refl eq_refl
+  Time exact_no_check (compile_f_ok (KFs := no_kfuns) bcount_P [existT ftype bcount_g bcount] gid1 1 bcall_g bcall_b eq_refl eq_refl
     (all_ok_callees bcount_P gid1 [existT ftype bcount_g bcount] (conj bcount_ok Logic.I)) eq_refl eq_refl).
 Time Qed.
 Print Assumptions bcall_ok.
@@ -13961,15 +14097,15 @@ Definition hgrow_g := mksig 0 [KNum] true true false None.
 Definition hgrow_b := FPlainM (MHw HGrow (SCons (SInt 2) (SCons (SVar 0) SNil)) MCur).
 Definition hw_P := mkprog [(gid1 0, compile_f gid1 0 mmio_g mmio_b); (gid1 1, compile_f gid1 1 hsz_g hsz_b); (gid1 2, compile_f gid1 2 hgrow_g hgrow_b)] [].
 Time Lemma mmio_ok : callee_ok hw_P (gid1 0) (cbz 0) mmio_g mmio.
-Proof. Time exact_no_check (compile_f_ok hw_P [] gid1 0 mmio_g mmio_b eq_refl eq_refl (no_callees hw_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) hw_P [] gid1 0 mmio_g mmio_b eq_refl eq_refl (no_callees hw_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma hsz_ok : callee_ok hw_P (gid1 1) (cbz 1) hsz_g hsz.
 Proof.
-  Time exact_no_check (compile_f_ok hw_P [existT ftype mmio_g mmio] gid1 1 hsz_g hsz_b eq_refl eq_refl
+  Time exact_no_check (compile_f_ok (KFs := no_kfuns) hw_P [existT ftype mmio_g mmio] gid1 1 hsz_g hsz_b eq_refl eq_refl
     (all_ok_callees hw_P gid1 [existT ftype mmio_g mmio] (conj mmio_ok Logic.I)) eq_refl eq_refl).
 Time Qed.
 Time Lemma hgrow_ok : callee_ok hw_P (gid1 2) (cbz 2) hgrow_g hgrow.
 Proof.
-  Time exact_no_check (compile_f_ok hw_P [existT ftype mmio_g mmio; existT ftype hsz_g hsz] gid1 2 hgrow_g hgrow_b eq_refl eq_refl
+  Time exact_no_check (compile_f_ok (KFs := no_kfuns) hw_P [existT ftype mmio_g mmio; existT ftype hsz_g hsz] gid1 2 hgrow_g hgrow_b eq_refl eq_refl
     (all_ok_callees hw_P gid1 [existT ftype mmio_g mmio; existT ftype hsz_g hsz] (conj mmio_ok (conj hsz_ok Logic.I))) eq_refl eq_refl).
 Time Qed.
 Print Assumptions hgrow_ok.
@@ -13991,10 +14127,10 @@ Definition bfill_g := mksig 1 [KNum] true true false None.
 Definition bfill_b := FRecM MCur (MRec CNil (SCons (SOp Badd (SVar 0) (SInt 1)) SNil) (MUpd8 (SInt 1) (SVar 0) (SOp Bmul (SVar 0) (SInt 7)) MCur)).
 Definition b8_P := mkprog [(gid1 0, compile_f gid1 0 bsum_g bsum_b); (gid1 1, compile_f gid1 1 bfill_g bfill_b)] [].
 Time Lemma bsum_ok : callee_ok b8_P (gid1 0) (cbz 0) bsum_g bsum.
-Proof. Time exact_no_check (compile_f_ok b8_P [] gid1 0 bsum_g bsum_b eq_refl eq_refl (no_callees b8_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) b8_P [] gid1 0 bsum_g bsum_b eq_refl eq_refl (no_callees b8_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma bfill_ok : callee_ok b8_P (gid1 1) (cbz 1) bfill_g bfill.
 Proof.
-  Time exact_no_check (compile_f_ok b8_P [existT ftype bsum_g bsum] gid1 1 bfill_g bfill_b eq_refl eq_refl
+  Time exact_no_check (compile_f_ok (KFs := no_kfuns) b8_P [existT ftype bsum_g bsum] gid1 1 bfill_g bfill_b eq_refl eq_refl
     (all_ok_callees b8_P gid1 [existT ftype bsum_g bsum] (conj bsum_ok Logic.I)) eq_refl eq_refl).
 Time Qed.
 (* the code: a byte read is one Ekld8, a byte written one Ekst8 *)
@@ -14029,10 +14165,10 @@ Definition pouter_g := mksig 1 [KNum] true false false None.
 Definition pouter_b := FPlain (SCall 0 (CCons (CVar 0) CNil) (SCons (SInt 0) (SConsR (RMk 0 (SCons (SInt 0) (SCons (SVar 0) SNil))) SNil))).
 Definition pair_P := mkprog [(gid1 0, compile_f gid1 0 pinner_g pinner_b); (gid1 1, compile_f gid1 1 pouter_g pouter_b)] [].
 Time Lemma pinner_ok : callee_ok pair_P (gid1 0) (cbz 0) pinner_g pinner.
-Proof. Time exact_no_check (compile_f_ok pair_P [] gid1 0 pinner_g pinner_b eq_refl eq_refl (no_callees pair_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) pair_P [] gid1 0 pinner_g pinner_b eq_refl eq_refl (no_callees pair_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma pouter_ok : callee_ok pair_P (gid1 1) (cbz 1) pouter_g pouter.
 Proof.
-  Time exact_no_check (compile_f_ok pair_P [existT ftype pinner_g pinner] gid1 1 pouter_g pouter_b eq_refl eq_refl
+  Time exact_no_check (compile_f_ok (KFs := no_kfuns) pair_P [existT ftype pinner_g pinner] gid1 1 pouter_g pouter_b eq_refl eq_refl
     (all_ok_callees pair_P gid1 [existT ftype pinner_g pinner] (conj pinner_ok Logic.I)) eq_refl eq_refl).
 Time Qed.
 Print Assumptions pouter_ok.
@@ -14048,19 +14184,19 @@ Definition plet_g := mksig 0 [KNum; KNum] false false false None.
 Definition plet_b := FPlain (SLetR (RMk 0 (SCons (SVar 1) (SCons (SOp Badd (SVar 0) (SInt 1)) SNil))) (SOp Bsub (SFld 0 0) (SFld 0 1))).
 Definition pm_P := mkprog [(gid1 0, compile_f gid1 0 pmatch_g pmatch_b); (gid1 1, compile_f gid1 1 plet_g plet_b)] [].
 Time Lemma pmatch_ok : callee_ok pm_P (gid1 0) (cbz 0) pmatch_g pmatch.
-Proof. Time exact_no_check (compile_f_ok pm_P [] gid1 0 pmatch_g pmatch_b eq_refl eq_refl (no_callees pm_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) pm_P [] gid1 0 pmatch_g pmatch_b eq_refl eq_refl (no_callees pm_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma plet_ok : callee_ok pm_P (gid1 1) (cbz 1) plet_g plet.
-Proof. Time exact_no_check (compile_f_ok pm_P [] gid1 1 plet_g plet_b eq_refl eq_refl (no_callees pm_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) pm_P [] gid1 1 plet_g plet_b eq_refl eq_refl (no_callees pm_P gid1) eq_refl eq_refl). Time Qed.
 (* a record variable passed as it is (step 16): [ppass] gives its pair to [pinner] *)
 Definition ppass (n : nat) (p : i63 * i63) (s : mem) : i63 := pinner n 0 p s.
 Definition ppass_g := mksig 1 [KRec 0] true false false None.
 Definition ppass_b := FPlain (SCall 0 (CCons (CVar 0) CNil) (SCons (SInt 0) (SConsR (RVar 0) SNil))).
 Definition ppass_P := mkprog [(gid1 0, compile_f gid1 0 pinner_g pinner_b); (gid1 1, compile_f gid1 1 ppass_g ppass_b)] [].
 Time Lemma pinner_ok2 : callee_ok ppass_P (gid1 0) (cbz 0) pinner_g pinner.
-Proof. Time exact_no_check (compile_f_ok ppass_P [] gid1 0 pinner_g pinner_b eq_refl eq_refl (no_callees ppass_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) ppass_P [] gid1 0 pinner_g pinner_b eq_refl eq_refl (no_callees ppass_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma ppass_ok : callee_ok ppass_P (gid1 1) (cbz 1) ppass_g ppass.
 Proof.
-  Time exact_no_check (compile_f_ok ppass_P [existT ftype pinner_g pinner] gid1 1 ppass_g ppass_b eq_refl eq_refl
+  Time exact_no_check (compile_f_ok (KFs := no_kfuns) ppass_P [existT ftype pinner_g pinner] gid1 1 ppass_g ppass_b eq_refl eq_refl
     (all_ok_callees ppass_P gid1 [existT ftype pinner_g pinner] (conj pinner_ok2 Logic.I)) eq_refl eq_refl).
 Time Qed.
 (* a record variable out of scope is refused by well-formedness *)
@@ -14110,20 +14246,20 @@ Definition plast_b := FPlain (SLetR (RCall 0 0 (CCons (CVar 0) CNil) (SCons (SVa
 Definition rret_P := mkprog [(gid1 0, compile_f gid1 0 minmax_g minmax_b); (gid1 1, compile_f gid1 1 fibp_g fibp_b);
                              (gid1 2, compile_f gid1 2 prounds_g prounds_b); (gid1 3, compile_f gid1 3 plast_g plast_b)] [].
 Time Lemma minmax_ok : callee_ok rret_P (gid1 0) (cbz 0) minmax_g minmax.
-Proof. Time exact_no_check (compile_f_ok rret_P [] gid1 0 minmax_g minmax_b eq_refl eq_refl (no_callees rret_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) rret_P [] gid1 0 minmax_g minmax_b eq_refl eq_refl (no_callees rret_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma fibp_ok : callee_ok rret_P (gid1 1) (cbz 1) fibp_g fibp.
 Proof.
-  Time exact_no_check (compile_f_ok rret_P [existT ftype minmax_g minmax] gid1 1 fibp_g fibp_b eq_refl eq_refl
+  Time exact_no_check (compile_f_ok (KFs := no_kfuns) rret_P [existT ftype minmax_g minmax] gid1 1 fibp_g fibp_b eq_refl eq_refl
     (all_ok_callees rret_P gid1 [existT ftype minmax_g minmax] (conj minmax_ok Logic.I)) eq_refl eq_refl).
 Time Qed.
 Time Lemma prounds_ok : callee_ok rret_P (gid1 2) (cbz 2) prounds_g prounds.
 Proof.
-  Time exact_no_check (compile_f_ok rret_P [existT ftype minmax_g minmax; existT ftype fibp_g fibp] gid1 2 prounds_g prounds_b eq_refl eq_refl
+  Time exact_no_check (compile_f_ok (KFs := no_kfuns) rret_P [existT ftype minmax_g minmax; existT ftype fibp_g fibp] gid1 2 prounds_g prounds_b eq_refl eq_refl
     (all_ok_callees rret_P gid1 [existT ftype minmax_g minmax; existT ftype fibp_g fibp] (conj minmax_ok (conj fibp_ok Logic.I))) eq_refl eq_refl).
 Time Qed.
 Time Lemma plast_ok : callee_ok rret_P (gid1 3) (cbz 3) plast_g plast.
 Proof.
-  Time exact_no_check (compile_f_ok rret_P [existT ftype minmax_g minmax; existT ftype fibp_g fibp; existT ftype prounds_g prounds] gid1 3 plast_g plast_b
+  Time exact_no_check (compile_f_ok (KFs := no_kfuns) rret_P [existT ftype minmax_g minmax; existT ftype fibp_g fibp; existT ftype prounds_g prounds] gid1 3 plast_g plast_b
     eq_refl eq_refl (all_ok_callees rret_P gid1 [existT ftype minmax_g minmax; existT ftype fibp_g fibp; existT ftype prounds_g prounds]
                        (conj minmax_ok (conj fibp_ok (conj prounds_ok Logic.I)))) eq_refl eq_refl).
 Time Qed.
@@ -14143,7 +14279,7 @@ Definition pswap_b := FRecR (BRet (RVar 0))
   (BIf Clt (SFld 0 0) (SFld 0 1) (BRec CNil (SConsR (RVar 0) SNil)) (BRec CNil (SConsR (RMk 0 (SCons (SFld 0 1) (SCons (SFld 0 0) SNil))) SNil))).
 Definition pswap_P := mkprog [(gid1 0, compile_f gid1 0 pswap_g pswap_b)] [].
 Time Lemma pswap_ok : callee_ok pswap_P (gid1 0) (cbz 0) pswap_g pswap.
-Proof. Time exact_no_check (compile_f_ok pswap_P [] gid1 0 pswap_g pswap_b eq_refl eq_refl (no_callees pswap_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) pswap_P [] gid1 0 pswap_g pswap_b eq_refl eq_refl (no_callees pswap_P gid1) eq_refl eq_refl). Time Qed.
 Print Assumptions pswap_ok.
 (* a record variable out of scope given back is refused by well-formedness *)
 Check (eq_refl : wf_f [] (mksig 0 [KRec 0] false false false (Some (KRec 0))) (FPlainR (BRet (RVar 1))) = false).
@@ -14162,9 +14298,9 @@ Definition pswap2_b := FPlain (SMatchR (RMatchR 0 (RMk 0 (SCons (SOp Badd (SVar 
                                                 (RMk 0 (SCons (SVar 0) (SCons (SVar 1) SNil)))) (SOp Bsub (SVar 1) (SVar 0))).
 Definition prif_P := mkprog [(gid1 0, compile_f gid1 0 prif_g pchoose_b); (gid1 1, compile_f gid1 1 prif_g pswap2_b)] [].
 Time Lemma pchoose_ok : callee_ok prif_P (gid1 0) (cbz 0) prif_g pchoose.
-Proof. Time exact_no_check (compile_f_ok prif_P [] gid1 0 prif_g pchoose_b eq_refl eq_refl (no_callees prif_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) prif_P [] gid1 0 prif_g pchoose_b eq_refl eq_refl (no_callees prif_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma pswap2_ok : callee_ok prif_P (gid1 1) (cbz 1) prif_g pswap2.
-Proof. Time exact_no_check (compile_f_ok prif_P [] gid1 1 prif_g pswap2_b eq_refl eq_refl (no_callees prif_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) prif_P [] gid1 1 prif_g pswap2_b eq_refl eq_refl (no_callees prif_P gid1) eq_refl eq_refl). Time Qed.
 (* records of two types in the branches are refused *)
 Check (eq_refl : wf_f [] prif_g (FPlain (SMatchR (RIf 0 Clt (SVar 1) (SVar 0) (RMk 0 (SCons (SVar 1) (SCons (SVar 0) SNil)))
                                                   (RMk 1 (SCons (SVar 0) (SCons (SVar 1) SNil)))) (SVar 0))) = false).
@@ -14210,27 +14346,27 @@ Definition xrletc (n : nat) (a b : i63) : i63 :=
 Definition xrletc_b := FPlain (SMatchR (RLetC (CS (CVar 0)) (RMatchCnt 0 0 (RMk 0 (SCons (SVar 1) (SCons (SVar 0) SNil))) (RMk 0 (SCons (SVar 0) (SCons (SVar 1) SNil))))) (SOp Bsub (SVar 0) (SVar 1))).
 Definition x36_P := mkprog [(gid1 0, compile_f gid1 0 prif_g xbif_b); (gid1 1, compile_f gid1 1 prif_g xbifj_b); (gid1 2, compile_f gid1 2 prif_g xblet_b); (gid1 3, compile_f gid1 3 prif_g xbletb_b); (gid1 4, compile_f gid1 4 x61_g xbletc_b); (gid1 5, compile_f gid1 5 prif_g xbmr_b); (gid1 6, compile_f gid1 6 prif_g xbletr_b); (gid1 7, compile_f gid1 7 prif_g xrifb_b); (gid1 8, compile_f gid1 8 prif_g xrletb_b); (gid1 9, compile_f gid1 9 x12_g xrmc_b); (gid1 10, compile_f gid1 10 x61_g xrletc_b)] [].
 Time Lemma xbif_ok : callee_ok x36_P (gid1 0) (cbz 0) prif_g xbif.
-Proof. Time exact_no_check (compile_f_ok x36_P [] gid1 0 prif_g xbif_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) x36_P [] gid1 0 prif_g xbif_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma xbifj_ok : callee_ok x36_P (gid1 1) (cbz 1) prif_g xbifj.
-Proof. Time exact_no_check (compile_f_ok x36_P [] gid1 1 prif_g xbifj_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) x36_P [] gid1 1 prif_g xbifj_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma xblet_ok : callee_ok x36_P (gid1 2) (cbz 2) prif_g xblet.
-Proof. Time exact_no_check (compile_f_ok x36_P [] gid1 2 prif_g xblet_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) x36_P [] gid1 2 prif_g xblet_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma xbletb_ok : callee_ok x36_P (gid1 3) (cbz 3) prif_g xbletb.
-Proof. Time exact_no_check (compile_f_ok x36_P [] gid1 3 prif_g xbletb_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) x36_P [] gid1 3 prif_g xbletb_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma xbletc_ok : callee_ok x36_P (gid1 4) 2305843009213693952%Z x61_g xbletc.
-Proof. Time exact_no_check (compile_f_ok x36_P [] gid1 4 x61_g xbletc_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) x36_P [] gid1 4 x61_g xbletc_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma xbmr_ok : callee_ok x36_P (gid1 5) (cbz 5) prif_g xbmr.
-Proof. Time exact_no_check (compile_f_ok x36_P [] gid1 5 prif_g xbmr_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) x36_P [] gid1 5 prif_g xbmr_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma xbletr_ok : callee_ok x36_P (gid1 6) (cbz 6) prif_g xbletr.
-Proof. Time exact_no_check (compile_f_ok x36_P [] gid1 6 prif_g xbletr_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) x36_P [] gid1 6 prif_g xbletr_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma xrifb_ok : callee_ok x36_P (gid1 7) (cbz 7) prif_g xrifb.
-Proof. Time exact_no_check (compile_f_ok x36_P [] gid1 7 prif_g xrifb_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) x36_P [] gid1 7 prif_g xrifb_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma xrletb_ok : callee_ok x36_P (gid1 8) (cbz 8) prif_g xrletb.
-Proof. Time exact_no_check (compile_f_ok x36_P [] gid1 8 prif_g xrletb_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) x36_P [] gid1 8 prif_g xrletb_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma xrmc_ok : callee_ok x36_P (gid1 9) (cbz 9) x12_g xrmc.
-Proof. Time exact_no_check (compile_f_ok x36_P [] gid1 9 x12_g xrmc_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) x36_P [] gid1 9 x12_g xrmc_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma xrletc_ok : callee_ok x36_P (gid1 10) 2305843009213693952%Z x61_g xrletc.
-Proof. Time exact_no_check (compile_f_ok x36_P [] gid1 10 x61_g xrletc_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) x36_P [] gid1 10 x61_g xrletc_b eq_refl eq_refl (no_callees x36_P gid1) eq_refl eq_refl). Time Qed.
 Print Assumptions xrletc_ok.
 (* refused: records of two types in a test on a boolean, a counter let at the index's bound whose own bound has no room, the
    tree of a test with its branches the other way round *)
@@ -14297,17 +14433,17 @@ Definition u64_P := mkprog [(gid1 0, compile_f gid1 0 uadd_g uadd_b); (gid1 1, c
                             (gid1 2, compile_f gid1 2 ufold_g ufold_b); (gid1 3, compile_f gid1 3 uput_g uput_b);
                             (gid1 4, compile_f gid1 4 uwr_g uwr_b); (gid1 5, compile_f gid1 5 ulets_g ulets_b)] [].
 Time Lemma uadd_ok : callee_ok u64_P (gid1 0) (cbz 0) uadd_g uadd.
-Proof. Time exact_no_check (compile_f_ok u64_P [] gid1 0 uadd_g uadd_b eq_refl eq_refl (no_callees u64_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) u64_P [] gid1 0 uadd_g uadd_b eq_refl eq_refl (no_callees u64_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma ultb_ok : callee_ok u64_P (gid1 1) (cbz 1) ultb_g ultb.
-Proof. Time exact_no_check (compile_f_ok u64_P [] gid1 1 ultb_g ultb_b eq_refl eq_refl (no_callees u64_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) u64_P [] gid1 1 ultb_g ultb_b eq_refl eq_refl (no_callees u64_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma ufold_ok : callee_ok u64_P (gid1 2) (cbz 2) ufold_g ufold.
-Proof. Time exact_no_check (compile_f_ok u64_P [] gid1 2 ufold_g ufold_b eq_refl eq_refl (no_callees u64_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) u64_P [] gid1 2 ufold_g ufold_b eq_refl eq_refl (no_callees u64_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma uput_ok : callee_ok u64_P (gid1 3) (cbz 3) uput_g uput.
-Proof. Time exact_no_check (compile_f_ok u64_P [] gid1 3 uput_g uput_b eq_refl eq_refl (no_callees u64_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) u64_P [] gid1 3 uput_g uput_b eq_refl eq_refl (no_callees u64_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma uwr_ok : callee_ok u64_P (gid1 4) (cbz 4) uwr_g uwr.
-Proof. Time exact_no_check (compile_f_ok u64_P [] gid1 4 uwr_g uwr_b eq_refl eq_refl (no_callees u64_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) u64_P [] gid1 4 uwr_g uwr_b eq_refl eq_refl (no_callees u64_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma ulets_ok : callee_ok u64_P (gid1 5) (cbz 5) ulets_g ulets.
-Proof. Time exact_no_check (compile_f_ok u64_P [] gid1 5 ulets_g ulets_b eq_refl eq_refl (no_callees u64_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) u64_P [] gid1 5 ulets_g ulets_b eq_refl eq_refl (no_callees u64_P gid1) eq_refl eq_refl). Time Qed.
 Print Assumptions ufold_ok.
 (* the operation is one instruction: [uadd]'s KQL starts with [Ew64] *)
 Check (eq_refl : match kbody (compile_f gid1 0 uadd_g uadd_b) with Ew64 KQ.KQRun.W_add _ _ _ _ _ _ _ => true | _ => false end = true).
@@ -14346,17 +14482,17 @@ Definition mut_P := mkprog [(gid1 0, compile_f gid1 0 mblk_g (FRec mblk_e0 mblk_
 Definition mblk := blk 0 (nk 2) true [mping; mpong].
 Time Lemma mblk_ok : callee_ok mut_P (gid1 0) (cbz 0) mblk_g mblk.
 Proof.
-  Time exact_no_check (compile_f_okr mut_P [] gid1 0 1 (nk 2) true mblk_e0 mblk_e1 None [] mblk eq_refl eq_refl (no_callees mut_P gid1) eq_refl eq_refl
+  Time exact_no_check (compile_f_okr (KFs := no_kfuns) mut_P [] gid1 0 1 (nk 2) true mblk_e0 mblk_e1 None [] mblk eq_refl eq_refl (no_callees mut_P gid1) eq_refl eq_refl
     eq_refl (fun n => eq_refl)).
 Time Qed.
 Time Lemma mping_ok : callee_ok mut_P (gid1 1) (cbz 1) mmem_g mping.
 Proof.
-  Time exact_no_check (compile_f_ok mut_P [existT ftype mblk_g mblk] gid1 1 mmem_g (mmem_b 0) eq_refl eq_refl
+  Time exact_no_check (compile_f_ok (KFs := no_kfuns) mut_P [existT ftype mblk_g mblk] gid1 1 mmem_g (mmem_b 0) eq_refl eq_refl
     (all_ok_callees mut_P gid1 [existT ftype mblk_g mblk] (conj mblk_ok Logic.I)) eq_refl eq_refl).
 Time Qed.
 Time Lemma mpong_ok : callee_ok mut_P (gid1 2) (cbz 2) mmem_g mpong.
 Proof.
-  Time exact_no_check (compile_f_ok mut_P [existT ftype mblk_g mblk] gid1 2 mmem_g (mmem_b 1) eq_refl eq_refl
+  Time exact_no_check (compile_f_ok (KFs := no_kfuns) mut_P [existT ftype mblk_g mblk] gid1 2 mmem_g (mmem_b 1) eq_refl eq_refl
     (all_ok_callees mut_P gid1 [existT ftype mblk_g mblk] (conj mblk_ok Logic.I)) eq_refl eq_refl).
 Time Qed.
 Print Assumptions mpong_ok.
@@ -14401,15 +14537,15 @@ Definition bsel_P := mkprog [(gid1 0, compile_f gid1 0 b2_g bpick_b); (gid1 1, c
                              (gid1 2, compile_f gid1 2 b2_g bval_b); (gid1 3, compile_f gid1 3 b1_g bcnt_b);
                              (gid1 4, compile_f gid1 4 b1_g bcntv_b)] [].
 Time Lemma bpick_ok : callee_ok bsel_P (gid1 0) (cbz 0) b2_g bpick.
-Proof. Time exact_no_check (compile_f_ok bsel_P [] gid1 0 b2_g bpick_b eq_refl eq_refl (no_callees bsel_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) bsel_P [] gid1 0 b2_g bpick_b eq_refl eq_refl (no_callees bsel_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma bjump_ok : callee_ok bsel_P (gid1 1) (cbz 1) b2_g bjump.
-Proof. Time exact_no_check (compile_f_ok bsel_P [] gid1 1 b2_g bjump_b eq_refl eq_refl (no_callees bsel_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) bsel_P [] gid1 1 b2_g bjump_b eq_refl eq_refl (no_callees bsel_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma bval_ok : callee_ok bsel_P (gid1 2) (cbz 2) b2_g bval.
-Proof. Time exact_no_check (compile_f_ok bsel_P [] gid1 2 b2_g bval_b eq_refl eq_refl (no_callees bsel_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) bsel_P [] gid1 2 b2_g bval_b eq_refl eq_refl (no_callees bsel_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma bcnt_ok : callee_ok bsel_P (gid1 3) (cbz 3) b1_g bcnt.
-Proof. Time exact_no_check (compile_f_ok bsel_P [] gid1 3 b1_g bcnt_b eq_refl eq_refl (no_callees bsel_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) bsel_P [] gid1 3 b1_g bcnt_b eq_refl eq_refl (no_callees bsel_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma bcntv_ok : callee_ok bsel_P (gid1 4) (cbz 4) b1_g bcntv.
-Proof. Time exact_no_check (compile_f_ok bsel_P [] gid1 4 b1_g bcntv_b eq_refl eq_refl (no_callees bsel_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) bsel_P [] gid1 4 b1_g bcntv_b eq_refl eq_refl (no_callees bsel_P gid1) eq_refl eq_refl). Time Qed.
 Print Assumptions bjump_ok.
 
 
@@ -14449,24 +14585,24 @@ Definition q_P := mkprog [(gid1 0, compile_f gid1 0 qb_g qtail_b); (gid1 1, comp
                           (gid1 4, compile_f gid1 4 qn_g qneg_b); (gid1 5, compile_f gid1 5 qc_g qgo_b);
                           (gid1 6, compile_f gid1 6 qc_g qval_b); (gid1 7, compile_f gid1 7 qp_g qpick_b)] [].
 Time Lemma qtail_ok : callee_ok q_P (gid1 0) (cbz 0) qb_g qtail.
-Proof. Time exact_no_check (compile_f_ok q_P [] gid1 0 qb_g qtail_b eq_refl eq_refl (no_callees q_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) q_P [] gid1 0 qb_g qtail_b eq_refl eq_refl (no_callees q_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma qsearch_ok : callee_ok q_P (gid1 1) (cbz 1) qb_g qsearch.
-Proof. Time exact_no_check (compile_f_ok q_P [] gid1 1 qb_g qsearch_b eq_refl eq_refl (no_callees q_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) q_P [] gid1 1 qb_g qsearch_b eq_refl eq_refl (no_callees q_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma qand_ok : callee_ok q_P (gid1 2) (cbz 2) qb_g qand.
-Proof. Time exact_no_check (compile_f_ok q_P [] gid1 2 qb_g qand_b eq_refl eq_refl (no_callees q_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) q_P [] gid1 2 qb_g qand_b eq_refl eq_refl (no_callees q_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma qor_ok : callee_ok q_P (gid1 3) (cbz 3) qb_g qor.
-Proof. Time exact_no_check (compile_f_ok q_P [] gid1 3 qb_g qor_b eq_refl eq_refl (no_callees q_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) q_P [] gid1 3 qb_g qor_b eq_refl eq_refl (no_callees q_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma qneg_ok : callee_ok q_P (gid1 4) (cbz 4) qn_g qneg.
-Proof. Time exact_no_check (compile_f_ok q_P [] gid1 4 qn_g qneg_b eq_refl eq_refl (no_callees q_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) q_P [] gid1 4 qn_g qneg_b eq_refl eq_refl (no_callees q_P gid1) eq_refl eq_refl). Time Qed.
 Definition q_cs := [existT ftype qb_g qtail; existT ftype qb_g qsearch; existT ftype qb_g qand; existT ftype qb_g qor;
                     existT ftype qn_g qneg].
 Definition q_all := all_ok_callees q_P gid1 q_cs (conj qtail_ok (conj qsearch_ok (conj qand_ok (conj qor_ok (conj qneg_ok Logic.I))))).
 Time Lemma qgo_ok : callee_ok q_P (gid1 5) (cbz 5) qc_g qgo.
-Proof. Time exact_no_check (compile_f_ok q_P q_cs gid1 5 qc_g qgo_b eq_refl eq_refl q_all eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) q_P q_cs gid1 5 qc_g qgo_b eq_refl eq_refl q_all eq_refl eq_refl). Time Qed.
 Time Lemma qval_ok : callee_ok q_P (gid1 6) (cbz 6) qc_g qval.
-Proof. Time exact_no_check (compile_f_ok q_P q_cs gid1 6 qc_g qval_b eq_refl eq_refl q_all eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) q_P q_cs gid1 6 qc_g qval_b eq_refl eq_refl q_all eq_refl eq_refl). Time Qed.
 Time Lemma qpick_ok : callee_ok q_P (gid1 7) (cbz 7) qp_g qpick.
-Proof. Time exact_no_check (compile_f_ok q_P q_cs gid1 7 qp_g qpick_b eq_refl eq_refl q_all eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) q_P q_cs gid1 7 qp_g qpick_b eq_refl eq_refl q_all eq_refl eq_refl). Time Qed.
 Print Assumptions qgo_ok.
 (* the KQL: a loop where the call is at the end, a call and [lxor 1] for the negation; the caller's choice a conditional move *)
 Check (eq_refl : has_loop (kbody (compile_f gid1 2 qb_g qand_b)) = true).
@@ -14503,17 +14639,17 @@ Definition j_P := mkprog [(gid1 0, compile_f gid1 0 jp_g jtail_b); (gid1 1, comp
                           (gid1 2, compile_f gid1 2 jx_g jif_b); (gid1 3, compile_f gid1 3 jx_g jgo_b);
                           (gid1 4, compile_f gid1 4 jx_g jlet_b)] [].
 Time Lemma jtail_ok : callee_ok j_P (gid1 0) (cbz 0) jp_g jtail.
-Proof. Time exact_no_check (compile_f_ok j_P [] gid1 0 jp_g jtail_b eq_refl eq_refl (no_callees j_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) j_P [] gid1 0 jp_g jtail_b eq_refl eq_refl (no_callees j_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma jnon_ok : callee_ok j_P (gid1 1) (cbz 1) jp_g jnon.
-Proof. Time exact_no_check (compile_f_ok j_P [] gid1 1 jp_g jnon_b eq_refl eq_refl (no_callees j_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) j_P [] gid1 1 jp_g jnon_b eq_refl eq_refl (no_callees j_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma jif_ok : callee_ok j_P (gid1 2) (cbz 2) jx_g jif.
-Proof. Time exact_no_check (compile_f_ok j_P [] gid1 2 jx_g jif_b eq_refl eq_refl (no_callees j_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) j_P [] gid1 2 jx_g jif_b eq_refl eq_refl (no_callees j_P gid1) eq_refl eq_refl). Time Qed.
 Definition j_cs := [existT ftype jp_g jtail; existT ftype jp_g jnon].
 Definition j_all := all_ok_callees j_P gid1 j_cs (conj jtail_ok (conj jnon_ok Logic.I)).
 Time Lemma jgo_ok : callee_ok j_P (gid1 3) (cbz 3) jx_g jgo.
-Proof. Time exact_no_check (compile_f_ok j_P j_cs gid1 3 jx_g jgo_b eq_refl eq_refl j_all eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) j_P j_cs gid1 3 jx_g jgo_b eq_refl eq_refl j_all eq_refl eq_refl). Time Qed.
 Time Lemma jlet_ok : callee_ok j_P (gid1 4) (cbz 4) jx_g jlet.
-Proof. Time exact_no_check (compile_f_ok j_P j_cs gid1 4 jx_g jlet_b eq_refl eq_refl j_all eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) j_P j_cs gid1 4 jx_g jlet_b eq_refl eq_refl j_all eq_refl eq_refl). Time Qed.
 Print Assumptions jgo_ok.
 (* the KQL: the loop's call at the end a loop, the recursion taking its pair apart a call *)
 Check (eq_refl : has_loop (kbody (compile_f gid1 0 jp_g jtail_b)) = true).
@@ -14574,21 +14710,21 @@ Definition d_P := mkprog [(gid1 0, compile_f gid1 0 d1_g dopt_b); (gid1 1, compi
                           (gid1 2, compile_f gid1 2 dpar_g dpar_b); (gid1 3, compile_f gid1 3 dres_g dres_b);
                           (gid1 4, compile_f gid1 4 dgo_g dgo_b); (gid1 5, compile_f gid1 5 dstate_g dstate_b)] [].
 Time Lemma dopt_ok : callee_ok d_P (gid1 0) (cbz 0) d1_g dopt.
-Proof. Time exact_no_check (compile_f_ok d_P [] gid1 0 d1_g dopt_b eq_refl eq_refl (no_callees d_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) d_P [] gid1 0 d1_g dopt_b eq_refl eq_refl (no_callees d_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma dsum_ok : callee_ok d_P (gid1 1) (cbz 1) d1_g dsum.
-Proof. Time exact_no_check (compile_f_ok d_P [] gid1 1 d1_g dsum_b eq_refl eq_refl (no_callees d_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) d_P [] gid1 1 d1_g dsum_b eq_refl eq_refl (no_callees d_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma dpar_ok : callee_ok d_P (gid1 2) (cbz 2) dpar_g dpar.
-Proof. Time exact_no_check (compile_f_ok d_P [] gid1 2 dpar_g dpar_b eq_refl eq_refl (no_callees d_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) d_P [] gid1 2 dpar_g dpar_b eq_refl eq_refl (no_callees d_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma dres_ok : callee_ok d_P (gid1 3) (cbz 3) dres_g dres.
-Proof. Time exact_no_check (compile_f_ok d_P [] gid1 3 dres_g dres_b eq_refl eq_refl (no_callees d_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) d_P [] gid1 3 dres_g dres_b eq_refl eq_refl (no_callees d_P gid1) eq_refl eq_refl). Time Qed.
 Definition d_cs := [existT ftype d1_g dopt; existT ftype d1_g dsum; existT ftype dpar_g dpar; existT ftype dres_g dres].
 Time Lemma dgo_ok : callee_ok d_P (gid1 4) (cbz 4) dgo_g dgo.
 Proof.
-  Time exact_no_check (compile_f_ok d_P d_cs gid1 4 dgo_g dgo_b eq_refl eq_refl
+  Time exact_no_check (compile_f_ok (KFs := no_kfuns) d_P d_cs gid1 4 dgo_g dgo_b eq_refl eq_refl
     (all_ok_callees d_P gid1 d_cs (conj dopt_ok (conj dsum_ok (conj dpar_ok (conj dres_ok Logic.I))))) eq_refl eq_refl).
 Time Qed.
 Time Lemma dstate_ok : callee_ok d_P (gid1 5) (cbz 5) dstate_g dstate.
-Proof. Time exact_no_check (compile_f_ok d_P [] gid1 5 dstate_g dstate_b eq_refl eq_refl (no_callees d_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) d_P [] gid1 5 dstate_g dstate_b eq_refl eq_refl (no_callees d_P gid1) eq_refl eq_refl). Time Qed.
 Print Assumptions dgo_ok.
 (* refused: a constructor's number not written, a field after the constructor's own not zero, a tag beyond the constructors *)
 Check (eq_refl : wf_f [] d1_g (FPlain (SMatchR (RMk 0 (SCons (SVar 0) (SCons (SInt 0) SNil))) (SVar 0))) = false).
@@ -14628,25 +14764,25 @@ Definition n_P := mkprog [(gid1 0, compile_f gid1 0 n12_g nceq_b); (gid1 1, comp
                           (gid1 4, compile_f gid1 4 n11_g nloop_b); (gid1 5, compile_f gid1 5 n11_g npk_b);
                           (gid1 6, compile_f gid1 6 n12_g npgo_b); (gid1 7, compile_f gid1 7 n11_g npv_b)] [].
 Time Lemma nceq_ok : callee_ok n_P (gid1 0) (cbz 0) n12_g nceq.
-Proof. Time exact_no_check (compile_f_ok n_P [] gid1 0 n12_g nceq_b eq_refl eq_refl (no_callees n_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) n_P [] gid1 0 n12_g nceq_b eq_refl eq_refl (no_callees n_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma nclt_ok : callee_ok n_P (gid1 1) (cbz 1) n12_g nclt.
-Proof. Time exact_no_check (compile_f_ok n_P [] gid1 1 n12_g nclt_b eq_refl eq_refl (no_callees n_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) n_P [] gid1 1 n12_g nclt_b eq_refl eq_refl (no_callees n_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma ncle_ok : callee_ok n_P (gid1 2) (cbz 2) n21_g ncle.
-Proof. Time exact_no_check (compile_f_ok n_P [] gid1 2 n21_g ncle_b eq_refl eq_refl (no_callees n_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) n_P [] gid1 2 n21_g ncle_b eq_refl eq_refl (no_callees n_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma ncv_ok : callee_ok n_P (gid1 3) (cbz 3) n12_g ncv.
-Proof. Time exact_no_check (compile_f_ok n_P [] gid1 3 n12_g ncv_b eq_refl eq_refl (no_callees n_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) n_P [] gid1 3 n12_g ncv_b eq_refl eq_refl (no_callees n_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma nloop_ok : callee_ok n_P (gid1 4) (cbz 4) n11_g nloop.
-Proof. Time exact_no_check (compile_f_ok n_P [] gid1 4 n11_g nloop_b eq_refl eq_refl (no_callees n_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) n_P [] gid1 4 n11_g nloop_b eq_refl eq_refl (no_callees n_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma npk_ok : callee_ok n_P (gid1 5) (cbz 5) n11_g npk.
-Proof. Time exact_no_check (compile_f_ok n_P [] gid1 5 n11_g npk_b eq_refl eq_refl (no_callees n_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) n_P [] gid1 5 n11_g npk_b eq_refl eq_refl (no_callees n_P gid1) eq_refl eq_refl). Time Qed.
 Definition n_cs := [existT ftype n12_g nceq; existT ftype n12_g nclt; existT ftype n21_g ncle; existT ftype n12_g ncv;
                     existT ftype n11_g nloop; existT ftype n11_g npk].
 Definition n_cs_ok := conj nceq_ok (conj nclt_ok (conj ncle_ok (conj ncv_ok (conj nloop_ok (conj npk_ok Logic.I))))).
 Time Lemma npgo_ok : callee_ok n_P (gid1 6) (cbz 6) n12_g npgo.
-Proof. Time exact_no_check (compile_f_ok n_P n_cs gid1 6 n12_g npgo_b eq_refl eq_refl (all_ok_callees n_P gid1 n_cs n_cs_ok) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) n_P n_cs gid1 6 n12_g npgo_b eq_refl eq_refl (all_ok_callees n_P gid1 n_cs n_cs_ok) eq_refl eq_refl). Time Qed.
 Time Lemma npv_ok : callee_ok n_P (gid1 7) (cbz 7) n11_g npv.
 Proof.
-  Time exact_no_check (compile_f_ok n_P (n_cs ++ [existT ftype n12_g npgo]) gid1 7 n11_g npv_b eq_refl eq_refl
+  Time exact_no_check (compile_f_ok (KFs := no_kfuns) n_P (n_cs ++ [existT ftype n12_g npgo]) gid1 7 n11_g npv_b eq_refl eq_refl
     (all_ok_callees n_P gid1 (n_cs ++ [existT ftype n12_g npgo]) (conj nceq_ok (conj nclt_ok (conj ncle_ok (conj ncv_ok
       (conj nloop_ok (conj npk_ok (conj npgo_ok Logic.I)))))))) eq_refl eq_refl).
 Time Qed.
@@ -14659,7 +14795,7 @@ Definition nsel (n : nat) (a b : i63) : i63 := PrimInt63.add (if Nat.eqb n 3 the
 Definition nsel_b := FPlain (SOp Badd (SIfB (BCmpC Ceq (CVar 0) c3) (SVar 1) (SVar 0)) (SInt 1)).
 Definition nsel_P := mkprog [(gid1 0, compile_f gid1 0 n12_g nsel_b)] [].
 Time Lemma nsel_ok : callee_ok nsel_P (gid1 0) (cbz 0) n12_g nsel.
-Proof. Time exact_no_check (compile_f_ok nsel_P [] gid1 0 n12_g nsel_b eq_refl eq_refl (no_callees nsel_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) nsel_P [] gid1 0 n12_g nsel_b eq_refl eq_refl (no_callees nsel_P gid1) eq_refl eq_refl). Time Qed.
 Check (eq_refl : shape (kbody (compile_f gid1 0 n12_g nsel_b)) = (1, 0)%nat).
 Check (eq_refl : has_sel (kbody (compile_f gid1 2 n21_g ncle_b)) = false).
 (* refused: a signed comparison of counters, a wrong comparison (the check), the predecessor where the text has none *)
@@ -14679,10 +14815,10 @@ Definition ka_b := FRec (SVar 0) (SRec CNil (SCons (SOp Badd (SVar 0) (SInt 1)) 
 Definition kgo_b := FPlain (SCall 0 (CCons (CAdd (CVar 0) (CVar 0)) CNil) (SCons (SVar 1) SNil)).
 Definition ka_P := mkprog [(gid1 0, compile_f gid1 0 ka_g ka_b); (gid1 1, compile_f gid1 1 kgo_g kgo_b)] [].
 Time Lemma ka_ok : callee_ok ka_P (gid1 0) 4611686018427387904%Z ka_g ka.
-Proof. Time exact_no_check (compile_f_ok ka_P [] gid1 0 ka_g ka_b eq_refl eq_refl (no_callees ka_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) ka_P [] gid1 0 ka_g ka_b eq_refl eq_refl (no_callees ka_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma kgo_ok : callee_ok ka_P (gid1 1) 2305843009213693952%Z kgo_g kgo.
 Proof.
-  Time exact_no_check (compile_f_ok ka_P [existT ftype ka_g ka] gid1 1 kgo_g kgo_b eq_refl eq_refl
+  Time exact_no_check (compile_f_ok (KFs := no_kfuns) ka_P [existT ftype ka_g ka] gid1 1 kgo_g kgo_b eq_refl eq_refl
     (all_ok_callees ka_P gid1 [existT ftype ka_g ka] (conj ka_ok Logic.I)) eq_refl eq_refl).
 Time Qed.
 Print Assumptions kgo_ok.
@@ -14717,16 +14853,16 @@ Definition k35_P := mkprog [(gid1 0, compile_f gid1 0 ka_g ka_b); (gid1 1, compi
                             (gid1 2, compile_f gid1 2 n12_g kls_b); (gid1 3, compile_f gid1 3 n12_g kcmp_b);
                             (gid1 4, compile_f gid1 4 k61_g kmt_b)] [].
 Time Lemma k35a_ok : callee_ok k35_P (gid1 0) 4611686018427387904%Z ka_g ka.
-Proof. Time exact_no_check (compile_f_ok k35_P [] gid1 0 ka_g ka_b eq_refl eq_refl (no_callees k35_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) k35_P [] gid1 0 ka_g ka_b eq_refl eq_refl (no_callees k35_P gid1) eq_refl eq_refl). Time Qed.
 Definition k35_cs := [existT ftype ka_g ka].
 Time Lemma klet_ok : callee_ok k35_P (gid1 1) 2305843009213693952%Z k61_g klet.
-Proof. Time exact_no_check (compile_f_ok k35_P k35_cs gid1 1 k61_g klet_b eq_refl eq_refl (all_ok_callees k35_P gid1 k35_cs (conj k35a_ok Logic.I)) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) k35_P k35_cs gid1 1 k61_g klet_b eq_refl eq_refl (all_ok_callees k35_P gid1 k35_cs (conj k35a_ok Logic.I)) eq_refl eq_refl). Time Qed.
 Time Lemma kls_ok : callee_ok k35_P (gid1 2) (cbz 2) n12_g kls.
-Proof. Time exact_no_check (compile_f_ok k35_P k35_cs gid1 2 n12_g kls_b eq_refl eq_refl (all_ok_callees k35_P gid1 k35_cs (conj k35a_ok Logic.I)) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) k35_P k35_cs gid1 2 n12_g kls_b eq_refl eq_refl (all_ok_callees k35_P gid1 k35_cs (conj k35a_ok Logic.I)) eq_refl eq_refl). Time Qed.
 Time Lemma kcmp_ok : callee_ok k35_P (gid1 3) (cbz 3) n12_g kcmp.
-Proof. Time exact_no_check (compile_f_ok k35_P k35_cs gid1 3 n12_g kcmp_b eq_refl eq_refl (all_ok_callees k35_P gid1 k35_cs (conj k35a_ok Logic.I)) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) k35_P k35_cs gid1 3 n12_g kcmp_b eq_refl eq_refl (all_ok_callees k35_P gid1 k35_cs (conj k35a_ok Logic.I)) eq_refl eq_refl). Time Qed.
 Time Lemma kmt_ok : callee_ok k35_P (gid1 4) 2305843009213693952%Z k61_g kmt.
-Proof. Time exact_no_check (compile_f_ok k35_P k35_cs gid1 4 k61_g kmt_b eq_refl eq_refl (all_ok_callees k35_P gid1 k35_cs (conj k35a_ok Logic.I)) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) k35_P k35_cs gid1 4 k61_g kmt_b eq_refl eq_refl (all_ok_callees k35_P gid1 k35_cs (conj k35a_ok Logic.I)) eq_refl eq_refl). Time Qed.
 Print Assumptions kmt_ok.
 (* refused: a let of a sum at the index's bound (n + n can reach twice it, beyond a machine number's room), the recursive call given
    a let-bound sum (its counters must stay below the function's bound), a let-bound sum given to a callee whose bound it passes,
@@ -14762,19 +14898,19 @@ Definition k37_P := mkprog [(gid1 0, compile_f gid1 0 krs_g krs_b); (gid1 1, com
                             (gid1 2, compile_f gid1 2 krw_g krw_b); (gid1 3, compile_f gid1 3 krl_g krl_b);
                             (gid1 4, compile_f gid1 4 krg_g krg_b); (gid1 5, compile_f gid1 5 krp_g krp_b)] [].
 Time Lemma krs_ok : callee_ok k37_P (gid1 0) 4611686018427387904%Z krs_g krs.
-Proof. Time exact_no_check (compile_f_ok k37_P [] gid1 0 krs_g krs_b eq_refl eq_refl (no_callees k37_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) k37_P [] gid1 0 krs_g krs_b eq_refl eq_refl (no_callees k37_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma krt_ok : callee_ok k37_P (gid1 1) 4611686018427387904%Z krt_g krt.
-Proof. Time exact_no_check (compile_f_ok k37_P [] gid1 1 krt_g krt_b eq_refl eq_refl (no_callees k37_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) k37_P [] gid1 1 krt_g krt_b eq_refl eq_refl (no_callees k37_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma krw_ok : callee_ok k37_P (gid1 2) 4611686018427387904%Z krw_g krw.
-Proof. Time exact_no_check (compile_f_ok k37_P [] gid1 2 krw_g krw_b eq_refl eq_refl (no_callees k37_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) k37_P [] gid1 2 krw_g krw_b eq_refl eq_refl (no_callees k37_P gid1) eq_refl eq_refl). Time Qed.
 Time Lemma krl_ok : callee_ok k37_P (gid1 3) 2305843009213693952%Z krl_g krl.
-Proof. Time exact_no_check (compile_f_ok k37_P [] gid1 3 krl_g krl_b eq_refl eq_refl (no_callees k37_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) k37_P [] gid1 3 krl_g krl_b eq_refl eq_refl (no_callees k37_P gid1) eq_refl eq_refl). Time Qed.
 Definition k37_cs := [existT ftype krs_g krs].
 Time Lemma krg_ok : callee_ok k37_P (gid1 4) 2305843009213693952%Z krg_g krg.
-Proof. Time exact_no_check (compile_f_ok k37_P k37_cs gid1 4 krg_g krg_b eq_refl eq_refl (all_ok_callees k37_P gid1 k37_cs (conj krs_ok Logic.I)) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) k37_P k37_cs gid1 4 krg_g krg_b eq_refl eq_refl (all_ok_callees k37_P gid1 k37_cs (conj krs_ok Logic.I)) eq_refl eq_refl). Time Qed.
 (* without weights: the recursion given the successor of the predecessor, at most the first counter (its linear bound) *)
 Time Lemma krp_ok : callee_ok k37_P (gid1 5) 4611686018427387904%Z krp_g krp.
-Proof. Time exact_no_check (compile_f_ok k37_P [] gid1 5 krp_g krp_b eq_refl eq_refl (no_callees k37_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) k37_P [] gid1 5 krp_g krp_b eq_refl eq_refl (no_callees k37_P gid1) eq_refl eq_refl). Time Qed.
 Print Assumptions krs_ok.
 (* refused: the growth without weights (each counter below the bound cannot hold S m), weights too small for m + 2, a zero weight,
    a counter grown by the predecessor (k p (m + p) grows quadratically: no weights of degree 1 bound it), a call
@@ -14804,10 +14940,10 @@ Definition krd_b := FRec (SVar 0) (SRec (CCons (CS (CVar 2)) (CCons (CS (CVar 1)
 Definition krdg_b := FPlain (SCall 0 (CCons (CVar 0) (CCons (CVar 0) (CCons (CVar 0) CNil))) (SCons (SVar 0) SNil)).
 Definition k38_P := mkprog [(gid1 0, compile_f gid1 0 krd_g krd_b); (gid1 1, compile_f gid1 1 krdg_g krdg_b)] [].
 Time Lemma krd_ok : callee_ok k38_P (gid1 0) 4611686018427387904%Z krd_g krd.
-Proof. Time exact_no_check (compile_f_ok k38_P [] gid1 0 krd_g krd_b eq_refl eq_refl (no_callees k38_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) k38_P [] gid1 0 krd_g krd_b eq_refl eq_refl (no_callees k38_P gid1) eq_refl eq_refl). Time Qed.
 Definition k38_cs := [existT ftype krd_g krd].
 Time Lemma krdg_ok : callee_ok k38_P (gid1 1) 2305843009213693952%Z krdg_g krdg.
-Proof. Time exact_no_check (compile_f_ok k38_P k38_cs gid1 1 krdg_g krdg_b eq_refl eq_refl (all_ok_callees k38_P gid1 k38_cs (conj krd_ok Logic.I)) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) k38_P k38_cs gid1 1 krdg_g krdg_b eq_refl eq_refl (all_ok_callees k38_P gid1 k38_cs (conj krd_ok Logic.I)) eq_refl eq_refl). Time Qed.
 Print Assumptions krdg_ok.
 (* refused: one weighted sum of the three (its weights add to 4: n n n at the caller's bound passes the callee's), a counter no
    vector covers, a vector whose sum grows *)
@@ -14826,10 +14962,10 @@ Definition krq_b := FRec (SVar 0) (SRec (CCons (CAdd (CVar 1) (CVar 0)) CNil) (S
 Definition krqg_b := FPlain (SCall 0 (CCons (CNat (SInt 100)) (CCons CO CNil)) (SCons (SVar 0) SNil)).
 Definition k39_P := mkprog [(gid1 0, compile_f gid1 0 krq_g krq_b); (gid1 1, compile_f gid1 1 krqg_g krqg_b)] [].
 Time Lemma krq_ok : callee_ok k39_P (gid1 0) 2305843009213693952%Z krq_g krq.
-Proof. Time exact_no_check (compile_f_ok k39_P [] gid1 0 krq_g krq_b eq_refl eq_refl (no_callees k39_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) k39_P [] gid1 0 krq_g krq_b eq_refl eq_refl (no_callees k39_P gid1) eq_refl eq_refl). Time Qed.
 Definition k39_cs := [existT ftype krq_g krq].
 Time Lemma krqg_ok : callee_ok k39_P (gid1 1) 2305843009213693952%Z krqg_g krqg.
-Proof. Time exact_no_check (compile_f_ok k39_P k39_cs gid1 1 krqg_g krqg_b eq_refl eq_refl (all_ok_callees k39_P gid1 k39_cs (conj krq_ok Logic.I)) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) k39_P k39_cs gid1 1 krqg_g krqg_b eq_refl eq_refl (all_ok_callees k39_P gid1 k39_cs (conj krq_ok Logic.I)) eq_refl eq_refl). Time Qed.
 Print Assumptions krqg_ok.
 (* refused: the same given n n from the data (the polynomial at the caller's bound passes the callee's: the counter outgrows a
    machine number), a degree-1 polynomial (the growth by the predecessor is not linear), a counter with no monomial of its own *)
@@ -14851,13 +14987,13 @@ Definition kpasg_b := FPlain (SCall 1 (CCons (CNat (SInt 3)) (CCons (CNat (SInt 
 Definition k40_P := mkprog [(gid1 0, compile_f gid1 0 krq40_g krq_b); (gid1 1, compile_f gid1 1 kpas_g kpas_b);
                             (gid1 2, compile_f gid1 2 kpasg_g kpasg_b)] [].
 Time Lemma krq40_ok : callee_ok k40_P (gid1 0) 20000%Z krq40_g krq.
-Proof. Time exact_no_check (compile_f_ok k40_P [] gid1 0 krq40_g krq_b eq_refl eq_refl (no_callees k40_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) k40_P [] gid1 0 krq40_g krq_b eq_refl eq_refl (no_callees k40_P gid1) eq_refl eq_refl). Time Qed.
 Definition k40_cs := [existT ftype krq40_g krq].
 Time Lemma kpas_ok : callee_ok k40_P (gid1 1) 101%Z kpas_g kpas.
-Proof. Time exact_no_check (compile_f_ok k40_P k40_cs gid1 1 kpas_g kpas_b eq_refl eq_refl (all_ok_callees k40_P gid1 k40_cs (conj krq40_ok Logic.I)) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) k40_P k40_cs gid1 1 kpas_g kpas_b eq_refl eq_refl (all_ok_callees k40_P gid1 k40_cs (conj krq40_ok Logic.I)) eq_refl eq_refl). Time Qed.
 Definition k40_cs2 := [existT ftype krq40_g krq; existT ftype kpas_g kpas].
 Time Lemma kpasg_ok : callee_ok k40_P (gid1 2) 2305843009213693952%Z kpasg_g kpasg.
-Proof. Time exact_no_check (compile_f_ok k40_P k40_cs2 gid1 2 kpasg_g kpasg_b eq_refl eq_refl (all_ok_callees k40_P gid1 k40_cs2 (conj krq40_ok (conj kpas_ok Logic.I))) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) k40_P k40_cs2 gid1 2 kpasg_g kpasg_b eq_refl eq_refl (all_ok_callees k40_P gid1 k40_cs2 (conj krq40_ok (conj kpas_ok Logic.I))) eq_refl eq_refl). Time Qed.
 Print Assumptions kpasg_ok.
 (* refused: a written budget above a small bound given to the recursion or bound by a let, a caller giving more than the bound *)
 Check (eq_refl : wf_f [] (mksig7 2 (nk 1) false false false None (Some 50%Z))

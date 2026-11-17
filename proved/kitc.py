@@ -897,6 +897,8 @@ def reflect(name, entry, prog, no_proof, closed=False):
               f"- intros i x E. destruct i as {dpat}; cbn in E; try discriminate E; reflexivity.\nQed.\n")
     else:
         inst, laws = "KQR.no_recs", "KQR.no_recs_laws"
+    # (step 146) the program's functions giving back a counter used as counters (KQR.KFuns): none yet
+    kfi = "KQR.no_kfuns"
     # a mutual block's meaning (step 45): blkT at the program's record types
     t += f"MetaRocq Run (monad_iter (fun p => tmMkDefinition (fst p) (snd p)) (KQRReify.blk_mts <% @{inst} %> {name}_mts)).\n"
     t += f"Definition {name}_funs := match {name}_src with Some l => l | None => [] end.\n"
@@ -1198,7 +1200,7 @@ def reflect(name, entry, prog, no_proof, closed=False):
             if kj and not isv:
                 # (step 145) its bound KQRK's, proved once (KQRK.kbound_ok), by conversion with what the reader states
                 g, bk = fs[kj[0]], f"(KQRReify.body_at {name}_funs {kj[0]})"
-                t += (f"Lemma {name}_bd{j} : {m}.\nProof. exact_no_check (@KQRK.kbound_ok {inst} nil {int(g[1]) - 1} {kl(g)} {g[3]}"
+                t += (f"Lemma {name}_bd{j} : {m}.\nProof. exact_no_check (@KQRK.kbound_ok {inst} {kfi} nil {int(g[1]) - 1} {kl(g)} {g[3]}"
                       f" (KQRK.unrow_kb0 {bk}) (KQRK.unrow_kb1 {bk}) eq_refl). Qed.\n")
             elif r >= ar:
                 t += (f"Lemma {name}_bd{j} : {m}.\nProof. unfold {m}. intros; unfold {fn}. {nbs} ltac:(repeat first [{bprev}]). Qed.\n")
@@ -1273,12 +1275,12 @@ def reflect(name, entry, prog, no_proof, closed=False):
                     # (step 138) where its counters are held by weights, callee_ok_eqv, the weights its argument
                     eql, vsa = ("callee_ok_eqv", f" {wsl(f)}") if wsl(f) != "nil" else ("callee_ok_eqb", "")
                     t += (f"Proof. exact_no_check (@KQR.{eql} {inst} {name}_prog (KQR.gid1 {j}) {bnz(f, j)}%Z {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)}{vsa} ({roomR}) {W} {f[0]} {rr0}"
-                          f" (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j}) eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl)). Qed.\n")
+                          f" (@KQR.compile_f_ok {inst} {kfi} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j}) eq_refl eq_refl (@KQR.all_ok_callees {inst} {kfi} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl)). Qed.\n")
                     continue
                 t += (f"Proof. exact_no_check (@KQR.callee_ok_eqr {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)} {wsl(f)} ({roomR}) {W} {f[0]} {name}_room {rq0}"
-                      f" (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j}) eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl)). Qed.\n" if vmr and f[0] in yf else
+                      f" (@KQR.compile_f_ok {inst} {kfi} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j}) eq_refl eq_refl (@KQR.all_ok_callees {inst} {kfi} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl)). Qed.\n" if vmr and f[0] in yf else
                       f"Proof. exact_no_check (@KQR.callee_ok_eq {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)} {wsl(f)} {W} {f[0]} {rq0}"
-                      f" (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j}) eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl)). Qed.\n")
+                      f" (@KQR.compile_f_ok {inst} {kfi} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j}) eq_refl eq_refl (@KQR.all_ok_callees {inst} {kfi} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl)). Qed.\n")
                 continue
             t += f"Lemma {name}_rok{j} : @KQR.callee_ok {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {sig(f)} {f[0]}.\n"
             # (step 45) a member of a mutual block is one call of its block: not a fix over its counter
@@ -1286,8 +1288,8 @@ def reflect(name, entry, prog, no_proof, closed=False):
             prec = isp(f) and not iskit(f) and (iscp(f[0]) or f[0] in fix1)
             if iskit(f):
                 # (step 93) its theorem under the signature without the flag, the same for a function that takes no memory
-                t += (f"Proof. exact_no_check (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sigc(f)} (KQRReify.body_at {name}_funs {j})"
-                      f" eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl). Qed.\n")
+                t += (f"Proof. exact_no_check (@KQR.compile_f_ok {inst} {kfi} {laws} {name}_prog {cs} KQR.gid1 {j} {sigc(f)} (KQRReify.body_at {name}_funs {j})"
+                      f" eq_refl eq_refl (@KQR.all_ok_callees {inst} {kfi} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl). Qed.\n")
             elif iscp(f[0]) or isw(f[0]) or prec or f[0] in cv:
                 # a copy: not a fix over its counter, so its statement comes from its two equations, each by conversion
                 # (a copy that writes the memory and gives back a number has a memory: no memory argument)
@@ -1307,8 +1309,8 @@ def reflect(name, entry, prog, no_proof, closed=False):
                 dead = f[0] + "__g" in made
                 hh = (f"(KQR.cmapT {f[1]} (KQR.ntypeTP {kl(f)} (KQR.rtq {f[4]} {rq(f)})) (KQR.ntypeT {kl(f)} true (KQR.rtq {f[4]} {rq(f)}))"
                       f" (KQR.unpairT {kl(f)} (KQR.rtq {f[4]} {rq(f)})) {f[0]})") if prec else f"({f[0]}__g u)" if dead else f[0]
-                core = (f"(@KQR.{thm} {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {int(f[1]) - 1} {kl(f)}{mm} ({p0} {b}) ({p1} {b})"
-                        f" {bo(f)} {ws(f)}{ri} {hh} eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl eq_refl"
+                core = (f"(@KQR.{thm} {inst} {kfi} {laws} {name}_prog {cs} KQR.gid1 {j} {int(f[1]) - 1} {kl(f)}{mm} ({p0} {b}) ({p1} {b})"
+                        f" {bo(f)} {ws(f)}{ri} {hh} eq_refl eq_refl (@KQR.all_ok_callees {inst} {kfi} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl eq_refl"
                         f" (fun n => {'ltac:(reflexivity)' if prec else 'eq_refl'}))")
                 if prec:
                     core = (f"(@KQR.callee_ok_unpair {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {f[1]} {kl(f)} {f[4]} {f[5]}"
@@ -1320,22 +1322,22 @@ def reflect(name, entry, prog, no_proof, closed=False):
             elif isp(f):
                 # the pair (step 44): the theorem of the function on the two components, then the function's own
                 t += (f"Proof. exact_no_check (@KQR.callee_ok_unpair {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {f[1]} {kl(f)} {f[4]} {f[5]}"
-                      f" {rq(f)} {bo(f)} {wsl(f)} {f[0]} (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sigc(f)}"
-                      f" (KQRReify.body_at {name}_funs {j}) eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks})"
+                      f" {rq(f)} {bo(f)} {wsl(f)} {f[0]} (@KQR.compile_f_ok {inst} {kfi} {laws} {name}_prog {cs} KQR.gid1 {j} {sigc(f)}"
+                      f" (KQRReify.body_at {name}_funs {j}) eq_refl eq_refl (@KQR.all_ok_callees {inst} {kfi} {name}_prog KQR.gid1 {cs} {oks})"
                       f" eq_refl eq_refl)). Qed.\n")
             elif f[0].rsplit(".", 1)[-1] + "__kr" in made:
                 # (step 143) a row made from KQRK's syntax: the theorem of its body's meaning, then of the function made a number, equal
                 # to it at every argument by KQRK.row_of_ok -- proved once -- and conversion; the counter body read back from the row
                 b = f"(KQRReify.body_at {name}_funs {j})"
                 t += (f"Proof. exact_no_check (@KQR.callee_ok_eq {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)} {wsl(f)}"
-                      f" (@KQR.denote_f {inst} {cs} {sig(f)} {b}) {f[0]}"
-                      f" (@KQRK.row_of_ok {inst} {laws} {cs} {int(f[1]) - 1} {kl(f)} {f[3]} {f[5]} {bo(f)} {wsl(f)} (KQRK.unrow_kb0 {b}) (KQRK.unrow_kb1 {b})"
+                      f" (@KQR.denote_f {inst} {kfi} {cs} {sig(f)} {b}) {f[0]}"
+                      f" (@KQRK.row_of_ok {inst} {kfi} {laws} {cs} {int(f[1]) - 1} {kl(f)} {f[3]} {f[5]} {bo(f)} {wsl(f)} (KQRK.unrow_kb0 {b}) (KQRK.unrow_kb1 {b})"
                       f" (KQR.fr0 {b}) (KQR.fr1 {b}) eq_refl eq_refl eq_refl eq_refl)"
-                      f" (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} {b}"
-                      f" eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl)). Qed.\n")
+                      f" (@KQR.compile_f_ok {inst} {kfi} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} {b}"
+                      f" eq_refl eq_refl (@KQR.all_ok_callees {inst} {kfi} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl)). Qed.\n")
             else:
-                t += (f"Proof. exact_no_check (@KQR.compile_f_ok {inst} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j})"
-                      f" eq_refl eq_refl (@KQR.all_ok_callees {inst} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl). Qed.\n")
+                t += (f"Proof. exact_no_check (@KQR.compile_f_ok {inst} {kfi} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} (KQRReify.body_at {name}_funs {j})"
+                      f" eq_refl eq_refl (@KQR.all_ok_callees {inst} {kfi} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl). Qed.\n")
             if shared:
                 # the sequential meaning describes the program only if it reaches its shared blocks through marked operations
                 t += f"Lemma {name}_rsh{j} : KQR.sh_ok {shared} (KQRReify.body_at {name}_funs {j}) = true.\nProof. exact eq_refl. Qed.\n"

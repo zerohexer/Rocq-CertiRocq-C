@@ -49,7 +49,7 @@ Time Lemma chain30_is : chain30 = denote_f [] chain_g chain30_b.
 Proof. Time exact_no_check (eq_refl chain30). Time Qed.
 Definition chain30_P := mkprog [(gid1 0, compile_f gid1 0 chain_g chain30_b)] [].
 Time Lemma chain30_ok : callee_ok chain30_P (gid1 0) (cbz 0) chain_g chain30.
-Proof. Time exact_no_check (compile_f_ok chain30_P [] gid1 0 chain_g chain30_b eq_refl eq_refl (no_callees chain30_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) chain30_P [] gid1 0 chain_g chain30_b eq_refl eq_refl (no_callees chain30_P gid1) eq_refl eq_refl). Time Qed.
 
 Definition chain100 (s : mem) : mem :=
   let s1 := KQ.KQRun.upd 0 1 (PrimInt63.add (KQ.KQRun.rd 0 0 s) 1) s in
@@ -158,7 +158,7 @@ Time Lemma chain100_is : chain100 = denote_f [] chain_g chain100_b.
 Proof. Time exact_no_check (eq_refl chain100). Time Qed.
 Definition chain100_P := mkprog [(gid1 0, compile_f gid1 0 chain_g chain100_b)] [].
 Time Lemma chain100_ok : callee_ok chain100_P (gid1 0) (cbz 0) chain_g chain100.
-Proof. Time exact_no_check (compile_f_ok chain100_P [] gid1 0 chain_g chain100_b eq_refl eq_refl (no_callees chain100_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) chain100_P [] gid1 0 chain_g chain100_b eq_refl eq_refl (no_callees chain100_P gid1) eq_refl eq_refl). Time Qed.
 
 Definition chain300 (s : mem) : mem :=
   let s1 := KQ.KQRun.upd 0 1 (PrimInt63.add (KQ.KQRun.rd 0 0 s) 1) s in
@@ -467,6 +467,6 @@ Time Lemma chain300_is : chain300 = denote_f [] chain_g chain300_b.
 Proof. Time exact_no_check (eq_refl chain300). Time Qed.
 Definition chain300_P := mkprog [(gid1 0, compile_f gid1 0 chain_g chain300_b)] [].
 Time Lemma chain300_ok : callee_ok chain300_P (gid1 0) (cbz 0) chain_g chain300.
-Proof. Time exact_no_check (compile_f_ok chain300_P [] gid1 0 chain_g chain300_b eq_refl eq_refl (no_callees chain300_P gid1) eq_refl eq_refl). Time Qed.
+Proof. Time exact_no_check (compile_f_ok (KFs := no_kfuns) chain300_P [] gid1 0 chain_g chain300_b eq_refl eq_refl (no_callees chain300_P gid1) eq_refl eq_refl). Time Qed.
 
 Print Assumptions chain300_ok.
