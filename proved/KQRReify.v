@@ -3347,7 +3347,7 @@ Definition krow_src (Σ : global_env) (kn : kername) : option (kername * term) :
     end
   else None.
 
-(** (step 147) the program's counter functions among the callees read so far, as kitc.py gives them to the proof (KQRK.kfuns_of):
+(** (step 147) the program's counter functions among the callees read so far, as kitc.py gives them to the proof (KQRK.kfb):
     each row KQRK's syntax makes whose bound is KQRK's *)
 Fixpoint ends_k0rp (s : string) : bool :=
   if String.eqb s "__k0__rp__wy"%bs then true else match s with String.EmptyString => false | String.String _ r => ends_k0rp r end.
@@ -3775,7 +3775,7 @@ Definition reify_fun_d (dm : bool) (Σ : global_env) (hb : kername -> option ter
   (callees : list (kername * sig)) (kn : kername) (bt : kername -> option Z) (chk : bool) : option (sig * fbody) :=
   match (if dm then read_fun_p true Σ hb tc rt callees kn else read_fun Σ hb tc rt callees kn) with
   | Some (gs, b) =>
-      let wfok := fun gs => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt) rt) (KQRK.kfuns_of (rd_kents Σ callees)) (map snd callees) (with_sp false gs) b in
+      let wfok := fun gs => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt) rt) (KQRK.kfb (rev (rd_kents Σ callees))) (map snd callees) (with_sp false gs) b in
       if negb chk then Some (gs, b) else
       (* the signature [wf_f] takes (steps 33, 34, 37); a function with the pair checked on the components (step 44) *)
       option_map (fun g => (with_sp (sp gs) g, b)) (wf_sig wfok gs b (bt kn))
@@ -4439,7 +4439,7 @@ Fixpoint ensure (fuel : nat) (Σ : global_env) (mp : modpath) (hb : kername -> o
                 | Some (es, tbl) =>
                     let ckn := (MPfile ["kqcopy"%bs], snd T ^ "__c" ^ string_of_nat (length tbl)) in
                     match read_def hb (tc_of Σ mp tbl) rt (callees_of es) d [] capk with
-                    | Some (gs, b) => match option_map (with_sp (sp gs)) (if chk then wf_sig (fun g => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt) rt) (KQRK.kfuns_of (rd_kents Σ (callees_of es))) (map snd (callees_of es)) (with_sp false g) b) gs b (bt ckn) else Some gs) with
+                    | Some (gs, b) => match option_map (with_sp (sp gs)) (if chk then wf_sig (fun g => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt) rt) (KQRK.kfb (rev (rd_kents Σ (callees_of es)))) (map snd (callees_of es)) (with_sp false g) b) gs b (bt ckn) else Some gs) with
                                       | Some g => Some (es ++ [(ckn, g, b)], tbl ++ [(T, (fargs, capk), ckn, lfix_meaning fx tys capk (match fx with tFix [d] 0 => nonfn_perm tys (rarg d) | _ => seq 0 (length tys) end))])
                                       | None => None
                                       end
@@ -4486,7 +4486,7 @@ Fixpoint ensure (fuel : nat) (Σ : global_env) (mp : modpath) (hb : kername -> o
                       end
                   | _ =>
                   match read_tmpl Σ hb (tc_of Σ mp tbl) rt (callees_of es) T fargs capk with
-                  | Some (gs, b) => match option_map (with_sp (sp gs)) (if chk then wf_sig (fun g => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt) rt) (KQRK.kfuns_of (rd_kents Σ (callees_of es))) (map snd (callees_of es)) (with_sp false g) b) gs b (bt ckn) else Some gs) with
+                  | Some (gs, b) => match option_map (with_sp (sp gs)) (if chk then wf_sig (fun g => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt) rt) (KQRK.kfb (rev (rd_kents Σ (callees_of es)))) (map snd (callees_of es)) (with_sp false g) b) gs b (bt ckn) else Some gs) with
                                     | Some g => Some (es ++ [(ckn, g, b)], tbl ++ [(T, (fargs, capk), ckn, copy_meaning T tys fargs capk (nonfn_perm tys (tmpl_rarg Σ T)))])
                                     | None => None
                                     end

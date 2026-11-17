@@ -713,51 +713,62 @@ Definition krow (x : nat) (k : list kind) (m : bool) (f : ctype (S x) (@ntypeT n
 Section KF.
 Context {RTs : RecTypes}.
 Record kent := mkkent { kj : nat; kx : nat; kk : list kind; km : bool; kb0 : sbk; kb1 : sbk }.
-Fixpoint kfind (l : list kent) (j : nat) : option kent :=
-  match l with [] => None | e :: r => if Nat.eqb (kj e) j then Some e else kfind r j end.
-Definition kbnd (e : kent) : option (Z * Z) := kbound (kx e) (kb0 e) (kb1 e).
-Definition kmeans (e : kent) : list nat -> list val -> mem -> nat :=
-  fun cvs vs s => appnT (kk e) (km e) nat (appc (S (kx e)) _ (@denote_kf RTs no_kfuns [] (kx e) (kk e) (km e) (kb0 e) (kb1 e)) cvs) vs s.
-Definition kf_is (l : list kent) (j : nat) : bool := match kfind l j with Some e => kbound_some (kbnd e) | None => false end.
-Definition kf_fn (l : list kent) (j : nat) : list nat -> list val -> mem -> nat :=
-  match kfind l j with Some e => if kbound_some (kbnd e) then kmeans e else (fun _ _ _ => O) | None => fun _ _ _ => O end.
-Definition kf_m (l : list kent) (j : nat) : bool := match kfind l j with Some e => km e | None => false end.
-Definition kf_w (l : list kent) (j : nat) : nat := match kfind l j with Some e => Z.to_nat (kbW (kbnd e)) | None => O end.
-Definition kf_k (l : list kent) (j : nat) : Z := match kfind l j with Some e => kbC (kbnd e) | None => 0%Z end.
-Lemma kf_k_nonneg : forall l j, (0 <= kf_k l j)%Z.
-Proof.
-  intros l j. unfold kf_k, kbnd. destruct (kfind l j) as [e|]; [|lia].
-  destruct (kbound (kx e) (kb0 e) (kb1 e)) as [[W C]|] eqn:E; cbn [kbC]; [|lia]. exact (proj2 (kbound_pos _ _ _ W C E)).
-Qed.
 Lemma appc_hd_tl : forall x T (h : ctype (S x) T) cvs, appc (S x) T h cvs = appc x T (h (hd O cvs)) (tl cvs).
 Proof. intros x T h [|c cvs]; reflexivity. Qed.
-Lemma kf_bound : forall l j cvs vs s,
-  (Z.of_nat (kf_fn l j cvs vs s) <= Z.of_nat (kf_w l j) * Z.of_nat (hd O cvs) + Z.of_nat (fold_right Nat.add O (tl cvs)) + kf_k l j)%Z.
-Proof.
-  intros l j cvs vs s. pose proof (kf_k_nonneg l j) as Kn. unfold kf_fn, kf_w, kf_k in *. destruct (kfind l j) as [e|]; [|cbn; lia].
-  unfold kbnd in *. destruct (kbound (kx e) (kb0 e) (kb1 e)) as [[W C]|] eqn:E; cbn [kbound_some kbW kbC] in *; [|cbn; lia].
-  pose proof (kbound_pos _ _ _ W C E) as [P1 P2]. unfold kmeans. rewrite appc_hd_tl.
-  pose proof (@kbound_list RTs no_kfuns [] (kx e) (kk e) (km e) (kb0 e) (kb1 e) W C E (hd O cvs) (tl cvs) vs s) as B.
-  unfold zsum in B. rewrite Z2Nat.id by lia. lia.
-Qed.
 Lemma appnT_nomem : forall ks T g vs s s', appnT ks false T g vs s = appnT ks false T g vs s'.
 Proof. induction ks as [|[| |ri] ks IH]; intros T g vs s s'; [reflexivity | destruct vs as [|[x|b|ri x] vs] | destruct vs as [|[x|b|ri x] vs] | destruct vs as [|v vs]]; apply IH. Qed.
-Lemma kf_mem : forall l j cvs vs s s', kf_m l j = false -> kf_fn l j cvs vs s = kf_fn l j cvs vs s'.
+(** (step 150) the program's counter functions, a row's syntax calling those before it: each entry's meaning at the instance of the
+    entries before it (the list the latest first); each field total, so that no proof is written per program *)
+Definition kmeans_at (I : @KFuns RTs) (e : kent) : list nat -> list val -> mem -> nat :=
+  fun cvs vs s => appnT (kk e) (km e) nat (appc (S (kx e)) _ (@denote_kf RTs I [] (kx e) (kk e) (km e) (kb0 e) (kb1 e)) cvs) vs s.
+Definition kbnd_at (I : @KFuns RTs) (e : kent) : option (Z * Z) := @kbound RTs I (kx e) (kb0 e) (kb1 e).
+Definition kfe_is (I : @KFuns RTs) (e : kent) (j : nat) : bool := if Nat.eqb j (kj e) then kbound_some (kbnd_at I e) else @kis _ I j.
+Definition kfe_fn (I : @KFuns RTs) (e : kent) (j : nat) : list nat -> list val -> mem -> nat :=
+  if Nat.eqb j (kj e) then (if kbound_some (kbnd_at I e) then kmeans_at I e else fun _ _ _ => O) else @kfn _ I j.
+Definition kfe_m (I : @KFuns RTs) (e : kent) (j : nat) : bool := if Nat.eqb j (kj e) then km e else @kfm _ I j.
+Definition kfe_w (I : @KFuns RTs) (e : kent) (j : nat) : nat := if Nat.eqb j (kj e) then Z.to_nat (kbW (kbnd_at I e)) else @kbw _ I j.
+Definition kfe_k (I : @KFuns RTs) (e : kent) (j : nat) : Z := if Nat.eqb j (kj e) then kbC (kbnd_at I e) else @kbk _ I j.
+Lemma kfe_k_nonneg : forall I e j, (0 <= kfe_k I e j)%Z.
 Proof.
-  intros l j cvs vs s s' M. unfold kf_m, kf_fn in *. destruct (kfind l j) as [e|]; [|reflexivity].
-  destruct (kbound_some (kbnd e)); [|reflexivity]. unfold kmeans. rewrite M. apply appnT_nomem.
+  intros I e j. unfold kfe_k. destruct (Nat.eqb j (kj e)); [|apply (@kbk_nonneg _ I)].
+  unfold kbnd_at. destruct (@kbound RTs I (kx e) (kb0 e) (kb1 e)) as [[W C]|] eqn:E; cbn [kbC]; [|lia].
+  exact (proj2 (@kbound_pos RTs I _ _ _ W C E)).
 Qed.
-Definition kfuns_of (l : list kent) : @KFuns RTs :=
-  {| kis := kf_is l; kfn := kf_fn l; kfm := kf_m l; kbw := kf_w l; kbk := kf_k l; kbk_nonneg := kf_k_nonneg l;
-     kfn_bound := kf_bound l; kfn_mem := kf_mem l |}.
-(** the callee of such an entry, the function made a number, called as a function of numbers, is it made a number *)
-Lemma krow_entry_ok : forall l j e w bo vw, kfind l j = Some e -> kbound_some (kbnd e) = true ->
-  @krow_entry RTs (kfuns_of l) j (mksig9 (S (kx e)) (kk e) (km e) false w None bo vw false)
-    (cmapT (S (kx e)) _ _ (nmapT (kk e) (km e) nat i63 ofn) (@denote_kf RTs no_kfuns [] (kx e) (kk e) (km e) (kb0 e) (kb1 e))).
+Lemma kfe_bound : forall I e j cvs vs s,
+  (Z.of_nat (kfe_fn I e j cvs vs s) <= Z.of_nat (kfe_w I e j) * Z.of_nat (hd O cvs) + Z.of_nat (fold_right Nat.add O (tl cvs)) + kfe_k I e j)%Z.
 Proof.
-  intros l j e w bo vw F K cvs vs s _ _. cbn [kfn kfuns_of]. unfold kf_fn. rewrite F, K. unfold kmeans.
-  change (appnT (kk e) (km e) i63 (appc (S (kx e)) _ (cmapT (S (kx e)) _ _ (nmapT (kk e) (km e) nat i63 ofn) (@denote_kf RTs no_kfuns [] (kx e) (kk e) (km e) (kb0 e) (kb1 e))) cvs) vs s
-          = ofn (appnT (kk e) (km e) nat (appc (S (kx e)) _ (@denote_kf RTs no_kfuns [] (kx e) (kk e) (km e) (kb0 e) (kb1 e)) cvs) vs s)).
+  intros I e j cvs vs s. pose proof (kfe_k_nonneg I e j) as Kn. unfold kfe_fn, kfe_w, kfe_k in *.
+  destruct (Nat.eqb j (kj e)); [|apply (@kfn_bound _ I)].
+  unfold kbnd_at in *. destruct (@kbound RTs I (kx e) (kb0 e) (kb1 e)) as [[W C]|] eqn:E; cbn [kbound_some kbW kbC] in *; [|cbn; lia].
+  pose proof (@kbound_pos RTs I _ _ _ W C E) as [P1 P2]. unfold kmeans_at. rewrite appc_hd_tl.
+  pose proof (@kbound_list RTs I [] (kx e) (kk e) (km e) (kb0 e) (kb1 e) W C E (hd O cvs) (tl cvs) vs s) as B.
+  unfold zsum in B. rewrite Z2Nat.id by lia. lia.
+Qed.
+Lemma kfe_mem : forall I e j cvs vs s s', kfe_m I e j = false -> kfe_fn I e j cvs vs s = kfe_fn I e j cvs vs s'.
+Proof.
+  intros I e j cvs vs s s' M. unfold kfe_m, kfe_fn in *. destruct (Nat.eqb j (kj e)); [|exact (@kfn_mem _ I j cvs vs s s' M)].
+  destruct (kbound_some (kbnd_at I e)); [|reflexivity]. unfold kmeans_at. rewrite M. apply appnT_nomem.
+Qed.
+Definition kf_ext (I : @KFuns RTs) (e : kent) : @KFuns RTs :=
+  {| kis := kfe_is I e; kfn := kfe_fn I e; kfm := kfe_m I e; kbw := kfe_w I e; kbk := kfe_k I e;
+     kbk_nonneg := kfe_k_nonneg I e; kfn_bound := kfe_bound I e; kfn_mem := kfe_mem I e |}.
+Fixpoint kfb (l : list kent) : @KFuns RTs := match l with [] => no_kfuns | e :: r => kf_ext (kfb r) e end.
+(** the entry of index [j], the latest first, and the instance of those before it *)
+Fixpoint kfb_get (l : list kent) (j : nat) : option (@KFuns RTs * kent) :=
+  match l with [] => None | e :: r => if Nat.eqb j (kj e) then Some (kfb r, e) else kfb_get r j end.
+Lemma kfb_fn : forall l j I e, kfb_get l j = Some (I, e) -> kbound_some (kbnd_at I e) = true -> @kfn _ (kfb l) j = kmeans_at I e.
+Proof.
+  induction l as [|e' r IH]; intros j I e G K; cbn [kfb_get] in G; [discriminate G|]. cbn [kfb kf_ext kfn]. unfold kfe_fn.
+  destruct (Nat.eqb j (kj e')); [injection G as <- <-; rewrite K; reflexivity | exact (IH j I e G K)].
+Qed.
+(** the callee of such an entry, the function made a number, called as a function of numbers, is it made a number *)
+Lemma krow_entry_kfb : forall l j I e w bo vw, kfb_get l j = Some (I, e) -> kbound_some (kbnd_at I e) = true ->
+  @krow_entry RTs (kfb l) j (mksig9 (S (kx e)) (kk e) (km e) false w None bo vw false)
+    (cmapT (S (kx e)) _ _ (nmapT (kk e) (km e) nat i63 ofn) (@denote_kf RTs I [] (kx e) (kk e) (km e) (kb0 e) (kb1 e))).
+Proof.
+  intros l j I e w bo vw G K cvs vs s _ _. rewrite (kfb_fn l j I e G K). unfold kmeans_at.
+  change (appnT (kk e) (km e) i63 (appc (S (kx e)) _ (cmapT (S (kx e)) _ _ (nmapT (kk e) (km e) nat i63 ofn) (@denote_kf RTs I [] (kx e) (kk e) (km e) (kb0 e) (kb1 e))) cvs) vs s
+          = ofn (appnT (kk e) (km e) nat (appc (S (kx e)) _ (@denote_kf RTs I [] (kx e) (kk e) (km e) (kb0 e) (kb1 e)) cvs) vs s)).
   rewrite appc_cmapT, appnT_nmapT. reflexivity.
 Qed.
 End KF.

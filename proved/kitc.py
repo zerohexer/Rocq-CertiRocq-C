@@ -912,13 +912,14 @@ def reflect(name, entry, prog, no_proof, closed=False):
     mts = re.findall(r'\(\s*"([^"]*)"(?:%bs)?,\s*"([^"]*)"(?:%bs)?\)', open(mp).read()) if os.path.exists(mp) else []
     made = {m for m, _ in mts}
     # (step 147) the program's functions giving back a counter used as counters: the rows KQRK's syntax makes whose bound is
-    # KQRK's (a mark named by the function and the row), each an entry of KQRK.kfuns_of: its index and its syntax
+    # KQRK's (a mark named by the function and the row), each an entry of KQRK.kfb: its index and its syntax
     kbrows = {mk.split("__kbr__", 1)[1] for mk, _ in mts if "__kbr__" in mk}
     kjs = [i for i, g in enumerate(fs) if g[0].rsplit(".", 1)[-1] in kbrows]
     if kjs:
+        # (step 150) the latest first: each one's meaning at the instance of those before it (KQRK.kfb)
         ents = "; ".join(f"KQRK.mkkent {i} {int(fs[i][1]) - 1} {kl(fs[i])} {fs[i][3]} (KQRK.unrow_kb0 (KQRReify.body_at {name}_funs {i}))"
-                         f" (KQRK.unrow_kb1 (KQRReify.body_at {name}_funs {i}))" for i in kjs)
-        t += f"Definition {name}_kents := [{ents}].\nDefinition {name}_kfs := @KQRK.kfuns_of {inst} {name}_kents.\n"
+                         f" (KQRK.unrow_kb1 (KQRReify.body_at {name}_funs {i}))" for i in reversed(kjs))
+        t += f"Definition {name}_kents := [{ents}].\nDefinition {name}_kfs := @KQRK.kfb {inst} {name}_kents.\n"
         kfi = f"{name}_kfs"
     iscp = lambda nm: nm in made and re.search(r"__c(\d+|blk)$", nm) is not None   # a copy, a block
     isw = lambda nm: nm in made and nm.endswith("__o")                              # a wrapper of a function that recurses (step 41)
@@ -1265,11 +1266,11 @@ def reflect(name, entry, prog, no_proof, closed=False):
         for j, f in enumerate(fs):
             cs = "[" + "; ".join(f"existT (@KQR.ftype {inst}) {sig(g)} {g[0]}" for g in fs[:j]) + "]"
             oks = "".join(f"(conj {f'(conj (KQR.kit_entry_ok {kitop(fs[i])}) {name}_rok{i})' if iskit(fs[i]) else f'{name}_rok{i}'} " for i in range(j)) + "Logic.I" + ")" * j
-            # (step 147) a callee that is one of the program's counter functions: its relation first (KQRK.krow_entry_ok)
+            # (step 147) a callee that is one of the program's counter functions: its relation first (KQRK.krow_entry_kfb)
             for i in kjs:
                 if i < j:
                     old = f"(conj {f'(conj (KQR.kit_entry_ok {kitop(fs[i])}) {name}_rok{i})' if iskit(fs[i]) else f'{name}_rok{i}'} "
-                    oks = oks.replace(old, f"(conj (conj (@KQRK.krow_entry_ok {inst} {name}_kents {i} _ {fs[i][5]} {bo(fs[i])} {wsl(fs[i])} eq_refl eq_refl) "
+                    oks = oks.replace(old, f"(conj (conj (@KQRK.krow_entry_kfb {inst} {name}_kents {i} _ _ {fs[i][5]} {bo(fs[i])} {wsl(fs[i])} eq_refl eq_refl) "
                                            + old[len("(conj "):-1] + ") ", 1)
             if f[0] in pfs or f[0] in pfc or f[0] in yf:
                 # (step 56) the theorem of its budget function's call, then equal to it at every argument
