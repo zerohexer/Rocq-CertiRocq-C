@@ -1596,7 +1596,21 @@ with reify_c (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sc
         | [tApp (tConst k _) [e]] => if Kername.eqb k kn_s2z then option_map CToNat (reify fuel ctx e)
                                      else if Kername.eqb k kn_u2z then option_map CToNatU (reify fuel ctx e) else None
         | _ => None end
-      else match hb kn with Some b => reify_c fuel ctx (wout b args) | None =>
+      else match find_callee (copy_mp, mangle kn ^ "__k0__rp__wy"%bs) callees 0 with
+      | Some (J, gs) =>
+          (* (step 147) a call of the program's function giving back a counter, its row made from KQRK's syntax: the function itself, on
+             counter variables *)
+          if sr gs || sw gs || isq gs || negb (Nat.leb (sn gs) (length args)) then None else
+          match opt_all (map (fun a => match a with tRel i => cnt_index ctx i | _ => None end) (firstn (sn gs) args)),
+                read_mem ctx (sm gs) (skipn (sn gs) args) with
+          | Some vs, Some nums =>
+              option_map (CCallK J vs)
+                (to_args (map (fun a => match reify fuel ctx a with Some e => Some (inl e) | None =>
+                                match reify_b fuel ctx a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel ctx a) end end) nums))
+          | _, _ => None
+          end
+      | None =>
+      match hb kn with Some b => reify_c fuel ctx (wout b args) | None =>
         (* (step 94) a number written from 5000 on *)
         if Kername.eqb kn kn_num_uint then match args with [u] => option_map CNumU (uint_of u) | _ => None end else
         (* (step 93) a recursive function of the library on counters: a call of the kit's function, read with the program *)
@@ -1621,7 +1635,7 @@ with reify_c (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sc
         | Some o, [a; b] => match reify_c fuel ctx a, reify_c fuel ctx b with Some x, Some y => Some (CBitN o x y) | _, _ => None end
         | None, [a; b] => if Kername.eqb kn kn_c_shiftl then (if cnt_lit b then option_map (CShl (cnt_val b)) (reify_c fuel ctx a) else None) else None
         | _, _ => None
-        end end end
+        end end end end
   (* (step 92) a let in a counter, named at most once: put in its place, as the kernel's check does (zeta); a helper written out
      binds what it is given so (a test given to [Nat.b2n]) *)
   | tLetIn _ v _ b => if Nat.leb (rel_occ 1000 0 b) 1 then reify_c fuel ctx (subst10 v b) else None
@@ -3312,6 +3326,18 @@ Fixpoint kb_handon (x dc : nat) (k : sbk) {struct k} : bool :=
 Definition kq_handon (Σ : global_env) (b : term) : bool :=
   match read_kbody Σ (fun _ => None) (fun _ _ => None) [] [] b with Some (gs, _, k1, _, _) => kb_handon (Nat.pred (sn gs)) 0 k1 | None => false end.
 (** the function a row made so stands for and its body as written (the marks [y_all] leaves) *)
+(** (step 145) a function giving back a counter whose row KQRK's syntax makes (step 143): its bound [KQRK.kbound]'s, proved once
+    ([KQRK.kbound_ok]), over its counters, the first [w] times, the others once; where [w] and the counters' number are at most 1000 *)
+Definition kb_bnd (Σ : global_env) (b : term) : option (nat * Z * Z) :=
+  match read_kbody Σ (fun _ => None) (fun _ _ => None) [] [] b with
+  | Some (gs, _, _, e0, e1) =>
+      let nx := Nat.pred (sn gs) in
+      match KQRK.kbound nx (KQRK.unrow_kb0 (FRec e0 e1)) (KQRK.unrow_kb1 (FRec e0 e1)) with
+      | Some (w, c) => if (w + Z.of_nat nx <=? 1000)%Z && (c <? 4611686018427387904)%Z then Some (nx, w, c) else None
+      | None => None
+      end
+  | None => None
+  end.
 Definition krow_src (Σ : global_env) (kn : kername) : option (kername * term) :=
   if eq_mp (fst kn) copy_mp then
     match lookup_env Σ (copy_mp, snd kn ^ "__ks"%bs), lookup_env Σ (copy_mp, snd kn ^ "__kb"%bs) with
@@ -3320,6 +3346,20 @@ Definition krow_src (Σ : global_env) (kn : kername) : option (kername * term) :
     | _, _ => None
     end
   else None.
+
+(** (step 147) the program's counter functions among the callees read so far, as kitc.py gives them to the proof (KQRK.kfuns_of):
+    each row KQRK's syntax makes whose bound is KQRK's *)
+Definition rd_kents (Σ : global_env) (callees : list (kername * sig)) : list KQRK.kent :=
+  flat_map (fun jc : nat * (kername * sig) =>
+    let '(j, (kn, gs)) := jc in
+    match krow_src Σ kn with
+    | Some (_, b) =>
+        match read_kbody Σ (fun _ => None) (fun _ _ => None) [] [] b, kb_bnd Σ b with
+        | Some (_, _, _, e0, e1), Some _ => [KQRK.mkkent j (Nat.pred (sn gs)) (sk gs) (sm gs) (KQRK.unrow_kb0 (FRec e0 e1)) (KQRK.unrow_kb1 (FRec e0 e1))]
+        | _, _ => []
+        end
+    | None => []
+    end) (combine (seq 0 (length callees)) callees).
 
 (** the same, the parameters in another order (step 41): the body read with each binder at its place in the order the syntax
     takes, a recursive call's arguments put in that order ([CSelfP]) *)
@@ -3731,7 +3771,7 @@ Definition reify_fun_d (dm : bool) (Σ : global_env) (hb : kername -> option ter
   (callees : list (kername * sig)) (kn : kername) (bt : kername -> option Z) (chk : bool) : option (sig * fbody) :=
   match (if dm then read_fun_p true Σ hb tc rt callees kn else read_fun Σ hb tc rt callees kn) with
   | Some (gs, b) =>
-      let wfok := fun gs => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt) rt) KQR.no_kfuns (map snd callees) (with_sp false gs) b in
+      let wfok := fun gs => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt) rt) (KQRK.kfuns_of (rd_kents Σ callees)) (map snd callees) (with_sp false gs) b in
       if negb chk then Some (gs, b) else
       (* the signature [wf_f] takes (steps 33, 34, 37); a function with the pair checked on the components (step 44) *)
       option_map (fun g => (with_sp (sp gs) g, b)) (wf_sig wfok gs b (bt kn))
@@ -3901,6 +3941,11 @@ Definition is_fn (lm : bool) (Σ : global_env) (mp : modpath) (root kn : kername
 (** the program's functions reachable from the root, callees first; the helpers they use (definitions of the file or of
     the kit that are not functions) are looked through for the functions they call, as the translator's [reach] does --
     each constant once ([seen]) *)
+(** (step 147) a function giving back a counter whose row KQRK's syntax makes, its bound KQRK's: reached as its row, which a use of
+    it as a counter calls (CCallK) as a use as a number does *)
+Definition kq_row (Σ : global_env) (k : kername) : kername :=
+  let rk := (copy_mp, mangle k ^ "__k0__rp__wy"%bs) in
+  match krow_src Σ rk with Some (_, b) => match kb_bnd Σ b with Some _ => rk | None => k end | None => k end.
 Fixpoint reach_go (lm : bool) (fuel : nat) (Σ : global_env) (mp : modpath) (root kn : kername) (st : list kername * list kername)
   : list kername * list kername :=
   match fuel with
@@ -3910,7 +3955,7 @@ Fixpoint reach_go (lm : bool) (fuel : nat) (Σ : global_env) (mp : modpath) (roo
       if existsb (Kername.eqb kn) seen then st
       else match body_of Σ kn with
            | Some b =>
-               let cs := filter (fun k => (in_prog mp (fst k) || eq_mp (fst k) kit_mp) && negb (Kername.eqb k kn)) (consts 10000 b []) in
+               let cs := filter (fun k => (in_prog mp (fst k) || eq_mp (fst k) kit_mp) && negb (Kername.eqb k kn)) (map (kq_row Σ) (consts 10000 b [])) in
                let '(done', seen') := fold_left (fun st k => reach_go lm fuel Σ mp root k st) (rev cs) (done, kn :: seen) in
                (if is_fn lm Σ mp root kn then List.app done' [kn] else done', seen')
            | None => (done, kn :: seen)
@@ -4387,7 +4432,7 @@ Fixpoint ensure (fuel : nat) (Σ : global_env) (mp : modpath) (hb : kername -> o
                 | Some (es, tbl) =>
                     let ckn := (MPfile ["kqcopy"%bs], snd T ^ "__c" ^ string_of_nat (length tbl)) in
                     match read_def hb (tc_of Σ mp tbl) rt (callees_of es) d [] capk with
-                    | Some (gs, b) => match option_map (with_sp (sp gs)) (if chk then wf_sig (fun g => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt) rt) KQR.no_kfuns (map snd (callees_of es)) (with_sp false g) b) gs b (bt ckn) else Some gs) with
+                    | Some (gs, b) => match option_map (with_sp (sp gs)) (if chk then wf_sig (fun g => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt) rt) (KQRK.kfuns_of (rd_kents Σ (callees_of es))) (map snd (callees_of es)) (with_sp false g) b) gs b (bt ckn) else Some gs) with
                                       | Some g => Some (es ++ [(ckn, g, b)], tbl ++ [(T, (fargs, capk), ckn, lfix_meaning fx tys capk (match fx with tFix [d] 0 => nonfn_perm tys (rarg d) | _ => seq 0 (length tys) end))])
                                       | None => None
                                       end
@@ -4434,7 +4479,7 @@ Fixpoint ensure (fuel : nat) (Σ : global_env) (mp : modpath) (hb : kername -> o
                       end
                   | _ =>
                   match read_tmpl Σ hb (tc_of Σ mp tbl) rt (callees_of es) T fargs capk with
-                  | Some (gs, b) => match option_map (with_sp (sp gs)) (if chk then wf_sig (fun g => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt) rt) KQR.no_kfuns (map snd (callees_of es)) (with_sp false g) b) gs b (bt ckn) else Some gs) with
+                  | Some (gs, b) => match option_map (with_sp (sp gs)) (if chk then wf_sig (fun g => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt) rt) (KQRK.kfuns_of (rd_kents Σ (callees_of es))) (map snd (callees_of es)) (with_sp false g) b) gs b (bt ckn) else Some gs) with
                                     | Some g => Some (es ++ [(ckn, g, b)], tbl ++ [(T, (fargs, capk), ckn, copy_meaning T tys fargs capk (nonfn_perm tys (tmpl_rarg Σ T)))])
                                     | None => None
                                     end
@@ -12045,18 +12090,6 @@ Definition nb_of1 (Σ : global_env) (mp : modpath) (tab : list (kername * nbf)) 
       else None
   | None => None
   end.
-(** (step 145) a function giving back a counter whose row KQRK's syntax makes (step 143): its bound [KQRK.kbound]'s, proved once
-    ([KQRK.kbound_ok]), over its counters, the first [w] times, the others once; where [w] and the counters' number are at most 1000 *)
-Definition kb_bnd (Σ : global_env) (b : term) : option (nat * Z * Z) :=
-  match read_kbody Σ (fun _ => None) (fun _ _ => None) [] [] b with
-  | Some (gs, _, _, e0, e1) =>
-      let nx := Nat.pred (sn gs) in
-      match KQRK.kbound nx (KQRK.unrow_kb0 (FRec e0 e1)) (KQRK.unrow_kb1 (FRec e0 e1)) with
-      | Some (w, c) => if (w + Z.of_nat nx <=? 1000)%Z && (c <? 4611686018427387904)%Z then Some (nx, w, c) else None
-      | None => None
-      end
-  | None => None
-  end.
 Definition kb_isrow (rows : list rprow) (kn : kername) : bool :=
   existsb (fun r : rprow => match r with (tConst k _, _, [s0], _, _) => Kername.eqb k kn && Nat.eqb s0 rp_nr | _ => false end) rows.
 Definition kb_nbf (Σ : global_env) (rows : list rprow) (kn : kername) : option nbf :=
@@ -12821,6 +12854,18 @@ Definition nc_bnd (Σ : global_env) (mp : modpath) (rows : list rprow) (tab : li
   match nc_bt 1000 Σ mp rows tab nv bv a with Some b => Some b | None => nc_bt 1000 Σ mp rows tab nv bv a1 end.
 Definition nc_capa (mp : modpath) (cap : nat) (k : kername) (go go2 : term -> term) (a : term) : term :=
   if if Nat.leb 1 cap then in_prog mp (fst k) else false then go2 a else go a.
+(** (step 147) a use as a counter that the reader reads as CCallK: a call of a function whose row KQRK's syntax makes, its bound
+    KQRK's, on counter variables *)
+Definition kq_ccall (Σ : global_env) (rows : list rprow) (t : term) : bool :=
+  match t with
+  | tApp (tConst kn _) args =>
+      match kb_nbf Σ rows kn with
+      | Some f => Nat.leb (length (fst f)) (length args)
+                  && forallb (fun a => match a with tRel _ => true | _ => false end) (firstn (length (fst f)) args)
+      | None => false
+      end
+  | _ => false
+  end.
 Fixpoint nc_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow) (tab : list (kername * nbf)) (cap : nat) (bv : list (nat * term)) (nv : list (nat * (nat * Z))) (t : term) {struct fuel} : term :=
   match fuel with
   | O => t
@@ -12828,6 +12873,7 @@ Fixpoint nc_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
       let go := nc_sub fuel Σ mp rows tab cap bv nv in
       let under := fun k => nc_sub fuel Σ mp rows tab cap (nc_bshift k bv) (nc_shift k nv) in
       if cnt_lit t then t else
+      if kq_ccall Σ rows t then (match t with tApp f args => tApp f (map go args) | _ => t end) else
       let t1 := nc_ul Σ mp rows tab nv t in
       if nc_ok Σ mp rows tab nv t1
       then (let u := tApp (tConst kn_zton []) [tApp (tConst kn_nc_u2z []) [nc_tr 1000 Σ mp rows tab nv (if Nat.eqb cap 2 then nc_sub fuel Σ mp rows tab 1 bv nv else go) t1]] in
@@ -12849,7 +12895,7 @@ Fixpoint nc_sub (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
         | tLetIn na v a b =>
             let v1 := nc_ul Σ mp rows tab nv v in
             (* a let of such a counter: the number, once *)
-            if if is_nat a then nc_ok Σ mp rows tab nv v1 else false then
+            if if is_nat a then negb (kq_ccall Σ rows v) && nc_ok Σ mp rows tab nv v1 else false then
               tLetIn na (nc_tr 1000 Σ mp rows tab nv go v1) (tConst kn_int [])
                      (nc_sub fuel Σ mp rows tab cap
                              ((* (step 134) its bound's term, under the let *)
@@ -12952,7 +12998,7 @@ Fixpoint nc_any (fuel : nat) (Σ : global_env) (mp : modpath) (rows : list rprow
         | tLambda _ _ b => under 1 b
         | tLetIn _ v a b =>
             let v1 := nc_ul Σ mp rows tab nv v in
-            if if is_nat a then nc_ok Σ mp rows tab nv v1 else false then
+            if if is_nat a then negb (kq_ccall Σ rows v) && nc_ok Σ mp rows tab nv v1 else false then
               if nc_lo lo (nc_cd 1000 Σ mp rows tab nv v1) then true
               else nc_any fuel Σ mp rows tab ((0%nat, nc_cd 1000 Σ mp rows tab nv v1) :: nc_shift 1 nv) lo b
             else if if is_nat a then nc_low Σ mp rows tab nv v && nc_ulow 1000 Σ mp rows tab ((0%nat, (1000%nat, 0%Z)) :: nc_shift 1 nv) 0 b else false then

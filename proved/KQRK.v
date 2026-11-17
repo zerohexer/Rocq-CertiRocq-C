@@ -707,3 +707,58 @@ End K.
     conversion.  Its parameters hold no record (the rows made so), so its type is the same at every program's record types *)
 Definition krow (x : nat) (k : list kind) (m : bool) (f : ctype (S x) (@ntypeT no_recs k m nat)) : ctype (S x) (@ntypeT no_recs k m i63) :=
   cmapT (S x) _ _ (@nmapT no_recs k m nat i63 ofn) f.
+
+(** (step 147) the program's counter functions used as counters (KQR.KFuns), made from the rows KQRK's syntax makes: an entry per
+    such function, its callee's index and its syntax; each field total (no proof per program), the meaning the syntax's at no
+    counter function (a row's syntax reads no call), the user's function by conversion as [row_of_ok]'s *)
+Section KF.
+Context {RTs : RecTypes}.
+Record kent := mkkent { kj : nat; kx : nat; kk : list kind; km : bool; kb0 : sbk; kb1 : sbk }.
+Fixpoint kfind (l : list kent) (j : nat) : option kent :=
+  match l with [] => None | e :: r => if Nat.eqb (kj e) j then Some e else kfind r j end.
+Definition kbnd (e : kent) : option (Z * Z) := kbound (kx e) (kb0 e) (kb1 e).
+Definition kmeans (e : kent) : list nat -> list val -> mem -> nat :=
+  fun cvs vs s => appnT (kk e) (km e) nat (appc (S (kx e)) _ (@denote_kf RTs no_kfuns [] (kx e) (kk e) (km e) (kb0 e) (kb1 e)) cvs) vs s.
+Definition kf_is (l : list kent) (j : nat) : bool := match kfind l j with Some e => kbound_some (kbnd e) | None => false end.
+Definition kf_fn (l : list kent) (j : nat) : list nat -> list val -> mem -> nat :=
+  match kfind l j with Some e => if kbound_some (kbnd e) then kmeans e else (fun _ _ _ => O) | None => fun _ _ _ => O end.
+Definition kf_m (l : list kent) (j : nat) : bool := match kfind l j with Some e => km e | None => false end.
+Definition kf_w (l : list kent) (j : nat) : nat := match kfind l j with Some e => Z.to_nat (kbW (kbnd e)) | None => O end.
+Definition kf_k (l : list kent) (j : nat) : Z := match kfind l j with Some e => kbC (kbnd e) | None => 0%Z end.
+Lemma kf_k_nonneg : forall l j, (0 <= kf_k l j)%Z.
+Proof.
+  intros l j. unfold kf_k, kbnd. destruct (kfind l j) as [e|]; [|lia].
+  destruct (kbound (kx e) (kb0 e) (kb1 e)) as [[W C]|] eqn:E; cbn [kbC]; [|lia]. exact (proj2 (kbound_pos _ _ _ W C E)).
+Qed.
+Lemma appc_hd_tl : forall x T (h : ctype (S x) T) cvs, appc (S x) T h cvs = appc x T (h (hd O cvs)) (tl cvs).
+Proof. intros x T h [|c cvs]; reflexivity. Qed.
+Lemma kf_bound : forall l j cvs vs s,
+  (Z.of_nat (kf_fn l j cvs vs s) <= Z.of_nat (kf_w l j) * Z.of_nat (hd O cvs) + Z.of_nat (fold_right Nat.add O (tl cvs)) + kf_k l j)%Z.
+Proof.
+  intros l j cvs vs s. pose proof (kf_k_nonneg l j) as Kn. unfold kf_fn, kf_w, kf_k in *. destruct (kfind l j) as [e|]; [|cbn; lia].
+  unfold kbnd in *. destruct (kbound (kx e) (kb0 e) (kb1 e)) as [[W C]|] eqn:E; cbn [kbound_some kbW kbC] in *; [|cbn; lia].
+  pose proof (kbound_pos _ _ _ W C E) as [P1 P2]. unfold kmeans. rewrite appc_hd_tl.
+  pose proof (@kbound_list RTs no_kfuns [] (kx e) (kk e) (km e) (kb0 e) (kb1 e) W C E (hd O cvs) (tl cvs) vs s) as B.
+  unfold zsum in B. rewrite Z2Nat.id by lia. lia.
+Qed.
+Lemma appnT_nomem : forall ks T g vs s s', appnT ks false T g vs s = appnT ks false T g vs s'.
+Proof. induction ks as [|[| |ri] ks IH]; intros T g vs s s'; [reflexivity | destruct vs as [|[x|b|ri x] vs] | destruct vs as [|[x|b|ri x] vs] | destruct vs as [|v vs]]; apply IH. Qed.
+Lemma kf_mem : forall l j cvs vs s s', kf_m l j = false -> kf_fn l j cvs vs s = kf_fn l j cvs vs s'.
+Proof.
+  intros l j cvs vs s s' M. unfold kf_m, kf_fn in *. destruct (kfind l j) as [e|]; [|reflexivity].
+  destruct (kbound_some (kbnd e)); [|reflexivity]. unfold kmeans. rewrite M. apply appnT_nomem.
+Qed.
+Definition kfuns_of (l : list kent) : @KFuns RTs :=
+  {| kis := kf_is l; kfn := kf_fn l; kfm := kf_m l; kbw := kf_w l; kbk := kf_k l; kbk_nonneg := kf_k_nonneg l;
+     kfn_bound := kf_bound l; kfn_mem := kf_mem l |}.
+(** the callee of such an entry, the function made a number, called as a function of numbers, is it made a number *)
+Lemma krow_entry_ok : forall l j e w bo vw, kfind l j = Some e -> kbound_some (kbnd e) = true ->
+  @krow_entry RTs (kfuns_of l) j (mksig9 (S (kx e)) (kk e) (km e) false w None bo vw false)
+    (cmapT (S (kx e)) _ _ (nmapT (kk e) (km e) nat i63 ofn) (@denote_kf RTs no_kfuns [] (kx e) (kk e) (km e) (kb0 e) (kb1 e))).
+Proof.
+  intros l j e w bo vw F K cvs vs s _ _. cbn [kfn kfuns_of]. unfold kf_fn. rewrite F, K. unfold kmeans.
+  change (appnT (kk e) (km e) i63 (appc (S (kx e)) _ (cmapT (S (kx e)) _ _ (nmapT (kk e) (km e) nat i63 ofn) (@denote_kf RTs no_kfuns [] (kx e) (kk e) (km e) (kb0 e) (kb1 e))) cvs) vs s
+          = ofn (appnT (kk e) (km e) nat (appc (S (kx e)) _ (@denote_kf RTs no_kfuns [] (kx e) (kk e) (km e) (kb0 e) (kb1 e)) cvs) vs s)).
+  rewrite appc_cmapT, appnT_nmapT. reflexivity.
+Qed.
+End KF.

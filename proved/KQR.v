@@ -142,8 +142,9 @@ Class KFuns := {
   kfn : nat -> list nat -> list val -> mem -> nat;
   kfm : nat -> bool;
   kbw : nat -> nat;
-  kbk : nat -> nat;
-  kfn_bound : forall f cvs vs s, (kfn f cvs vs s <= kbw f * hd O cvs + fold_right Nat.add O (tl cvs) + kbk f)%nat;
+  kbk : nat -> Z;
+  kbk_nonneg : forall f, (0 <= kbk f)%Z;
+  kfn_bound : forall f cvs vs s, (Z.of_nat (kfn f cvs vs s) <= Z.of_nat (kbw f) * Z.of_nat (hd O cvs) + Z.of_nat (fold_right Nat.add O (tl cvs)) + kbk f)%Z;
   kfn_mem : forall f cvs vs s s', kfm f = false -> kfn f cvs vs s = kfn f cvs vs s' }.
 Context {KFs : KFuns}.
 Definition ofv (v : val) : i63 := match v with VNum n => n | VBool b => b2i b | VRec _ _ => 0%uint63 end.
@@ -2284,7 +2285,7 @@ Fixpoint cmax (B : Z) (c : scnt) : Z :=
   | CLib _ _ a b => Z.max (cmax B a) (cmax B b)
   | CLit k => Z.of_nat k
   | CNumU u => nu_z u
-  | CCallK f vs _ => (Z.of_nat (kbw f) * (B - 1) + Z.of_nat (length (tl vs)) * (B - 1) + Z.of_nat (kbk f))%Z
+  | CCallK f vs _ => (Z.of_nat (kbw f) * (B - 1) + Z.of_nat (length (tl vs)) * (B - 1) + kbk f)%Z
   end.
 (** [wf]'s first argument: the callees' signatures, the function's own bound if it has one, and the bounds of the counters in
     scope (step 35), the nearest first -- none for a counter below the function's own bound (a parameter, a let or a match of
@@ -2328,7 +2329,7 @@ Fixpoint clinf (bs : list cbe) (c : scnt) : linf :=
   | CLib _ _ a b => ladd (clinf bs a) (clinf bs b)
   | CLit k => ([], Z.of_nat k)
   | CNumU u => ([], nu_z u)
-  | CCallK f vs _ => lshift (Z.of_nat (kbk f)) (ladd (lscale (Z.of_nat (kbw f)) (linat bs (hd O vs))) (fold_right (fun i a => ladd (linat bs i) a) lzero (tl vs)))
+  | CCallK f vs _ => lshift (kbk f) (ladd (lscale (Z.of_nat (kbw f)) (linat bs (hd O vs))) (fold_right (fun i a => ladd (linat bs i) a) lzero (tl vs)))
   end.
 Definition wfctx : Type := (list sig * ((option Z * list poly) * list cbe))%type.
 Definition ub (sigs : wfctx) : Z :=
@@ -2355,7 +2356,7 @@ Fixpoint cmaxv (B : Z) (bs : list cbe) (c : scnt) : Z :=
   | CLib _ _ a b => Z.max (cmaxv B bs a) (cmaxv B bs b)
   | CLit k => Z.of_nat k
   | CNumU u => nu_z u
-  | CCallK f vs _ => (Z.of_nat (kbw f) * cvmx B bs (hd O vs) + fold_right (fun i a => cvmx B bs i + a) 0 (tl vs) + Z.of_nat (kbk f))%Z
+  | CCallK f vs _ => (Z.of_nat (kbw f) * cvmx B bs (hd O vs) + fold_right (fun i a => cvmx B bs i + a) 0 (tl vs) + kbk f)%Z
   end.
 (** a counter whose variables are all below the function's own bound *)
 Fixpoint pvars (bs : list cbe) (c : scnt) : bool :=
@@ -5105,7 +5106,7 @@ Proof. intros bd l H. induction l as [|i l IH]; cbn [fold_right]; [lia|]. specia
 Lemma fold_bd_const : forall (c : Z) (l : list nat), fold_right (fun _ a => c + a) 0%Z l = (Z.of_nat (length l) * c)%Z.
 Proof. intros c l. induction l as [|i l IH]; cbn [fold_right length]; [lia|]. rewrite IH. lia. Qed.
 Lemma kfn_le_lin : forall f vs args s (cenv : list nat) (bd : nat -> Z), (forall i, (Z.of_nat (nth i cenv O) <= bd i)%Z) ->
-  (Z.of_nat (kfn f (map (fun i => nth i cenv O) vs) args s) <= Z.of_nat (kbw f) * bd (hd O vs) + fold_right (fun i a => bd i + a) 0 (tl vs) + Z.of_nat (kbk f))%Z.
+  (Z.of_nat (kfn f (map (fun i => nth i cenv O) vs) args s) <= Z.of_nat (kbw f) * bd (hd O vs) + fold_right (fun i a => bd i + a) 0 (tl vs) + kbk f)%Z.
 Proof.
   intros f vs args s cenv bd H. pose proof (kfn_bound f (map (fun i => nth i cenv O) vs) args s) as K.
   assert (Hh : (Z.of_nat (hd O (map (fun i => nth i cenv O) vs)) <= bd (hd O vs))%Z).
@@ -5183,7 +5184,7 @@ Lemma cmax_depth : forall B c, noadd c = true -> (1152921504606846976 <= B - 1)%
 Proof. intros B c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b | fi vs args]; intros NA L; cbn [cmax cdepth noadd] in *; try discriminate NA;
   try specialize (IH NA L); cn_range; lia. Qed.
 Lemma cmax_nonneg : forall B c, (1 <= B)%Z -> (0 <= cmax B c)%Z.
-Proof. intros B c L. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b | fi vs args]; cbn [cmax]; cn_range; first [lia | nia | pose proof (cbitm_nonneg o (cmax B a) (cmax B b) IHa IHb); lia | pose proof (Z.pow_nonneg 2 (Z.of_nat w) ltac:(lia)); nia | rewrite <- nu_z_ok; lia | rewrite <- cpw_ok; lia]. Qed.
+Proof. intros B c L. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b | fi vs args]; cbn [cmax]; cn_range; first [lia | nia | pose proof (kbk_nonneg fi); nia | pose proof (cbitm_nonneg o (cmax B a) (cmax B b) IHa IHb); lia | pose proof (Z.pow_nonneg 2 (Z.of_nat w) ltac:(lia)); nia | rewrite <- nu_z_ok; lia | rewrite <- cpw_ok; lia]. Qed.
 
 (** each counter below its own bound (step 35): [B] the function's, an entry of [bs] its own when it has one *)
 (** each counter below its own bound; the counters bound since the body's start below their linear bounds over the function's
@@ -5276,7 +5277,7 @@ Proof.
 Qed.
 Lemma cmaxv_nonneg : forall B bs c, (0 <= cmaxv B bs c)%Z.
 Proof. intros B bs c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b | fi vs args]; cbn [cmaxv]; cn_range; first [lia | nia | pose proof (cbitm_nonneg o (cmaxv B bs a) (cmaxv B bs b) IHa IHb); lia | pose proof (Z.pow_nonneg 2 (Z.of_nat w) ltac:(lia)); nia | rewrite <- nu_z_ok; lia | rewrite <- cpw_ok; lia
-                                   | pose proof (cvmx_nonneg B bs (hd O vs)); pose proof (fold_bd_nonneg (cvmx B bs) (tl vs) (cvmx_nonneg B bs)); nia]. Qed.
+                                   | pose proof (cvmx_nonneg B bs (hd O vs)); pose proof (fold_bd_nonneg (cvmx B bs) (tl vs) (cvmx_nonneg B bs)); pose proof (kbk_nonneg fi); nia]. Qed.
 
 Lemma cmax_free : forall B c, cfree c = true -> noadd c = true -> (cmax B c <= 1152921504606846976 + Z.of_nat (cdepth c))%Z.
 Proof. intros B c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b | fi vs args]; intros F NA; cbn [cfree noadd cmax cdepth] in *; try discriminate;
@@ -13227,9 +13228,12 @@ Qed.
 
 End Recs.
 (** (step 146) no counter function used as a counter: the default *)
+Lemma kz_bound : forall a b : nat, (Z.of_nat O <= Z.of_nat O * Z.of_nat a + Z.of_nat b + 0)%Z.
+Proof. intros a b. lia. Qed.
 #[global] Instance no_kfuns {RTs : RecTypes} : @KFuns RTs | 100 :=
-  {| kis := fun _ => false; kfn := fun _ _ _ _ => O; kfm := fun _ => false; kbw := fun _ => O; kbk := fun _ => O;
-     kfn_bound := fun _ _ _ _ => Nat.le_0_l _; kfn_mem := fun _ _ _ _ _ _ => eq_refl |}.
+  {| kis := fun _ => false; kfn := fun _ _ _ _ => O; kfm := fun _ => false; kbw := fun _ => O; kbk := fun _ => 0%Z;
+     kbk_nonneg := fun _ => Z.le_refl 0; kfn_bound := fun _ cvs _ _ => kz_bound (hd O cvs) (fold_right Nat.add O (tl cvs));
+     kfn_mem := fun _ _ _ _ _ _ => eq_refl |}.
 (** (step 134) a counter the reader holds at its bound, so that the callee's bound need be no more than the caller's counters': a min,
     read as [CMin]; where the bound holds, the counter itself *)
 Definition kq_cap (x k : nat) : nat := Nat.min x k.
