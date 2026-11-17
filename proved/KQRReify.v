@@ -12043,6 +12043,27 @@ Definition nb_of1 (Σ : global_env) (mp : modpath) (tab : list (kername * nbf)) 
       else None
   | None => None
   end.
+(** (step 145) a function giving back a counter whose row KQRK's syntax makes (step 143): its bound [KQRK.kbound]'s, proved once
+    ([KQRK.kbound_ok]), over its counters, the first [w] times, the others once; where [w] and the counters' number are at most 1000 *)
+Definition kb_bnd (Σ : global_env) (b : term) : option (nat * Z * Z) :=
+  match read_kbody Σ (fun _ => None) (fun _ _ => None) [] [] b with
+  | Some (gs, _, _, e0, e1) =>
+      let nx := Nat.pred (sn gs) in
+      match KQRK.kbound nx (KQRK.unrow_kb0 (FRec e0 e1)) (KQRK.unrow_kb1 (FRec e0 e1)) with
+      | Some (w, c) => if (w + Z.of_nat nx <=? 1000)%Z && (c <? 4611686018427387904)%Z then Some (nx, w, c) else None
+      | None => None
+      end
+  | None => None
+  end.
+Definition kb_isrow (rows : list rprow) (kn : kername) : bool :=
+  existsb (fun r : rprow => match r with (tConst k _, _, [s0], _, _) => Kername.eqb k kn && Nat.eqb s0 rp_nr | _ => false end) rows.
+Definition kb_nbf (Σ : global_env) (rows : list rprow) (kn : kername) : option nbf :=
+  if kb_isrow rows kn then
+    match body_of Σ kn with
+    | Some b => option_map (fun r => let '(nx, w, c) := r in (Z.to_nat w :: repeat 1%nat nx, c)) (kb_bnd Σ b)
+    | None => None
+    end
+  else None.
 Definition nb_of (Σ : global_env) (mp : modpath) (tab : list (kername * nbf)) (blk : list nat) (d0 : def term) : option nbf :=
   match nb_of1 Σ mp tab blk false false [] d0 with
   | Some f => Some f
@@ -12096,7 +12117,7 @@ Definition nb_all (Σ : global_env) (mp : modpath) (rows : list rprow) : list (k
           | Some b =>
               match vm_norm b with
               | Some d =>
-                  match nb_of Σ mp tab [] d with
+                  match match kb_nbf Σ rows kn with Some f => Some f | None => nb_of Σ mp tab [] d end with
                   | Some f => if Nat.leb (fold_left Nat.add (fst f) 0%nat) 1000 && (snd f <? 4611686018427387904)%Z then tab ++ [(kn, f)] else tab
                   | None => tab
                   end
@@ -12296,6 +12317,18 @@ Definition nb_stmt (Σ : global_env) (mp : modpath) (kn : kername) (f : nbf) : t
        | Some P => pis_of tys0 P
        | None => tVar "unread"%bs
        end.
+(** (step 145) the bound of a function whose row KQRK's syntax makes, as [KQRK.kbstmt] is once reduced: [w] times the first counter,
+    plus the other counters, plus the constant, each a written number *)
+Definition kb_stmt (Σ : global_env) (mp : modpath) (kn : kername) (f : nbf) : term :=
+  let tys0 := match lookup_env Σ kn with
+              | Some (ConstantDecl cb) => removelast (prod_tys (al_t 1000 Σ mp (cst_type cb)))
+              | _ => []
+              end in
+  let m := length tys0 in
+  let nx := Nat.pred (length (fst f)) in
+  let L := tApp (tConst nr_nat_add []) [tApp (tConst nr_nat_mul []) [nb_cst (Z.of_nat (hd 0%nat (fst f))); tRel (m - 1)];
+             fold_right (fun j b => tApp (tConst nr_nat_add []) [tRel (m - 1 - j); b]) (nb_cst (snd f)) (seq 1 nx)] in
+  pis_of tys0 (tApp nb_le [mkApps (tConst kn []) (map (fun j => tRel (m - 1 - j)) (seq 0 m)); L]).
 (** (step 104) a function read as a row, with a bound or without *)
 Definition nc_rows (rows : list rprow) : bool := existsb (fun r : rprow => let '(_, _, sl, _, _) := r in if rp_is_nr sl then true else rp_is_nrv sl) rows.
 Definition nc_rowa (rows : list rprow) (k : kername) (n : nat) : option rprow :=
@@ -13270,7 +13303,8 @@ Definition y_allc (cap : bool) (Σ : global_env) (mp : modpath) (root : kername)
                 match body_of (conv_all Σ mp) kn with
                 | Some b =>
                     match vm_norm b with
-                    | Some d => add_decl S2 (nb_namev (conv_all Σ mp) mp kn d) (tSort sProp) (nb_stmt (conv_all Σ mp) mp kn f)
+                    | Some d => add_decl S2 (nb_namev (conv_all Σ mp) mp kn d) (tSort sProp)
+                                  (match kb_nbf (conv_all Σ mp) rows kn with Some _ => kb_stmt (conv_all Σ mp) mp kn f | None => nb_stmt (conv_all Σ mp) mp kn f end)
                     | None => S2
                     end
                 | None => S2
@@ -13409,6 +13443,13 @@ Definition y_rows (Σ : global_env) : copytab :=
 (** (step 143) what the program's file defines of a row made from KQRK's syntax: the function made a number *)
 Definition kn_krow := kn_of <% @KQRK.krow %>.
 Definition kq_tt := <% tt %>.
+(** (step 145) where the bound of the function a row is made of is KQRK's: a mark named by the function and the row, for kitc.py's proof
+    of the bound by KQRK.kbound_ok (a name: the function may be one the reader made, not yet defined where the marks are) *)
+Definition kb_marks (Σ : global_env) (kn : kername) (rn : string) : list (string * term) :=
+  match krow_src Σ kn with
+  | Some (src, b) => match kb_bnd Σ b with Some _ => [(mangle src ^ "__kbr__" ^ rn, kq_tt)] | None => [] end
+  | None => []
+  end.
 Definition krow_term (Σ : global_env) (kn : kername) : option term :=
   match krow_src Σ kn with
   | Some (src, b) =>
@@ -13484,7 +13525,7 @@ Definition reify_prog2c (lo : bool) (bt0 : kername -> option Z) (chk : bool) (p 
                       end
                   end) kns (Some ([], lts)) in
       option_map (fun et => (fst et, vt_mts Σ0000 (MPfile (mp_file mp)) ++ map (fun e => (snd (snd (fst e)), real_copies 1000 (MPfile (mp_file mp)) (match krow_term Σ0000 (snd (fst e)) with Some t => t | None => snd e end))) (lms ++ snd et)
-                                      ++ flat_map (fun e => match krow_term Σ0000 (snd (fst e)) with Some _ => [(snd (snd (fst e)) ^ "__kr"%bs, kq_tt)] | None => [] end) (lms ++ snd et))) st
+                                      ++ flat_map (fun e => match krow_term Σ0000 (snd (fst e)) with Some _ => (snd (snd (fst e)) ^ "__kr"%bs, kq_tt) :: kb_marks Σ0000 (snd (fst e)) (snd (snd (fst e))) | None => [] end) (lms ++ snd et))) st
   | _ => None
   end.
 (** counter bounds worked out from the call graph (step 34): from the entry down -- the functions come callees first -- each

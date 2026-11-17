@@ -1179,10 +1179,13 @@ def reflect(name, entry, prog, no_proof, closed=False):
                 pa, pb = bpose(i, f"{name}_bdb{g}_{i}")
                 t += f"Ltac {name}_btb{g}_{i} := first [{pa} | {pb} | {bprev}].\n"
                 bprev = f"{name}_btb{g}_{i}"
+        # (step 145) the functions whose row is made from KQRK's syntax with its bound KQRK's: a mark named by the function and the row
+        krk = dict(mk.split("__kbr__", 1) for mk, _ in mts if "__kbr__" in mk)
         for j, m in enumerate(bqs):
             mb = re.match(r"(.*)__b(\d+)_(\d+)__b[qv]__wy$", m)
             fn, ar, r = kqfn(mb.group(1)), int(mb.group(2)), int(mb.group(3))
             isv = m.endswith("__bv__wy")
+            kj = [i for i, g in enumerate(fs) if mb.group(1) in krk and g[0].rsplit(".", 1)[-1] == krk[mb.group(1)]]
             xs = " ".join(f"?kx{i}" for i in range(ar))
             ys = " ".join(f"kx{i}" for i in range(ar))
             # (step 118) a value's bound is posed where no hypothesis but an equation names the call yet
@@ -1192,7 +1195,12 @@ def reflect(name, entry, prog, no_proof, closed=False):
             nbs = "KQRWf.nb_stepv" if isv else "KQRWf.nb_step"
             pth = (lambda pr: f"match goal with _ : context [{fn} {xs}] |- _ => {vno}; pose proof ({pr} {ys}) end") if isv else \
                   (lambda pr: f"match goal with _ : context [{fn} {xs}] |- _ => lazymatch goal with _ : ({fn} {ys} <= _)%nat |- _ => fail | _ => pose proof ({pr} {ys}) end end")
-            if r >= ar:
+            if kj and not isv:
+                # (step 145) its bound KQRK's, proved once (KQRK.kbound_ok), by conversion with what the reader states
+                g, bk = fs[kj[0]], f"(KQRReify.body_at {name}_funs {kj[0]})"
+                t += (f"Lemma {name}_bd{j} : {m}.\nProof. exact_no_check (@KQRK.kbound_ok {inst} nil {int(g[1]) - 1} {kl(g)} {g[3]}"
+                      f" (KQRK.unrow_kb0 {bk}) (KQRK.unrow_kb1 {bk}) eq_refl). Qed.\n")
+            elif r >= ar:
                 t += (f"Lemma {name}_bd{j} : {m}.\nProof. unfold {m}. intros; unfold {fn}. {nbs} ltac:(repeat first [{bprev}]). Qed.\n")
             else:
                 d0 = f"do {r} intro; " if r else ""
