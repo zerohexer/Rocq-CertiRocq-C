@@ -6732,6 +6732,19 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The C*: the same: compared on the 26 cells whose rows are made so from this step on (231 in all from step 143).
 - *Cells*: none added (the families of counters exercise it).
 
+**Steps 143, 144 — the results (2026-11-17), one chain for the two.**  Built as designed:
+- *Step 143, the rows' statements proved once, begun*: `proved/KQRK.v` (new, after `KQR.v`): `kexp`, `sbk`, `denote_ke`, `denote_kb`, `denote_kf`, `row_ke`, `row_kb`, `row_of_ok`, `krow`, `unrow_kb`, and the lemmas they need (`eqN_absn`, `eqC_absc`, `kq_step`, `nmapT`), generic in the program's record types; the reader (`KQRReify.v`): `reify_ke`, `reify_kb`, `read_kbody`, `krow_src`, `krow_term`, the function's body as written kept for it; *`kitc.py`*: such a row's theorem by `callee_ok_eq`, `row_of_ok` and `compile_f_ok`, its statement by `eq_refl`; `make.sh` builds `KQRK.v` and prints its lemmas' assumptions with the others', `kqsess.py` loads it.  *Found while building* (on the work laptop): `KQR.v`'s functions take the program's record types and laws as section variables, so `KQRK.v` takes them too, and `krow`, whose rows hold no record, is defined at the default ones (the row's type the same at every program's); a variable inferred after a hypothesis that names it is given first.  Checked on the work laptop (the repository at step 142 with this step's files, step 142's wide lab: 2150): every verdict and category the last table's; 205 cells' rows made so, 418 statements by `eq_refl` against 218 by `nr_step` left; the C of 34 of them byte-identical; their proof files 48.2 s against 51.0 s; `KQRK.v`'s lemmas rest on 62 names, each in `proved/TRUSTED.txt`.
+- *Step 144, a row made so where the recursion hands its counters on unchanged; `ldiff`*: the reader: `kcs_eq`, `ke_handon`, `kb_handon`, `kq_handon` in `nr_rows`; `KQRK.v`: `KBitK NLdiff`, its case of `row_ke_ok`, read back by `unrow_ke`.  Checked on the work laptop (the repository at step 143 with this step's files, step 142's wide lab: 2150): every verdict and category the last table's; 231 cells' rows made so, the C of the 26 this step moved byte-identical.
+- *The reifier's step on the kernels' programs* (on the work laptop, one core, interleaved, three rounds, the fastest, F62, in clean copies of two trees, the repository at step 142 / at step 144): `HWP_kernel` 3.17 / 3.18 s, `HWP_own` 2.17 / 2.20, `HWP_irqnow` 1.95 / 1.90: the same (the laptop back at its speed before step 142's timing).
+- *The run*: one chain for the two steps, on the last step's code commit, the table in 12 long-lived Rocq sessions under 14 GB (§12.F).
+- The C: the 99 programs byte-identical.  The construct table (on `2653cc4`): **4236 of 4385 through the verified compiler**, 76
+  by design, 72 gaps, 1 not Rocq (was 4236 of 4385: no cell added; every cell's verdict and category the last table's; no cell
+  lost).  The gate on `2653cc4`, the walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding, beside the
+  corpus; the same C: undefined behaviour trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36;
+  the five kernels and `grow` (23 / 23 / 25 / 20 / 19 / 9 s); **109 programs through the verified compiler, 0 refused**, their 109
+  end theorems each within the list; `check_trust.py`: `trust unchanged`.  Next: the bound of such a function proved once over
+  KQRK's syntax (§12.V), then a call of a counter function in S (its uses as counters by conversion).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6930,11 +6943,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `5a388df` (2026-11-16); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `2653cc4` (2026-11-17); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 144's design -- a row made from KQRK's syntax where the recursion hands its counters on unchanged; ldiff; §14 step 143's code row |
+| (this commit) | §12.V: steps 143, 144 (the rows' statements proved once, begun: a function giving back a counter as a syntax of its own, KQRK.v; the construct table 4236 of 4385), one chain for the two; the gate |
+| `2653cc4` | `proved/KQRReify.v` + `KQRK.v` step 144: a function giving back a counter whose recursion hands its counters on unchanged: its row takes none at numbers, made from KQRK's syntax; ldiff in KQRK's syntax |
+| `ea10bc4` | §12.V: step 144's design -- a row made from KQRK's syntax where the recursion hands its counters on unchanged; ldiff; §14 step 143's code row |
 | `0cea408` | `proved/KQRK.v` (new) + `KQRReify.v` + `kitc.py` + `make.sh` + `kqsess.py` step 143: a function giving back a counter as a syntax of its own; its row made from it (row_kb) and its statement proved once (row_of_ok); such a row's theorem exact only, its statement by conversion |
 | `fd063a7` | §12.V: step 143's design -- the rows' statements proved once, begun: a function giving back a counter as a syntax of its own (KQRK.v), its row made from it, its theorem by row_of_ok |
 | `d212fa3` | §12.V: steps 140, 141, 142 (a counter row's part the machine's only below a word kept as the source writes it; the cells of a counter used in a mutual block; a counter given back with a proof: the construct table 4236 of 4385), one chain for the three; the gate; §12.A |
