@@ -6753,6 +6753,13 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Left* (§12.V): the uses as counters (step 83's `nc_sub`, `own_step`, `nc_step`: a call of a counter function in S, by conversion); the bounds of the rows KQRK's syntax does not make (step 140's kept parts, value rows, blocks).
 - *The C*: the same.  *Cells*: none added (the families of counters exercise it).
 
+**Step 146, a call of the program's counter function used as a counter, in S (§12.V, D26, §0.10's row 8b) — the design (2026-11-17).**  Since step 83 a use of a function giving back a counter as a counter (`cnt n a s` where a counter is) is read by rewriting the caller (`nc_sub`, a copy `__wy`) and the copy's equation with the caller proved for each program by Ltac (`KQRWf.own_step`, `nc_step`): S's calls give back numbers, so S's meaning of such a use could only be the row's number made a counter, not convertible with the user's text.  This step gives S the construct and proves it once; the reader does not produce it yet (step 147).
+- *The program's counter functions* (`proved/KQR.v`: `Class KFuns`, a section variable after the record types): which callees they are (`kis`), each as the function itself (`kfn`, the user's by conversion: per program a match on the callee), whether it takes the memory (`kfm`), its bound (`kbw`, `kbk`: at most `kbw` times its first counter plus its other counters plus `kbk`) with its proof (`kfn_bound`, per program `KQRK.kbound_ok`'s) and that one taking no memory reads none (`kfn_mem`); `no_kfuns`, none, the default.
+- *The construct*: `CCallK f vs args`, function `f` on these counter variables (a counter argument is let-bound first: the same meaning by conversion, and no bound lemma needs a new induction), numbers and the memory.  Its meaning `kfn f ..`; its code the call's (`Ecall` of `f` on the variables' words and the numbers); `wf`: `f` one of them, a callee giving back a number of the right counters, kinds and memory, the counters within its bound (`cfits_b`), its number below 2^63 by the counter bounds (`cmax`, `clinf`, `cmaxv`: its bound at the variables'); the reader's call sites (`cl_c`) count it as a call of `f`.
+- *Proved once*: the callee's call computes the counter function made a number (`krow_entry`, `krows_ok`, a third part of `callees_ok`; `all_ok`'s entry for such a callee, the others' as before), so the construct's case of the compiler's proof is the call's (`cexp_all`, SCall's case with that rewriting); the bound lemmas through `kfn_bound` (`kfn_le_lin`), the memory one through `kfn_mem`, the three inductions over the syntax.
+- *`kitc.py`*: the theorems given the program's counter functions (`KQR.no_kfuns` until step 147).
+- *The C*: the same (nothing produces the construct yet).  *Cells*: none added.
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6956,7 +6963,9 @@ Pushed to the public repository up to `2653cc4` (2026-11-17); `git log --oneline
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 145's design -- the bound of a function whose row KQRK's syntax makes, proved once (kbound, kbound_ok), its statement by conversion |
+| (this commit) | §12.V: step 146's design -- a call of the program's counter function used as a counter, in S (CCallK, the class KFuns), proved once; §14 step 145's code row |
+| `f0946c7` | `proved/KQRK.v` + `KQRReify.v` + `kitc.py` step 145: the bound of a function whose row KQRK's syntax makes, computed from the syntax (kbound) and proved once (kbound_ok); the reader states it in kbstmt's form, kitc.py proves it by exact |
+| `f83cc77` | §12.V: step 145's design -- the bound of a function whose row KQRK's syntax makes, proved once (kbound, kbound_ok), its statement by conversion |
 | `b159f5a` | §12.V: steps 143, 144 (the rows' statements proved once, begun: a function giving back a counter as a syntax of its own, KQRK.v; the construct table 4236 of 4385), one chain for the two; the gate |
 | `2653cc4` | `proved/KQRReify.v` + `KQRK.v` step 144: a function giving back a counter whose recursion hands its counters on unchanged: its row takes none at numbers, made from KQRK's syntax; ldiff in KQRK's syntax |
 | `ea10bc4` | §12.V: step 144's design -- a row made from KQRK's syntax where the recursion hands its counters on unchanged; ldiff; §14 step 143's code row |
