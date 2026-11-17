@@ -1926,7 +1926,7 @@ proved once, measured against C written the same way.
   levels of a 256-branch match, cubic in the constructors; simplifying the whole goal at each step unfolds the representation and
   runs out of memory.  A byte match is ordinary in a parser or a driver.  Accepted when `A_q_byte_lit`'s proof file takes under 10 s,
   every law of every program of the gate and the table proved as before.
-- *The reifier's step after step 147* (found at step 147): `HWP_kernel` 3.41 s against 3.21 at step 144 (on the work laptop, in every
+- ~~*The reifier's step after step 147*~~ (found at step 147) — **done, step 148**: `HWP_kernel` 3.14 s at step 149.  `HWP_kernel` 3.41 s against 3.21 at step 144 (on the work laptop, in every
   round), `HWP_own` 2.32 against 2.21, `HWP_irqnow` 1.99 against 1.94.  The look for a counter function's row at every constant reached
   (`kq_row`) and at each check of a function (`rd_kents`) are the likely cost, not measured yet.  Accepted when the kernels' reifier
   step measures as step 144's.
@@ -6793,6 +6793,19 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *The reader*: `reify_c` reads the call's counters as counters (`reify_c`), `kq_ccall` takes any; the call site its counters' (`cl_c`).
 - *The C*: the same.  *Cells*: none added.
 
+**Steps 148, 149 — the results (2026-11-17), one chain for the two.**  Built as designed:
+- *Step 148, the reifier's step after step 147*: the reader (`KQRReify.v`): `kq_rows`, `kn_dedup` after the program's functions are reached, `kq_row` out of `reach_go`; `ends_k0rp` in `rd_kents`.  Checked on the work laptop (the repository at step 147 with this step's files, the counter families and the mutual blocks': 178): every verdict the last table's.  Timed (on the work laptop, one core, interleaved, three rounds, the fastest, F62, in clean copies of the repository at step 144 and at step 148): `HWP_kernel` 3.14 / 3.21 s, `HWP_own` 2.19 / 2.22, `HWP_irqnow` 1.91 / 1.97: within the spread (step 144's own rounds 3.14 to 3.33 s), against 3.41 s at step 147; §12.F's item closed.
+- *Step 149, a counter function's call on any counters of S*: *`KQR.v`*: `CCallK`'s counters `scnts`, its meaning, code, `wfc` and `sh_c` as `SCall`'s, its bounds through each counter's (a fixpoint inside `cmax`, `clinf`, `cmaxv`); `scnt_ind'`, `wsumf`, `wsuml`, `ws_mono`, `ws_nonneg`, `ws_sum`, `ws_denote`, `kfn_le_ws`, `leval_wsuml`; the bound lemmas by `scnt_ind'`; its case of the three inductions and of `cexp_all` (`SCall`'s); step 146's lemmas over variables removed; *`KQRK.v`*: `clinf_le`'s case; the reader: `reify_c` and `cl_c` on the counters, `kq_ccall` on any.  *Found while building*: Rocq's guard takes a fixpoint over the counters inside a fixpoint over a counter, the one over the counters a subterm's; `induction .. as .. using` (in that order).  Checked on the work laptop (the repository at step 148 with this step's files, step 142's wide lab: 2150): every verdict and category the last table's; in that lab's proof files the callers' copies' equations (`eqCb`) on 368 lines against 388 at step 147, `own_step` 1193 uses in 755 files against 1203 in 765.
+- *The reifier's step on the kernels' programs* (on the work laptop, one core, interleaved, three rounds, the fastest, F62, in clean copies of the repository at step 147 and at step 149): `HWP_kernel` 3.47 / 3.14 s, `HWP_own` 2.31 / 2.17, `HWP_irqnow` 1.97 / 1.92: back to step 144's (3.14 s at step 148's timing).
+- *The run*: one chain for the two steps, on the last step's code commit, the table in 12 long-lived Rocq sessions under 14 GB (§12.F).
+- The C: the 99 programs byte-identical.  The construct table (on `ba9baae`): **4239 of 4385 through the verified compiler**, 76
+  by design, 69 gaps, 1 not Rocq (was 4239 of 4385: every cell's verdict and category the last table's; no cell lost).  The gate
+  on `ba9baae`, the walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding, beside the corpus; the same C:
+  undefined behaviour trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels
+  and `grow` (23 / 23 / 25 / 20 / 20 / 10 s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems
+  each within the list; `check_trust.py`: `trust unchanged`.  Next: a counter function whose row calls another (the program's
+  counter functions given to a row), then value rows and blocks the same way (§12.V).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -6993,11 +7006,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `439812a` (2026-11-17); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `ba9baae` (2026-11-17); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 149's design -- a counter function's call on any counters of S (CCallK as SCall's counters); §14 step 148's code row |
+| (this commit) | §12.V: steps 148, 149 (the reader's look for a counter function's row once; a counter function's call on any counters of S: the construct table 4239 of 4385), one chain for the two; the gate; §12.F |
+| `ba9baae` | `proved/KQR.v` + `KQRK.v` + `KQRReify.v` step 149: a counter function's call on any counters of S (CCallK's counters scnts, its bounds through each counter's, scnt_ind'); the reader reads them as counters |
+| `3b6a1e1` | §12.V: step 149's design -- a counter function's call on any counters of S (CCallK as SCall's counters); §14 step 148's code row |
 | `3021688` | `proved/KQRReify.v` step 148: the look for a counter function's row once per function reached (kq_rows) and only for a callee whose name is a row's (ends_k0rp) |
 | `50c53cf` | §12.V: step 148's design -- the reader's look for a counter function's row, once per function reached and per callee whose name is a row's (§12.F) |
 | `35877e9` | §12.V: steps 145, 146, 147 (a counter function's bound proved once; its call used as a counter a construct of S, proved once; such uses read so, the callers by conversion: the construct table 4239 of 4385), one chain for the three; the gate; §12.A |
