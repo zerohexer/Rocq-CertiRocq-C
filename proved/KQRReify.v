@@ -3349,9 +3349,13 @@ Definition krow_src (Σ : global_env) (kn : kername) : option (kername * term) :
 
 (** (step 147) the program's counter functions among the callees read so far, as kitc.py gives them to the proof (KQRK.kfuns_of):
     each row KQRK's syntax makes whose bound is KQRK's *)
+Fixpoint ends_k0rp (s : string) : bool :=
+  if String.eqb s "__k0__rp__wy"%bs then true else match s with String.EmptyString => false | String.String _ r => ends_k0rp r end.
 Definition rd_kents (Σ : global_env) (callees : list (kername * sig)) : list KQRK.kent :=
   flat_map (fun jc : nat * (kername * sig) =>
     let '(j, (kn, gs)) := jc in
+    (* (step 148) a callee whose name is a row's only *)
+    if negb (ends_k0rp (snd kn)) then [] else
     match krow_src Σ kn with
     | Some (_, b) =>
         match read_kbody Σ (fun _ => None) (fun _ _ => None) [] [] b, kb_bnd Σ b with
@@ -3942,10 +3946,13 @@ Definition is_fn (lm : bool) (Σ : global_env) (mp : modpath) (root kn : kername
     the kit that are not functions) are looked through for the functions they call, as the translator's [reach] does --
     each constant once ([seen]) *)
 (** (step 147) a function giving back a counter whose row KQRK's syntax makes, its bound KQRK's: reached as its row, which a use of
-    it as a counter calls (CCallK) as a use as a number does *)
+    it as a counter calls (CCallK) as a use as a number does; (step 148) the functions reached, each looked for once *)
 Definition kq_row (Σ : global_env) (k : kername) : kername :=
   let rk := (copy_mp, mangle k ^ "__k0__rp__wy"%bs) in
   match krow_src Σ rk with Some (_, b) => match kb_bnd Σ b with Some _ => rk | None => k end | None => k end.
+Fixpoint kn_dedup (seen l : list kername) : list kername :=
+  match l with [] => [] | k :: r => if existsb (Kername.eqb k) seen then kn_dedup seen r else k :: kn_dedup (k :: seen) r end.
+Definition kq_rows (Σ : global_env) (l : list kername) : list kername := kn_dedup [] (map (kq_row Σ) l).
 Fixpoint reach_go (lm : bool) (fuel : nat) (Σ : global_env) (mp : modpath) (root kn : kername) (st : list kername * list kername)
   : list kername * list kername :=
   match fuel with
@@ -3955,7 +3962,7 @@ Fixpoint reach_go (lm : bool) (fuel : nat) (Σ : global_env) (mp : modpath) (roo
       if existsb (Kername.eqb kn) seen then st
       else match body_of Σ kn with
            | Some b =>
-               let cs := filter (fun k => (in_prog mp (fst k) || eq_mp (fst k) kit_mp) && negb (Kername.eqb k kn)) (map (kq_row Σ) (consts 10000 b [])) in
+               let cs := filter (fun k => (in_prog mp (fst k) || eq_mp (fst k) kit_mp) && negb (Kername.eqb k kn)) (consts 10000 b []) in
                let '(done', seen') := fold_left (fun st k => reach_go lm fuel Σ mp root k st) (rev cs) (done, kn :: seen) in
                (if is_fn lm Σ mp root kn then List.app done' [kn] else done', seen')
            | None => (done, kn :: seen)
@@ -13534,7 +13541,7 @@ Definition reify_prog2c (lo : bool) (bt0 : kername -> option Z) (chk : bool) (p 
                                     | ConstantDecl cb => match cst_body cb with Some b => lfix_body b | None => false end
                                     | _ => false end else false) (declarations S) in
       let lf0 := lfl Σ0 in
-      let kns0 := reach_m lf0 1000 Σ0 mp root root [] in
+      let kns0 := kq_rows Σ0 (reach_m lf0 1000 Σ0 mp root root []) in
       let Σ0f := float_all Σ0 kns0 in
       let '(Σ, kns1, lts1) := lift_all lf0 Σ0f mp kns0 in
       (* (step 93) the kit's functions first: the program's functions call them *)
