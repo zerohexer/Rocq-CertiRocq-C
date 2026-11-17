@@ -1599,12 +1599,12 @@ with reify_c (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : option sc
       else match find_callee (copy_mp, mangle kn ^ "__k0__rp__wy"%bs) callees 0 with
       | Some (J, gs) =>
           (* (step 147) a call of the program's function giving back a counter, its row made from KQRK's syntax: the function itself, on
-             counter variables *)
+             counters (step 149: any counters) *)
           if sr gs || sw gs || isq gs || negb (Nat.leb (sn gs) (length args)) then None else
-          match opt_all (map (fun a => match a with tRel i => cnt_index ctx i | _ => None end) (firstn (sn gs) args)),
+          match option_map to_scnts (opt_all (map (reify_c fuel ctx) (firstn (sn gs) args))),
                 read_mem ctx (sm gs) (skipn (sn gs) args) with
-          | Some vs, Some nums =>
-              option_map (CCallK J vs)
+          | Some ccs, Some nums =>
+              option_map (CCallK J ccs)
                 (to_args (map (fun a => match reify fuel ctx a with Some e => Some (inl e) | None =>
                                 match reify_b fuel ctx a with Some b => Some (inr (inl b)) | None => option_map (fun x => inr (inr x)) (reify_r fuel ctx a) end end) nums))
           | _, _ => None
@@ -3541,8 +3541,8 @@ with cl_es (B : Z) (bs : list cbe) (es : sexps) {struct es} : list site :=
   end
 with cl_c (B : Z) (bs : list cbe) (c : scnt) {struct c} : list site :=
   match c with CVar _ | CO | CLit _ | CNumU _ | CPowL _ _ => [] | CS c | KQR.CPred c | CDiv2 c | CMulK _ _ c | CMulU _ _ c | CShl _ c => cl_c B bs c | CAdd a b | CMin a b | CMax a b | CSub a b | CDivN a b | CModN a b | CBitN _ a b | CLib _ _ a b => cl_c B bs a ++ cl_c B bs b | CNat e | CToNat e | CToNatU e => cl_e B bs e | CIf b x y => cl_b B bs b ++ cl_c B bs x ++ cl_c B bs y
-             (* (step 146) a counter function's call: a call site of it, on its counter variables *)
-             | CCallK f vs args => (Some f, (bs, cvars vs)) :: cl_es B bs args end
+             (* (step 146) a counter function's call: a call site of it, on its counters *)
+             | CCallK f ccs args => (Some f, (bs, ccs)) :: cl_cs B bs ccs ++ cl_es B bs args end
 with cl_cs (B : Z) (bs : list cbe) (cs : scnts) {struct cs} : list site :=
   match cs with CNil => [] | CCons c r => cl_c B bs c ++ cl_cs B bs r end
 with cl_b (B : Z) (bs : list cbe) (b : sbool) {struct b} : list site :=
@@ -12862,13 +12862,12 @@ Definition nc_bnd (Σ : global_env) (mp : modpath) (rows : list rprow) (tab : li
 Definition nc_capa (mp : modpath) (cap : nat) (k : kername) (go go2 : term -> term) (a : term) : term :=
   if if Nat.leb 1 cap then in_prog mp (fst k) else false then go2 a else go a.
 (** (step 147) a use as a counter that the reader reads as CCallK: a call of a function whose row KQRK's syntax makes, its bound
-    KQRK's, on counter variables *)
+    KQRK's, on any counters (step 149) *)
 Definition kq_ccall (Σ : global_env) (rows : list rprow) (t : term) : bool :=
   match t with
   | tApp (tConst kn _) args =>
       match kb_nbf Σ rows kn with
       | Some f => Nat.leb (length (fst f)) (length args)
-                  && forallb (fun a => match a with tRel _ => true | _ => false end) (firstn (length (fst f)) args)
       | None => false
       end
   | _ => false

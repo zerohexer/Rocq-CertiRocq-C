@@ -323,7 +323,7 @@ Qed.
 Lemma clinf_le : forall bs pv c cs rec cenv benv renv denv M, cbl bs pv cenv ->
   (Z.of_nat (denote_c cs rec cenv benv renv denv M c) <= leval (clinf bs c) pv)%Z.
 Proof.
-  intros bs pv c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b | fi vs args]; intros cs rec cenv benv renv denv M Cb; simpl denote_c; cbn [clinf].
+  intros bs pv c. induction c as [i | | c IH | e | c IH | a IHa b IHb | a IHa b IHb | a IHa b IHb | a IHa b IHb | c IH | l w c IH | e | e | a IHa b IHb | a IHa b IHb | b a IHa d IHb | o a IHa b IHb | w c IH | o fi a IHa b IHb | k | u | l w c IH | a b | fi ccs IHcs args] using scnt_ind'; intros cs rec cenv benv renv denv M Cb; simpl denote_c; cbn [clinf].
   - eapply linat_le; eauto.
   - rewrite leval_zero. lia.
   - rewrite leval_shift. specialize (IH cs rec cenv benv renv denv M Cb). lia.
@@ -354,9 +354,8 @@ Proof.
   - unfold leval. cbn [fst snd evc]. rewrite nu_z_ok. lia.
   - rewrite leval_scale. specialize (IH cs rec cenv benv renv denv M Cb). rewrite <- nu_z_ok. destruct l; rewrite Nat2Z.inj_mul; nia.
   - unfold leval. cbn [fst snd evc]. rewrite cpw_ok. lia.
-  - rewrite leval_shift, leval_add, leval_scale, leval_fold_linat.
-    pose proof (kfn_le_lin fi vs (denote_es cs rec cenv benv renv denv M args) M cenv (fun i => leval (linat bs i) pv) (fun i => linat_le bs pv cenv i Cb)) as K.
-    cbv beta in K. lia.
+  - change (Z.of_nat (kfn fi (denote_cs cs rec cenv benv renv denv M ccs) (denote_es cs rec cenv benv renv denv M args) M) <= leval (lshift (kbk fi) (wsuml (clinf bs) ccs (Z.of_nat (kbw fi)))) pv)%Z.
+    rewrite leval_shift, leval_wsuml. apply kfn_le_ws. eapply Forall_impl; [|exact IHcs]. intros c' Hc'. exact (Hc' cs rec cenv benv renv denv M Cb).
 Qed.
 
 (** the sum of counters *)
