@@ -4799,6 +4799,26 @@ addA('zx_cr_value', "", 'if Nat.leb (w n a s) 3 then a else b',
      'Fixpoint pv (k : nat) (i : int) : nat * int := match k with O => (O, i) | S m => let p := pv m (i + 1) in (S (fst p), snd p) end.\nFixpoint w (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if Nat.leb (fst (pv m i)) 3 then S (w m (i + 1) t) else w m (i + 1) t end.\n')
 addA('zx_cr_acc', "", 'if Nat.leb (w n a s) 3 then a else b',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint w (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if Nat.leb (cnt m i t) 3 then S (w m (i + 1) t) else w m (i + 1) t end.\nDefinition w2 (k : nat) (i : int) (t : mem) : nat := w k i t.\n')
+addA('zx_cr_chain3', "", 'if Nat.leb (v n a s) 3 then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint w (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if Nat.leb (cnt m i t) 3 then S (w m (i + 1) t) else w m (i + 1) t end.\nFixpoint v (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if Nat.leb (w m i t) 2 then S (v m (i + 1) t) else v m (i + 1) t end.\n')
+addA('zx_cr_chain3_res', "", 'if Nat.leb (tz n) 3 then a else b',
+     'Fixpoint tw (k : nat) : nat := match k with O => O | S m => S (tw m) end.\nFixpoint th (k : nat) : nat := match k with O => tw 2 | S m => S (th m) end.\nFixpoint tz (k : nat) : nat := match k with O => th 3 | S m => S (tz m) end.\n')
+addA('zx_cr_result', "", 'if Nat.leb (w n a s) 3 then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint w (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 1 i t =? 0 then cnt m i t else S (w m (i + 1) t) end.\n')
+addA('zx_cr_result_add', "", 'if Nat.leb (w n a s) 3 then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint w (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => S (w m (i + 1) t) + cnt 2 i t end.\n')
+addA('zx_cr_nested', "", 'if Nat.leb (w n a s) 3 then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint w (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if Nat.leb (cnt (cnt m i t) i t) 3 then S (w m (i + 1) t) else w m (i + 1) t end.\n')
+addA('zx_cr_succ_arg', "", 'if Nat.leb (w n a s) 3 then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint w (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if Nat.leb (cnt (S m) i t) 3 then S (w m (i + 1) t) else w m (i + 1) t end.\n')
+addA('zx_cr_whole', "", 'if Nat.leb (w n a s) 3 then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint w (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if Nat.leb (cnt k i t) 3 then S (w m (i + 1) t) else w m (i + 1) t end.\n')
+addA('zx_cr_other_counter', "", 'if Nat.leb (w n n a s) 3 then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint w (k c : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if Nat.leb (cnt c i t) 3 then S (w m c (i + 1) t) else w m c (i + 1) t end.\n')
+addA('zx_cr_caller_both', "", 'if Nat.leb (w n a s + cnt n a s) 3 then a else b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint w (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if Nat.leb (cnt m i t) 3 then S (w m (i + 1) t) else w m (i + 1) t end.\n')
+addA('zx_cr_acc_callee', "", 'if Nat.leb (w n a) 3 then a else b',
+     'Fixpoint ac (k x : nat) : nat := match k with O => x | S m => ac m (S x) end.\nFixpoint w (k : nat) (i : int) : nat := match k with O => O | S m => if Nat.leb (ac m 0) 3 then S (w m (i + 1)) else w m (i + 1) end.\n')
 # a test in Z of a counter against a negative number: BCmpZN (step 137)
 addA('zx_zn_ge', "", 'if (Z.of_nat n >=? -5)%Z then a else b',
      '')

@@ -2999,7 +2999,9 @@ Fixpoint reify_kb (fuel : nat) (ctx : list cent) (t : term) {struct fuel} : opti
             | Some x, Some e0, Some e1 => Some (KMatch x e0 e1)
             | _, _, _ => None
             end
-        | _ => None
+        (* (step 151) on a counter that is not a variable (a counter function's call), as S's reading: a written one its branch, any other
+           let-bound first, then the match on it, the same up to zeta *)
+        | _ => match known_branch c b0 b1 with Some t => reify_kb fuel ctx t | None => reify_kb fuel ctx (let_scrut ci p c b0 b1) end
         end
       else None
       end
@@ -3328,16 +3330,23 @@ Definition kq_handon (Σ : global_env) (b : term) : bool :=
 (** the function a row made so stands for and its body as written (the marks [y_all] leaves) *)
 (** (step 145) a function giving back a counter whose row KQRK's syntax makes (step 143): its bound [KQRK.kbound]'s, proved once
     ([KQRK.kbound_ok]), over its counters, the first [w] times, the others once; where [w] and the counters' number are at most 1000 *)
-Definition kb_bnd (Σ : global_env) (b : term) : option (nat * Z * Z) :=
-  match read_kbody Σ (fun _ => None) (fun _ _ => None) [] [] b with
+(** (step 151) the rows read so, callees first, each read with those before it as its callees (a call of one a [CCallK] of its
+    place), its bound at the instance of their entries: the row's name, its signature, its entry *)
+Definition kpe_callees (pe : list (kername * sig * KQRK.kent)) : list (kername * sig) := map (fun p => (fst (fst p), snd (fst p))) pe.
+Definition kpe_ents (pe : list (kername * sig * KQRK.kent)) : list KQRK.kent := rev (map snd pe).
+Definition kb_bnd (pe : list (kername * sig * KQRK.kent)) (Σ : global_env) (b : term) : option (nat * Z * Z * KQRK.kent * sig) :=
+  match read_kbody Σ (fun _ => None) (fun _ _ => None) [] (kpe_callees pe) b with
   | Some (gs, _, _, e0, e1) =>
       let nx := Nat.pred (sn gs) in
-      match KQRK.kbound nx (KQRK.unrow_kb0 (FRec e0 e1)) (KQRK.unrow_kb1 (FRec e0 e1)) with
-      | Some (w, c) => if (w + Z.of_nat nx <=? 1000)%Z && (c <? 4611686018427387904)%Z then Some (nx, w, c) else None
+      let e := KQRK.mkkent (length pe) nx (sk gs) (sm gs) (KQRK.unrow_kb0 (FRec e0 e1)) (KQRK.unrow_kb1 (FRec e0 e1)) in
+      match @KQRK.kbound no_recs (@KQRK.kfb no_recs (kpe_ents pe)) nx (KQRK.kb0 e) (KQRK.kb1 e) with
+      | Some (w, c) => if (w + Z.of_nat nx <=? 1000)%Z && (c <? 4611686018427387904)%Z then Some (nx, w, c, e, gs) else None
       | None => None
       end
   | None => None
   end.
+Definition kpe_add (pe : list (kername * sig * KQRK.kent)) (Σ : global_env) (rn : kername) (b : term) : list (kername * sig * KQRK.kent) :=
+  match kb_bnd pe Σ b with Some (_, _, _, e, gs) => pe ++ [(rn, gs, e)] | None => pe end.
 Definition krow_src (Σ : global_env) (kn : kername) : option (kername * term) :=
   if eq_mp (fst kn) copy_mp then
     match lookup_env Σ (copy_mp, snd kn ^ "__ks"%bs), lookup_env Σ (copy_mp, snd kn ^ "__kb"%bs) with
@@ -3347,23 +3356,45 @@ Definition krow_src (Σ : global_env) (kn : kername) : option (kername * term) :
     end
   else None.
 
+Fixpoint ends_ks (s : string) : bool :=
+  if String.eqb s "__k0__rp__wy__ks"%bs then true else match s with String.EmptyString => false | String.String _ r => ends_ks r end.
+Definition kpe_marks (Σ : global_env) : list (kername * sig * KQRK.kent) :=
+  fold_left (fun pe (d : kername * global_decl) =>
+    match d with
+    | ((mp', nm), ConstantDecl cb) =>
+        if eq_mp mp' copy_mp && ends_ks nm then
+          match cst_body cb with
+          | Some (tConst src _) => let rn := (copy_mp, mangle src ^ "__k0__rp__wy"%bs) in
+                                   match krow_src Σ rn with Some (_, b) => kpe_add pe Σ rn b | None => pe end
+          | _ => pe
+          end
+        else pe
+    | _ => pe
+    end) (rev (declarations Σ)) [].
 (** (step 147) the program's counter functions among the callees read so far, as kitc.py gives them to the proof (KQRK.kfb):
-    each row KQRK's syntax makes whose bound is KQRK's *)
+    each row KQRK's syntax makes whose bound is KQRK's; (step 151) each read with the callees before it *)
 Fixpoint ends_k0rp (s : string) : bool :=
   if String.eqb s "__k0__rp__wy"%bs then true else match s with String.EmptyString => false | String.String _ r => ends_k0rp r end.
 Definition rd_kents (Σ : global_env) (callees : list (kername * sig)) : list KQRK.kent :=
-  flat_map (fun jc : nat * (kername * sig) =>
+  snd (fold_left (fun st (jc : nat * (kername * sig)) =>
     let '(j, (kn, gs)) := jc in
-    (* (step 148) a callee whose name is a row's only *)
-    if negb (ends_k0rp (snd kn)) then [] else
-    match krow_src Σ kn with
-    | Some (_, b) =>
-        match read_kbody Σ (fun _ => None) (fun _ _ => None) [] [] b, kb_bnd Σ b with
-        | Some (_, _, _, e0, e1), Some _ => [KQRK.mkkent j (Nat.pred (sn gs)) (sk gs) (sm gs) (KQRK.unrow_kb0 (FRec e0 e1)) (KQRK.unrow_kb1 (FRec e0 e1))]
-        | _, _ => []
-        end
-    | None => []
-    end) (combine (seq 0 (length callees)) callees).
+    let '(pre, es) := st in
+    (pre ++ [(kn, gs)],
+     (* (step 148) a callee whose name is a row's only *)
+     if negb (ends_k0rp (snd kn)) then es else
+     match krow_src Σ kn with
+     | Some (_, b) =>
+         match read_kbody Σ (fun _ => None) (fun _ _ => None) [] pre b with
+         | Some (gs', _, _, e0, e1) =>
+             let e := KQRK.mkkent j (Nat.pred (sn gs')) (sk gs') (sm gs') (KQRK.unrow_kb0 (FRec e0 e1)) (KQRK.unrow_kb1 (FRec e0 e1)) in
+             match @KQRK.kbound no_recs (@KQRK.kfb no_recs (rev es)) (KQRK.kx e) (KQRK.kb0 e) (KQRK.kb1 e) with
+             | Some (w, c) => if (w + Z.of_nat (KQRK.kx e) <=? 1000)%Z && (c <? 4611686018427387904)%Z then es ++ [e] else es
+             | None => es
+             end
+         | None => es
+         end
+     | None => es
+     end)) (combine (seq 0 (length callees)) callees) ([], [])).
 
 (** the same, the parameters in another order (step 41): the body read with each binder at its place in the order the syntax
     takes, a recursive call's arguments put in that order ([CSelfP]) *)
@@ -3947,12 +3978,12 @@ Definition is_fn (lm : bool) (Σ : global_env) (mp : modpath) (root kn : kername
     each constant once ([seen]) *)
 (** (step 147) a function giving back a counter whose row KQRK's syntax makes, its bound KQRK's: reached as its row, which a use of
     it as a counter calls (CCallK) as a use as a number does; (step 148) the functions reached, each looked for once *)
-Definition kq_row (Σ : global_env) (k : kername) : kername :=
+Definition kq_row (pe : list (kername * sig * KQRK.kent)) (Σ : global_env) (k : kername) : kername :=
   let rk := (copy_mp, mangle k ^ "__k0__rp__wy"%bs) in
-  match krow_src Σ rk with Some (_, b) => match kb_bnd Σ b with Some _ => rk | None => k end | None => k end.
+  if existsb (fun p => Kername.eqb (fst (fst p)) rk) pe then rk else k.
 Fixpoint kn_dedup (seen l : list kername) : list kername :=
   match l with [] => [] | k :: r => if existsb (Kername.eqb k) seen then kn_dedup seen r else k :: kn_dedup (k :: seen) r end.
-Definition kq_rows (Σ : global_env) (l : list kername) : list kername := kn_dedup [] (map (kq_row Σ) l).
+Definition kq_rows (pe : list (kername * sig * KQRK.kent)) (Σ : global_env) (l : list kername) : list kername := kn_dedup [] (map (kq_row pe Σ) l).
 Fixpoint reach_go (lm : bool) (fuel : nat) (Σ : global_env) (mp : modpath) (root kn : kername) (st : list kername * list kername)
   : list kername * list kername :=
   match fuel with
@@ -12099,10 +12130,23 @@ Definition nb_of1 (Σ : global_env) (mp : modpath) (tab : list (kername * nbf)) 
   end.
 Definition kb_isrow (rows : list rprow) (kn : kername) : bool :=
   existsb (fun r : rprow => match r with (tConst k _, _, [s0], _, _) => Kername.eqb k kn && Nat.eqb s0 rp_nr | _ => false end) rows.
+Fixpoint kpe_upto (Σ : global_env) (rows : list rprow) (kn : kername) (pe : list (kername * sig * KQRK.kent)) : list (kername * sig * KQRK.kent) :=
+  match rows with
+  | [] => pe
+  | r :: rs =>
+      match r with
+      | (tConst k _, _, [s0], _, _) =>
+          if Kername.eqb k kn then pe
+          else if Nat.eqb s0 rp_nr then
+            match body_of Σ k with Some b => kpe_upto Σ rs kn (kpe_add pe Σ (rp_name r) b) | None => kpe_upto Σ rs kn pe end
+          else kpe_upto Σ rs kn pe
+      | _ => kpe_upto Σ rs kn pe
+      end
+  end.
 Definition kb_nbf (Σ : global_env) (rows : list rprow) (kn : kername) : option nbf :=
   if kb_isrow rows kn then
     match body_of Σ kn with
-    | Some b => option_map (fun r => let '(nx, w, c) := r in (Z.to_nat w :: repeat 1%nat nx, c)) (kb_bnd Σ b)
+    | Some b => option_map (fun r => let '(nx, w, c, _, _) := r in (Z.to_nat w :: repeat 1%nat nx, c)) (kb_bnd (kpe_upto Σ rows kn []) Σ b)
     | None => None
     end
   else None.
@@ -13306,7 +13350,7 @@ Definition y_allc (cap : bool) (Σ : global_env) (mp : modpath) (root : kername)
               | (tConst kn _, _, [s0], _, _) =>
                   if Nat.eqb s0 rp_nr then
                     match body_of (conv_all Σ mp) kn with
-                    | Some b => match read_kbody (conv_all Σ mp) (fun _ => None) (fun _ _ => None) [] [] b with
+                    | Some b => match read_kbody (conv_all Σ mp) (fun _ => None) (fun _ _ => None) [] (kpe_callees (kpe_upto (conv_all Σ mp) rows kn [])) b with
                                 | Some _ => add_decl (add_decl S2 (copy_mp, snd (rp_name r) ^ "__ks"%bs) (tSort sProp) (tConst kn []))
                                                      (copy_mp, snd (rp_name r) ^ "__kb"%bs) (tSort sProp) b
                                 | None => S2
@@ -13403,6 +13447,8 @@ Definition y_allc (cap : bool) (Σ : global_env) (mp : modpath) (root : kername)
   fold_left (fun st kn =>
     let '(S1, ch) := st in
     if existsb (fun r : rprow => match r with (tConst k _, _, sl, _, _) => if if rp_is_um sl then true else if rp_is_bm sl then true else if rp_is_er sl then true else if rp_is_qm sl then true else if rp_is_om sl then true else if rp_is_gm sl then true else if rp_is_sp sl then true else rp_is_vm sl then Kername.eqb k kn else false | _ => false end) rows then st else
+    (* (step 151) a row KQRK's syntax makes is read from its body as written (its marks, [krow_src]): no copy of it is read *)
+    if match krow_src S1 kn with Some _ => true | None => false end then st else
     if in_prog mp (fst kn) then
       match lookup_env S1 kn with
       | Some (ConstantDecl cb) =>
@@ -13499,15 +13545,15 @@ Definition kn_krow := kn_of <% @KQRK.krow %>.
 Definition kq_tt := <% tt %>.
 (** (step 145) where the bound of the function a row is made of is KQRK's: a mark named by the function and the row, for kitc.py's proof
     of the bound by KQRK.kbound_ok (a name: the function may be one the reader made, not yet defined where the marks are) *)
-Definition kb_marks (Σ : global_env) (kn : kername) (rn : string) : list (string * term) :=
+Definition kb_marks (pe : list (kername * sig * KQRK.kent)) (Σ : global_env) (kn : kername) (rn : string) : list (string * term) :=
   match krow_src Σ kn with
-  | Some (src, b) => match kb_bnd Σ b with Some _ => [(mangle src ^ "__kbr__" ^ rn, kq_tt)] | None => [] end
+  | Some (src, _) => if existsb (fun p => Kername.eqb (fst (fst p)) kn) pe then [(mangle src ^ "__kbr__" ^ rn, kq_tt)] else []
   | None => []
   end.
-Definition krow_term (Σ : global_env) (kn : kername) : option term :=
+Definition krow_term (pe : list (kername * sig * KQRK.kent)) (Σ : global_env) (kn : kername) : option term :=
   match krow_src Σ kn with
   | Some (src, b) =>
-      match read_kbody Σ (fun _ => None) (fun _ _ => None) [] [] b with
+      match read_kbody Σ (fun _ => None) (fun _ _ => None) [] (kpe_callees pe) b with
       | Some (gs, _, _, _, _) =>
           Some (tApp (tConst kn_krow []) [qnat (Nat.pred (sn gs)); qlist (tInd ind_kind []) (map qkind (sk gs));
                                           tConstruct ind_bool (if sm gs then 0 else 1) []; tConst src []])
@@ -13519,6 +13565,8 @@ Definition reify_prog2c (lo : bool) (bt0 : kername -> option Z) (chk : bool) (p 
   match p with
   | (Σ0000, tConst root _) =>
       let mp := fst root in
+      (* (step 151) the rows KQRK's syntax makes, callees first, from the marks the reading left *)
+      let kpe := kpe_marks Σ0000 in
       (* (step 93) the kit's functions a call of the library's needs *)
       let lko := lk_ops Σ0000 in
       let Σ000 := lk_with lko Σ0000 in
@@ -13540,7 +13588,7 @@ Definition reify_prog2c (lo : bool) (bt0 : kername -> option Z) (chk : bool) (p 
                                     | ConstantDecl cb => match cst_body cb with Some b => lfix_body b | None => false end
                                     | _ => false end else false) (declarations S) in
       let lf0 := lfl Σ0 in
-      let kns0 := kq_rows Σ0 (reach_m lf0 1000 Σ0 mp root root []) in
+      let kns0 := kq_rows kpe Σ0 (reach_m lf0 1000 Σ0 mp root root []) in
       let Σ0f := float_all Σ0 kns0 in
       let '(Σ, kns1, lts1) := lift_all lf0 Σ0f mp kns0 in
       (* (step 93) the kit's functions first: the program's functions call them *)
@@ -13578,8 +13626,8 @@ Definition reify_prog2c (lo : bool) (bt0 : kername -> option Z) (chk : bool) (p 
                       | None => None
                       end
                   end) kns (Some ([], lts)) in
-      option_map (fun et => (fst et, vt_mts Σ0000 (MPfile (mp_file mp)) ++ map (fun e => (snd (snd (fst e)), real_copies 1000 (MPfile (mp_file mp)) (match krow_term Σ0000 (snd (fst e)) with Some t => t | None => snd e end))) (lms ++ snd et)
-                                      ++ flat_map (fun e => match krow_term Σ0000 (snd (fst e)) with Some _ => (snd (snd (fst e)) ^ "__kr"%bs, kq_tt) :: kb_marks Σ0000 (snd (fst e)) (snd (snd (fst e))) | None => [] end) (lms ++ snd et))) st
+      option_map (fun et => (fst et, vt_mts Σ0000 (MPfile (mp_file mp)) ++ map (fun e => (snd (snd (fst e)), real_copies 1000 (MPfile (mp_file mp)) (match krow_term kpe Σ0000 (snd (fst e)) with Some t => t | None => snd e end))) (lms ++ snd et)
+                                      ++ flat_map (fun e => match krow_term kpe Σ0000 (snd (fst e)) with Some _ => (snd (snd (fst e)) ^ "__kr"%bs, kq_tt) :: kb_marks kpe Σ0000 (snd (fst e)) (snd (snd (fst e))) | None => [] end) (lms ++ snd et))) st
   | _ => None
   end.
 (** counter bounds worked out from the call graph (step 34): from the entry down -- the functions come callees first -- each
