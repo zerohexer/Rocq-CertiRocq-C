@@ -4990,6 +4990,10 @@ addA('z_n_let', "", 'let c := Uint63.of_nat (cnt n a s) in c + c',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
 addA('z_n_twice', "", 'Uint63.of_nat (cnt n a s) + Uint63.of_nat (cnt n b s)',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('z_n_built', "", 'Uint63.of_nat (cnt n a s + 1) + b',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
+addA('z_n_built_two', "", 'Uint63.of_nat (cnt n a s + cnt n b s)',
+     'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\n')
 addA('z_n_in_rec', "", 'outer n a s',
      'Fixpoint cnt (k : nat) (i : int) (t : mem) : nat := match k with O => O | S m => if rd 0 i t =? 0 then cnt m (i + 1) t else S (cnt m (i + 1) t) end.\nFixpoint outer (j : nat) (x : int) (t : mem) : int := match j with O => x | S m => outer m (x + Uint63.of_nat (cnt 3 x t)) t end.\n')
 addA('z_n_in_helper', "", 'wrap a s',
