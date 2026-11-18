@@ -1936,8 +1936,11 @@ proved once, measured against C written the same way.
 - *The table's sessions at the container's cap* (found at chain B11, steps 150 to 152): in 12 long-lived sessions under 14 GB the
   container reached its cap twice (the kernel stopping a session: 5 cells, then 3 others, refused with no reason, each proved in the
   other run and in the wide lab); in 11 no cell was lost, the cap still reached once (537 sessions started afresh, the largest 2583 MB, at
-  12; 527 and 2184 MB at 11).  Chains B8 to B10 lost none at 12.  Accepted when what grew is found (each cell's session size against
-  step 149's, `kqsess.log`) and the table runs below its cap, at 12 sessions again or at a number settled with its reason.
+  12; 527 and 2184 MB at 11).  Chains B8 to B10 lost none at 12.  Not the code: the counter families' sessions are the same size on
+  step 149's files and on step 152's (median 963 / 960 MB, the largest 1136 / 1123, `kqsess.log`), and step 149's own tree, its table
+  run again at 12, reached the cap as well (4 cells refused with no reason, the largest 2293 MB): the laptop's Docker VM no longer gives
+  12 sessions the room it did.  Accepted when the table runs below its cap with room to spare (at 11 it still reached it once), the number
+  of sessions settled with that reason.
 
 **G. Concurrency:** an interleaving semantics of two programs over the marked operations; protocol properties proved once (a
 lock's mutual exclusion, a queue); a ticket lock.
