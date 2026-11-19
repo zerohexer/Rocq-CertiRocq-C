@@ -1187,7 +1187,18 @@ def reflect(name, entry, prog, no_proof, closed=False):
                 yrd = " ".join(f"kx{q}" for q in [r] + [q for q in range(ar) if q != r])
                 return (f"match goal with |- context [{fn} {xs}] => lazymatch goal with _ : ({fn} {yin} <= _)%nat |- _ => fail | _ => pose proof ({pr} {yrd}) end end",
                         f"match goal with _ : context [{fn} {xs}] |- _ => lazymatch goal with _ : ({fn} {yin} <= _)%nat |- _ => fail | _ => pose proof ({pr} {yrd}) end end")
+            # (step 154) the block's part made from KQRK's syntax (step 153): its members' bounds KQRK.kbound's, at their selectors
+            row0 = f"{btag}__kb{grp[0][2]}_0_{bmb}_{btag}__rp__wy"
+            part = "kqcopy'_" + row0.replace("'", "''") + "__cblk"
+            jp = next((jj for jj, ff in enumerate(fs) if ff[0] == part), None)
             for i in range(bmb):
+                if bst[i][:-len("__bq__wy")] + "__kbm__wy" in made and jp is not None and mtsd.get(part) == "KQC.KQRK.krow":
+                    fp = fs[jp]
+                    B = f"(KQRReify.body_at {name}_funs {jp})"
+                    cv = " ".join(f"kqc{q}" for q in range(int(fp[1]) - 2))
+                    t += (f"Lemma {name}_bdb{g}_{i} : {bst[i]}.\nProof. unfold {bst[i]}. exact (fun kqn {cv} => @KQRK.kbound_okr {inst} {kfi} nil {int(fp[1]) - 1} {kl(fp)} {fp[3]}"
+                          f" (KQRK.unrow_kb0 {B}) (KQRK.unrow_kb1 {B}) {part}__H eq_refl eq_refl (fun _ => eq_refl) kqn {cv} ({i})%nat). Qed.\n")
+                    continue
                 bwith = " ".join(f"(IH{k} (kqn : nat) {{struct kqn}} : {bat[k]} kqn)" for k in range(bmb) if k != i)
                 bposes = " | ".join(bpose(k, f"IH{k}")[0] for k in range(bmb))
                 t += (f"Lemma {name}_bdb{g}_{i} : {bst[i]}.\nProof. unfold {bst[i]}. fix IH{i} 1 with {bwith}. all: intros kqn; destruct kqn as [|kqn]; "

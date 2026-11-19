@@ -727,6 +727,55 @@ Proof.
   intros n. apply kbc_intro. intros cvs vs s. rewrite fold_add. specialize (B n cvs vs s). unfold zsum in B.
   apply Nat2Z.inj_le. rewrite !Nat2Z.inj_add, Nat2Z.inj_mul, !Z2Nat.id by lia. lia.
 Qed.
+
+(** (step 154) the bound of a function [H] that satisfies the syntax's two equations ([row_of_okr]'s): [kbound]'s, as of the syntax's
+    own meaning, by the same induction with [H n] as the recursion *)
+Lemma kbound_listr : forall cs x k m b0 b1 W C (H : ctype (S x) (ntypeT k m nat)), kbound x b0 b1 = Some (W, C) ->
+  H O = absc x _ (fun cenv => absnT k m nat (fun env benv renv s => denote_kb cs kzero (cenv ++ [O]) benv renv env s b0)) ->
+  (forall n, H (S n) = absc x _ (fun cenv => absnT k m nat (fun env benv renv s =>
+     denote_kb cs (fun cvs args s' => appnT k m nat (appc x _ (H n) cvs) args s') (n :: cenv ++ [S n]) benv renv env s b1))) ->
+  forall n cvs vs s, (Z.of_nat (appnT k m nat (appc x _ (H n) cvs) vs s) <= zsum cvs + W * Z.of_nat n + C)%Z.
+Proof.
+  intros cs x k m b0 b1 W C H E HO HS. unfold kbound in E.
+  destruct (kb_abs false [] b0) as [[[L0|] [s0|]]|] eqn:E0; try discriminate E.
+  destruct (kb_abs true [(None, lunit x)] b1) as [[o1 s1]|] eqn:E1; [|discriminate E].
+  destruct (cy1 x (fst L0) && kb_ok1 x o1 && kb_ok2 x s1) eqn:CK; [|discriminate E].
+  apply andb_true_iff in CK as [CK C2]. apply andb_true_iff in CK as [C0 C1]. injection E as EW EC.
+  induction n as [|n IH]; intros cvs vs s.
+  - rewrite HO.
+    match goal with |- context [appc x ?T (absc x ?T ?F) cvs] => destruct (appc_absc_any x T F cvs) as (l & L & Zl & ->) end. cbv beta.
+    match goal with |- context [appnT k m nat (absnT k m nat ?G) vs s] => destruct (appnT_absnT_any k m nat G vs s) as (env & benv & renv & s' & ->) end.
+    cbv beta.
+    assert (Cb : cbl [] (l ++ [O]) (l ++ [O])) by (split; [reflexivity | intros i Hi; cbn [length] in Hi; lia]).
+    destruct (kb_abs_ok cs kzero false (l ++ [O]) 0%Z (fun H => ltac:(discriminate H)) (fun _ _ _ _ => eq_refl) b0 [] _ (l ++ [O]) benv renv env s' Cb E0)
+      as [B|B]; cbn [fst snd obnd] in B; [|destruct B].
+    unfold leval in B. pose proof (evc_cy1 x (fst L0) l O L C0). lia.
+  - rewrite (HS n).
+    match goal with |- context [appc x ?T (absc x ?T ?F) cvs] => destruct (appc_absc_any x T F cvs) as (l & L & Zl & ->) end. cbv beta.
+    match goal with |- context [appnT k m nat (absnT k m nat ?G) vs s] => destruct (appnT_absnT_any k m nat G vs s) as (env & benv & renv & s' & ->) end.
+    cbv beta.
+    assert (Cb : cbl [(None, lunit x)] (l ++ [S n]) (n :: l ++ [S n])).
+    { split; [reflexivity|]. intros [|i] Hi; cbn [length] in Hi; [|lia]. cbn [nth snd]. rewrite leval_unit, <- L, nth_middle. lia. }
+    destruct (kb_abs_ok cs (fun cvs args s' => appnT k m nat (appc x _ (H n) cvs) args s') true (l ++ [S n]) (W * Z.of_nat n + C)%Z
+                        (fun _ cvs' args s'' => ltac:(pose proof (IH cvs' args s''); lia)) (fun H => ltac:(discriminate H))
+                        b1 _ _ _ benv renv env s' Cb E1) as [B|B]; cbn [fst snd] in B.
+    + destruct o1 as [L1|]; cbn [obnd kb_ok1 oxat osnd] in B, C1, EW, EC; [|destruct B]. unfold leval in B. pose proof (evc_cy1 x (fst L1) l (S n) L C1).
+      assert (W1 : (cxat x (fst L1) <= W)%Z) by lia. assert (C1' : (snd L1 <= C)%Z) by lia. nia.
+    + destruct s1 as [S1|]; cbn [obnd kb_ok2 osnd] in B, C2, EW; [|destruct B]. apply andb_true_iff in C2 as [C2 C3]. apply Z.leb_le in C3.
+      unfold leval in B. pose proof (evc_cy1 x (fst S1) l (S n) L C2).
+      assert (W2 : (snd S1 <= W)%Z) by lia. nia.
+Qed.
+Theorem kbound_okr : forall cs x k m b0 b1 (H : ctype (S x) (ntypeT k m nat)), kbound_some (kbound x b0 b1) = true ->
+  H O = absc x _ (fun cenv => absnT k m nat (fun env benv renv s => denote_kb cs kzero (cenv ++ [O]) benv renv env s b0)) ->
+  (forall n, H (S n) = absc x _ (fun cenv => absnT k m nat (fun env benv renv s =>
+     denote_kb cs (fun cvs args s' => appnT k m nat (appc x _ (H n) cvs) args s') (n :: cenv ++ [S n]) benv renv env s b1))) ->
+  kbstmt x k m (Z.to_nat (kbW (kbound x b0 b1))) (Z.to_nat (kbC (kbound x b0 b1))) H.
+Proof.
+  intros cs x k m b0 b1 H K HO HS. destruct (kbound x b0 b1) as [[W C]|] eqn:E; [|discriminate K]. cbn [kbW kbC].
+  pose proof (kbound_pos x b0 b1 W C E) as [P1 P2]. pose proof (kbound_listr cs x k m b0 b1 W C H E HO HS) as B.
+  intros n. apply kbc_intro. intros cvs vs s. rewrite fold_add. specialize (B n cvs vs s). unfold zsum in B.
+  apply Nat2Z.inj_le. rewrite !Nat2Z.inj_add, Nat2Z.inj_mul, !Z2Nat.id by lia. lia.
+Qed.
 End K.
 
 (** a program's row of a counter function: the function made a number at its results; its statement [C .. = ofn (cnt ..)] holds by

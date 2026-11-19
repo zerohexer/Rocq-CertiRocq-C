@@ -4928,9 +4928,9 @@ Definition kn_krowb := kn_of <% @KQRK.krow %>.
 Definition kn_kblk := kn_of <% @KQRK.kblk %>.
 (** the part's single fixpoint made of its rows' sources, a block giving back counters (as [read_part] makes one), read by KQRK's
     syntax with the callees given; its signature, body, and the meanings: [KQRK.kblk] of the sources' views, [KQRK.krow] of it *)
-Definition kpart (Σ : global_env) (rt : list rentry) (callees : list (kername * sig)) (mp : modpath) (mfix : mfixpoint term)
-  (P : list nat) : option (sig * fbody * term * term) :=
-  match opt_all (map (fun j => ksb_src Σ (mem_kn mp mfix j)) (seq 0 (length mfix))) with
+Definition kpart_s (Σ : global_env) (rt : list rentry) (callees : list (kername * sig)) (mp : modpath) (mfix : mfixpoint term)
+  (P : list nat) (osrcs : option (list kername)) : option (sig * fbody * term * term) :=
+  match osrcs with
   | Some ((s0 :: _) as srcs) =>
       match option_map (fun b => snd (lams b)) (fold_left (fun a k => match a with Some _ => a | None => body_of Σ k end) srcs None) with
       | Some (tFix mfs _) =>
@@ -4999,6 +4999,9 @@ Definition kpart (Σ : global_env) (rt : list rentry) (callees : list (kername *
       end
   | _ => None
   end.
+Definition kpart (Σ : global_env) (rt : list rentry) (callees : list (kername * sig)) (mp : modpath) (mfix : mfixpoint term) (P : list nat)
+  : option (sig * fbody * term * term) :=
+  kpart_s Σ rt callees mp mfix P (opt_all (map (fun j => ksb_src Σ (mem_kn mp mfix j)) (seq 0 (length mfix)))).
 Definition read_part (Σ : global_env) (mp : modpath) (hb : kername -> option term) (rt : list rentry) (bt : kername -> option Z) (chk : bool)
   (mfix : mfixpoint term) (P : list nat) (st : list (kername * sig * fbody) * copytab) : option (list (kername * sig * fbody) * copytab) :=
   let '(es, tbl) := st in
@@ -12255,6 +12258,43 @@ Definition nb_of (Σ : global_env) (mp : modpath) (tab : list (kername * nbf)) (
   | None => if existsb (fun T => if is_nat T then false else vt_has 50 Σ T) (fst (lams (dbody d0))) then nb_of1 Σ mp tab blk true false [] d0 else None
   end.
 (** the bounds of the functions read as a number, each after what it calls; a bound worth nothing is none *)
+(** (step 154) a member of a block whose part KQRK's syntax makes (step 153): the part's syntax, the member's place, the part's signature *)
+Definition kbm_part (Σ : global_env) (rows : list rprow) (kn : kername) : option (nat * KQRK.sbk * KQRK.sbk * sig) :=
+  match List.find (fun r : rprow => match r with (tConst k _, _, sl, _, _) => Kername.eqb k kn && rp_is_nrb sl | _ => false end) rows with
+  | Some ((_, _, _, _, d0) as r) =>
+      let rn := rp_name r in
+      (* the sources: each member row's (its head); the block from any the quote holds (a member the program never names is none) *)
+      let srcs := match dbody d0 with
+                  | tFix mfix _ => opt_all (map (fun i => match List.find (fun q : rprow => Kername.eqb (rp_name q) (mem_kn (fst rn) mfix i)) rows with
+                                                          | Some (tConst k _, _, _, _, _) => Some k | _ => None end) (seq 0 (length mfix)))
+                  | _ => None
+                  end in
+      match dbody d0, srcs with
+      | tFix mfix j, Some _ =>
+          (* the members' parameters all the block's: a member's bound is then the block's at its selector, by conversion (members of
+             other parameters sit in step 45's slots, which the statement does not see) *)
+          if negb (forallb (fun d => teqs (fst (lams (dbody d))) (fst (lams (dbody (hd dflt_def mfix))))) mfix) then None else
+          match kpart_s Σ [] (kpe_callees (kpe_upto Σ rows kn [])) (fst rn) mfix (part_of (map (mcalls (length mfix)) mfix) (length mfix) j) srcs with
+          | Some (gs, fb, _, _) => Some (j, KQRK.unrow_kb0 fb, KQRK.unrow_kb1 fb, gs)
+          | None => None
+          end
+      | _, _ => None
+      end
+  | None => None
+  end.
+(** its bound: the part's [KQRK.kbound] at the member's selector, [w] times its counter, its other counters once, the part's constant and
+    the selector; where [w] and the counters' number are at most 1000, as step 145's *)
+Definition kbm_nbf (Σ : global_env) (rows : list rprow) (kn : kername) : option nbf :=
+  match kbm_part Σ rows kn with
+  | Some (j, b0, b1, gs) =>
+      let nx := Nat.pred (sn gs) in
+      match @KQRK.kbound no_recs (@KQRK.kfb no_recs (kpe_ents (kpe_upto Σ rows kn []))) nx b0 b1 with
+      | Some (w, c) => if (w + Z.of_nat nx <=? 1000)%Z && (c + Z.of_nat j <? 4611686018427387904)%Z
+                       then Some (Z.to_nat w :: repeat 1%nat (Nat.pred nx), (Z.of_nat j + c)%Z) else None
+      | None => None
+      end
+  | None => None
+  end.
 Definition nb_all (Σ : global_env) (mp : modpath) (rows : list rprow) : list (kername * nbf) :=
   fold_left (fun tab r =>
     match r with
@@ -12262,6 +12302,8 @@ Definition nb_all (Σ : global_env) (mp : modpath) (rows : list rprow) : list (k
         if rp_is_nrb sl then
           (* (step 120) a block's members: one bound for them all, the most of each member's, read with every call of the block its own *)
           if existsb (fun e => Kername.eqb (fst e) kn) tab then tab else
+          (* (step 154) a member of a block whose part KQRK's syntax makes: its own, KQRK.kbound's *)
+          match kbm_nbf Σ rows kn with Some f => tab ++ [(kn, f)] | None =>
           match match body_of Σ kn with Some b => blk_view b | None => None end with
           | Some (mfix, _) =>
               (* (step 132) a block with a member giving back a number has none *)
@@ -12296,6 +12338,7 @@ Definition nb_all (Σ : global_env) (mp : modpath) (rows : list rprow) : list (k
                 end
               else tab
           | None => tab
+          end
           end
         else if (if rp_is_nr sl then true else rp_is_nrv sl) then
           match body_of Σ kn with
@@ -12451,6 +12494,13 @@ Definition z_tm (z : Z) : term :=
 Definition nb_cst (c : Z) : term := if (c <? 5000)%Z then nb_nat (Z.to_nat c) else tApp (tConst kn_zton []) [z_tm c].
 (** (step 120) a block's bounds: each member's, the counter first, named by its row and its number of parameters, and at a counter, for
     kitc.py's mutual fixpoint over them; the member's parameters from its row *)
+(** (step 154) such a member's bound as [KQRK.kbstmt] is once reduced (as [kb_stmt]), its parameters the block's member's *)
+Definition kbm_stmt (tys0 : list term) (kn : kername) (f : nbf) : term :=
+  let m := length tys0 in
+  let nx := Nat.pred (length (fst f)) in
+  let L := tApp (tConst nr_nat_add []) [tApp (tConst nr_nat_mul []) [nb_cst (Z.of_nat (hd 0%nat (fst f))); tRel (m - 1)];
+             fold_right (fun j b => tApp (tConst nr_nat_add []) [tRel (m - 1 - j); b]) (nb_cst (snd f)) (seq 1 nx)] in
+  pis_of tys0 (tApp nb_le [mkApps (tConst kn []) (map (fun j => tRel (m - 1 - j)) (seq 0 m)); L]).
 Definition nb_blk (Σ : global_env) (rows : list rprow) (tab : list (kername * nbf)) : list (kername * term * kername * term) :=
   flat_map (fun r : rprow =>
     let '(h0, _, sl, st, d0) := r in
@@ -12477,7 +12527,13 @@ Definition nb_blk (Σ : global_env) (rows : list rprow) (tab : list (kername * n
                          (nb_cst (snd f)) (combine (seq 0 n) rels) in
               let body := pis_of (map (fun q => nth q tys0 (tRel 0)) others) (tApp nb_le [mkApps (tConst kn []) rels; L]) in
               let sb := (st ^ "__bnd" ^ string_of_nat n)%bs in
+              (* (step 154) a member of a block whose part KQRK's syntax makes: its statement in kbstmt's form *)
+              match kbm_nbf Σ rows kn, kbm_stmt tys0 kn f with
+              | Some _, tProd na A B =>
+                  [((copy_mp, sb ^ "__bq__wy"%bs), tProd na A B, (copy_mp, sb ^ "__bba__wy"%bs), tLambda na A B)]
+              | _, _ =>
               [((copy_mp, sb ^ "__bq__wy"%bs), tProd anon_b (tInd ind_nat []) body, (copy_mp, sb ^ "__bba__wy"%bs), tLambda anon_b (tInd ind_nat []) body)]
+              end
           | None => []
           end
         else []
@@ -13554,6 +13610,21 @@ Definition y_allc (cap : bool) (Σ : global_env) (mp : modpath) (root : kername)
   let S0 := if nbu then
               fold_left (fun S2 e => let '(k1, t1, k2, t2) := e in
                            add_decl (add_decl S2 k1 (tSort sProp) t1) k2 (tProd anon_b (tInd ind_nat []) (tSort sProp)) t2) (nb_blk (conv_all Σ mp) rows nbt) S0
+            else S0 in
+  (* (step 154) the block members' bounds KQRK's syntax gives: a mark for kitc.py (named __wy, as the marks it reads) *)
+  let S0 := if nbu then
+              fold_left (fun S2 (r : rprow) => match r with
+                | (tConst kn _, _, sl, st, d0) =>
+                    if rp_is_nrb sl then
+                      match kbm_nbf (conv_all Σ mp) rows kn, dbody d0 with
+                      | Some _, tFix rds j =>
+                          let n := length (removelast (prod_tys (dtype (nth j rds dflt_def)))) in
+                          add_decl S2 (copy_mp, st ^ "__bnd" ^ string_of_nat n ^ "__kbm__wy"%bs) (tSort sProp) nb_true
+                      | _, _ => S2
+                      end
+                    else S2
+                | _ => S2
+                end) rows S0
             else S0 in
   (* (step 78) the lemmas that come first, each after what it calls; the values' types, for the slot block's room *)
   let S0 := match vrows with
