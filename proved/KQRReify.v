@@ -4918,9 +4918,102 @@ Definition part_layout (rt : list rentry) (mfix : mfixpoint term) (P : list nat)
   end.
 (** a part's block function: the members' bodies in the slots under a match on the selector *)
 Fixpoint relams (b t : term) : term := match b with tLambda na ty b' => tLambda na ty (relams b' t) | _ => t end.
+(** (step 153) a block's rows (step 111) made from KQRK's syntax: a row's source member (the y phase's mark) *)
+Definition ksb_src (Σ : global_env) (kn : kername) : option kername :=
+  match lookup_env Σ (copy_mp, snd kn ^ "__ksb"%bs) with
+  | Some (ConstantDecl c) => match cst_body c with Some (tConst k _) => Some k | _ => None end
+  | _ => None
+  end.
+Definition kn_krowb := kn_of <% @KQRK.krow %>.
+Definition kn_kblk := kn_of <% @KQRK.kblk %>.
+(** the part's single fixpoint made of its rows' sources, a block giving back counters (as [read_part] makes one), read by KQRK's
+    syntax with the callees given; its signature, body, and the meanings: [KQRK.kblk] of the sources' views, [KQRK.krow] of it *)
+Definition kpart (Σ : global_env) (rt : list rentry) (callees : list (kername * sig)) (mp : modpath) (mfix : mfixpoint term)
+  (P : list nat) : option (sig * fbody * term * term) :=
+  match opt_all (map (fun j => ksb_src Σ (mem_kn mp mfix j)) (seq 0 (length mfix))) with
+  | Some ((s0 :: _) as srcs) =>
+      match option_map (fun b => snd (lams b)) (fold_left (fun a k => match a with Some _ => a | None => body_of Σ k end) srcs None) with
+      | Some (tFix mfs _) =>
+          let mps := fst s0 in
+          let L := length mfs in
+          if negb (Nat.eqb L (length mfix)) then None else
+          if negb (forallb (fun ij => Kername.eqb (fst ij) (mem_kn mps mfs (snd ij))) (combine srcs (seq 0 L))) then None else
+          (* the rows the sources' own, their parameters the same: no counter taken at numbers (step 130's accumulators), no value at
+             numbers (steps 114, 123) *)
+          if negb (forallb (fun j => let a := fst (lams (dbody (nth j mfix dflt_def))) in let b := fst (lams (dbody (nth j mfs dflt_def))) in
+                                     Nat.eqb (length a) (length b) && forallb (fun xy => teq 1000 (fst xy) (snd xy)) (combine a b)) (seq 0 L)) then None else
+          let bn := part_name mp mfix P in
+          let ds := map (fun i => nth i mfs dflt_def) P in
+          let T := tInd ind_nat [] in
+          match part_layout rt mfs P with
+          | None => None
+          | Some (X, K, M, NB, psss, btys) =>
+          if negb (forallb (fun d => is_nat (ret_ty (dtype d))) ds) then None else
+          let pin := fun jj => option_map (fun s => (s, nth s psss [])) (find_idx jj P) in
+          let nargs := fun jj => match nth_error mfs jj with Some d => length (fst (lams (dbody d))) | None => O end in
+          let rd (dps : def term * list (list nat)) :=
+            let body := sibr 100000 L NB X pin nargs (mem_kn mps mfs) 0 (relocate NB (snd dps) (snd (lams (dbody (fst dps))))) in
+            let body := if M then flatp 100000 (fun _ _ => false) 0 body else body in
+            match body with
+            | tCase ci pr (tRel c) [b0; b1] => if Nat.eqb c (NB - 1) then Some (ci, pr, b0, b1) else None
+            | _ => None
+            end in
+          match opt_all (map rd (combine ds psss)) with
+          | Some (((ci, pr, b0, b1) :: _) as cs) =>
+              let bc1 := bcontext b1 in
+              let sv d := tRel (d + NB - 1 - S X) in
+              let body := tCase ci pr (tRel (NB - 1))
+                            [{| bcontext := []; bbody := nest_t ci pr bc1 (sv 0) 0 (map (fun c => bbody (snd (fst c))) cs) |};
+                             {| bcontext := bc1; bbody := nest_t ci pr bc1 (sv 1) 0 (map (fun c => bbody (snd c)) cs) |}] in
+              let bfix := tFix [{| dname := {| binder_name := nNamed (snd bn); binder_relevance := Relevant |}; dtype := pis_of btys T;
+                                   dbody := lams_of btys body; rarg := 0 |}] 0 in
+              match read_kbody Σ (fun _ => None) (fun _ _ => None) rt callees bfix with
+              | Some (gs, _, _, e0, e1) =>
+                  let vtys := firstn (S X) btys ++ skipn (S (S X)) btys in
+                  let NV := length vtys in
+                  let vpos p := if Nat.leb p X then p else Nat.pred p in
+                  let varg (ps : list nat) := match ps with
+                                              | [p] => tRel (NV - 1 - vpos p)
+                                              | [p1; p2] => pair_t (tRel (NV - 1 - vpos p1)) (tRel (NV - 1 - vpos p2))
+                                              | _ => unread_t end in
+                  let bl0 := fold_left (fun a j => match a with
+                                                   | Some _ => a
+                                                   | None => match body_of Σ (mem_kn mps mfs j) with Some (tLambda _ _ _ as b) => Some b | _ => None end
+                                                   end) (seq 0 L) None in
+                  let vw := fun i => match bl0 with
+                                     | Some b => match snd (lams b) with tFix m _ => relams b (tFix m i) | _ => tFix mfs i end
+                                     | None => tFix mfs i
+                                     end in
+                  let views := map (fun ip => lams_of vtys (tApp (vw (fst ip)) (map varg (snd ip)))) (combine P psss) in
+                  let qK := qlist (tInd ind_kind []) (map (fun e => qkind (fst e)) K) in
+                  let qM := tConstruct ind_bool (if M then 0 else 1) [] in
+                  let mH := tApp (tConst kn_kblk []) [qnat X; qK; qM; hd unread_t views; qlist (pis_of vtys T) (tl views)] in
+                  let mn := tApp (tConst kn_krowb []) [qnat (S X); qK; qM; tConst (copy_mp, snd bn ^ "__H"%bs) []] in
+                  Some (gs, FRec e0 e1, mH, mn)
+              | None => None
+              end
+          | _ => None
+          end
+          end
+      | _ => None
+      end
+  | _ => None
+  end.
 Definition read_part (Σ : global_env) (mp : modpath) (hb : kername -> option term) (rt : list rentry) (bt : kername -> option Z) (chk : bool)
   (mfix : mfixpoint term) (P : list nat) (st : list (kername * sig * fbody) * copytab) : option (list (kername * sig * fbody) * copytab) :=
   let '(es, tbl) := st in
+  (* (step 153) a part of a block's rows whose sources KQRK's syntax reads: made of them *)
+  match match kpart Σ rt (callees_of es) mp mfix P with
+        | Some (gs, fb, mH, mn) =>
+            let wfok := fun g => @wf_f (arity_recs (map (fun e => (snd (fst (fst (fst e))), snd (fst e))) rt) rt)
+                                       (KQRK.kfb (rev (rd_kents Σ (callees_of es)))) (map snd (callees_of es)) (with_sp false g) fb in
+            option_map (fun g => (with_sp (sp gs) g, fb, mH, mn)) (if chk then wf_sig wfok gs fb (bt (part_name mp mfix P)) else Some gs)
+        | None => None
+        end with
+  | Some (gs, fb, mH, mn) =>
+      let bn := part_name mp mfix P in let hn := (copy_mp, snd bn ^ "__H"%bs) in
+      Some (es ++ [(bn, gs, fb)], tbl ++ [(hn, ([], []), hn, mH); (bn, ([], []), bn, mn)])
+  | None =>
   let L := length mfix in
   let bn := part_name mp mfix P in
   let ds := map (fun i => nth i mfix dflt_def) P in
@@ -4974,6 +5067,7 @@ Definition read_part (Σ : global_env) (mp : modpath) (hb : kername -> option te
       | None => None
       end
   | _ => None
+  end
   end
   end.
 (** a member: one call of its part's block function, the slots not its own given zeros *)
@@ -13396,6 +13490,8 @@ Definition y_allc (cap : bool) (Σ : global_env) (mp : modpath) (root : kername)
               | _ => S2
               end) rows S0 in
   let S0 := fold_left (fun S2 r => match r with (_, _, sl, _, _) => if rp_is_nrb sl then add_decl S2 (ra_name r) (tProd anon_b (tInd ind_nat []) (tSort sProp)) (nr_at Σ r) else S2 end) rows S0 in
+  (* (step 153) each block row's source member, for the reading of its part by KQRK's syntax *)
+  let S0 := fold_left (fun S2 r => match r with (tConst kn _, _, sl, _, _) => if rp_is_nrb sl then add_decl S2 (copy_mp, snd (rp_name r) ^ "__ksb"%bs) (tSort sProp) (tConst kn []) else S2 | _ => S2 end) rows S0 in
   (* (step 85) what the proof of a class's program unfolds: the methods, the instances, the helpers over them *)
   let S0 := match cls with
             | [] => S0
@@ -13596,6 +13692,28 @@ Definition krow_term (pe : list (kername * sig * KQRK.kent)) (Σ : global_env) (
       end
   | None => None
   end.
+(** (step 153) a block row whose part KQRK's syntax reads ([kpart]): [KQRK.krow] of its source member, so that its statement holds by
+    conversion *)
+Definition is_krowm (t : term) : bool := match t with tApp (tConst k _) _ => Kername.eqb k kn_krowb | _ => false end.
+Definition krowm_term (tbl : copytab) (Σ : global_env) (kn : kername) : option term :=
+  match ksb_src Σ kn, body_of Σ kn with
+  | Some src, Some (tFix mfix j) =>
+      let bn := part_name (fst kn) mfix (part_of (map (mcalls (length mfix)) mfix) (length mfix) j) in
+      (* the member's type from its block's fixpoint: a member the program never names is no declaration of the quote *)
+      match (if existsb (fun e => Kername.eqb (fst (fst (fst e))) bn && is_krowm (snd e)) tbl then Some tt else None),
+            option_map (fun b => snd (lams b))
+              (fold_left (fun a i => match a with Some _ => a | None => match ksb_src Σ (mem_kn (fst kn) mfix i) with Some k => body_of Σ k | None => None end end)
+                         (seq 0 (length mfix)) None) with
+      | Some _, Some (tFix mfs _) =>
+          match read_sig [] (fst (lams (dbody (nth j mfs dflt_def)))) (tConst kn_int []) with
+          | Some gs => Some (tApp (tConst kn_krow []) [qnat (Nat.pred (sn gs)); qlist (tInd ind_kind []) (map qkind (sk gs));
+                                                     tConstruct ind_bool (if sm gs then 0 else 1) []; tConst src []])
+          | None => None
+          end
+      | _, _ => None
+      end
+  | _, _ => None
+  end.
 Definition reify_prog2c (lo : bool) (bt0 : kername -> option Z) (chk : bool) (p : program) : option (list (kername * sig * fbody) * list (string * term)) :=
   match p with
   | (Σ0000, tConst root _) =>
@@ -13661,8 +13779,8 @@ Definition reify_prog2c (lo : bool) (bt0 : kername -> option Z) (chk : bool) (p 
                       | None => None
                       end
                   end) kns (Some ([], lts)) in
-      option_map (fun et => (fst et, vt_mts Σ0000 (MPfile (mp_file mp)) ++ map (fun e => (snd (snd (fst e)), real_copies 1000 (MPfile (mp_file mp)) (match krow_term kpe Σ0000 (snd (fst e)) with Some t => t | None => snd e end))) (lms ++ snd et)
-                                      ++ flat_map (fun e => match krow_term kpe Σ0000 (snd (fst e)) with Some _ => (snd (snd (fst e)) ^ "__kr"%bs, kq_tt) :: kb_marks kpe Σ0000 (snd (fst e)) (snd (snd (fst e))) | None => [] end) (lms ++ snd et))) st
+      option_map (fun et => (fst et, vt_mts Σ0000 (MPfile (mp_file mp)) ++ map (fun e => (snd (snd (fst e)), real_copies 1000 (MPfile (mp_file mp)) (match krow_term kpe Σ0000 (snd (fst e)) with Some t => t | None => match krowm_term (snd et) Σ0000 (snd (fst e)) with Some t => t | None => snd e end end))) (lms ++ snd et)
+                                      ++ flat_map (fun e => match krow_term kpe Σ0000 (snd (fst e)) with Some _ => (snd (snd (fst e)) ^ "__kr"%bs, kq_tt) :: kb_marks kpe Σ0000 (snd (fst e)) (snd (snd (fst e))) | None => match krowm_term (snd et) Σ0000 (snd (fst e)) with Some _ => [(snd (snd (fst e)) ^ "__krm"%bs, kq_tt)] | None => [] end end) (lms ++ snd et))) st
   | _ => None
   end.
 (** counter bounds worked out from the call graph (step 34): from the entry down -- the functions come callees first -- each

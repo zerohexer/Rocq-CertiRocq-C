@@ -911,6 +911,7 @@ def reflect(name, entry, prog, no_proof, closed=False):
     mp = os.path.join(GEN, f"{name}_rmts.out")
     mts = re.findall(r'\(\s*"([^"]*)"(?:%bs)?,\s*"([^"]*)"(?:%bs)?\)', open(mp).read()) if os.path.exists(mp) else []
     made = {m for m, _ in mts}
+    mtsd = dict(mts)
     # (step 147) the program's functions giving back a counter used as counters: the rows KQRK's syntax makes whose bound is
     # KQRK's (a mark named by the function and the row), each an entry of KQRK.kfb: its index and its syntax
     kbrows = {mk.split("__kbr__", 1)[1] for mk, _ in mts if "__kbr__" in mk}
@@ -1093,7 +1094,11 @@ def reflect(name, entry, prog, no_proof, closed=False):
             katl = ", ".join(kats)
             kwiths = " ".join("(IH%d (kqn : nat) {struct kqn} : %s kqn)" % (i, kats[i]) for i in range(kmb) if i != kib)
             krwt = "ltac:(rewrite " + ", ".join("<- ?IH%d" % i for i in range(kmb)) + ")"
-            t += (f"Lemma {name}_rr{j} {hrb}: {m}.\n"
+            # (step 153) a block's row made from KQRK's syntax (its part read so): the function made a number, its statement by conversion
+            if kfs[kib] + "__krm" in made:
+                t += f"Lemma {name}_rr{j} {hrb}: {m}.\nProof. unfold {m}. intros. exact eq_refl. Qed.\n"
+            else:
+              t += (f"Lemma {name}_rr{j} {hrb}: {m}.\n"
                   f"Proof. unfold {m}. fix IH{kib} 1 with {kwiths}. all: intros kqn; destruct kqn as [|kqn]; try unfold {katl} in *; intros; cbn [{kunf}]; "
                   f"first [solve [KQRWf.nr_stepT {krwt}] | solve [cbn; KQRWf.nr_stepT {krwt}] | solve [cbv beta iota zeta delta -[{keepf}]; KQRWf.nr_stepT {krwt}]]. Qed.\n")
             rrn.append(f"{name}_rr{j}")
@@ -1306,6 +1311,16 @@ def reflect(name, entry, prog, no_proof, closed=False):
                 # (step 93) its theorem under the signature without the flag, the same for a function that takes no memory
                 t += (f"Proof. exact_no_check (@KQR.compile_f_ok {inst} {kfi} {laws} {name}_prog {cs} KQR.gid1 {j} {sigc(f)} (KQRReify.body_at {name}_funs {j})"
                       f" eq_refl eq_refl (@KQR.all_ok_callees {inst} {kfi} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl). Qed.\n")
+            elif iscp(f[0]) and mtsd.get(f[0]) == "KQC.KQRK.krow":
+                # (step 153) a block's part made from KQRK's syntax: its body's meaning is krow of its members (KQRK.kblk, its __H), by
+                # KQRK.row_of_okr -- proved once -- whose two equations hold by conversion
+                b = f"(KQRReify.body_at {name}_funs {j})"
+                t += (f"Proof. exact_no_check (@KQR.callee_ok_eq {inst} {name}_prog (KQR.gid1 {j}) {bnd(f, j)} {f[1]} {kl(f)} {f[3]} {f[4]} {f[5]} {rq(f)} {bo(f)} {wsl(f)}"
+                      f" (@KQR.denote_f {inst} {kfi} {cs} {sig(f)} {b}) {f[0]}"
+                      f" (@KQRK.row_of_okr {inst} {kfi} {laws} {cs} {int(f[1]) - 1} {kl(f)} {f[3]} {f[5]} {bo(f)} {wsl(f)} (KQRK.unrow_kb0 {b}) (KQRK.unrow_kb1 {b})"
+                      f" (KQR.fr0 {b}) (KQR.fr1 {b}) {f[0]}__H eq_refl eq_refl eq_refl eq_refl eq_refl (fun _ => eq_refl))"
+                      f" (@KQR.compile_f_ok {inst} {kfi} {laws} {name}_prog {cs} KQR.gid1 {j} {sig(f)} {b}"
+                      f" eq_refl eq_refl (@KQR.all_ok_callees {inst} {kfi} {name}_prog KQR.gid1 {cs} {oks}) eq_refl eq_refl)). Qed.\n")
             elif iscp(f[0]) or isw(f[0]) or prec or f[0] in cv:
                 # a copy: not a fix over its counter, so its statement comes from its two equations, each by conversion
                 # (a copy that writes the memory and gives back a number has a memory: no memory argument)

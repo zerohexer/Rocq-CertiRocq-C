@@ -269,6 +269,33 @@ Proof.
 Qed.
 
 
+(** (step 153) a function [H] that is not a fixpoint over the counter -- a mutual block's members seen as one function with a
+    selector ([KQR.blkT] of them) -- has the row's meaning when it satisfies the syntax's two equations: at 0 its meaning, at
+    [S n] its body with [H n] as its recursion.  Each is checked by conversion, per program, as [KQR.compile_f_okr]'s *)
+Theorem row_of_okr : forall cs x k m w bo vw b0 b1 e0 e1 (H : ctype (S x) (ntypeT k m nat)),
+  row_kb b0 = Some e0 -> row_kb b1 = Some e1 -> norecs k = true ->
+  wf_f (map (@projT1 _ _) cs) (mksig9 (S x) k m false w None bo vw false) (FRec e0 e1) = true ->
+  H O = absc x _ (fun cenv => absnT k m nat (fun env benv renv s => denote_kb cs kzero (cenv ++ [O]) benv renv env s b0)) ->
+  (forall n, H (S n) = absc x _ (fun cenv => absnT k m nat (fun env benv renv s =>
+     denote_kb cs (fun cvs args s' => appnT k m nat (appc x _ (H n) cvs) args s') (n :: cenv ++ [S n]) benv renv env s b1))) ->
+  eqC (S x) _ (eqN k m _) (denote_f cs (mksig9 (S x) k m false w None bo vw false) (FRec e0 e1))
+                          (cmapT (S x) _ _ (nmapT k m nat i63 ofn) H).
+Proof.
+  intros cs x k m w bo vw b0 b1 e0 e1 H E0 E1 N W HO HS.
+  unfold wf_f in W. cbn [sb sv sq sn sr sw sm sk] in W.
+  apply andb_true_iff in W as [_ W]. apply andb_true_iff in W as [W W1]. apply andb_true_iff in W as [_ W0].
+  pose proof (rk0_norecs k N) as R0. rewrite R0 in W0, W1.
+  assert (T : rtyped [] []) by reflexivity.
+  cbn [denote_f denote_f0 eqC cmapT]. intros n. induction n as [|n IH]; cbn beta iota.
+  - rewrite HO. apply eqC_absc. intros l. apply eqN_absn; [exact N|]. intros env benv s.
+    apply (row_kb_ok cs x k dnum kzero (fun _ _ _ _ _ => eq_refl) b0 e0 (wctx (map (@projT1 _ _) cs) (mksig9 (S x) k m false w None bo vw false) false)
+             false m [] (l ++ [O]) benv [] env s E0 W0 eq_refl T).
+  - rewrite (HS n). apply eqC_absc. intros l. apply eqN_absn; [exact N|]. intros env benv s.
+    refine (row_kb_ok cs x k _ _ _ b1 e1 (wctx (map (@projT1 _ _) cs) (mksig9 (S x) k m false w None bo vw false) true)
+             true m [] (n :: l ++ [S n]) benv [] env s E1 W1 eq_refl T).
+    intros cvs l' s' _ _. unfold krec. exact (kq_step x k m _ _ cvs l' s' IH).
+Qed.
+
 (** the counter body of a row [row_kb] made, read back from the row (so that a program's proof needs only the row's syntax tree):
     [row_kb] of it is the row again, which the proof checks by computation *)
 Fixpoint unrow_ke (e : sexp) : option kexp :=
@@ -706,6 +733,10 @@ End K.
     conversion.  Its parameters hold no record (the rows made so), so its type is the same at every program's record types *)
 Definition krow (x : nat) (k : list kind) (m : bool) (f : ctype (S x) (@ntypeT no_recs k m nat)) : ctype (S x) (@ntypeT no_recs k m i63) :=
   cmapT (S x) _ _ (@nmapT no_recs k m nat i63 ofn) f.
+(** (step 153) a mutual block's members giving back counters, one function with a selector (the last of its counters): [KQR.blkT] at
+    no record, as [krow] *)
+Definition kblk (x : nat) (k : list kind) (m : bool) (h0 : nat -> ctype x (@ntypeT no_recs k m nat))
+  (hs : list (nat -> ctype x (@ntypeT no_recs k m nat))) : ctype (S (S x)) (@ntypeT no_recs k m nat) := @blkT no_recs x k m nat h0 hs.
 
 (** (step 147) the program's counter functions used as counters (KQR.KFuns), made from the rows KQRK's syntax makes: an entry per
     such function, its callee's index and its syntax; each field total (no proof per program), the meaning the syntax's at no
