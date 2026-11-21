@@ -1940,7 +1940,9 @@ proved once, measured against C written the same way.
   step 149's files and on step 152's (median 963 / 960 MB, the largest 1136 / 1123, `kqsess.log`), and step 149's own tree, its table
   run again at 12, reached the cap as well (4 cells refused with no reason, the largest 2293 MB): the laptop's Docker VM no longer gives
   12 sessions the room it did.  Accepted when the table runs below its cap with room to spare (at 11 it still reached it once), the number
-  of sessions settled with that reason.
+  of sessions settled with that reason.  At chain B12 (steps 153, 154) the laptop's commit limit (its memory and page file) was
+  reached first, two runs at 11 stopped by our guard, until its restart; after it the table at 11 lost 12 cells, at 10 none (at the cap
+  once still): the table runs at 10.
 
 **G. Concurrency:** an interleaving semantics of two programs over the marked operations; protocol properties proved once (a
 lock's mutual exclusion, a queue); a ticket lock.
@@ -6865,6 +6867,20 @@ recursive call given a proof.  Conversion can never open it: the recursion is on
 - *Left* (§12.V): the bound of a member of a block of members of different parameters; a member used as a counter read as `CCallK` (the callers' copies and their equations by Ltac, `own_step`, as step 147 removed for single functions).
 - *The C*: the same.  *Cells*: none added (`A_zx_as_counter`, `A_zx_bc*`, `A_zx_cg_block` exercise it).
 
+**Steps 153, 154 — the results (2026-11-21), one chain for the two.**  Built as designed:
+- *Step 153, a mutual block giving back counters, its rows made from KQRK's syntax*: *`KQRK.v`*: `row_of_okr`, `kblk`; the reader (`KQRReify.v`): `ksb_src`, `kpart` (step 45's single fixpoint made of the sources, read by `read_kbody`), `read_part`'s first try, checked by `wf_sig`, the y phase's `__ksb` marks, `is_krowm`, `krowm_term` and the `__krm` marks; *`kitc.py`*: such a part's theorem by `row_of_okr` (its `__H` named, its two equations `eq_refl`), its rows' statements by `eq_refl`.  *Found while building* (on the work laptop): a written selector fails S's `rec_ok`, S writes it `kq_nat j`; an `as` over a cons pattern binds only the tail, so the sources' check failed and the route never ran; a member the program never names is no declaration of Rocq's quote; rows with step 130's accumulators, and a part whose counter is handed on growing (`A_zx_acc`, `A_zx_bcp_both`, `A_zx_bcq_grown`: ill formed without weights), keep step 111's route.  Checked on the work laptop (the repository at step 152 with this step's files, step 142's wide lab: 2162): every verdict and category the last table's; the block rows' statements by `nr_stepT` 21 uses in 10 files against 81 in 37, 28 proof files by `row_of_okr`.
+- *Step 154, the bound of a member of a block whose rows KQRK's syntax makes, proved once*: *`KQRK.v`*: `kbound_listr`, `kbound_okr`; the reader: `kpart_s` (`kpart` given its sources), `kbm_part`, `kbm_nbf` first in `nb_all`'s block branch, `kbm_stmt` in `nb_blk`, the `__kbm__wy` marks; *`kitc.py`*: such a member's bound by `kbound_okr` at its selector.  *Found while building* (on the work laptop): the y phase reads the environment before its own marks are in it, so the sources come from the block's rows; the marks `kitc.py` reads are the y phase's names ending `__wy`; the selector written in the term is read as an `int` (its type is under `kbstmt`); members of different parameters (`A_zx_bc_arities`, `A_zx_bca_budget`, `A_zx_bca_three`) keep step 120's bound.  Checked on the work laptop (the repository at step 153 with this step's files, step 142's wide lab: 2162): every verdict and category the last table's; bounds by `nb_step` 89 uses against 112, 23 by `kbound_okr`.
+- *The reifier's step on the kernels' programs* (on the work laptop, one core, interleaved, three rounds, the fastest, F62, in clean copies of the repository at step 152 and at step 154): `HWP_kernel` 3.22 / 3.23 s, `HWP_own` 2.22 / 2.25, `HWP_irqnow` 1.95 / 1.89: the same.
+- *The run*: one chain for the two steps, on the last step's code commit, the table in 10 long-lived Rocq sessions under 14 GB (§12.F): the laptop's commit limit (its memory and page file) stopped two runs at 11 before its restart (our guard stopping the table, not the laptop), and after it a run at 11 lost 12 cells to the container's cap (7 at the time limit, 5 with no reason, each proved in the step's wide lab), so the table of record is the run at 10, no cell lost.
+- The C: the 99 programs byte-identical.  The construct table (on `e744755`): **4253 of 4397 through the verified compiler**, 76
+  by design, 67 gaps, 1 not Rocq (was 4253 of 4397: every cell's verdict and category the last table's; no cell lost).  The gate
+  on `e744755`, the walk switched off: `make.sh` `core-ok`; examples 64 / 64, 63 / 63 freestanding, beside the corpus; the same C:
+  undefined behaviour trapped 63 / 63, `-O0` 63 / 63, `ccomp` 60 / 60 and 3 not built with it; corpus 36 / 36; the five kernels
+  and `grow` (24 / 23 / 26 / 20 / 20 / 10 s); **109 programs through the verified compiler, 0 refused**, their 109 end theorems
+  each within the list; `check_trust.py`: `trust unchanged`.  Next: a block member used as a counter read as `CCallK` (the
+  instance's entries carrying the user's members), then the parts the machine's only below a word in KQRK's syntax (step 140's
+  rows) (§12.V).
+
 **Q. (Dropped by D26; kept for its reasoning.)  Proofs built by construction (§1.11, D25).**  (1) The spike: lemmas over the Rocq constructs for `Eop`, `Eif`, `Esel`,
 `Eret`, `Ecall`, `Eloop` and the counter match, emitted by the translator, on `wfix.body`, one corpus program and `x86_setup`;
 proof time and acceptance measured against the walk.  Continue only if at least as reliable and faster.  (2) Conversion,
@@ -7065,11 +7081,13 @@ recorded in §11 rather than silently reverted.
 
 ## §14. COMMIT LEDGER (newest first)
 
-Pushed to the public repository up to `483ed1a` (2026-11-19); `git log --oneline origin/main..HEAD` lists what is local.
+Pushed to the public repository up to `e744755` (2026-11-21); `git log --oneline origin/main..HEAD` lists what is local.
 
 | Commit | What |
 |---|---|
-| (this commit) | §12.V: step 154's design -- the bound of a member of a block whose rows KQRK's syntax makes, proved once (KQRK.kbound_okr, at its selector); §14 step 153's code row |
+| (this commit) | §12.V: steps 153, 154 (a mutual block giving back counters, its rows made from KQRK's syntax; its members' bounds proved once: the construct table 4253 of 4397), one chain for the two; the gate; §12.F |
+| `e744755` | `proved/KQRK.v` + `KQRReify.v` + `kitc.py` step 154: the bound of a member of a block whose rows KQRK's syntax makes: kbound_listr, kbound_okr; the reader's kbm_part, kbm_nbf, kbm_stmt (kpart_s given the sources), __kbm__wy marks; kitc's member bound by kbound_okr at its selector |
+| `bf244a2` | §12.V: step 154's design -- the bound of a member of a block whose rows KQRK's syntax makes, proved once (KQRK.kbound_okr, at its selector); §14 step 153's code row |
 | `1077845` | `proved/KQRK.v` + `KQRReify.v` + `kitc.py` step 153: a mutual block giving back counters, its rows made from KQRK's syntax: row_of_okr, kblk; the part's single fixpoint of the sources read by read_kbody (kpart), checked as a function (wf_sig), the rows krow of their sources (krowm_term, __krm) |
 | `5782b0f` | §12.V: step 153's design -- a mutual block giving back counters, its rows made from KQRK's syntax (KQRK.row_of_okr: a function satisfying the syntax's two equations, by conversion); §14 the §12.F correction's row |
 | `2dacce3` | §12.F: the table's sessions at the cap -- not the code (step 149's tree reaches it too at 12 sessions); the laptop's VM |
